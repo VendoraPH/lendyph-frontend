@@ -1,0 +1,55 @@
+export interface Loan {
+  id: number;
+  borrower_id: number;
+  loan_product_id?: number;
+  principal_amount: number;
+  interest_rate: number;
+  interest_type: "fixed" | "diminishing";
+  term_months: number;
+  payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
+  total_payable: number;
+  outstanding_balance: number;
+  status:
+    | "pending"
+    | "approved"
+    | "released"
+    | "ongoing"
+    | "completed"
+    | "defaulted"
+    | "restructured"
+    | "rejected";
+  purpose?: string;
+  collateral?: string;
+  co_maker?: string;
+  approved_at?: string;
+  released_at?: string;
+  maturity_date?: string;
+  next_due_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoanSchedule {
+  id: number;
+  loan_id: number;
+  due_date: string;
+  principal: number;
+  interest: number;
+  amount_due: number;
+  amount_paid: number;
+  balance: number;
+  status: "pending" | "paid" | "partial" | "overdue";
+}
+
+export interface LoanProduct {
+  id: number;
+  name: string;
+  min_amount: number;
+  max_amount: number;
+  interest_rate: number;
+  interest_type: "fixed" | "diminishing";
+  min_term: number;
+  max_term: number;
+  payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
+  is_active: boolean;
+}

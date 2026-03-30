@@ -1,0 +1,32 @@
+import { api } from "@/lib/api-client";
+import { API_ENDPOINTS } from "@/config/api-endpoints";
+import type { User } from "@/types";
+
+export const authService = {
+  login: (credentials: { email: string; password: string }) =>
+    api.post<{ token: string; refreshToken: string; user: User }>(
+      API_ENDPOINTS.AUTH.LOGIN,
+      credentials
+    ),
+
+  register: (data: {
+    name: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+  }) => api.post<{ user: User }>(API_ENDPOINTS.AUTH.REGISTER, data),
+
+  logout: () => api.post(API_ENDPOINTS.AUTH.LOGOUT),
+
+  me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),
+
+  forgotPassword: (data: { email: string }) =>
+    api.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, data),
+
+  resetPassword: (data: {
+    token: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+  }) => api.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, data),
+};
