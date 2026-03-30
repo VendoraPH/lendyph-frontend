@@ -26,6 +26,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "dashboard:view",
   },
   {
+    title: "Users",
+    href: "/users",
+    icon: UserCog,
+    permission: "users:view",
+  },
+  {
     title: "Borrowers",
     href: "/borrowers",
     icon: Users,
@@ -60,11 +66,5 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/settings",
     icon: Settings,
     permission: "settings:view",
-  },
-  {
-    title: "Users",
-    href: "/settings/users",
-    icon: UserCog,
-    permission: "users:view",
   },
 ];

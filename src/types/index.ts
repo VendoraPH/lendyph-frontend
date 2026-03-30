@@ -1,4 +1,4 @@
-export type { User } from "./user";
+export type { User, UserStatus } from "./user";
 export type { Loan, LoanSchedule, LoanProduct } from "./loan";
 export type { Borrower } from "./borrower";
 export type { Payment } from "./payment";

@@ -50,7 +50,7 @@ export function Header() {
         <DropdownMenu>
           <DropdownMenuTrigger className="rounded-full outline-none">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-brand-blue text-brand-blue-foreground text-xs">
+              <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
                 {initials}
               </AvatarFallback>
             </Avatar>
