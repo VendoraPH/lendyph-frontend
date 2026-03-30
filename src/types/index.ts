@@ -5,3 +5,4 @@ export type { Payment } from "./payment";
 export type { Collection } from "./collection";
 export type { DashboardOverview, PortfolioSummary } from "./dashboard";
 export type { ApiResponse, PaginatedResponse } from "./api";
+export type { Role, Module, Action, Permission, RoleConfig } from "./rbac";

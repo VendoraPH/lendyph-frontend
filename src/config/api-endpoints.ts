@@ -58,6 +58,14 @@ export const API_ENDPOINTS = {
     PORTFOLIO: "/reports/portfolio",
     INCOME: "/reports/income",
   },
+  USERS: {
+    LIST: "/users",
+    DETAIL: (id: number) => `/users/${id}`,
+    CREATE: "/users",
+    UPDATE: (id: number) => `/users/${id}`,
+    DELETE: (id: number) => `/users/${id}`,
+    UPDATE_ROLE: (id: number) => `/users/${id}/role`,
+  },
   SETTINGS: {
     PROFILE: "/settings/profile",
     BUSINESS: "/settings/business",
