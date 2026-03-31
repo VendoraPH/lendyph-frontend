@@ -1,0 +1,361 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import { Camera, KeyRound, User } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/use-auth";
+import type { Role } from "@/types/rbac";
+
+// ── Helpers ──
+
+const ROLE_LABELS: Record<Role, string> = {
+  admin: "Administrator",
+  loan_officer: "Loan Officer",
+  cashier: "Cashier",
+  collector: "Collector",
+  viewer: "Viewer",
+};
+
+const ROLE_BADGE_CLASS: Record<Role, string> = {
+  admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
+  loan_officer: "bg-blue-100 text-blue-700 border-blue-200",
+  cashier: "bg-green-100 text-green-700 border-green-200",
+  collector: "bg-purple-100 text-purple-700 border-purple-200",
+  viewer: "bg-muted text-muted-foreground border-border",
+};
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0].toUpperCase())
+    .join("");
+}
+
+// ── Profile Card ──
+
+function ProfileCard() {
+  const { user } = useAuth();
+  if (!user) return null;
+
+  const initials = getInitials(user.name);
+  const roleLabel = ROLE_LABELS[user.role] ?? user.role;
+  const roleBadgeClass = ROLE_BADGE_CLASS[user.role] ?? "";
+
+  return (
+    <Card>
+      <CardContent className="pt-6 pb-6">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
+          {/* Avatar */}
+          <div className="relative shrink-0">
+            <Avatar className="h-20 w-20 text-xl">
+              {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
+              <AvatarFallback className="bg-brand-orange/10 text-brand-orange font-semibold text-xl">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+
+          {/* Info */}
+          <div className="flex flex-col items-center gap-2 sm:items-start sm:flex-1 min-w-0">
+            <div className="text-center sm:text-left">
+              <h2 className="text-xl font-bold leading-tight">{user.name}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">{user.email}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+              <Badge
+                variant="outline"
+                className={roleBadgeClass}
+              >
+                {roleLabel}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{user.branch}</span>
+            </div>
+          </div>
+
+          {/* Upload Button */}
+          <div className="shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled
+              title="Photo upload coming soon"
+            >
+              <Camera className="h-4 w-4" />
+              Upload Photo
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Edit Profile Form ──
+
+interface ProfileForm {
+  name: string;
+  email: string;
+  mobile: string;
+}
+
+function EditProfileCard() {
+  const { user } = useAuth();
+
+  const [form, setForm] = useState<ProfileForm>({
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    mobile: user?.mobile ?? "",
+  });
+
+  const update = (field: keyof ProfileForm, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast.success("Profile updated successfully");
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <User className="h-4 w-4 text-muted-foreground" />
+          Edit Profile
+        </CardTitle>
+      </CardHeader>
+      <Separator />
+      <CardContent className="pt-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Full Name */}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="profile-name">Full Name *</Label>
+              <Input
+                id="profile-name"
+                placeholder="Enter your full name"
+                value={form.name}
+                onChange={(e) => update("name", e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <Label htmlFor="profile-email">Email *</Label>
+              <Input
+                id="profile-email"
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(e) => update("email", e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Mobile */}
+            <div className="space-y-2">
+              <Label htmlFor="profile-mobile">Mobile / Phone</Label>
+              <Input
+                id="profile-mobile"
+                type="tel"
+                placeholder="+63 9XX XXX XXXX"
+                value={form.mobile}
+                onChange={(e) => update("mobile", e.target.value)}
+              />
+            </div>
+
+            {/* Username */}
+            <div className="space-y-2">
+              <Label htmlFor="profile-username">
+                Username
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                  (read-only)
+                </span>
+              </Label>
+              <Input
+                id="profile-username"
+                value={user?.username ?? ""}
+                disabled
+                readOnly
+                className="bg-muted/50 cursor-not-allowed"
+              />
+            </div>
+
+            {/* Branch */}
+            <div className="space-y-2">
+              <Label htmlFor="profile-branch">
+                Branch
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                  (read-only)
+                </span>
+              </Label>
+              <Input
+                id="profile-branch"
+                value={user?.branch ?? ""}
+                disabled
+                readOnly
+                className="bg-muted/50 cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
+            >
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Change Password Form ──
+
+interface PasswordForm {
+  current: string;
+  next: string;
+  confirm: string;
+}
+
+const EMPTY_PASSWORD: PasswordForm = { current: "", next: "", confirm: "" };
+
+function ChangePasswordCard() {
+  const [form, setForm] = useState<PasswordForm>(EMPTY_PASSWORD);
+
+  const update = (field: keyof PasswordForm, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (form.next !== form.confirm) {
+      toast.error("New password and confirmation do not match");
+      return;
+    }
+
+    if (form.next.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+
+    toast.success("Password updated successfully");
+    setForm(EMPTY_PASSWORD);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <KeyRound className="h-4 w-4 text-muted-foreground" />
+          Change Password
+        </CardTitle>
+      </CardHeader>
+      <Separator />
+      <CardContent className="pt-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Current Password */}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="pwd-current">Current Password *</Label>
+              <Input
+                id="pwd-current"
+                type="password"
+                placeholder="Enter current password"
+                value={form.current}
+                onChange={(e) => update("current", e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            {/* New Password */}
+            <div className="space-y-2">
+              <Label htmlFor="pwd-new">New Password *</Label>
+              <Input
+                id="pwd-new"
+                type="password"
+                placeholder="Min. 8 characters"
+                value={form.next}
+                onChange={(e) => update("next", e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            {/* Confirm New Password */}
+            <div className="space-y-2">
+              <Label htmlFor="pwd-confirm">Confirm New Password *</Label>
+              <Input
+                id="pwd-confirm"
+                type="password"
+                placeholder="Repeat new password"
+                value={form.confirm}
+                onChange={(e) => update("confirm", e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          {/* Mismatch hint */}
+          {form.confirm.length > 0 && form.next !== form.confirm && (
+            <p className="text-xs text-destructive">
+              Passwords do not match.
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              Update Password
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Main Page ──
+
+export default function ProfileSettingsPage() {
+  return (
+    <div className="space-y-6 min-w-0">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
+        <p className="text-muted-foreground">Manage your account settings</p>
+      </div>
+
+      {/* Profile summary card */}
+      <ProfileCard />
+
+      {/* Edit profile form */}
+      <EditProfileCard />
+
+      {/* Change password form */}
+      <ChangePasswordCard />
+    </div>
+  );
+}
