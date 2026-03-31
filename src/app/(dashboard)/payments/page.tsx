@@ -365,11 +365,13 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Payment Entry</h1>
-        <p className="text-muted-foreground">
-          Record borrower loan repayments
-        </p>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Payment Entry</h1>
+          <p className="text-sm text-muted-foreground">
+            Record borrower loan repayments
+          </p>
+        </div>
       </div>
 
       {/* Card 1: Search Active Loan */}

@@ -127,12 +127,12 @@ export default function BorrowersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Borrower Management
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Search, filter, and manage borrower profiles
           </p>
         </div>
@@ -145,10 +145,12 @@ export default function BorrowersPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Total Borrowers</p>
+                <p className="text-xs font-medium text-muted-foreground">Total Borrowers</p>
                 <p className="text-2xl font-bold">{borrowers.length}</p>
               </div>
-              <Users className="h-8 w-8 text-muted-foreground/30" />
+              <div className="rounded-full bg-brand-blue/10 p-2.5">
+                <Users className="h-5 w-5 text-brand-blue" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -156,12 +158,14 @@ export default function BorrowersPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Active</p>
+                <p className="text-xs font-medium text-muted-foreground">Active</p>
                 <p className="text-2xl font-bold text-green-600">
                   {activeCount}
                 </p>
               </div>
-              <UserCheck className="h-8 w-8 text-green-600/30" />
+              <div className="rounded-full bg-green-500/10 p-2.5">
+                <UserCheck className="h-5 w-5 text-green-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -169,12 +173,14 @@ export default function BorrowersPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Inactive</p>
+                <p className="text-xs font-medium text-muted-foreground">Inactive</p>
                 <p className="text-2xl font-bold text-red-600">
                   {inactiveCount}
                 </p>
               </div>
-              <UserX className="h-8 w-8 text-red-600/30" />
+              <div className="rounded-full bg-red-500/10 p-2.5">
+                <UserX className="h-5 w-5 text-red-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -182,10 +188,12 @@ export default function BorrowersPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Blacklisted</p>
+                <p className="text-xs font-medium text-muted-foreground">Blacklisted</p>
                 <p className="text-2xl font-bold">{blacklistedCount}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-muted-foreground/30" />
+              <div className="rounded-full bg-muted p-2.5">
+                <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+              </div>
             </div>
           </CardContent>
         </Card>

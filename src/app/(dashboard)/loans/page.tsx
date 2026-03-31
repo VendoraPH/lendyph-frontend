@@ -366,10 +366,10 @@ export default function LoansPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Manage loan applications and track approval workflow
           </p>
         </div>
@@ -384,52 +384,72 @@ export default function LoansPage() {
       {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Applications
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{summaryStats.total}</p>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Total Applications
+                </p>
+                <p className="text-2xl font-bold">{summaryStats.total}</p>
+              </div>
+              <div className="rounded-full bg-brand-blue/10 p-2.5">
+                <FileText className="h-5 w-5 text-brand-blue" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Approval
-            </CardTitle>
-            <Clock className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-amber-600">
-              {summaryStats.forReview}
-            </p>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Pending Approval
+                </p>
+                <p className="text-2xl font-bold text-amber-600">
+                  {summaryStats.forReview}
+                </p>
+              </div>
+              <div className="rounded-full bg-amber-500/10 p-2.5">
+                <Clock className="h-5 w-5 text-amber-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Loans</CardTitle>
-            <Banknote className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-600">
-              {summaryStats.active}
-            </p>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Active Loans
+                </p>
+                <p className="text-2xl font-bold text-green-600">
+                  {summaryStats.active}
+                </p>
+              </div>
+              <div className="rounded-full bg-green-500/10 p-2.5">
+                <Banknote className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Rejected</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-red-600">
-              {summaryStats.rejected}
-            </p>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Rejected
+                </p>
+                <p className="text-2xl font-bold text-red-600">
+                  {summaryStats.rejected}
+                </p>
+              </div>
+              <div className="rounded-full bg-red-500/10 p-2.5">
+                <XCircle className="h-5 w-5 text-red-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
