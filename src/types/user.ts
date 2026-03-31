@@ -1,19 +1,30 @@
-import type { Role, Permission } from "./rbac";
+import type { Permission } from "./rbac";
 
 export type UserStatus = "active" | "inactive";
 
-export interface User {
+export interface UserBranch {
   id: number;
   name: string;
+  code: string;
+  address?: string;
+  contact_number?: string;
+  is_active?: boolean;
+}
+
+export interface User {
+  id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
   username: string;
   email: string;
-  mobile: string;
-  role: Role;
-  branch: string;
+  mobile_number?: string | null;
   status: UserStatus;
-  permissions?: Permission[];
-  avatar?: string;
-  email_verified_at?: string;
+  last_login_at?: string | null;
+  branch?: UserBranch | null;
+  roles: string[];
+  permissions: Permission[];
+  avatar?: string | null;
   created_at: string;
   updated_at: string;
 }
