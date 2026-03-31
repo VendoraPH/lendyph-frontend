@@ -1,0 +1,132 @@
+<h2>Audit Trail Page Layout</h2>
+<p class="subtitle">How should the audit log page be structured?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Table with Filter Bar</h3>
+      <p>Clean table layout with a horizontal filter bar at the top (date range, user, action type, module). Click a row to expand an inline detail panel showing before/after changes. Similar to your existing Users page pattern.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Audit Trail</div>
+        <div class="mockup-body" style="padding:12px;font-size:13px">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <input class="mock-input" placeholder="Date range" style="width:140px;font-size:12px">
+            <input class="mock-input" placeholder="User" style="width:120px;font-size:12px">
+            <input class="mock-input" placeholder="Module" style="width:120px;font-size:12px">
+            <input class="mock-input" placeholder="Action" style="width:120px;font-size:12px">
+            <button class="mock-button" style="font-size:12px">Search</button>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <tr style="border-bottom:1px solid #e5e5e5;text-align:left">
+              <th style="padding:6px">Timestamp</th>
+              <th style="padding:6px">User</th>
+              <th style="padding:6px">Action</th>
+              <th style="padding:6px">Module</th>
+              <th style="padding:6px">Description</th>
+            </tr>
+            <tr style="border-bottom:1px solid #f0f0f0;cursor:pointer">
+              <td style="padding:6px;color:#666">Mar 31, 2:15 PM</td>
+              <td style="padding:6px">Augustin</td>
+              <td style="padding:6px"><span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:11px">Created</span></td>
+              <td style="padding:6px">Borrowers</td>
+              <td style="padding:6px;color:#666">Created borrower "Juan Dela Cruz"</td>
+            </tr>
+            <tr style="border-bottom:1px solid #f0f0f0;cursor:pointer">
+              <td style="padding:6px;color:#666">Mar 31, 1:42 PM</td>
+              <td style="padding:6px">Maria</td>
+              <td style="padding:6px"><span style="background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;font-size:11px">Updated</span></td>
+              <td style="padding:6px">Loans</td>
+              <td style="padding:6px;color:#666">Updated loan #1024 status</td>
+            </tr>
+            <tr style="border-bottom:1px solid #f0f0f0;cursor:pointer">
+              <td style="padding:6px;color:#666">Mar 31, 12:05 PM</td>
+              <td style="padding:6px">Augustin</td>
+              <td style="padding:6px"><span style="background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-size:11px">Login</span></td>
+              <td style="padding:6px">Auth</td>
+              <td style="padding:6px;color:#666">Logged in from 192.168.1.10</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Table + Side Detail Panel</h3>
+      <p>Same table but clicking a row opens a slide-out side panel (like email clients) showing full detail — user info, timestamp, action description, and before/after changes in a diff-style view. Filters stay in a collapsible sidebar on the left.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Audit Trail</div>
+        <div class="mockup-body" style="padding:0;font-size:13px;display:flex;min-height:180px">
+          <div style="width:65%;border-right:1px solid #e5e5e5;padding:12px">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input class="mock-input" placeholder="Search logs..." style="flex:1;font-size:12px">
+              <button class="mock-button" style="font-size:12px">Filters</button>
+            </div>
+            <div style="font-size:12px">
+              <div style="padding:8px;background:#fff7ed;border-left:3px solid #f97316;margin-bottom:4px;border-radius:4px">
+                <strong>Augustin</strong> created borrower "Juan" <span style="color:#999;float:right">2:15 PM</span>
+              </div>
+              <div style="padding:8px;margin-bottom:4px">
+                <strong>Maria</strong> updated loan #1024 <span style="color:#999;float:right">1:42 PM</span>
+              </div>
+              <div style="padding:8px;margin-bottom:4px">
+                <strong>Augustin</strong> logged in <span style="color:#999;float:right">12:05 PM</span>
+              </div>
+            </div>
+          </div>
+          <div style="width:35%;padding:12px;font-size:12px;background:#fafafa">
+            <p style="font-weight:600;margin-bottom:8px">Event Detail</p>
+            <p style="color:#666;margin-bottom:4px"><strong>User:</strong> Augustin Maputol</p>
+            <p style="color:#666;margin-bottom:4px"><strong>Action:</strong> Created</p>
+            <p style="color:#666;margin-bottom:4px"><strong>Module:</strong> Borrowers</p>
+            <p style="color:#666;margin-bottom:8px"><strong>Time:</strong> Mar 31, 2:15 PM</p>
+            <p style="font-weight:600;margin-bottom:4px">Changes</p>
+            <div style="background:#fff;border:1px solid #e5e5e5;border-radius:4px;padding:6px;font-size:11px">
+              <div style="color:#166534">+ full_name: "Juan Dela Cruz"</div>
+              <div style="color:#166534">+ phone: "09171234567"</div>
+              <div style="color:#166534">+ status: "active"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Timeline + Dialog Detail</h3>
+      <p>Activity feed style with a vertical timeline. Each entry shows avatar, action, and timestamp. Click any entry to open a dialog/modal with full before/after change details. More visual but less data-dense.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Audit Trail</div>
+        <div class="mockup-body" style="padding:16px;font-size:13px">
+          <div style="border-left:2px solid #e5e5e5;padding-left:16px;margin-left:8px">
+            <div style="margin-bottom:16px;position:relative">
+              <div style="position:absolute;left:-23px;top:2px;width:12px;height:12px;border-radius:50%;background:#f97316;border:2px solid #fff"></div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="width:24px;height:24px;border-radius:50%;background:#f97316;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">AM</div>
+                <strong style="font-size:12px">Augustin Maputol</strong>
+                <span style="color:#666;font-size:12px">created a borrower</span>
+                <span style="color:#999;font-size:11px;margin-left:auto">2:15 PM</span>
+              </div>
+              <p style="font-size:12px;color:#666;margin-top:4px;margin-left:30px">Created borrower "Juan Dela Cruz" in Main branch</p>
+            </div>
+            <div style="margin-bottom:16px;position:relative">
+              <div style="position:absolute;left:-23px;top:2px;width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2px solid #fff"></div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">MS</div>
+                <strong style="font-size:12px">Maria Santos</strong>
+                <span style="color:#666;font-size:12px">updated a loan</span>
+                <span style="color:#999;font-size:11px;margin-left:auto">1:42 PM</span>
+              </div>
+              <p style="font-size:12px;color:#666;margin-top:4px;margin-left:30px">Updated loan #1024 — changed status from "pending" to "approved"</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
