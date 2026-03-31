@@ -1,23 +1,27 @@
 export const LOAN_STATUS = {
-  PENDING: "pending",
+  DRAFT: "draft",
+  FOR_REVIEW: "for_review",
   APPROVED: "approved",
+  REJECTED: "rejected",
   RELEASED: "released",
   ONGOING: "ongoing",
   COMPLETED: "completed",
   DEFAULTED: "defaulted",
   RESTRUCTURED: "restructured",
-  REJECTED: "rejected",
+  CLOSED: "closed",
 } as const;
 
 export const LOAN_STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
+  draft: "Draft",
+  for_review: "For Review",
   approved: "Approved",
+  rejected: "Rejected",
   released: "Released",
   ongoing: "Ongoing",
   completed: "Completed",
   defaulted: "Defaulted",
   restructured: "Restructured",
-  rejected: "Rejected",
+  closed: "Closed",
 };
 
 export const INTEREST_TYPE = {
@@ -69,4 +73,15 @@ export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
 export type { Branch } from "./branches";
 export { SIDEBAR_NAV } from "./navigation";
-export type { NavItem } from "./navigation";
+export type { NavItem, NavSubItem } from "./navigation";
+export const INTEREST_TYPE_OPTIONS = [
+  { value: "fixed", label: "Fixed" },
+  { value: "diminishing", label: "Diminishing" },
+] as const;
+
+export const PAYMENT_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
