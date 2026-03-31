@@ -68,6 +68,11 @@ export const API_ENDPOINTS = {
     TOGGLE_STATUS: (id: number) => `/users/${id}/status`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
   },
+  AUDIT_LOGS: {
+    LIST: "/audit-logs",
+    DETAIL: (id: number) => `/audit-logs/${id}`,
+    EXPORT: "/audit-logs/export",
+  },
   SETTINGS: {
     PROFILE: "/settings/profile",
     BUSINESS: "/settings/business",

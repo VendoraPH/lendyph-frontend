@@ -73,7 +73,7 @@ const INITIAL_USERS: MockUser[] = [
     id: 1,
     name: "Augustin Maputol",
     username: "augustin",
-    email: "augustin@lendyph.com",
+    email: "augustin@lendy.ph",
     mobile: "09171234567",
     role: "admin",
     branch: "main",
@@ -84,7 +84,7 @@ const INITIAL_USERS: MockUser[] = [
     id: 2,
     name: "Maria Santos",
     username: "maria.santos",
-    email: "maria@lendyph.com",
+    email: "maria@lendy.ph",
     mobile: "09181234567",
     role: "loan_officer",
     branch: "cebu",
@@ -95,7 +95,7 @@ const INITIAL_USERS: MockUser[] = [
     id: 3,
     name: "Juan Dela Cruz",
     username: "juan.dc",
-    email: "juan@lendyph.com",
+    email: "juan@lendy.ph",
     mobile: "09191234567",
     role: "cashier",
     branch: "main",
@@ -106,7 +106,7 @@ const INITIAL_USERS: MockUser[] = [
     id: 4,
     name: "Ana Reyes",
     username: "ana.reyes",
-    email: "ana@lendyph.com",
+    email: "ana@lendy.ph",
     mobile: "09201234567",
     role: "collector",
     branch: "davao",
@@ -117,7 +117,7 @@ const INITIAL_USERS: MockUser[] = [
     id: 5,
     name: "Pedro Garcia",
     username: "pedro.g",
-    email: "pedro@lendyph.com",
+    email: "pedro@lendy.ph",
     mobile: "09211234567",
     role: "viewer",
     branch: "manila",
@@ -335,7 +335,7 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
               <Input
                 id="add-email"
                 type="email"
-                placeholder="name@lendyph.com"
+                placeholder="name@lendy.ph"
                 value={form.email}
                 onChange={(e) => update("email", e.target.value)}
                 required
