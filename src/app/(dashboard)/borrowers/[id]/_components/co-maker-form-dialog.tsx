@@ -317,7 +317,7 @@ function CoMakerFormFields({
           <Label>Relationship to Borrower *</Label>
           <Select
             value={form.relationship || undefined}
-            onValueChange={(v) => update("relationship", v)}
+            onValueChange={(v) => update("relationship", v ?? "")}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select relationship" />
@@ -397,7 +397,7 @@ function CoMakerFormFields({
           <Label>Valid ID Type</Label>
           <Select
             value={form.valid_id_type || undefined}
-            onValueChange={(v) => update("valid_id_type", v)}
+            onValueChange={(v) => update("valid_id_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select ID type" />
