@@ -27,6 +27,7 @@ export const LOAN_STATUS_LABELS: Record<string, string> = {
 export const INTEREST_TYPE = {
   FIXED: "fixed",
   DIMINISHING: "diminishing",
+  UPON_MATURITY: "upon_maturity",
 } as const;
 
 export const PAYMENT_FREQUENCY = {
@@ -77,6 +78,7 @@ export type { NavItem, NavSubItem } from "./navigation";
 export const INTEREST_TYPE_OPTIONS = [
   { value: "fixed", label: "Fixed" },
   { value: "diminishing", label: "Diminishing" },
+  { value: "upon_maturity", label: "Upon Maturity" },
 ] as const;
 
 export const PAYMENT_FREQUENCY_OPTIONS = [

@@ -10,6 +10,8 @@ export type LoanStatus =
   | "restructured"
   | "closed";
 
+export type InterestType = "fixed" | "diminishing" | "upon_maturity";
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -22,7 +24,7 @@ export interface Loan {
   loan_product_name?: string;
   principal_amount: number;
   interest_rate: number;
-  interest_type: "fixed" | "diminishing";
+  interest_type: InterestType;
   term_months: number;
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee?: number;
@@ -70,7 +72,7 @@ export interface LoanProduct {
   min_amount: number;
   max_amount: number;
   interest_rate: number;
-  interest_type: "fixed" | "diminishing";
+  interest_type: InterestType;
   min_term: number;
   max_term: number;
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
