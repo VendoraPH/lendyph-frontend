@@ -8,40 +8,84 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
-import type { User } from "@/types";
+import { authService } from "@/services";
+import { tokenManager } from "@/lib/axios-client";
+import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 export default function LoginPage() {
   const router = useRouter();
   const { setUser } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ login: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState<{ login?: string; password?: string }>(
+    {}
+  );
+
+  const validate = (): boolean => {
+    const newErrors: typeof errors = {};
+
+    if (!form.login) {
+      newErrors.login = "Username or email is required";
+    }
+
+    if (!form.password) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
+
     setIsLoading(true);
+    setErrors({});
 
-    // TODO: Replace with actual authService.login() call
-    // Mock user for testing — remove when backend is connected
-    const mockUser: User = {
-      id: 1,
-      name: "Augustin Maputol",
-      username: "augustin",
-      email: form.email || "admin@lendyph.com",
-      mobile: "09171234567",
-      role: "admin",
-      branch: "main",
-      status: "active",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      const { token, user } = await authService.login({
+        login: form.login,
+        password: form.password,
+        remember: rememberMe,
+      });
 
-    setTimeout(() => {
-      setUser(mockUser);
-      setIsLoading(false);
+      tokenManager.setAccessToken(token);
+
+      if (rememberMe) {
+        localStorage.setItem("lendy_remember_me", "true");
+      } else {
+        localStorage.removeItem("lendy_remember_me");
+      }
+
+      setUser(user);
       router.push("/dashboard");
-    }, 1000);
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        if (status === 422 && data?.errors) {
+          setErrors({
+            login: data.errors.login?.[0],
+            password: data.errors.password?.[0],
+          });
+        } else if (status === 401) {
+          toast.error("Invalid credentials. Please try again.");
+        } else {
+          toast.error(
+            data?.message || "Something went wrong. Please try again."
+          );
+        }
+      } else {
+        toast.error("Unable to connect. Please check your internet connection.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -57,8 +101,10 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lendyph</h1>
-            <p className="mt-1 text-sm text-white/70">Lending Management Platform</p>
+            <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
+            <p className="mt-1 text-sm text-white/70">
+              Lending Management Platform
+            </p>
           </div>
 
           <div className="max-w-md">
@@ -91,7 +137,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-xs text-white/50">
-            &copy; {new Date().getFullYear()} Lendyph. All rights reserved.
+            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
           </p>
         </div>
       </div>
@@ -101,7 +147,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="text-center lg:hidden">
-            <h1 className="text-3xl font-bold text-brand-orange">Lendyph</h1>
+            <h1 className="text-3xl font-bold text-brand-orange">Lendy.PH</h1>
             <p className="text-sm text-muted-foreground">
               Lending Management Platform
             </p>
@@ -116,19 +162,24 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="login">Username or Email</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="name@example.com"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, email: e.target.value }))
-                }
+                id="login"
+                type="text"
+                placeholder="Username or email"
+                value={form.login}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, login: e.target.value }));
+                  if (errors.login)
+                    setErrors((prev) => ({ ...prev, login: undefined }));
+                }}
                 required
-                autoComplete="email"
-                className="h-11"
+                autoComplete="username"
+                className={`h-11 ${errors.login ? "border-destructive" : ""}`}
               />
+              {errors.login && (
+                <p className="text-xs text-destructive">{errors.login}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -147,12 +198,17 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={form.password}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, password: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, password: e.target.value }));
+                    if (errors.password)
+                      setErrors((prev) => ({
+                        ...prev,
+                        password: undefined,
+                      }));
+                  }}
                   required
                   autoComplete="current-password"
-                  className="h-11 pr-10"
+                  className={`h-11 pr-10 ${errors.password ? "border-destructive" : ""}`}
                 />
                 <button
                   type="button"
@@ -166,6 +222,9 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
