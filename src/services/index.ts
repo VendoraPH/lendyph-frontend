@@ -6,3 +6,5 @@ export { collectionService } from "./collection.service";
 export { dashboardService } from "./dashboard.service";
 export { reportService } from "./report.service";
 export { userService } from "./user.service";
+export { roleService } from "./role.service";
+export { branchService } from "./branch.service";
