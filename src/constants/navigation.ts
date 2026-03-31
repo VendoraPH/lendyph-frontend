@@ -62,6 +62,10 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/payments",
     icon: CreditCard,
     permission: "payments:view",
+    children: [
+      { title: "New Payment", href: "/payments" },
+      { title: "Payment History", href: "/payments/history" },
+    ],
   },
   {
     title: "Collections",
