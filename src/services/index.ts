@@ -8,3 +8,7 @@ export { reportService } from "./report.service";
 export { userService } from "./user.service";
 export { roleService } from "./role.service";
 export { branchService } from "./branch.service";
+export { auditService } from "./audit.service";
+export { coMakerService } from "./co-maker.service";
+export { documentService } from "./document.service";
+export { loanProductService } from "./loan-product.service";

@@ -28,4 +28,16 @@ export const borrowerService = {
 
   ledger: (id: number) =>
     api.get(API_ENDPOINTS.BORROWERS.LEDGER(id)),
+
+  deactivate: (id: number) =>
+    api.patch<Borrower>(API_ENDPOINTS.BORROWERS.DEACTIVATE(id)),
+
+  reactivate: (id: number) =>
+    api.patch<Borrower>(API_ENDPOINTS.BORROWERS.REACTIVATE(id)),
+
+  uploadPhoto: (id: number, formData: FormData) =>
+    api.upload<Borrower>(API_ENDPOINTS.BORROWERS.UPLOAD_PHOTO(id), formData),
+
+  deletePhoto: (id: number) =>
+    api.delete(API_ENDPOINTS.BORROWERS.DELETE_PHOTO(id)),
 };
