@@ -19,8 +19,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Lendyph - Lending Management Platform",
-    template: "%s | Lendyph",
+    default: "Lendy.PH - Lending Management Platform",
+    template: "%s | Lendy.PH",
   },
   description:
     "Lending management platform for lending business owners to manage borrowers, loans, payments, and collections.",
