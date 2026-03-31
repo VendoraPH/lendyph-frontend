@@ -13,6 +13,7 @@ export type LoanStatus =
 export interface Loan {
   id: number;
   application_number?: string;
+  loan_account_number?: string;
   borrower_id: number;
   borrower_name?: string;
   co_maker_id?: number;
