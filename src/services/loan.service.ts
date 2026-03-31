@@ -18,18 +18,27 @@ export const loanService = {
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.LOANS.DELETE(id)),
 
-  approve: (id: number) =>
-    api.post<Loan>(API_ENDPOINTS.LOANS.APPROVE(id)),
+  approve: (id: number, data?: { approval_remarks?: string }) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVE(id), data),
 
-  reject: (id: number, reason?: string) =>
-    api.post<Loan>(API_ENDPOINTS.LOANS.REJECT(id), { reason }),
+  reject: (id: number, data?: { approval_remarks?: string }) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.REJECT(id), data),
 
   release: (id: number) =>
-    api.post<Loan>(API_ENDPOINTS.LOANS.RELEASE(id)),
+    api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id)),
 
   schedule: (id: number) =>
     api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.SCHEDULE(id)),
 
   restructure: (id: number, data: Partial<Loan>) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
+
+  amortizationPreview: (id: number) =>
+    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
+
+  submit: (id: number) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.SUBMIT(id)),
+
+  void: (id: number) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.VOID(id)),
 };
