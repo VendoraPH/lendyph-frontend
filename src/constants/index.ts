@@ -53,6 +53,18 @@ export const BORROWER_STATUS = {
   BLACKLISTED: "blacklisted",
 } as const;
 
+export const VALID_ID_OPTIONS: { value: string; label: string }[] = [
+  { value: "philippine_id", label: "Philippine National ID" },
+  { value: "drivers_license", label: "Driver's License" },
+  { value: "passport", label: "Passport" },
+  { value: "sss", label: "SSS ID" },
+  { value: "umid", label: "UMID" },
+  { value: "voters_id", label: "Voter's ID" },
+  { value: "postal_id", label: "Postal ID" },
+  { value: "prc_id", label: "PRC ID" },
+  { value: "tin_id", label: "TIN ID" },
+];
+
 export const COLLECTION_STATUS = {
   DUE_TODAY: "due_today",
   UPCOMING: "upcoming",
