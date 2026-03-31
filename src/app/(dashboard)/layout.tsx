@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 // TODO: Re-enable auth guard and SessionProvider when backend API is ready
 // import { useEffect } from "react";
 // import { useRouter } from "next/navigation";
@@ -13,6 +15,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   // TODO: Re-enable when backend API is ready
   // const { isAuthenticated } = useAuth();
   // const router = useRouter();
@@ -27,9 +31,12 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+      />
       <div className="flex flex-1 flex-col min-w-0">
-        <Header />
+        <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
