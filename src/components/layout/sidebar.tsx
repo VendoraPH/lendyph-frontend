@@ -6,8 +6,15 @@ import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useUIStore } from "@/store/ui-store";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -17,10 +24,12 @@ interface SidebarProps {
 function NavLink({
   item,
   pathname,
+  collapsed,
   onNavigate,
 }: {
   item: NavItem;
   pathname: string;
+  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   const hasChildren = item.children && item.children.length > 0;
@@ -36,6 +45,32 @@ function NavLink({
 
   const [expanded, setExpanded] = useState(isOpen);
 
+  // Collapsed mode: icon-only with tooltip
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Link
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center justify-center rounded-md p-2 transition-colors",
+                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                (isActive || isChildActive) &&
+                  "bg-sidebar-primary/15 text-sidebar-primary-foreground border-l-2 border-brand-blue"
+              )}
+            />
+          }
+        >
+          <item.icon className="h-5 w-5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="right">{item.title}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // Expanded mode: full nav with text labels
   if (!hasChildren) {
     return (
       <Link
@@ -104,51 +139,117 @@ function NavLink({
   );
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  collapsed,
+  onToggle,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  onToggle?: () => void;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      {/* Logo area */}
-      <div className="flex flex-col gap-0.5 border-b border-sidebar-border px-6 py-4">
-        <span className="text-xl font-bold text-brand-orange">Lendy.PH</span>
-        <span className="text-[11px] font-medium tracking-wide text-sidebar-foreground/50 uppercase">
-          Lending Management
-        </span>
-      </div>
+    <TooltipProvider>
+      <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+        {/* Logo area */}
+        <div
+          className={cn(
+            "flex flex-col border-b border-sidebar-border",
+            collapsed ? "items-center px-2 py-4" : "gap-0.5 px-6 py-4"
+          )}
+        >
+          {collapsed ? (
+            <span className="text-xl font-bold text-brand-orange">L</span>
+          ) : (
+            <>
+              <span className="text-xl font-bold text-brand-orange">
+                Lendy.PH
+              </span>
+              <span className="text-[11px] font-medium tracking-wide text-sidebar-foreground/50 uppercase">
+                Lending Management
+              </span>
+            </>
+          )}
+        </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 flex flex-col gap-0.5 overflow-y-auto p-3">
-        {SIDEBAR_NAV.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            pathname={pathname}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </nav>
+        {/* Navigation */}
+        <nav
+          className={cn(
+            "flex-1 flex flex-col gap-0.5 overflow-y-auto",
+            collapsed ? "items-center p-1.5" : "p-3"
+          )}
+        >
+          {SIDEBAR_NAV.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </nav>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar-border px-6 py-3">
-        <span className="text-[11px] text-sidebar-foreground/40">v1.0.0</span>
+        {/* Collapse toggle (desktop only) */}
+        {onToggle && (
+          <div className="border-t border-sidebar-border">
+            <button
+              onClick={onToggle}
+              className={cn(
+                "flex w-full items-center gap-3 px-3 py-3 text-sm text-sidebar-foreground/60 transition-colors",
+                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                collapsed && "justify-center"
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-4 w-4 shrink-0" />
+              ) : (
+                <>
+                  <PanelLeftClose className="h-4 w-4 shrink-0" />
+                  <span>Collapse</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Footer (hidden when collapsed) */}
+        {!collapsed && (
+          <div className="border-t border-sidebar-border px-6 py-3">
+            <span className="text-[11px] text-sidebar-foreground/40">
+              v1.0.0
+            </span>
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
+  const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:block w-64 shrink-0 border-r border-border min-h-screen sticky top-0 overflow-y-auto bg-sidebar">
-        <SidebarContent />
+      <aside
+        className={cn(
+          "hidden md:block shrink-0 border-r border-border min-h-screen sticky top-0 overflow-y-auto bg-sidebar transition-all duration-200 ease-in-out",
+          sidebarCollapsed ? "w-14" : "w-64"
+        )}
+      >
+        <SidebarContent
+          collapsed={sidebarCollapsed}
+          onToggle={toggleSidebarCollapsed}
+        />
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — always expanded */}
       <Sheet open={mobileOpen} onOpenChange={onMobileClose}>
         <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
-          <SidebarContent onNavigate={onMobileClose} />
+          <SidebarContent collapsed={false} onNavigate={onMobileClose} />
         </SheetContent>
       </Sheet>
     </>
