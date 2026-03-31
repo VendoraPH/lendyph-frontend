@@ -30,21 +30,22 @@ export function Header() {
     }
   };
 
-  const initials = user?.name
+  const initials = user?.full_name
     ?.split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
 
-  const roleLabel = user?.role ? ROLES[user.role]?.label : "";
+  const primaryRole = user?.roles?.[0] as import("@/types").Role | undefined;
+  const roleLabel = primaryRole ? ROLES[primaryRole]?.label : "";
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
       <div />
       <div className="flex items-center gap-3">
         <div className="text-right text-sm">
-          <p className="font-medium">{user?.name}</p>
+          <p className="font-medium">{user?.full_name}</p>
           <p className="text-xs text-muted-foreground">{roleLabel}</p>
         </div>
         <DropdownMenu>
