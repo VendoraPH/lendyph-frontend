@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { UserPlus, Upload } from "lucide-react";
+import { UserPlus, Upload, AlertTriangle } from "lucide-react";
 import { RELATIONSHIP_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { CoMaker, CoMakerRelationship, Loan, ValidIdType } from "@/types";
 
@@ -86,6 +86,7 @@ interface AddCoMakerDialogProps {
   loans: Loan[];
   borrowerId: number;
   coMakerCount: number;
+  existingCoMakers: CoMaker[];
   onAdd: (coMaker: CoMaker) => void;
 }
 
@@ -93,12 +94,17 @@ export function AddCoMakerDialog({
   loans,
   borrowerId,
   coMakerCount,
+  existingCoMakers,
   onAdd,
 }: AddCoMakerDialogProps) {
   const [form, setForm] = useState<CoMakerFormData>(emptyForm());
   const [open, setOpen] = useState(false);
   const idPhotoRef = useRef<HTMLInputElement>(null);
   const [idPhotoName, setIdPhotoName] = useState("");
+
+  const selectedLoanHasCoMaker = form.loan_id
+    ? existingCoMakers.some((cm) => cm.loan_id === form.loan_id)
+    : false;
 
   const update = (field: keyof CoMakerFormData, value: string | number | undefined) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -158,6 +164,7 @@ export function AddCoMakerDialog({
             idPhotoRef={idPhotoRef}
             idPhotoName={idPhotoName}
             setIdPhotoName={setIdPhotoName}
+            loanWarning={selectedLoanHasCoMaker ? "This loan already has a co-maker assigned." : undefined}
           />
           <div className="flex justify-end gap-3 pt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>
@@ -271,6 +278,7 @@ function CoMakerFormFields({
   idPhotoRef,
   idPhotoName,
   setIdPhotoName,
+  loanWarning,
 }: {
   form: CoMakerFormData;
   update: (field: keyof CoMakerFormData, value: string | number | undefined) => void;
@@ -278,6 +286,7 @@ function CoMakerFormFields({
   idPhotoRef: React.RefObject<HTMLInputElement | null>;
   idPhotoName: string;
   setIdPhotoName: (name: string) => void;
+  loanWarning?: string;
 }) {
   return (
     <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
@@ -299,6 +308,12 @@ function CoMakerFormFields({
             ))}
           </SelectContent>
         </Select>
+        {loanWarning && (
+          <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            {loanWarning}
+          </p>
+        )}
       </div>
 
       {/* Personal Info */}

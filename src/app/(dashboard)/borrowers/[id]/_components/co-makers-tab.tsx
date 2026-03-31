@@ -52,6 +52,7 @@ export function CoMakersTab({
           loans={loans}
           borrowerId={borrowerId}
           coMakerCount={coMakers.length}
+          existingCoMakers={coMakers}
           onAdd={onAdd}
         />
       </div>
