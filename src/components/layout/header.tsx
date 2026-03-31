@@ -151,7 +151,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+      <header className="flex h-16 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
         {/* Left side: hamburger (mobile) + breadcrumb */}
         <div className="flex items-center gap-3">
           <Button
@@ -167,19 +167,16 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         {/* Right side: search + notifications + user */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           {/* Command palette trigger */}
-          <Button
-            variant="outline"
-            className="hidden h-8 w-56 justify-start gap-2 text-sm text-muted-foreground sm:flex"
+          <button
             onClick={() => setCommandOpen(true)}
+            className="hidden md:flex items-center gap-2 rounded-full border bg-muted/30 px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors w-64 lg:w-80"
           >
             <Search className="h-4 w-4" />
             <span className="flex-1 text-left">Search...</span>
-            <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-              ⌘K
-            </kbd>
-          </Button>
+            <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-background px-1.5 text-[10px] font-medium text-muted-foreground">⌘K</kbd>
+          </button>
           {/* Mobile search icon */}
           <Button
             variant="ghost"
@@ -195,7 +192,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            className="relative text-muted-foreground"
+            className="relative rounded-full text-muted-foreground hover:bg-muted/50"
           >
             <Bell className="h-4 w-4" />
             <div className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
@@ -219,7 +216,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full outline-none">
                 <div className="relative">
-                  <Avatar className="h-9 w-9">
+                  <Avatar className="h-9 w-9 ring-2 ring-border">
                     <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
                       {initials}
                     </AvatarFallback>
