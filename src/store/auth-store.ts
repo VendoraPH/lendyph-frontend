@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { User, Permission } from "@/types";
+import type { User, Permission, Role } from "@/types";
 import { ROLES } from "@/constants/rbac";
 
 interface AuthState {
@@ -24,7 +24,14 @@ export const useAuthStore = create<AuthState>()(
       getPermissions: () => {
         const user = get().user;
         if (!user) return [];
-        return user.permissions ?? ROLES[user.role]?.permissions ?? [];
+        // Combine user-level permissions with role-based defaults
+        const userPerms = user.permissions ?? [];
+        const primaryRole = user.roles?.[0] as Role | undefined;
+        const rolePerms = primaryRole
+          ? (ROLES[primaryRole]?.permissions ?? [])
+          : [];
+        const combined = new Set([...userPerms, ...rolePerms]);
+        return Array.from(combined);
       },
       hasPermission: (permission) => {
         return get().getPermissions().includes(permission);
@@ -34,7 +41,7 @@ export const useAuthStore = create<AuthState>()(
         return permissions.some((p) => userPerms.includes(p));
       },
       hasRole: (role) => {
-        return get().user?.role === role;
+        return get().user?.roles?.includes(role) ?? false;
       },
     }),
     {

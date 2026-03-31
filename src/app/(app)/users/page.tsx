@@ -890,13 +890,13 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            User Management
+            Team Management
           </h1>
-          <p className="text-muted-foreground">
-            Create, edit, and manage user accounts
+          <p className="text-sm text-muted-foreground">
+            Manage your team members and their roles
           </p>
         </div>
         <AddUserDialog onAdd={handleAdd} />

@@ -98,7 +98,7 @@ const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
 const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: 1,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "login",
     module: "auth",
     description: "Logged in from 192.168.1.10",
@@ -109,7 +109,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 2,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "created",
     module: "borrowers",
     description: 'Created borrower "Juan Dela Cruz"',
@@ -126,7 +126,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 3,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "created",
     module: "loans",
     description: 'Created loan #1024 for "Juan Dela Cruz"',
@@ -143,7 +143,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 4,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "approved",
     module: "loans",
     description: "Approved loan #1024",
@@ -154,7 +154,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 5,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "released",
     module: "loans",
     description: "Released loan #1024",
@@ -165,7 +165,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 6,
-    user: { id: 3, name: "Juan Dela Cruz", role: "cashier" },
+    user: { id: 3, full_name: "Juan Dela Cruz", roles: ["cashier"] },
     action: "created",
     module: "payments",
     description: "Recorded payment of \u20B15,000 for loan #1024",
@@ -181,7 +181,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 7,
-    user: { id: 3, name: "Juan Dela Cruz", role: "cashier" },
+    user: { id: 3, full_name: "Juan Dela Cruz", roles: ["cashier"] },
     action: "voided",
     module: "payments",
     description: "Voided payment #199 — duplicate entry",
@@ -195,7 +195,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 8,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "updated",
     module: "borrowers",
     description: 'Updated borrower "Ana Reyes" profile',
@@ -209,7 +209,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 9,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "created",
     module: "users",
     description: 'Created user account "pedro.g"',
@@ -226,7 +226,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 10,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "status_changed",
     module: "users",
     description: 'Deactivated user "Pedro Garcia"',
@@ -237,7 +237,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 11,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "reset_password",
     module: "users",
     description: 'Reset password for "Maria Santos"',
@@ -248,7 +248,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 12,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "rejected",
     module: "loans",
     description: "Rejected loan #1020 — insufficient collateral",
@@ -262,7 +262,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 13,
-    user: { id: 4, name: "Ana Reyes", role: "collector" },
+    user: { id: 4, full_name: "Ana Reyes", roles: ["collector"] },
     action: "updated",
     module: "collections",
     description: "Marked collection #301 as collected",
@@ -273,7 +273,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 14,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "printed",
     module: "loans",
     description: "Printed disclosure statement for loan #1024",
@@ -284,7 +284,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 15,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "printed",
     module: "loans",
     description: "Printed promissory note for loan #1024",
@@ -295,7 +295,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 16,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "deleted",
     module: "borrowers",
     description: 'Deleted borrower "Test Borrower"',
@@ -309,7 +309,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 17,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "login",
     module: "auth",
     description: "Logged in from 192.168.1.15",
@@ -320,7 +320,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 18,
-    user: { id: 2, name: "Maria Santos", role: "loan_officer" },
+    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
     action: "logout",
     module: "auth",
     description: "Logged out",
@@ -331,7 +331,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 19,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "updated",
     module: "loans",
     description: "Restructured loan #1018 — extended term",
@@ -346,7 +346,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   },
   {
     id: 20,
-    user: { id: 1, name: "Augustin Maputol", role: "admin" },
+    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
     action: "updated",
     module: "users",
     description: 'Updated role for "Ana Reyes"',
@@ -416,12 +416,12 @@ function AuditDetailDrawer({
           {/* User Info */}
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-orange text-white text-sm font-semibold">
-              {getInitials(log.user.name)}
+              {getInitials(log.user.full_name)}
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm">{log.user.name}</p>
+              <p className="font-medium text-sm">{log.user.full_name}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {log.user.role.replace("_", " ")}
+                {log.user.roles?.[0].replace("_", " ")}
               </p>
             </div>
           </div>
@@ -557,7 +557,7 @@ export default function AuditTrailPage() {
     const matchesSearch =
       !q ||
       log.description.toLowerCase().includes(q) ||
-      log.user.name.toLowerCase().includes(q) ||
+      log.user.full_name.toLowerCase().includes(q) ||
       log.module.toLowerCase().includes(q) ||
       (log.target?.label.toLowerCase().includes(q) ?? false);
 
@@ -733,14 +733,14 @@ export default function AuditTrailPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            {getInitials(log.user.name)}
+                            {getInitials(log.user.full_name)}
                           </div>
                           <div>
                             <p className="text-sm font-medium">
-                              {log.user.name}
+                              {log.user.full_name}
                             </p>
                             <p className="text-xs text-muted-foreground capitalize">
-                              {log.user.role.replace("_", " ")}
+                              {log.user.roles?.[0].replace("_", " ")}
                             </p>
                           </div>
                         </div>

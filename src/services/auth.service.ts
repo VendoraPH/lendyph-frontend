@@ -3,8 +3,12 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { User } from "@/types";
 
 export const authService = {
-  login: (credentials: { email: string; password: string }) =>
-    api.post<{ token: string; refreshToken: string; user: User }>(
+  login: (credentials: {
+    login: string;
+    password: string;
+    remember?: boolean;
+  }) =>
+    api.rawPost<{ token: string; user: User }>(
       API_ENDPOINTS.AUTH.LOGIN,
       credentials
     ),

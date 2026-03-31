@@ -66,12 +66,24 @@ export const API_ENDPOINTS = {
     DELETE: (id: number) => `/users/${id}`,
     UPDATE_ROLE: (id: number) => `/users/${id}/role`,
     TOGGLE_STATUS: (id: number) => `/users/${id}/status`,
+    DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
+    REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
   },
   AUDIT_LOGS: {
     LIST: "/audit-logs",
     DETAIL: (id: number) => `/audit-logs/${id}`,
     EXPORT: "/audit-logs/export",
+  },
+  ROLES: {
+    LIST: "/roles",
+    DETAIL: (id: number) => `/roles/${id}`,
+  },
+  BRANCHES: {
+    LIST: "/branches",
+    DETAIL: (id: number) => `/branches/${id}`,
+    CREATE: "/branches",
+    UPDATE: (id: number) => `/branches/${id}`,
   },
   SETTINGS: {
     PROFILE: "/settings/profile",
