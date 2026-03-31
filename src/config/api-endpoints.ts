@@ -66,6 +66,8 @@ export const API_ENDPOINTS = {
     DELETE: (id: number) => `/users/${id}`,
     UPDATE_ROLE: (id: number) => `/users/${id}/role`,
     TOGGLE_STATUS: (id: number) => `/users/${id}/status`,
+    DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
+    REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
   },
   SETTINGS: {
