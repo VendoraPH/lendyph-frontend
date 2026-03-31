@@ -1,25 +1,26 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { User, Role, UserStatus, PaginatedResponse } from "@/types";
+import type { User } from "@/types";
 
 export interface CreateUserData {
-  name: string;
+  first_name: string;
+  last_name: string;
   username: string;
   email: string;
-  mobile: string;
   password: string;
   password_confirmation: string;
-  role: Role;
-  branch: string;
+  mobile_number?: string;
+  branch_id: number;
+  role: string;
 }
 
 export interface UpdateUserData {
-  name?: string;
-  username?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
-  mobile?: string;
-  role?: Role;
-  branch?: string;
+  mobile_number?: string;
+  branch_id?: number;
+  role?: string;
 }
 
 export interface ResetPasswordData {
@@ -29,7 +30,7 @@ export interface ResetPasswordData {
 
 export const userService = {
   list: (params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<User>>(API_ENDPOINTS.USERS.LIST, { params }),
+    api.get<User[]>(API_ENDPOINTS.USERS.LIST, { params }),
 
   detail: (id: number) =>
     api.get<User>(API_ENDPOINTS.USERS.DETAIL(id)),
@@ -43,12 +44,12 @@ export const userService = {
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.USERS.DELETE(id)),
 
-  updateRole: (id: number, role: Role) =>
-    api.patch<User>(API_ENDPOINTS.USERS.UPDATE_ROLE(id), { role }),
+  deactivate: (id: number) =>
+    api.patch<User>(API_ENDPOINTS.USERS.DEACTIVATE(id)),
 
-  toggleStatus: (id: number, status: UserStatus) =>
-    api.patch<User>(API_ENDPOINTS.USERS.TOGGLE_STATUS(id), { status }),
+  reactivate: (id: number) =>
+    api.patch<User>(API_ENDPOINTS.USERS.REACTIVATE(id)),
 
   resetPassword: (id: number, data: ResetPasswordData) =>
-    api.patch<User>(API_ENDPOINTS.USERS.RESET_PASSWORD(id), data),
+    api.post<void>(API_ENDPOINTS.USERS.RESET_PASSWORD(id), data),
 };

@@ -15,6 +15,6 @@ export function usePermission() {
     isRole: (role: Role) => hasRole(role),
     isAdmin: () => hasRole("admin"),
     permissions: getPermissions(),
-    role: user?.role ?? null,
+    role: (user?.roles?.[0] as Role) ?? null,
   };
 }

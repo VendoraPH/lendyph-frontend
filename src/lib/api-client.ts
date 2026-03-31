@@ -52,4 +52,14 @@ export const api = {
     });
     return response.data.data;
   },
+
+  /** POST without unwrapping nested `data` — for endpoints that return flat responses (e.g. login) */
+  rawPost: async <T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
+    const response = await axiosClient.post<T>(url, data, config);
+    return response.data;
+  },
 };

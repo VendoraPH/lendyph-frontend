@@ -1,28 +1,33 @@
 export const LOAN_STATUS = {
-  PENDING: "pending",
+  DRAFT: "draft",
+  FOR_REVIEW: "for_review",
   APPROVED: "approved",
+  REJECTED: "rejected",
   RELEASED: "released",
   ONGOING: "ongoing",
   COMPLETED: "completed",
   DEFAULTED: "defaulted",
   RESTRUCTURED: "restructured",
-  REJECTED: "rejected",
+  CLOSED: "closed",
 } as const;
 
 export const LOAN_STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
+  draft: "Draft",
+  for_review: "For Review",
   approved: "Approved",
+  rejected: "Rejected",
   released: "Released",
   ongoing: "Ongoing",
   completed: "Completed",
   defaulted: "Defaulted",
   restructured: "Restructured",
-  rejected: "Rejected",
+  closed: "Closed",
 };
 
 export const INTEREST_TYPE = {
   FIXED: "fixed",
   DIMINISHING: "diminishing",
+  UPON_MATURITY: "upon_maturity",
 } as const;
 
 export const PAYMENT_FREQUENCY = {
@@ -65,6 +70,18 @@ export const PAGINATION = {
   DEFAULT_PER_PAGE: 10,
 } as const;
 
+export const INTEREST_TYPE_OPTIONS = [
+  { value: "fixed", label: "Fixed" },
+  { value: "diminishing", label: "Diminishing" },
+  { value: "upon_maturity", label: "Upon Maturity" },
+] as const;
+
+export const PAYMENT_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
 export const CIVIL_STATUS_OPTIONS = [
   { value: "single", label: "Single" },
   { value: "married", label: "Married" },
@@ -88,6 +105,16 @@ export const VALID_ID_OPTIONS = [
   { value: "postal_id", label: "Postal ID" },
   { value: "prc_id", label: "PRC ID" },
   { value: "tin_id", label: "TIN ID" },
+] as const;
+
+export const RELATIONSHIP_OPTIONS = [
+  { value: "spouse", label: "Spouse" },
+  { value: "parent", label: "Parent" },
+  { value: "sibling", label: "Sibling" },
+  { value: "relative", label: "Relative" },
+  { value: "friend", label: "Friend" },
+  { value: "colleague", label: "Colleague" },
+  { value: "other", label: "Other" },
 ] as const;
 
 export const EMPLOYMENT_TYPE_OPTIONS = [
@@ -125,8 +152,9 @@ export const PHILIPPINE_PROVINCES = [
   "Bukidnon",
 ] as const;
 
+
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
 export type { Branch } from "./branches";
 export { SIDEBAR_NAV } from "./navigation";
-export type { NavItem } from "./navigation";
+export type { NavItem, NavSubItem } from "./navigation";

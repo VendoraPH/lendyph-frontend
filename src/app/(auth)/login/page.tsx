@@ -18,21 +18,21 @@ export default function LoginPage() {
   const { setUser } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ login: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ login?: string; password?: string }>(
+    {}
+  );
 
   const validate = (): boolean => {
     const newErrors: typeof errors = {};
 
-    if (!form.email) {
-      newErrors.email = "Email is required";
+    if (!form.login) {
+      newErrors.login = "Username or email is required";
     }
 
     if (!form.password) {
       newErrors.password = "Password is required";
-    } else if (form.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
     }
 
     setErrors(newErrors);
@@ -47,13 +47,13 @@ export default function LoginPage() {
     setErrors({});
 
     try {
-      const { token, refreshToken, user } = await authService.login({
-        email: form.email,
+      const { token, user } = await authService.login({
+        login: form.login,
         password: form.password,
+        remember: rememberMe,
       });
 
       tokenManager.setAccessToken(token);
-      tokenManager.setRefreshToken(refreshToken);
 
       if (rememberMe) {
         localStorage.setItem("lendy_remember_me", "true");
@@ -70,13 +70,15 @@ export default function LoginPage() {
 
         if (status === 422 && data?.errors) {
           setErrors({
-            email: data.errors.email?.[0],
+            login: data.errors.login?.[0],
             password: data.errors.password?.[0],
           });
         } else if (status === 401) {
-          toast.error("Invalid email or password");
+          toast.error("Invalid credentials. Please try again.");
         } else {
-          toast.error(data?.message || "Something went wrong. Please try again.");
+          toast.error(
+            data?.message || "Something went wrong. Please try again."
+          );
         }
       } else {
         toast.error("Unable to connect. Please check your internet connection.");
@@ -100,7 +102,9 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
-            <p className="mt-1 text-sm text-white/70">Lending Management Platform</p>
+            <p className="mt-1 text-sm text-white/70">
+              Lending Management Platform
+            </p>
           </div>
 
           <div className="max-w-md">
@@ -158,22 +162,23 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="login">Username or Email</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="name@example.com"
-                value={form.email}
+                id="login"
+                type="text"
+                placeholder="Username or email"
+                value={form.login}
                 onChange={(e) => {
-                  setForm((prev) => ({ ...prev, email: e.target.value }));
-                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                  setForm((prev) => ({ ...prev, login: e.target.value }));
+                  if (errors.login)
+                    setErrors((prev) => ({ ...prev, login: undefined }));
                 }}
                 required
-                autoComplete="email"
-                className={`h-11 ${errors.email ? "border-destructive" : ""}`}
+                autoComplete="username"
+                className={`h-11 ${errors.login ? "border-destructive" : ""}`}
               />
-              {errors.email && (
-                <p className="text-xs text-destructive">{errors.email}</p>
+              {errors.login && (
+                <p className="text-xs text-destructive">{errors.login}</p>
               )}
             </div>
 
@@ -195,7 +200,11 @@ export default function LoginPage() {
                   value={form.password}
                   onChange={(e) => {
                     setForm((prev) => ({ ...prev, password: e.target.value }));
-                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                    if (errors.password)
+                      setErrors((prev) => ({
+                        ...prev,
+                        password: undefined,
+                      }));
                   }}
                   required
                   autoComplete="current-password"
