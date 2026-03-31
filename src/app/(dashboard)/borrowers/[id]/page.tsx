@@ -64,7 +64,7 @@ export default function BorrowerDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="pt-4">
-          <OverviewTab borrower={borrower} loans={loans} />
+          <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} />
         </TabsContent>
 
         <TabsContent value="loans" className="pt-4">

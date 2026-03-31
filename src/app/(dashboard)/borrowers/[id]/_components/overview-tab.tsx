@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
-import type { Borrower, Loan } from "@/types";
+import type { Borrower, Loan, CoMaker } from "@/types";
 import { VALID_ID_OPTIONS } from "@/constants";
 
 function formatCurrency(amount: number): string {
@@ -16,6 +16,7 @@ function formatDate(dateStr: string): string {
 interface OverviewTabProps {
   borrower: Borrower;
   loans: Loan[];
+  coMakers: CoMaker[];
 }
 
 function InfoItem({ label, value }: { label: string; value?: string | null }) {
@@ -27,12 +28,17 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export function OverviewTab({ borrower, loans }: OverviewTabProps) {
+export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
   const ongoingLoans = loans.filter((l) => l.status === "ongoing").length;
   const completedLoans = loans.filter((l) => l.status === "completed").length;
   const defaultedLoans = loans.filter((l) => l.status === "defaulted").length;
   const totalOutstanding = loans.reduce((sum, l) => sum + l.outstanding_balance, 0);
   const totalPrincipal = loans.reduce((sum, l) => sum + l.principal_amount, 0);
+
+  const totalCoMakers = coMakers.length;
+  const loansNeedingCoMaker = loans.filter(
+    (l) => l.principal_amount >= 50000 && l.status !== "completed" && !coMakers.some((cm) => cm.loan_id === l.id)
+  ).length;
 
   const idLabel =
     VALID_ID_OPTIONS.find((o) => o.value === borrower.valid_id_type)?.label ?? borrower.valid_id_type;
@@ -128,6 +134,16 @@ export function OverviewTab({ borrower, loans }: OverviewTabProps) {
                 <span className="text-red-600">{defaultedLoans}</span>
               </p>
             </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Co-Makers</p>
+              <p className="text-2xl font-bold">{totalCoMakers}</p>
+            </div>
+            {loansNeedingCoMaker > 0 && (
+              <div>
+                <p className="text-xs text-amber-500">Loans Needing Co-Maker</p>
+                <p className="text-2xl font-bold text-amber-500">{loansNeedingCoMaker}</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
