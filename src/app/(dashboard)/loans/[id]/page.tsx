@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useMemo, use } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -25,10 +40,12 @@ import {
   Ban,
   Send,
   Unlock,
+  Lock,
   Circle,
   CheckCircle2,
   XCircle,
   AlertCircle,
+  CalendarIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -60,6 +77,116 @@ const formatDateTime = (dateStr: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const formatDateObj = (date: Date) =>
+  date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
+
+// ── Amortization Schedule Helpers ──
+
+type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
+type InterestType = "fixed" | "diminishing";
+
+interface AmortizationRow {
+  period: number;
+  dueDate: Date;
+  principal: number;
+  interest: number;
+  totalPayment: number;
+  balance: number;
+}
+
+function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
+  switch (frequency) {
+    case "daily":
+      return Math.round(termMonths * 30);
+    case "weekly":
+      return Math.round(termMonths * 4.33);
+    case "bi_weekly":
+      return Math.round(termMonths * 2.17);
+    case "monthly":
+      return termMonths;
+  }
+}
+
+function getIntervalDays(frequency: PaymentFrequency): number {
+  switch (frequency) {
+    case "daily":
+      return 1;
+    case "weekly":
+      return 7;
+    case "bi_weekly":
+      return 14;
+    case "monthly":
+      return 30;
+  }
+}
+
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function generateSchedule(
+  principal: number,
+  rate: number,
+  termMonths: number,
+  frequency: PaymentFrequency,
+  interestType: InterestType,
+  startDate: Date,
+): AmortizationRow[] {
+  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
+  const intervalDays = getIntervalDays(frequency);
+  const principalPerPeriod = principal / totalPeriods;
+  const rows: AmortizationRow[] = [];
+
+  let remainingBalance = principal;
+
+  for (let i = 1; i <= totalPeriods; i++) {
+    const dueDate =
+      frequency === "monthly"
+        ? addMonths(startDate, i)
+        : addDays(startDate, i * intervalDays);
+
+    let interest: number;
+    if (interestType === "fixed") {
+      interest = principal * (rate / 100);
+    } else {
+      interest = remainingBalance * (rate / 100);
+    }
+
+    remainingBalance -= principalPerPeriod;
+
+    rows.push({
+      period: i,
+      dueDate,
+      principal: principalPerPeriod,
+      interest,
+      totalPayment: principalPerPeriod + interest,
+      balance: Math.max(0, remainingBalance),
+    });
+  }
+
+  return rows;
+}
+
+function generateLoanAccountNumber(loanId: number): string {
+  const year = new Date().getFullYear();
+  const seq = String(loanId).padStart(4, "0");
+  return `LN-${year}${seq}`;
+}
 
 // ── Status Colors ──
 
@@ -237,6 +364,7 @@ const MOCK_LOANS: Loan[] = [
   {
     id: 7,
     application_number: "LA-20260007",
+    loan_account_number: "LN-20260007",
     borrower_id: 7,
     borrower_name: "Elena Villanueva",
     loan_product_name: "Salary Loan",
@@ -265,6 +393,7 @@ const MOCK_LOANS: Loan[] = [
   {
     id: 8,
     application_number: "LA-20260008",
+    loan_account_number: "LN-20260008",
     borrower_id: 8,
     borrower_name: "Roberto Tan",
     co_maker_name: "Gloria Reyes",
@@ -294,6 +423,7 @@ const MOCK_LOANS: Loan[] = [
   {
     id: 9,
     application_number: "LA-20260009",
+    loan_account_number: "LN-20260009",
     borrower_id: 9,
     borrower_name: "Lorna Bautista",
     loan_product_name: "Salary Loan",
@@ -321,6 +451,7 @@ const MOCK_LOANS: Loan[] = [
   {
     id: 10,
     application_number: "LA-20260010",
+    loan_account_number: "LN-20260010",
     borrower_id: 10,
     borrower_name: "Dennis Aquino",
     loan_product_name: "Emergency Loan",
@@ -348,6 +479,7 @@ const MOCK_LOANS: Loan[] = [
   {
     id: 11,
     application_number: "LA-20260011",
+    loan_account_number: "LN-20260011",
     borrower_id: 11,
     borrower_name: "Gloria Pascual",
     loan_product_name: "Business Loan",
@@ -614,9 +746,75 @@ export default function LoanDetailPage({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [releaseDatePickerOpen, setReleaseDatePickerOpen] = useState(false);
 
   const [approvalRemarks, setApprovalRemarks] = useState("");
   const [rejectionRemarks, setRejectionRemarks] = useState("");
+  const [releaseDate, setReleaseDate] = useState<Date>(new Date());
+
+  // Generated loan account number for release dialog
+  const generatedAccountNumber = useMemo(
+    () => (loan ? generateLoanAccountNumber(loan.id) : ""),
+    [loan?.id],
+  );
+
+  // Amortization schedule preview for release dialog
+  const releaseSchedule = useMemo(() => {
+    if (!loan) return [];
+    return generateSchedule(
+      loan.principal_amount,
+      loan.interest_rate,
+      loan.term_months,
+      loan.payment_frequency,
+      loan.interest_type,
+      releaseDate,
+    );
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, releaseDate]);
+
+  const scheduleTotals = useMemo(() => {
+    return releaseSchedule.reduce(
+      (acc, row) => ({
+        principal: acc.principal + row.principal,
+        interest: acc.interest + row.interest,
+        totalPayment: acc.totalPayment + row.totalPayment,
+      }),
+      { principal: 0, interest: 0, totalPayment: 0 },
+    );
+  }, [releaseSchedule]);
+
+  // Maturity date computed from release date + term
+  const computedMaturityDate = useMemo(() => {
+    if (!loan) return null;
+    return addMonths(releaseDate, loan.term_months);
+  }, [releaseDate, loan?.term_months]);
+
+  // Post-release: compute stored schedule for display
+  const storedSchedule = useMemo(() => {
+    if (!loan || !loan.release_date) return [];
+    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+    if (!isReleased) return [];
+    return generateSchedule(
+      loan.principal_amount,
+      loan.interest_rate,
+      loan.term_months,
+      loan.payment_frequency,
+      loan.interest_type,
+      new Date(loan.release_date),
+    );
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status]);
+
+  const storedScheduleTotals = useMemo(() => {
+    return storedSchedule.reduce(
+      (acc, row) => ({
+        principal: acc.principal + row.principal,
+        interest: acc.interest + row.interest,
+        totalPayment: acc.totalPayment + row.totalPayment,
+      }),
+      { principal: 0, interest: 0, totalPayment: 0 },
+    );
+  }, [storedSchedule]);
+
+  const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
   if (!loan) {
     return (
@@ -675,21 +873,22 @@ export default function LoanDetailPage({
   };
 
   const handleRelease = () => {
-    const today = new Date().toISOString().split("T")[0];
-    const maturity = new Date();
-    maturity.setMonth(maturity.getMonth() + loan.term_months);
-    const nextDue = new Date();
-    nextDue.setMonth(nextDue.getMonth() + 1);
+    const releaseDateStr = formatDateISO(releaseDate);
+    const maturityDate = addMonths(releaseDate, loan.term_months);
+    const firstDueDate = releaseSchedule.length > 0
+      ? formatDateISO(releaseSchedule[0].dueDate)
+      : formatDateISO(addMonths(releaseDate, 1));
 
     setLoan({
       ...loan,
       status: "released",
+      loan_account_number: generatedAccountNumber,
       released_by: ACTING_USER,
       released_at: now,
-      release_date: today,
-      maturity_date: maturity.toISOString().split("T")[0],
-      next_due_date: nextDue.toISOString().split("T")[0],
-      outstanding_balance: loan.total_payable,
+      release_date: releaseDateStr,
+      maturity_date: formatDateISO(maturityDate),
+      next_due_date: firstDueDate,
+      outstanding_balance: scheduleTotals.totalPayment,
       updated_at: now,
     });
     setReleaseOpen(false);
@@ -714,16 +913,34 @@ export default function LoanDetailPage({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
+            {loan.loan_account_number && (
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-mono text-xl font-bold text-brand-orange">
+                  {loan.loan_account_number}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn("text-sm px-3 py-1", statusColors[loan.status])}
+                >
+                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                </Badge>
+              </div>
+            )}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-mono text-lg font-semibold text-brand-orange">
+              <span className={cn(
+                "font-mono font-semibold",
+                loan.loan_account_number ? "text-sm text-muted-foreground" : "text-lg text-brand-orange"
+              )}>
                 {loan.application_number}
               </span>
-              <Badge
-                variant="outline"
-                className={cn("text-sm px-3 py-1", statusColors[loan.status])}
-              >
-                {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
-              </Badge>
+              {!loan.loan_account_number && (
+                <Badge
+                  variant="outline"
+                  className={cn("text-sm px-3 py-1", statusColors[loan.status])}
+                >
+                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                </Badge>
+              )}
             </div>
             <p className="text-lg text-foreground">{loan.borrower_name}</p>
           </div>
@@ -860,25 +1077,35 @@ export default function LoanDetailPage({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
                   Principal Amount
+                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
                 <p className="text-sm font-semibold">
                   {formatCurrency(loan.principal_amount)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Interest Rate</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  Interest Rate
+                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </p>
                 <p className="text-sm font-medium">{loan.interest_rate}%</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Interest Type</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  Interest Type
+                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </p>
                 <p className="text-sm font-medium capitalize">
                   {loan.interest_type}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Term</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  Term
+                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </p>
                 <p className="text-sm font-medium">
                   {loan.term_months} months
                 </p>
@@ -1004,6 +1231,91 @@ export default function LoanDetailPage({
         </Card>
       </div>
 
+      {/* Release Details — only for released+ loans */}
+      {isLocked && loan.release_date && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Unlock className="h-4 w-4 text-cyan-600" />
+              Release Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Release Date</p>
+                <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
+              </div>
+              {loan.maturity_date && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Maturity Date</p>
+                  <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
+                </div>
+              )}
+              {loan.next_due_date && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Next Due Date</p>
+                  <p className="text-sm font-medium">{formatDate(loan.next_due_date)}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                <p className="text-sm font-semibold">{formatCurrency(loan.outstanding_balance)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Amortization Schedule — only for released+ loans */}
+      {storedSchedule.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Amortization Schedule
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 text-center">#</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead className="text-right">Principal</TableHead>
+                    <TableHead className="text-right">Interest</TableHead>
+                    <TableHead className="text-right">Total Payment</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {storedSchedule.map((row) => (
+                    <TableRow key={row.period}>
+                      <TableCell className="text-center">{row.period}</TableCell>
+                      <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                    <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Dialogs ── */}
 
       {/* Submit for Review Dialog */}
@@ -1115,19 +1427,167 @@ export default function LoanDetailPage({
 
       {/* Release Dialog */}
       <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Release Loan</DialogTitle>
             <DialogDescription>
-              Are you sure you want to release{" "}
-              <span className="font-medium">
-                {formatCurrency(loan.principal_amount)}
-              </span>{" "}
-              for{" "}
-              <span className="font-medium">{loan.borrower_name}</span>? This
-              action cannot be undone.
+              Review the release details below before confirming. This action
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-5 pt-2">
+            {/* Summary Grid */}
+            <div className="rounded-lg border bg-muted/50 p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Loan Account Number</p>
+                  <p className="text-sm font-bold font-mono text-brand-orange">
+                    {generatedAccountNumber}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Application Number</p>
+                  <p className="text-sm font-medium font-mono">{loan.application_number}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Borrower</p>
+                  <p className="text-sm font-medium">{loan.borrower_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Loan Product</p>
+                  <p className="text-sm font-medium">{loan.loan_product_name ?? "N/A"}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Principal Amount</p>
+                  <p className="text-sm font-semibold">{formatCurrency(loan.principal_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Net Proceeds</p>
+                  <p className="text-sm font-semibold text-green-600">
+                    {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
+                  <p className="text-sm font-medium">
+                    {loan.interest_rate}% / <span className="capitalize">{loan.interest_type}</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Term / Frequency</p>
+                  <p className="text-sm font-medium">
+                    {loan.term_months} months / {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency]}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Release Date Picker */}
+            <div className="space-y-1.5">
+              <Label>Release Date</Label>
+              <Popover open={releaseDatePickerOpen} onOpenChange={setReleaseDatePickerOpen}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    />
+                  }
+                >
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  <span>{formatDateObj(releaseDate)}</span>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={releaseDate}
+                    onSelect={(date) => {
+                      if (date) setReleaseDate(date);
+                      setReleaseDatePickerOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Computed dates */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Maturity Date</p>
+                <p className="text-sm font-medium">
+                  {computedMaturityDate ? formatDateObj(computedMaturityDate) : "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">First Due Date</p>
+                <p className="text-sm font-medium">
+                  {releaseSchedule.length > 0 ? formatDateObj(releaseSchedule[0].dueDate) : "N/A"}
+                </p>
+              </div>
+            </div>
+
+            {/* Amortization Preview */}
+            {releaseSchedule.length > 0 && (
+              <div className="space-y-2">
+                <Label>Amortization Schedule Preview</Label>
+                <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10 text-center sticky top-0 bg-background">#</TableHead>
+                        <TableHead className="sticky top-0 bg-background">Due Date</TableHead>
+                        <TableHead className="text-right sticky top-0 bg-background">Principal</TableHead>
+                        <TableHead className="text-right sticky top-0 bg-background">Interest</TableHead>
+                        <TableHead className="text-right sticky top-0 bg-background">Total</TableHead>
+                        <TableHead className="text-right sticky top-0 bg-background">Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {releaseSchedule.map((row) => (
+                        <TableRow key={row.period}>
+                          <TableCell className="text-center text-xs">{row.period}</TableCell>
+                          <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
+                          <TableCell className="text-right text-xs">{formatCurrency(row.principal)}</TableCell>
+                          <TableCell className="text-right text-xs">{formatCurrency(row.interest)}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                          <TableCell className="text-right text-xs">{formatCurrency(row.balance)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell colSpan={2} className="font-semibold text-xs">Total</TableCell>
+                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.principal)}</TableCell>
+                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.interest)}</TableCell>
+                        <TableCell className="text-right font-bold text-xs">{formatCurrency(scheduleTotals.totalPayment)}</TableCell>
+                        <TableCell />
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {/* Warning */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-700">
+                Releasing this loan will lock the principal, interest rate, and term.
+                The borrower will receive{" "}
+                <span className="font-semibold">
+                  {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : formatCurrency(loan.principal_amount)}
+                </span>{" "}
+                as net proceeds.
+              </p>
+            </div>
+          </div>
+
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setReleaseOpen(false)}>
               Cancel
