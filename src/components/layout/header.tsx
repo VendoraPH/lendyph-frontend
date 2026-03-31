@@ -139,14 +139,15 @@ export function Header({ onMenuClick }: HeaderProps) {
     }
   };
 
-  const initials = user?.name
+  const initials = user?.full_name
     ?.split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
 
-  const roleLabel = user?.role ? ROLES[user.role]?.label : "";
+  const primaryRole = user?.roles?.[0];
+  const roleLabel = primaryRole ? ROLES[primaryRole as keyof typeof ROLES]?.label : "";
 
   return (
     <>
@@ -206,7 +207,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <div className="hidden items-center gap-2 sm:flex">
               <div className="text-right">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold">{user?.name}</span>
+                  <span className="text-sm font-semibold">{user?.full_name}</span>
                   {roleLabel && (
                     <Badge variant="secondary" className="text-[10px]">
                       {roleLabel}
@@ -230,7 +231,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold">{user?.name}</p>
+                    <p className="text-sm font-semibold">{user?.full_name}</p>
                     <p className="text-xs text-muted-foreground">
                       {user?.email}
                     </p>

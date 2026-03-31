@@ -50,9 +50,10 @@ function ProfileCard() {
   const { user } = useAuth();
   if (!user) return null;
 
-  const initials = getInitials(user.name);
-  const roleLabel = ROLE_LABELS[user.role] ?? user.role;
-  const roleBadgeClass = ROLE_BADGE_CLASS[user.role] ?? "";
+  const initials = getInitials(user.full_name);
+  const primaryRole = user.roles?.[0] ?? "";
+  const roleLabel = (ROLE_LABELS as Record<string, string>)[primaryRole] ?? primaryRole;
+  const roleBadgeClass = (ROLE_BADGE_CLASS as Record<string, string>)[primaryRole] ?? "";
 
   return (
     <Card>
@@ -61,7 +62,7 @@ function ProfileCard() {
           {/* Avatar */}
           <div className="relative shrink-0">
             <Avatar className="h-20 w-20 text-xl">
-              {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
+              {user.avatar && <AvatarImage src={user.avatar} alt={user.full_name} />}
               <AvatarFallback className="bg-brand-orange/10 text-brand-orange font-semibold text-xl">
                 {initials}
               </AvatarFallback>
@@ -71,7 +72,7 @@ function ProfileCard() {
           {/* Info */}
           <div className="flex flex-col items-center gap-2 sm:items-start sm:flex-1 min-w-0">
             <div className="text-center sm:text-left">
-              <h2 className="text-xl font-bold leading-tight">{user.name}</h2>
+              <h2 className="text-xl font-bold leading-tight">{user.full_name}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">{user.email}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
@@ -81,7 +82,7 @@ function ProfileCard() {
               >
                 {roleLabel}
               </Badge>
-              <span className="text-xs text-muted-foreground">{user.branch}</span>
+              <span className="text-xs text-muted-foreground">{user.branch?.name}</span>
             </div>
           </div>
 
@@ -116,9 +117,9 @@ function EditProfileCard() {
   const { user } = useAuth();
 
   const [form, setForm] = useState<ProfileForm>({
-    name: user?.name ?? "",
+    name: user?.full_name ?? "",
     email: user?.email ?? "",
-    mobile: user?.mobile ?? "",
+    mobile: user?.mobile_number ?? "",
   });
 
   const update = (field: keyof ProfileForm, value: string) =>
@@ -205,7 +206,7 @@ function EditProfileCard() {
               </Label>
               <Input
                 id="profile-branch"
-                value={user?.branch ?? ""}
+                value={user?.branch?.name ?? ""}
                 disabled
                 readOnly
                 className="bg-muted/50 cursor-not-allowed"

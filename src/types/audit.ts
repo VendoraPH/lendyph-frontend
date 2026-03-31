@@ -31,8 +31,8 @@ export interface AuditLog {
   id: number;
   user: {
     id: number;
-    name: string;
-    role: string;
+    full_name: string;
+    roles: string[];
   };
   action: AuditAction;
   module: AuditModule;
