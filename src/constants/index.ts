@@ -65,6 +65,28 @@ export const PAGINATION = {
   DEFAULT_PER_PAGE: 10,
 } as const;
 
+export const RELATIONSHIP_OPTIONS = [
+  { value: "spouse", label: "Spouse" },
+  { value: "parent", label: "Parent" },
+  { value: "sibling", label: "Sibling" },
+  { value: "relative", label: "Relative" },
+  { value: "friend", label: "Friend" },
+  { value: "colleague", label: "Colleague" },
+  { value: "other", label: "Other" },
+] as const;
+
+export const VALID_ID_OPTIONS = [
+  { value: "philippine_id", label: "Philippine National ID (PhilSys)" },
+  { value: "drivers_license", label: "Driver's License" },
+  { value: "passport", label: "Passport" },
+  { value: "sss", label: "SSS ID" },
+  { value: "umid", label: "UMID" },
+  { value: "voters_id", label: "Voter's ID" },
+  { value: "postal_id", label: "Postal ID" },
+  { value: "prc_id", label: "PRC ID" },
+  { value: "tin_id", label: "TIN ID" },
+] as const;
+
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
 export type { Branch } from "./branches";
