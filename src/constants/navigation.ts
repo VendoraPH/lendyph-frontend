@@ -9,6 +9,7 @@ import {
   BarChart3,
   Settings,
   UserCog,
+  History,
 } from "lucide-react";
 
 export interface NavItem {
@@ -60,6 +61,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/reports",
     icon: BarChart3,
     permission: "reports:view",
+  },
+  {
+    title: "Audit Trail",
+    href: "/audit-trail",
+    icon: History,
+    permission: "audit_logs:view",
   },
   {
     title: "Settings",

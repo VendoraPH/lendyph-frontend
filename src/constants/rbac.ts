@@ -31,6 +31,8 @@ export const ROLES: Record<Role, RoleConfig> = {
       "users:create",
       "users:update",
       "users:delete",
+      "audit_logs:view",
+      "audit_logs:export",
     ],
   },
   loan_officer: {

@@ -13,7 +13,8 @@ export type Module =
   | "collections"
   | "reports"
   | "settings"
-  | "users";
+  | "users"
+  | "audit_logs";
 
 export type Action =
   | "view"
