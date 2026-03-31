@@ -9,13 +9,22 @@ import {
   BarChart3,
   Settings,
   UserCog,
+  History,
+  FilePlus,
+  Package,
 } from "lucide-react";
+
+export interface NavSubItem {
+  title: string;
+  href: string;
+}
 
 export interface NavItem {
   title: string;
   href: string;
   icon: LucideIcon;
   permission: Permission;
+  children?: NavSubItem[];
 }
 
 export const SIDEBAR_NAV: NavItem[] = [
@@ -42,6 +51,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/loans",
     icon: FileText,
     permission: "loans:view",
+    children: [
+      { title: "All Loans", href: "/loans" },
+      { title: "New Application", href: "/loans/new" },
+      { title: "Loan Products", href: "/loans/products" },
+      { title: "Amortization", href: "/loans/amortization" },
+    ],
   },
   {
     title: "Payments",
@@ -60,6 +75,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/reports",
     icon: BarChart3,
     permission: "reports:view",
+  },
+  {
+    title: "Audit Trail",
+    href: "/audit-trail",
+    icon: History,
+    permission: "audit_logs:view",
   },
   {
     title: "Settings",
