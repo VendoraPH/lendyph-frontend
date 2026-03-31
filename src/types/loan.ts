@@ -44,6 +44,7 @@ export interface LoanSchedule {
 export interface LoanProduct {
   id: number;
   name: string;
+  description?: string;
   min_amount: number;
   max_amount: number;
   interest_rate: number;
@@ -51,5 +52,11 @@ export interface LoanProduct {
   min_term: number;
   max_term: number;
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
+  processing_fee: number;
+  service_fee: number;
+  penalty_rate: number;
+  grace_period: number;
   is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }

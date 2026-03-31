@@ -39,6 +39,18 @@ export const PAYMENT_FREQUENCY_LABELS: Record<string, string> = {
   monthly: "Monthly",
 };
 
+export const INTEREST_TYPE_OPTIONS = [
+  { value: "fixed", label: "Fixed" },
+  { value: "diminishing", label: "Diminishing" },
+] as const;
+
+export const PAYMENT_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
+
 export const PAYMENT_METHOD = {
   CASH: "cash",
   BANK_TRANSFER: "bank_transfer",
