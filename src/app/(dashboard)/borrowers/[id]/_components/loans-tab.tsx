@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import type { Loan, LoanSchedule } from "@/types";
+import { AlertTriangle, ChevronDown, ChevronRight, UserCheck } from "lucide-react";
+import type { CoMaker, Loan, LoanSchedule } from "@/types";
 import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
 import { MOCK_SCHEDULES } from "./mock-detail-data";
 
@@ -39,6 +39,7 @@ const scheduleStatusColor: Record<string, string> = {
 
 interface LoansTabProps {
   loans: Loan[];
+  coMakers: CoMaker[];
 }
 
 function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
@@ -74,7 +75,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
   );
 }
 
-export function LoansTab({ loans }: LoansTabProps) {
+export function LoansTab({ loans, coMakers }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
 
   const sortedLoans = [...loans].sort((a, b) => {
@@ -100,6 +101,7 @@ export function LoansTab({ loans }: LoansTabProps) {
                 <TableHead>Released</TableHead>
                 <TableHead>Maturity</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Co-Maker</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -108,19 +110,23 @@ export function LoansTab({ loans }: LoansTabProps) {
                 const hasSchedule = schedule.length > 0;
                 const isExpanded = expandedLoan === loan.id;
 
+                const loanCoMakers = coMakers.filter((cm) => cm.loan_id === loan.id);
+                const hasCoMaker = loanCoMakers.length > 0;
+                const needsCoMaker = !hasCoMaker && loan.principal_amount >= 50000 && loan.status !== "completed";
+                const isExpandable = hasSchedule || loanCoMakers.length > 0 || needsCoMaker;
+
                 return (
-                  <>
+                  <Fragment key={loan.id}>
                     <TableRow
-                      key={loan.id}
-                      className={hasSchedule ? "cursor-pointer hover:bg-muted/50" : ""}
+                      className={isExpandable ? "cursor-pointer hover:bg-muted/50" : ""}
                       onClick={() => {
-                        if (hasSchedule) {
+                        if (isExpandable) {
                           setExpandedLoan(isExpanded ? null : loan.id);
                         }
                       }}
                     >
                       <TableCell>
-                        {hasSchedule &&
+                        {isExpandable &&
                           (isExpanded ? (
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           ) : (
@@ -147,20 +153,66 @@ export function LoansTab({ loans }: LoansTabProps) {
                           {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        {hasCoMaker ? (
+                          <div className="flex items-center gap-1.5">
+                            <UserCheck className="h-4 w-4 text-green-600" />
+                            <span className="text-xs text-green-600">{loanCoMakers.length}</span>
+                          </div>
+                        ) : needsCoMaker ? (
+                          <div className="flex items-center gap-1.5">
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            <span className="text-xs text-amber-500">Recommended</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">None</span>
+                        )}
+                      </TableCell>
                     </TableRow>
-                    {isExpanded && hasSchedule && (
-                      <TableRow key={`${loan.id}-schedule`}>
-                        <TableCell colSpan={9} className="p-0">
-                          <ScheduleTable schedule={schedule} />
+                    {isExpanded && (
+                      <TableRow key={`${loan.id}-details`}>
+                        <TableCell colSpan={10} className="p-0">
+                          {/* Co-maker info */}
+                          {loanCoMakers.length > 0 && (
+                            <div className="mx-4 mt-4 mb-2 rounded-lg border bg-green-50/50 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                                Co-Maker{loanCoMakers.length > 1 ? "s" : ""} for this Loan
+                              </p>
+                              <div className="grid gap-2 md:grid-cols-2">
+                                {loanCoMakers.map((cm) => (
+                                  <div key={cm.id} className="flex items-center gap-3 rounded-md border bg-white p-2">
+                                    <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium truncate">{cm.full_name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {cm.relationship} · {cm.phone}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Repayment schedule */}
+                          {hasSchedule && <ScheduleTable schedule={schedule} />}
+                          {/* Warning if no co-maker needed */}
+                          {needsCoMaker && (
+                            <div className="mx-4 mt-2 mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                              <p className="text-xs text-amber-600">
+                                This loan is ≥ ₱50,000. A co-maker is recommended for high-value loans.
+                              </p>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
               {loans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                     No loans found.
                   </TableCell>
                 </TableRow>
