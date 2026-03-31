@@ -69,4 +69,4 @@ export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
 export type { Branch } from "./branches";
 export { SIDEBAR_NAV } from "./navigation";
-export type { NavItem } from "./navigation";
+export type { NavItem, NavSubItem } from "./navigation";
