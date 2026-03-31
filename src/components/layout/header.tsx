@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@/hooks";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { ROLES } from "@/constants/rbac";
+import { toast } from "sonner";
 
 export function Header() {
   const { user, clearAuth } = useAuth();
@@ -25,7 +25,9 @@ export function Header() {
       await authService.logout();
     } finally {
       tokenManager.clearTokens();
+      localStorage.removeItem("lendyph_remember_me");
       clearAuth();
+      toast.success("Logged out successfully");
       router.replace("/login");
     }
   };
