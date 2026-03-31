@@ -24,6 +24,25 @@ export const API_ENDPOINTS = {
     LOANS: (id: number) => `/borrowers/${id}/loans`,
     PAYMENTS: (id: number) => `/borrowers/${id}/payments`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
+    DEACTIVATE: (id: number) => `/borrowers/${id}/deactivate`,
+    REACTIVATE: (id: number) => `/borrowers/${id}/reactivate`,
+    UPLOAD_PHOTO: (id: number) => `/borrowers/${id}/photo`,
+    DELETE_PHOTO: (id: number) => `/borrowers/${id}/photo`,
+  },
+  CO_MAKERS: {
+    LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
+    CREATE: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
+    DETAIL: (id: number) => `/co-makers/${id}`,
+    UPDATE: (id: number) => `/co-makers/${id}`,
+    DELETE: (id: number) => `/co-makers/${id}`,
+  },
+  DOCUMENTS: {
+    BORROWER_LIST: (borrowerId: number) => `/borrowers/${borrowerId}/documents`,
+    BORROWER_UPLOAD: (borrowerId: number) => `/borrowers/${borrowerId}/documents`,
+    CO_MAKER_LIST: (coMakerId: number) => `/co-makers/${coMakerId}/documents`,
+    CO_MAKER_UPLOAD: (coMakerId: number) => `/co-makers/${coMakerId}/documents`,
+    DETAIL: (id: number) => `/documents/${id}`,
+    DELETE: (id: number) => `/documents/${id}`,
   },
   LOANS: {
     LIST: "/loans",
@@ -36,6 +55,16 @@ export const API_ENDPOINTS = {
     RELEASE: (id: number) => `/loans/${id}/release`,
     SCHEDULE: (id: number) => `/loans/${id}/schedule`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
+    AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
+    SUBMIT: (id: number) => `/loans/${id}/submit`,
+    VOID: (id: number) => `/loans/${id}/void`,
+  },
+  LOAN_PRODUCTS: {
+    LIST: "/loan-products",
+    CREATE: "/loan-products",
+    DETAIL: (id: number) => `/loan-products/${id}`,
+    UPDATE: (id: number) => `/loan-products/${id}`,
+    DELETE: (id: number) => `/loan-products/${id}`,
   },
   PAYMENTS: {
     LIST: "/payments",
@@ -90,5 +119,8 @@ export const API_ENDPOINTS = {
     BUSINESS: "/settings/business",
     LOAN_PRODUCTS: "/settings/loan-products",
     INTEREST_RATES: "/settings/interest-rates",
+  },
+  SYSTEM: {
+    HEALTH: "/health",
   },
 } as const;
