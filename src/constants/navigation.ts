@@ -55,6 +55,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "All Loans", href: "/loans" },
       { title: "New Application", href: "/loans/new" },
       { title: "Loan Products", href: "/loans/products" },
+      { title: "Amortization", href: "/loans/amortization" },
     ],
   },
   {
