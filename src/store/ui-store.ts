@@ -15,7 +15,7 @@ export const useUIStore = create<UIState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
     }),
     {
-      name: "lendyph-ui",
+      name: "lendy-ui",
     }
   )
 );

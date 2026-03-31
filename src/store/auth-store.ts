@@ -38,7 +38,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "lendyph-auth",
+      name: "lendy-auth",
     }
   )
 );

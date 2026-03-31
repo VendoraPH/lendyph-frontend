@@ -56,9 +56,9 @@ export default function LoginPage() {
       tokenManager.setRefreshToken(refreshToken);
 
       if (rememberMe) {
-        localStorage.setItem("lendyph_remember_me", "true");
+        localStorage.setItem("lendy_remember_me", "true");
       } else {
-        localStorage.removeItem("lendyph_remember_me");
+        localStorage.removeItem("lendy_remember_me");
       }
 
       setUser(user);
@@ -99,7 +99,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lendyph</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
             <p className="mt-1 text-sm text-white/70">Lending Management Platform</p>
           </div>
 
@@ -133,7 +133,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-xs text-white/50">
-            &copy; {new Date().getFullYear()} Lendyph. All rights reserved.
+            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
           </p>
         </div>
       </div>
@@ -143,7 +143,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="text-center lg:hidden">
-            <h1 className="text-3xl font-bold text-brand-orange">Lendyph</h1>
+            <h1 className="text-3xl font-bold text-brand-orange">Lendy.PH</h1>
             <p className="text-sm text-muted-foreground">
               Lending Management Platform
             </p>

@@ -40,7 +40,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const isRememberMe =
     typeof window !== "undefined" &&
-    localStorage.getItem("lendyph_remember_me") === "true";
+    localStorage.getItem("lendy_remember_me") === "true";
 
   const clearTimers = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);

@@ -25,7 +25,7 @@ export function Header() {
       await authService.logout();
     } finally {
       tokenManager.clearTokens();
-      localStorage.removeItem("lendyph_remember_me");
+      localStorage.removeItem("lendy_remember_me");
       clearAuth();
       toast.success("Logged out successfully");
       router.replace("/login");

@@ -217,7 +217,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
     changes: [
       { field: "name", old: null, new: "Pedro Garcia" },
       { field: "username", old: null, new: "pedro.g" },
-      { field: "email", old: null, new: "pedro@lendyph.com" },
+      { field: "email", old: null, new: "pedro@lendy.ph" },
       { field: "role", old: null, new: "viewer" },
       { field: "branch", old: null, new: "manila" },
     ],
