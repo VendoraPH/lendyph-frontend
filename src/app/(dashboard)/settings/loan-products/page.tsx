@@ -299,7 +299,7 @@ function ProductFormDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
           {/* Basic Info */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -736,9 +736,9 @@ export default function LoanProductsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Loan Products</h1>
           <p className="text-muted-foreground">
@@ -747,7 +747,7 @@ export default function LoanProductsPage() {
         </div>
         <Button
           onClick={() => setAddDialogOpen(true)}
-          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
         >
           <Plus className="mr-2 h-4 w-4" />
           Add Loan Product
@@ -755,7 +755,7 @@ export default function LoanProductsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -795,8 +795,93 @@ export default function LoanProductsPage() {
         </Card>
       </div>
 
-      {/* Data Table */}
-      <Card>
+      {/* Mobile Card View */}
+      <div className="space-y-3 md:hidden">
+        <p className="text-sm font-medium text-muted-foreground">
+          All Products ({products.length})
+        </p>
+        {products.map((product) => (
+          <Card key={product.id}>
+            <CardContent className="py-4">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{product.name}</p>
+                    <Badge
+                      variant="outline"
+                      className={
+                        product.is_active
+                          ? statusBadge.active
+                          : statusBadge.inactive
+                      }
+                    >
+                      {product.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  {product.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {product.description}
+                    </p>
+                  )}
+                </div>
+                <ProductActionsCell
+                  product={product}
+                  onEdit={(form) => handleEdit(product.id, form)}
+                  onToggleStatus={() => handleToggleStatus(product.id)}
+                  onDelete={() => handleDelete(product.id)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest</p>
+                  <p className="font-medium">
+                    {product.interest_rate}%{" "}
+                    <span className="text-muted-foreground font-normal">
+                      {product.interest_type === "fixed" ? "Fixed" : "Diminishing"}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Frequency</p>
+                  <p>{PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="text-xs">
+                    {formatCurrency(product.min_amount)} – {formatCurrency(product.max_amount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Term</p>
+                  <p>{product.min_term}–{product.max_term} months</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Fees</p>
+                  <p className="text-xs">
+                    Processing {product.processing_fee}% · Service {product.service_fee}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Penalty</p>
+                  <p className="text-xs">
+                    {product.penalty_rate}%/day · {product.grace_period}d grace
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {products.length === 0 && (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              No loan products found. Add one to get started.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <Card className="hidden md:block min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle className="text-sm font-medium">
             All Products ({products.length})
@@ -842,10 +927,10 @@ export default function LoanProductsPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {product.min_term}–{product.max_term} months
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {formatCurrency(product.min_amount)} —{" "}
                       {formatCurrency(product.max_amount)}
                     </TableCell>
@@ -853,7 +938,7 @@ export default function LoanProductsPage() {
                       {PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
                         <span>Processing: {product.processing_fee}%</span>
                         <br />
                         <span>Service: {product.service_fee}%</span>
