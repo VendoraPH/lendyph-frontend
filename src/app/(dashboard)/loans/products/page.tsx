@@ -1,0 +1,995 @@
+"use client";
+
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Plus,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Package,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+} from "lucide-react";
+import {
+  INTEREST_TYPE_OPTIONS,
+  PAYMENT_FREQUENCY_OPTIONS,
+  PAYMENT_FREQUENCY_LABELS,
+} from "@/constants";
+import type { LoanProduct } from "@/types/loan";
+
+// ── Helpers ──
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+  }).format(amount);
+
+const statusBadge = {
+  active: "bg-green-100 text-green-700 border-green-200",
+  inactive: "bg-red-100 text-red-700 border-red-200",
+};
+
+// ── Mock Data ──
+
+const INITIAL_PRODUCTS: LoanProduct[] = [
+  {
+    id: 1,
+    name: "Salary Loan",
+    description: "Short-term loan for employed individuals based on monthly salary",
+    min_amount: 5000,
+    max_amount: 50000,
+    interest_rate: 3,
+    interest_type: "fixed",
+    min_term: 1,
+    max_term: 12,
+    payment_frequency: "monthly",
+    processing_fee: 2,
+    service_fee: 1,
+    penalty_rate: 0.5,
+    grace_period: 3,
+    is_active: true,
+    created_at: "2026-01-15T00:00:00Z",
+    updated_at: "2026-01-15T00:00:00Z",
+  },
+  {
+    id: 2,
+    name: "Business Loan",
+    description: "Working capital and expansion financing for SMEs",
+    min_amount: 50000,
+    max_amount: 500000,
+    interest_rate: 2,
+    interest_type: "diminishing",
+    min_term: 6,
+    max_term: 36,
+    payment_frequency: "monthly",
+    processing_fee: 3,
+    service_fee: 1.5,
+    penalty_rate: 0.3,
+    grace_period: 5,
+    is_active: true,
+    created_at: "2026-01-20T00:00:00Z",
+    updated_at: "2026-01-20T00:00:00Z",
+  },
+  {
+    id: 3,
+    name: "Emergency Loan",
+    description: "Quick-release loan for urgent financial needs",
+    min_amount: 1000,
+    max_amount: 20000,
+    interest_rate: 5,
+    interest_type: "fixed",
+    min_term: 1,
+    max_term: 3,
+    payment_frequency: "weekly",
+    processing_fee: 1,
+    service_fee: 0,
+    penalty_rate: 1,
+    grace_period: 1,
+    is_active: true,
+    created_at: "2026-02-01T00:00:00Z",
+    updated_at: "2026-02-01T00:00:00Z",
+  },
+  {
+    id: 4,
+    name: "Agricultural Loan",
+    description: "Crop financing and farm equipment loans for farmers",
+    min_amount: 20000,
+    max_amount: 200000,
+    interest_rate: 2.5,
+    interest_type: "fixed",
+    min_term: 3,
+    max_term: 24,
+    payment_frequency: "monthly",
+    processing_fee: 2,
+    service_fee: 1,
+    penalty_rate: 0.3,
+    grace_period: 7,
+    is_active: true,
+    created_at: "2026-02-10T00:00:00Z",
+    updated_at: "2026-02-10T00:00:00Z",
+  },
+  {
+    id: 5,
+    name: "OFW Loan",
+    description: "Pre-departure and family assistance loan for overseas Filipino workers",
+    min_amount: 30000,
+    max_amount: 300000,
+    interest_rate: 2,
+    interest_type: "diminishing",
+    min_term: 6,
+    max_term: 24,
+    payment_frequency: "monthly",
+    processing_fee: 2.5,
+    service_fee: 1,
+    penalty_rate: 0.5,
+    grace_period: 5,
+    is_active: true,
+    created_at: "2026-02-20T00:00:00Z",
+    updated_at: "2026-02-20T00:00:00Z",
+  },
+  {
+    id: 6,
+    name: "Microfinance Loan",
+    description: "Daily collection micro-loan for market vendors and small traders",
+    min_amount: 1000,
+    max_amount: 10000,
+    interest_rate: 4,
+    interest_type: "fixed",
+    min_term: 1,
+    max_term: 6,
+    payment_frequency: "daily",
+    processing_fee: 1,
+    service_fee: 0.5,
+    penalty_rate: 1.5,
+    grace_period: 0,
+    is_active: false,
+    created_at: "2026-03-01T00:00:00Z",
+    updated_at: "2026-03-01T00:00:00Z",
+  },
+];
+
+// ── Form Types ──
+
+interface ProductForm {
+  name: string;
+  description: string;
+  min_amount: string;
+  max_amount: string;
+  min_term: string;
+  max_term: string;
+  payment_frequency: string;
+  interest_rate: string;
+  interest_type: string;
+  processing_fee: string;
+  service_fee: string;
+  penalty_rate: string;
+  grace_period: string;
+}
+
+const EMPTY_FORM: ProductForm = {
+  name: "",
+  description: "",
+  min_amount: "",
+  max_amount: "",
+  min_term: "",
+  max_term: "",
+  payment_frequency: "monthly",
+  interest_rate: "",
+  interest_type: "fixed",
+  processing_fee: "",
+  service_fee: "",
+  penalty_rate: "",
+  grace_period: "",
+};
+
+function productToForm(p: LoanProduct): ProductForm {
+  return {
+    name: p.name,
+    description: p.description ?? "",
+    min_amount: String(p.min_amount),
+    max_amount: String(p.max_amount),
+    min_term: String(p.min_term),
+    max_term: String(p.max_term),
+    payment_frequency: p.payment_frequency,
+    interest_rate: String(p.interest_rate),
+    interest_type: p.interest_type,
+    processing_fee: String(p.processing_fee),
+    service_fee: String(p.service_fee),
+    penalty_rate: String(p.penalty_rate),
+    grace_period: String(p.grace_period),
+  };
+}
+
+function formToProduct(form: ProductForm, id: number): LoanProduct {
+  const now = new Date().toISOString();
+  return {
+    id,
+    name: form.name,
+    description: form.description || undefined,
+    min_amount: Number(form.min_amount),
+    max_amount: Number(form.max_amount),
+    interest_rate: Number(form.interest_rate),
+    interest_type: form.interest_type as LoanProduct["interest_type"],
+    min_term: Number(form.min_term),
+    max_term: Number(form.max_term),
+    payment_frequency: form.payment_frequency as LoanProduct["payment_frequency"],
+    processing_fee: Number(form.processing_fee),
+    service_fee: Number(form.service_fee),
+    penalty_rate: Number(form.penalty_rate),
+    grace_period: Number(form.grace_period),
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+// ── Product Form Dialog ──
+
+function ProductFormDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  initialData,
+  title,
+  description,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (form: ProductForm) => void;
+  initialData?: ProductForm;
+  title: string;
+  description: string;
+}) {
+  const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
+
+  const update = (field: keyof ProductForm, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(form);
+    if (!initialData) setForm(EMPTY_FORM);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+          {/* Basic Info */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Basic Info
+            </h3>
+            <div className="space-y-2">
+              <Label htmlFor="product-name">Product Name *</Label>
+              <Input
+                id="product-name"
+                placeholder="e.g. Salary Loan"
+                value={form.name}
+                onChange={(e) => update("name", e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="product-description">Description</Label>
+              <Textarea
+                id="product-description"
+                placeholder="Brief description of this loan product"
+                value={form.description}
+                onChange={(e) => update("description", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Amount & Term */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Amount & Term
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="min-amount">Minimum Amount (PHP) *</Label>
+                <Input
+                  id="min-amount"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="5,000"
+                  value={form.min_amount}
+                  onChange={(e) => update("min_amount", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max-amount">Maximum Amount (PHP) *</Label>
+                <Input
+                  id="max-amount"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="50,000"
+                  value={form.max_amount}
+                  onChange={(e) => update("max_amount", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="min-term">Min Term (months) *</Label>
+                <Input
+                  id="min-term"
+                  type="number"
+                  min={1}
+                  placeholder="1"
+                  value={form.min_term}
+                  onChange={(e) => update("min_term", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max-term">Max Term (months) *</Label>
+                <Input
+                  id="max-term"
+                  type="number"
+                  min={1}
+                  placeholder="12"
+                  value={form.max_term}
+                  onChange={(e) => update("max_term", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Frequency *</Label>
+                <Select
+                  value={form.payment_frequency}
+                  onValueChange={(v) => update("payment_frequency", v as string)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Interest */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Interest
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="interest-rate">Interest Rate (%) *</Label>
+                <Input
+                  id="interest-rate"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="3"
+                  value={form.interest_rate}
+                  onChange={(e) => update("interest_rate", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Interest Method *</Label>
+                <Select
+                  value={form.interest_type}
+                  onValueChange={(v) => update("interest_type", v as string)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTEREST_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Fees & Penalties */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Fees & Penalties
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="processing-fee">Processing Fee (%)</Label>
+                <Input
+                  id="processing-fee"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="2"
+                  value={form.processing_fee}
+                  onChange={(e) => update("processing_fee", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="service-fee">Service Fee (%)</Label>
+                <Input
+                  id="service-fee"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="1"
+                  value={form.service_fee}
+                  onChange={(e) => update("service_fee", e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="penalty-rate">Penalty Rate (% per day)</Label>
+                <Input
+                  id="penalty-rate"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.5"
+                  value={form.penalty_rate}
+                  onChange={(e) => update("penalty_rate", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="grace-period">Grace Period (days)</Label>
+                <Input
+                  id="grace-period"
+                  type="number"
+                  min={0}
+                  placeholder="3"
+                  value={form.grace_period}
+                  onChange={(e) => update("grace_period", e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              {initialData ? "Save Changes" : "Create Product"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Toggle Status Dialog ──
+
+function ToggleStatusDialog({
+  product,
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  product: LoanProduct;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const isActive = product.is_active;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-brand-orange" />
+            {isActive ? "Deactivate" : "Activate"} Product
+          </DialogTitle>
+          <DialogDescription>
+            {isActive
+              ? `Are you sure you want to deactivate "${product.name}"? It will no longer appear as an option during loan applications.`
+              : `Are you sure you want to activate "${product.name}"? It will become available for loan applications.`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              onConfirm();
+              onOpenChange(false);
+            }}
+            className={
+              isActive
+                ? "bg-destructive text-white hover:bg-destructive/90"
+                : "bg-green-600 text-white hover:bg-green-700"
+            }
+          >
+            {isActive ? "Deactivate" : "Activate"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Delete Product Dialog ──
+
+function DeleteProductDialog({
+  product,
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  product: LoanProduct;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="h-5 w-5" />
+            Delete Loan Product
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to permanently delete &quot;{product.name}&quot;?
+            This action cannot be undone. Existing loans using this product will
+            not be affected.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              onConfirm();
+              onOpenChange(false);
+            }}
+            className="bg-destructive text-white hover:bg-destructive/90"
+          >
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Product Actions Cell ──
+
+function ProductActionsCell({
+  product,
+  onEdit,
+  onToggleStatus,
+  onDelete,
+}: {
+  product: LoanProduct;
+  onEdit: (form: ProductForm) => void;
+  onToggleStatus: () => void;
+  onDelete: () => void;
+}) {
+  const [openDialog, setOpenDialog] = useState<string | null>(null);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger className="outline-none">
+          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setOpenDialog("edit")}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setOpenDialog("status")}>
+            {product.is_active ? (
+              <ToggleLeft className="mr-2 h-4 w-4" />
+            ) : (
+              <ToggleRight className="mr-2 h-4 w-4" />
+            )}
+            {product.is_active ? "Deactivate" : "Activate"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => setOpenDialog("delete")}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ProductFormDialog
+        open={openDialog === "edit"}
+        onOpenChange={(v) => !v && setOpenDialog(null)}
+        onSubmit={onEdit}
+        initialData={productToForm(product)}
+        title="Edit Loan Product"
+        description={`Update the configuration for ${product.name}.`}
+      />
+      <ToggleStatusDialog
+        product={product}
+        open={openDialog === "status"}
+        onOpenChange={(v) => !v && setOpenDialog(null)}
+        onConfirm={onToggleStatus}
+      />
+      <DeleteProductDialog
+        product={product}
+        open={openDialog === "delete"}
+        onOpenChange={(v) => !v && setOpenDialog(null)}
+        onConfirm={onDelete}
+      />
+    </>
+  );
+}
+
+// ── Main Page ──
+
+export default function LoanProductsPage() {
+  const [products, setProducts] = useState<LoanProduct[]>(INITIAL_PRODUCTS);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+
+  const activeCount = products.filter((p) => p.is_active).length;
+  const inactiveCount = products.filter((p) => !p.is_active).length;
+
+  const handleAdd = (form: ProductForm) => {
+    const newProduct = formToProduct(form, Date.now());
+    setProducts((prev) => [newProduct, ...prev]);
+  };
+
+  const handleEdit = (id: number, form: ProductForm) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...formToProduct(form, id),
+              is_active: p.is_active,
+              created_at: p.created_at,
+              updated_at: new Date().toISOString(),
+            }
+          : p
+      )
+    );
+  };
+
+  const handleToggleStatus = (id: number) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, is_active: !p.is_active, updated_at: new Date().toISOString() }
+          : p
+      )
+    );
+  };
+
+  const handleDelete = (id: number) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  return (
+    <div className="space-y-6 min-w-0">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Loan Products</h1>
+          <p className="text-muted-foreground">
+            Configure loan products and terms for loan applications
+          </p>
+        </div>
+        <Button
+          onClick={() => setAddDialogOpen(true)}
+          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Loan Product
+        </Button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Package className="h-4 w-4" />
+                <span className="text-sm font-medium">Total Products</span>
+              </div>
+              <span className="text-2xl font-bold">{products.length}</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-sm font-medium">Active</span>
+              </div>
+              <span className="text-2xl font-bold text-green-600">
+                {activeCount}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-red-600">
+                <XCircle className="h-4 w-4" />
+                <span className="text-sm font-medium">Inactive</span>
+              </div>
+              <span className="text-2xl font-bold text-red-600">
+                {inactiveCount}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="space-y-3 md:hidden">
+        <p className="text-sm font-medium text-muted-foreground">
+          All Products ({products.length})
+        </p>
+        {products.map((product) => (
+          <Card key={product.id}>
+            <CardContent className="py-4">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{product.name}</p>
+                    <Badge
+                      variant="outline"
+                      className={
+                        product.is_active
+                          ? statusBadge.active
+                          : statusBadge.inactive
+                      }
+                    >
+                      {product.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  {product.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {product.description}
+                    </p>
+                  )}
+                </div>
+                <ProductActionsCell
+                  product={product}
+                  onEdit={(form) => handleEdit(product.id, form)}
+                  onToggleStatus={() => handleToggleStatus(product.id)}
+                  onDelete={() => handleDelete(product.id)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest</p>
+                  <p className="font-medium">
+                    {product.interest_rate}%{" "}
+                    <span className="text-muted-foreground font-normal">
+                      {product.interest_type === "fixed" ? "Fixed" : "Diminishing"}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Frequency</p>
+                  <p>{PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="text-xs">
+                    {formatCurrency(product.min_amount)} – {formatCurrency(product.max_amount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Term</p>
+                  <p>{product.min_term}–{product.max_term} months</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Fees</p>
+                  <p className="text-xs">
+                    Processing {product.processing_fee}% · Service {product.service_fee}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Penalty</p>
+                  <p className="text-xs">
+                    {product.penalty_rate}%/day · {product.grace_period}d grace
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {products.length === 0 && (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              No loan products found. Add one to get started.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <Card className="hidden md:block min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">
+            All Products ({products.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Interest</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Amount Range</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Fees</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{product.name}</p>
+                        {product.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {product.description}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <span className="font-medium">
+                          {product.interest_rate}%
+                        </span>
+                        <span className="text-muted-foreground ml-1">
+                          {product.interest_type === "fixed"
+                            ? "Fixed"
+                            : "Diminishing"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {product.min_term}–{product.max_term} months
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {formatCurrency(product.min_amount)} —{" "}
+                      {formatCurrency(product.max_amount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
+                        <span>Processing: {product.processing_fee}%</span>
+                        <br />
+                        <span>Service: {product.service_fee}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          product.is_active
+                            ? statusBadge.active
+                            : statusBadge.inactive
+                        }
+                      >
+                        {product.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <ProductActionsCell
+                        product={product}
+                        onEdit={(form) => handleEdit(product.id, form)}
+                        onToggleStatus={() => handleToggleStatus(product.id)}
+                        onDelete={() => handleDelete(product.id)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {products.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="h-24 text-center text-muted-foreground"
+                    >
+                      No loan products found. Add one to get started.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Add Product Dialog */}
+      <ProductFormDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onSubmit={handleAdd}
+        title="Add Loan Product"
+        description="Create a new loan product that staff can select during loan applications."
+      />
+    </div>
+  );
+}
