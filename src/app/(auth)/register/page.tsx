@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import { authService } from "@/services";
+import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,20 +23,66 @@ export default function RegisterPage() {
     password: "",
     password_confirmation: "",
   });
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!form.name) newErrors.name = "Full name is required";
+    if (!form.email) newErrors.email = "Email is required";
+
+    if (!form.password) {
+      newErrors.password = "Password is required";
+    } else if (form.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    }
+
+    if (!form.password_confirmation) {
+      newErrors.password_confirmation = "Please confirm your password";
+    } else if (form.password !== form.password_confirmation) {
+      newErrors.password_confirmation = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (!validate()) return;
 
-    // TODO: Replace with actual authService.register() call
-    setTimeout(() => {
-      setIsLoading(false);
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      await authService.register(form);
+      toast.success("Account created successfully. Please sign in.");
       router.push("/login");
-    }, 1500);
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        if (status === 422 && data?.errors) {
+          const serverErrors: Record<string, string> = {};
+          for (const [key, messages] of Object.entries(data.errors)) {
+            serverErrors[key] = (messages as string[])[0];
+          }
+          setErrors(serverErrors);
+        } else {
+          toast.error(data?.message || "Registration failed. Please try again.");
+        }
+      } else {
+        toast.error("Unable to connect. Please check your internet connection.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
   return (
@@ -49,7 +98,7 @@ export default function RegisterPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lendyph</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
             <p className="mt-1 text-sm text-white/70">
               Lending Management Platform
             </p>
@@ -108,7 +157,7 @@ export default function RegisterPage() {
           </div>
 
           <p className="text-xs text-white/50">
-            &copy; {new Date().getFullYear()} Lendyph. All rights reserved.
+            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
           </p>
         </div>
       </div>
@@ -118,7 +167,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="text-center lg:hidden">
-            <h1 className="text-3xl font-bold text-brand-orange">Lendyph</h1>
+            <h1 className="text-3xl font-bold text-brand-orange">Lendy.PH</h1>
             <p className="text-sm text-muted-foreground">
               Lending Management Platform
             </p>
@@ -144,8 +193,11 @@ export default function RegisterPage() {
                 onChange={(e) => updateField("name", e.target.value)}
                 required
                 autoComplete="name"
-                className="h-11"
+                className={`h-11 ${errors.name ? "border-destructive" : ""}`}
               />
+              {errors.name && (
+                <p className="text-xs text-destructive">{errors.name}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -158,8 +210,11 @@ export default function RegisterPage() {
                 onChange={(e) => updateField("email", e.target.value)}
                 required
                 autoComplete="email"
-                className="h-11"
+                className={`h-11 ${errors.email ? "border-destructive" : ""}`}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -173,7 +228,7 @@ export default function RegisterPage() {
                   onChange={(e) => updateField("password", e.target.value)}
                   required
                   autoComplete="new-password"
-                  className="h-11 pr-10"
+                  className={`h-11 pr-10 ${errors.password ? "border-destructive" : ""}`}
                 />
                 <button
                   type="button"
@@ -187,9 +242,13 @@ export default function RegisterPage() {
                   )}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Must be at least 8 characters
-              </p>
+              {errors.password ? (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Must be at least 8 characters
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -205,7 +264,7 @@ export default function RegisterPage() {
                   }
                   required
                   autoComplete="new-password"
-                  className="h-11 pr-10"
+                  className={`h-11 pr-10 ${errors.password_confirmation ? "border-destructive" : ""}`}
                 />
                 <button
                   type="button"
@@ -219,6 +278,9 @@ export default function RegisterPage() {
                   )}
                 </button>
               </div>
+              {errors.password_confirmation && (
+                <p className="text-xs text-destructive">{errors.password_confirmation}</p>
+              )}
             </div>
 
             <div className="flex items-start gap-2">

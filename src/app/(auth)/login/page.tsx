@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
-import type { User } from "@/types";
+import { authService } from "@/services";
+import { tokenManager } from "@/lib/axios-client";
+import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,31 +20,70 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  const validate = (): boolean => {
+    const newErrors: typeof errors = {};
+
+    if (!form.email) {
+      newErrors.email = "Email is required";
+    }
+
+    if (!form.password) {
+      newErrors.password = "Password is required";
+    } else if (form.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
+
     setIsLoading(true);
+    setErrors({});
 
-    // TODO: Replace with actual authService.login() call
-    // Mock user for testing — remove when backend is connected
-    const mockUser: User = {
-      id: 1,
-      name: "Augustin Maputol",
-      username: "augustin",
-      email: form.email || "admin@lendyph.com",
-      mobile: "09171234567",
-      role: "admin",
-      branch: "main",
-      status: "active",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      const { token, refreshToken, user } = await authService.login({
+        email: form.email,
+        password: form.password,
+      });
 
-    setTimeout(() => {
-      setUser(mockUser);
-      setIsLoading(false);
+      tokenManager.setAccessToken(token);
+      tokenManager.setRefreshToken(refreshToken);
+
+      if (rememberMe) {
+        localStorage.setItem("lendy_remember_me", "true");
+      } else {
+        localStorage.removeItem("lendy_remember_me");
+      }
+
+      setUser(user);
       router.push("/dashboard");
-    }, 1000);
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        if (status === 422 && data?.errors) {
+          setErrors({
+            email: data.errors.email?.[0],
+            password: data.errors.password?.[0],
+          });
+        } else if (status === 401) {
+          toast.error("Invalid email or password");
+        } else {
+          toast.error(data?.message || "Something went wrong. Please try again.");
+        }
+      } else {
+        toast.error("Unable to connect. Please check your internet connection.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -57,7 +99,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lendyph</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
             <p className="mt-1 text-sm text-white/70">Lending Management Platform</p>
           </div>
 
@@ -91,7 +133,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-xs text-white/50">
-            &copy; {new Date().getFullYear()} Lendyph. All rights reserved.
+            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
           </p>
         </div>
       </div>
@@ -101,7 +143,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="text-center lg:hidden">
-            <h1 className="text-3xl font-bold text-brand-orange">Lendyph</h1>
+            <h1 className="text-3xl font-bold text-brand-orange">Lendy.PH</h1>
             <p className="text-sm text-muted-foreground">
               Lending Management Platform
             </p>
@@ -122,13 +164,17 @@ export default function LoginPage() {
                 type="email"
                 placeholder="name@example.com"
                 value={form.email}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, email: e.target.value }))
-                }
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, email: e.target.value }));
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                }}
                 required
                 autoComplete="email"
-                className="h-11"
+                className={`h-11 ${errors.email ? "border-destructive" : ""}`}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -147,12 +193,13 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={form.password}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, password: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, password: e.target.value }));
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                   required
                   autoComplete="current-password"
-                  className="h-11 pr-10"
+                  className={`h-11 pr-10 ${errors.password ? "border-destructive" : ""}`}
                 />
                 <button
                   type="button"
@@ -166,6 +213,9 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
