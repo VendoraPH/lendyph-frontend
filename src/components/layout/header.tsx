@@ -1,15 +1,36 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Menu, Search, Bell, ChevronRight } from "lucide-react";
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
+import {
+  LogOut,
+  User,
+  Menu,
+  Search,
+  Bell,
+  ChevronRight,
+  Settings,
+  FilePlus,
+  CreditCard,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
@@ -25,12 +46,10 @@ interface HeaderProps {
 /** Map first path segment to its nav title */
 function getPageTitle(segment: string): string {
   for (const item of SIDEBAR_NAV) {
-    // Match by href, e.g. "/dashboard" -> "dashboard"
     if (item.href === `/${segment}`) {
       return item.title;
     }
   }
-  // Fallback: capitalize
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 
@@ -41,6 +60,8 @@ function getSubLabel(segment: string): string {
     products: "Loan Products",
     amortization: "Amortization",
     history: "History",
+    profile: "Profile",
+    "loan-products": "Loan Products",
   };
   return (
     labels[segment] ||
@@ -57,14 +78,12 @@ function Breadcrumb() {
   const firstSegment = segments[0];
   const pageTitle = getPageTitle(firstSegment);
 
-  // Single segment, e.g. /dashboard
   if (segments.length === 1) {
     return (
       <span className="text-sm font-medium text-foreground">{pageTitle}</span>
     );
   }
 
-  // Two or more segments, e.g. /loans/products or /borrowers/1
   const subSegment = segments[1];
   const isId = /^\d+$/.test(subSegment);
   const subLabel = isId ? "Detail" : getSubLabel(subSegment);
@@ -78,9 +97,35 @@ function Breadcrumb() {
   );
 }
 
+const QUICK_ACTIONS = [
+  { title: "New Loan", href: "/loans/new", icon: FilePlus },
+  { title: "Record Payment", href: "/payments", icon: CreditCard },
+];
+
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
   const router = useRouter();
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K shortcut
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleSelect = useCallback(
+    (href: string) => {
+      setCommandOpen(false);
+      router.push(href);
+    },
+    [router],
+  );
 
   const handleLogout = async () => {
     try {
@@ -104,59 +149,146 @@ export function Header({ onMenuClick }: HeaderProps) {
   const roleLabel = user?.role ? ROLES[user.role]?.label : "";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
-      {/* Left side: hamburger (mobile) + breadcrumb */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="md:hidden"
-          onClick={onMenuClick}
-        >
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Open menu</span>
-        </Button>
-        <Breadcrumb />
-      </div>
-
-      {/* Right side: search + notifications + user */}
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
-          <Search className="h-4 w-4" />
-          <span className="sr-only">Search</span>
-        </Button>
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
-          <Bell className="h-4 w-4" />
-          <span className="sr-only">Notifications</span>
-        </Button>
-
-        <div className="ml-1 flex items-center gap-3">
-          <div className="hidden sm:block text-right text-sm">
-            <p className="font-medium">{user?.name}</p>
-            <p className="text-xs text-muted-foreground">{roleLabel}</p>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="rounded-full outline-none">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => router.push("/settings")}>
-                <User className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+    <>
+      <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+        {/* Left side: hamburger (mobile) + breadcrumb */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="md:hidden"
+            onClick={onMenuClick}
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Open menu</span>
+          </Button>
+          <Breadcrumb />
         </div>
-      </div>
-    </header>
+
+        {/* Right side: search + notifications + user */}
+        <div className="flex items-center gap-2">
+          {/* Command palette trigger */}
+          <Button
+            variant="outline"
+            className="hidden h-8 w-56 justify-start gap-2 text-sm text-muted-foreground sm:flex"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search className="h-4 w-4" />
+            <span className="flex-1 text-left">Search...</span>
+            <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              ⌘K
+            </kbd>
+          </Button>
+          {/* Mobile search icon */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground sm:hidden"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search className="h-4 w-4" />
+            <span className="sr-only">Search</span>
+          </Button>
+
+          {/* Notification bell with red dot */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="relative text-muted-foreground"
+          >
+            <Bell className="h-4 w-4" />
+            <div className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
+            <span className="sr-only">Notifications</span>
+          </Button>
+
+          {/* User section */}
+          <div className="ml-1 flex items-center gap-3">
+            <div className="hidden items-center gap-2 sm:flex">
+              <div className="text-right">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold">{user?.name}</span>
+                  {roleLabel && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {roleLabel}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="rounded-full outline-none">
+                <div className="relative">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Online indicator */}
+                  <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-semibold">{user?.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {user?.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => router.push("/settings/profile")}
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/settings/loan-products")}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </header>
+
+      {/* Command palette dialog */}
+      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <CommandInput placeholder="Type a command or search..." />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Navigation">
+            {SIDEBAR_NAV.map((item) => (
+              <CommandItem
+                key={item.href}
+                onSelect={() => handleSelect(item.href)}
+              >
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.title}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandGroup heading="Quick Actions">
+            {QUICK_ACTIONS.map((action) => (
+              <CommandItem
+                key={action.href}
+                onSelect={() => handleSelect(action.href)}
+              >
+                <action.icon className="mr-2 h-4 w-4" />
+                {action.title}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
+    </>
   );
 }
