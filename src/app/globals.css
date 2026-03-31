@@ -89,14 +89,14 @@
   --chart-4: oklch(0.65 0.16 50);
   --chart-5: oklch(0.75 0.12 264);
   --radius: 0.625rem;
-  --sidebar: oklch(0.25 0.06 264);
-  --sidebar-foreground: oklch(0.95 0.01 250);
-  --sidebar-primary: oklch(0.488 0.217 264);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.35 0.02 260);
+  --sidebar-primary: oklch(0.72 0.19 50);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.32 0.06 264);
-  --sidebar-accent-foreground: oklch(0.95 0.01 250);
-  --sidebar-border: oklch(0.35 0.05 264);
-  --sidebar-ring: oklch(0.488 0.217 264);
+  --sidebar-accent: oklch(0.96 0.01 260);
+  --sidebar-accent-foreground: oklch(0.25 0.02 260);
+  --sidebar-border: oklch(0.92 0.01 260);
+  --sidebar-ring: oklch(0.72 0.19 50);
 
   /* Brand: Blue */
   --brand-blue: oklch(0.488 0.217 264);
