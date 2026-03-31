@@ -35,7 +35,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "dashboard:view",
   },
   {
-    title: "Team",
+    title: "User Management",
     href: "/users",
     icon: UserCog,
     permission: "users:view",
@@ -81,7 +81,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "reports:view",
   },
   {
-    title: "Activity Log",
+    title: "Audit Trail",
     href: "/audit-trail",
     icon: History,
     permission: "audit_logs:view",
