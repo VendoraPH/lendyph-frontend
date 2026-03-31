@@ -91,5 +91,9 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/settings",
     icon: Settings,
     permission: "settings:view",
+    children: [
+      { title: "Profile", href: "/settings/profile" },
+      { title: "Loan Products", href: "/settings/loan-products" },
+    ],
   },
 ];
