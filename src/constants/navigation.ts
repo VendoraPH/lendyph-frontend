@@ -29,13 +29,13 @@ export interface NavItem {
 
 export const SIDEBAR_NAV: NavItem[] = [
   {
-    title: "Dashboard",
+    title: "Overview",
     href: "/dashboard",
     icon: LayoutDashboard,
     permission: "dashboard:view",
   },
   {
-    title: "Users",
+    title: "Team",
     href: "/users",
     icon: UserCog,
     permission: "users:view",
@@ -81,7 +81,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "reports:view",
   },
   {
-    title: "Audit Trail",
+    title: "Activity Log",
     href: "/audit-trail",
     icon: History,
     permission: "audit_logs:view",
