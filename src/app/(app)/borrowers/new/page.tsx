@@ -214,7 +214,7 @@ export default function NewBorrowerPage() {
               <div className="space-y-2">
                 <Label>Suffix</Label>
                 <Select
-                  value={form.suffix || null}
+                  value={form.suffix}
                   onValueChange={(v) => update("suffix", v ?? "")}
                 >
                   <SelectTrigger className="w-full">
@@ -245,7 +245,7 @@ export default function NewBorrowerPage() {
                 <Label>Gender</Label>
                 <RadioGroup
                   className="flex gap-4 pt-2"
-                  value={form.gender || null}
+                  value={form.gender}
                   onValueChange={(v) => update("gender", v ?? "")}
                 >
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -263,7 +263,7 @@ export default function NewBorrowerPage() {
             <div className="space-y-2">
               <Label>Civil Status</Label>
               <Select
-                value={form.civil_status || null}
+                value={form.civil_status}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
                 <SelectTrigger className="w-full sm:w-1/2">
@@ -370,7 +370,7 @@ export default function NewBorrowerPage() {
                 </div>
               ) : (
                 <Select
-                  value={form.branch_id || null}
+                  value={form.branch_id ? String(form.branch_id) : ""}
                   onValueChange={(v) => update("branch_id", v ?? "")}
                 >
                   <SelectTrigger className="w-full sm:w-1/2">
