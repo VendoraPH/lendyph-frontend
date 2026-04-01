@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/select";
 import {
   Users,
+  UserPlus,
   UserCheck,
   UserX,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import type { Borrower } from "@/types";
 import { Spinner } from "@/components/ui/spinner";
@@ -27,7 +29,6 @@ import {
   type StatusFilter,
 } from "./_components/borrower-filters";
 import { BorrowerTable } from "./_components/borrower-table";
-import { AddBorrowerDialog } from "./_components/borrower-actions";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50] as const;
 
@@ -102,16 +103,6 @@ export default function BorrowersPage() {
     setCurrentPage(1);
   }
 
-  const handleAdd = async (newBorrower: Borrower) => {
-    try {
-      await borrowerService.create(newBorrower);
-      toast.success("Borrower created successfully");
-      fetchBorrowers();
-    } catch {
-      toast.error("Failed to create borrower");
-    }
-  };
-
   const handleEdit = async (updated: Borrower) => {
     try {
       await borrowerService.update(updated.id, updated);
@@ -183,7 +174,13 @@ export default function BorrowersPage() {
             Search, filter, and manage borrower profiles
           </p>
         </div>
-        <AddBorrowerDialog onAdd={handleAdd} borrowerCount={borrowers.length} />
+        <Link
+          href="/borrowers/new"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors"
+        >
+          <UserPlus className="h-4 w-4" />
+          Add Borrower
+        </Link>
       </div>
 
       {/* Summary Cards */}
