@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   AreaChart,
   Area,
-  BarChart,
+  ComposedChart,
   Bar,
   Cell,
   XAxis,
@@ -78,19 +78,38 @@ const SPARKLINE_BLUE = [
 ];
 
 const TARGET = 50000;
-const CHART_DATA = Array.from({ length: 15 }, (_, i) => ({
-  date: `Mar ${16 + i}`,
-  collected: Math.floor(35000 + (((i * 7 + 3) % 10) / 10) * 30000),
-}));
 
-const ATTENTION_LOANS = [
-  { id: 2, app_number: "LA-20260002", borrower: "Roberto Garcia", amount: 100000, status: "for_review" },
-  { id: 4, app_number: "LA-20260004", borrower: "Eduardo Mendoza", amount: 50000, status: "for_review" },
-  { id: 3, app_number: "LA-20260003", borrower: "Maria L. Reyes", amount: 30000, status: "approved" },
-  { id: 7, app_number: "LA-20260007", borrower: "Ana Santos", amount: 15000, status: "approved" },
-  { id: 9, app_number: "LA-20260009", borrower: "Danilo Villanueva", amount: 80000, status: "defaulted" },
-  { id: 11, app_number: "LA-20260011", borrower: "Carmen Torres", amount: 5000, status: "defaulted" },
-] as const;
+// Candlestick-style data: each bar has open/close (body) and high/low (wick)
+const CHART_DATA = Array.from({ length: 15 }, (_, i) => {
+  const base = 35000 + (((i * 7 + 3) % 10) / 10) * 30000;
+  const open = Math.floor(base * (0.88 + Math.random() * 0.06));
+  const close = Math.floor(base * (0.94 + Math.random() * 0.12));
+  const high = Math.floor(Math.max(open, close) * (1.03 + Math.random() * 0.04));
+  const low = Math.floor(Math.min(open, close) * (0.93 + Math.random() * 0.04));
+  return {
+    date: `Mar ${16 + i}`,
+    collected: Math.floor(base),
+    open,
+    close,
+    high,
+    low,
+    // body bottom = min(open,close), body height = abs(close-open)
+    bodyBottom: Math.min(open, close),
+    bodyHeight: Math.abs(close - open),
+    wickLow: low,
+    wickHigh: high,
+  };
+});
+
+const RECENT_TRANSACTIONS = [
+  { id: 1, borrower: "Rosario D. Santos", type: "Payment", amount: 3933, date: "Mar 31, 2026", status: "completed", method: "GCash" },
+  { id: 2, borrower: "Roberto Garcia", type: "Payment", amount: 9417, date: "Mar 31, 2026", status: "completed", method: "Cash" },
+  { id: 3, borrower: "Ana Santos", type: "Loan Release", amount: 15000, date: "Mar 30, 2026", status: "released", method: "Bank Transfer" },
+  { id: 4, borrower: "Eduardo Mendoza", type: "Payment", amount: 4708, date: "Mar 30, 2026", status: "completed", method: "Bank Transfer" },
+  { id: 5, borrower: "Maria L. Reyes", type: "Payment", amount: 958, date: "Mar 29, 2026", status: "completed", method: "Maya" },
+  { id: 6, borrower: "Carmen Torres", type: "Loan Release", amount: 50000, date: "Mar 29, 2026", status: "released", method: "Bank Transfer" },
+  { id: 7, borrower: "Danilo Villanueva", type: "Payment", amount: 8667, date: "Mar 28, 2026", status: "overdue", method: "Cash" },
+];
 
 const RECENT_ACTIVITY = [
   { type: "released", title: "Loan Released", detail: "LA-20260005 — ₱50,000 to Eduardo Mendoza", time: "9:42 AM", href: "/loans/5" },
@@ -107,16 +126,10 @@ const RECENT_ACTIVITY = [
 // Color maps
 // ---------------------------------------------------------------------------
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  for_review: { bg: "bg-amber-100", text: "text-amber-700", label: "For Review" },
-  approved: { bg: "bg-blue-100", text: "text-blue-700", label: "Approved" },
-  defaulted: { bg: "bg-red-100", text: "text-red-700", label: "Defaulted" },
-};
-
-const ACTION_STYLES: Record<string, { className: string; label: string }> = {
-  for_review: { className: "bg-purple-100 text-purple-700 hover:bg-purple-200", label: "Review" },
-  approved: { className: "bg-blue-100 text-blue-700 hover:bg-blue-200", label: "Release" },
-  defaulted: { className: "bg-red-100 text-red-700 hover:bg-red-200", label: "Follow Up" },
+const TRANSACTION_STATUS: Record<string, { bg: string; text: string; label: string }> = {
+  completed: { bg: "bg-green-100", text: "text-green-700", label: "Completed" },
+  released: { bg: "bg-purple-100", text: "text-purple-700", label: "Released" },
+  overdue: { bg: "bg-red-100", text: "text-red-700", label: "Overdue" },
 };
 
 const ACTIVITY_DOT: Record<string, string> = {
@@ -127,6 +140,29 @@ const ACTIVITY_DOT: Record<string, string> = {
   overdue: "bg-red-500",
   completed: "bg-green-500",
 };
+
+// Avatar background colors keyed by first letter bucket
+const AVATAR_COLORS: Record<string, string> = {
+  A: "bg-purple-200 text-purple-800",
+  B: "bg-blue-200 text-blue-800",
+  C: "bg-orange-200 text-orange-800",
+  D: "bg-green-200 text-green-800",
+  E: "bg-teal-200 text-teal-800",
+  M: "bg-pink-200 text-pink-800",
+  R: "bg-indigo-200 text-indigo-800",
+  default: "bg-gray-200 text-gray-700",
+};
+
+function getAvatarColor(name: string) {
+  const first = name.charAt(0).toUpperCase();
+  return AVATAR_COLORS[first] ?? AVATAR_COLORS.default;
+}
+
+function getInitials(name: string) {
+  const parts = name.split(" ").filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 // ---------------------------------------------------------------------------
 // Sparkline component
@@ -171,22 +207,108 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: SparklineCol
 }
 
 // ---------------------------------------------------------------------------
+// Custom candlestick bar shape
+// ---------------------------------------------------------------------------
+
+interface CandlestickBarProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  value?: number;
+  payload?: {
+    bodyBottom: number;
+    bodyHeight: number;
+    wickLow: number;
+    wickHigh: number;
+    collected: number;
+  };
+  // recharts also passes yAxis scale info via these
+  background?: { y: number; height: number };
+}
+
+function CandlestickBar(props: CandlestickBarProps) {
+  const { x = 0, width = 0, payload, background } = props;
+
+  if (!payload || !background) return null;
+
+  const chartBottom = background.y + background.height;
+  const chartTop = background.y;
+  const chartHeight = background.height;
+  const maxVal = payload.wickHigh;
+  const minVal = payload.wickLow;
+
+  // Scale value -> pixel y (top-down)
+  function toY(val: number) {
+    // We need to map relative to the chart range.
+    // Use a fixed domain for the whole chart for consistency.
+    // We'll derive from the background rect proportionally using a global max.
+    // Since we don't have direct scale access, use a rough approach:
+    // find max/min across all data as constants.
+    const DOMAIN_MIN = 25000;
+    const DOMAIN_MAX = 80000;
+    const ratio = (val - DOMAIN_MIN) / (DOMAIN_MAX - DOMAIN_MIN);
+    return chartBottom - ratio * chartHeight;
+  }
+
+  const wickX = x + width / 2;
+  const wickTop = toY(payload.wickHigh);
+  const wickBottom = toY(payload.wickLow);
+
+  const bodyTop = toY(Math.max(payload.bodyBottom + payload.bodyHeight, payload.bodyBottom));
+  const bodyBottom2 = toY(payload.bodyBottom);
+  const bodyH = Math.abs(bodyBottom2 - bodyTop);
+
+  const isAbove = payload.collected >= TARGET;
+  const fill = isAbove ? "#22c55e" : "#f43f5e";
+  const wickWidth = 1.5;
+  const bodyWidth = Math.max(width * 0.55, 6);
+
+  return (
+    <g>
+      {/* Wick (thin vertical line) */}
+      <line
+        x1={wickX}
+        y1={Math.min(wickTop, chartTop)}
+        x2={wickX}
+        y2={Math.max(wickBottom, chartTop)}
+        stroke={fill}
+        strokeWidth={wickWidth}
+        opacity={0.7}
+      />
+      {/* Body (wider rectangle) */}
+      <rect
+        x={x + (width - bodyWidth) / 2}
+        y={Math.max(bodyTop, chartTop)}
+        width={bodyWidth}
+        height={Math.max(bodyH, 3)}
+        fill={fill}
+        rx={2}
+        ry={2}
+      />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Custom bar chart tooltip
 // ---------------------------------------------------------------------------
 
 function CollectionTooltip({ active, payload, label }: {
   active?: boolean;
-  payload?: { value: number }[];
+  payload?: { value: number; payload: typeof CHART_DATA[0] }[];
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
-  const isAboveTarget = payload[0].value >= TARGET;
+  const d = payload[0].payload;
+  const isAboveTarget = d.collected >= TARGET;
   return (
     <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
       <p className="font-medium mb-1">{label}</p>
       <p className={isAboveTarget ? "text-[#22c55e] font-semibold" : "text-[#f43f5e] font-semibold"}>
-        {phpFormat.format(payload[0].value)}
+        {phpFormat.format(d.collected)}
       </p>
+      <p className="text-muted-foreground mt-0.5">H: {phpFormat.format(d.high)} / L: {phpFormat.format(d.low)}</p>
     </div>
   );
 }
@@ -304,7 +426,7 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       {/* Section 3: Main Chart Card                                         */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border bg-card shadow-sm" style={{ minHeight: 350 }}>
+      <Card className="rounded-xl border bg-card shadow-sm" style={{ minHeight: 400 }}>
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle className="text-base font-semibold">Collection Overview</CardTitle>
@@ -325,9 +447,21 @@ export default function DashboardPage() {
             </div>
           </div>
         </CardHeader>
+
+        {/* Big value display */}
+        <div className="px-6 pb-4">
+          <div className="flex items-baseline gap-3">
+            <span className="text-4xl font-bold tracking-tight">₱2,456,890</span>
+            <span className="text-sm font-medium text-green-600">+12.5%</span>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Total collections this month
+          </p>
+        </div>
+
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={CHART_DATA} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={CHART_DATA} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis
                 dataKey="date"
@@ -336,6 +470,7 @@ export default function DashboardPage() {
                 axisLine={false}
               />
               <YAxis
+                domain={[25000, 80000]}
                 tickFormatter={(v: number) =>
                   v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`
                 }
@@ -347,8 +482,8 @@ export default function DashboardPage() {
               <Tooltip content={<CollectionTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
               <Bar
                 dataKey="collected"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={32}
+                maxBarSize={28}
+                shape={<CandlestickBar />}
               >
                 {CHART_DATA.map((entry, index) => (
                   <Cell
@@ -357,7 +492,7 @@ export default function DashboardPage() {
                   />
                 ))}
               </Bar>
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
@@ -412,33 +547,55 @@ export default function DashboardPage() {
       {/* Section 5: Two-column bottom layout                                */}
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Loans Needing Attention */}
+        {/* Left: Recent Transactions */}
         <div className="lg:col-span-2">
           <Card className="rounded-xl border bg-card shadow-sm h-full">
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Loans Needing Attention</CardTitle>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">Recent Transactions</CardTitle>
+                <Link
+                  href="/payments/history"
+                  className="text-xs font-medium text-purple-600 hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0 pb-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Loan #</TableHead>
-                    <TableHead>Borrower</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-6">Borrower</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="hidden sm:table-cell">Date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead className="hidden md:table-cell pr-6">Method</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ATTENTION_LOANS.map((loan) => {
-                    const statusStyle = STATUS_COLORS[loan.status];
-                    const actionStyle = ACTION_STYLES[loan.status];
+                  {RECENT_TRANSACTIONS.map((tx) => {
+                    const statusStyle = TRANSACTION_STATUS[tx.status] ?? TRANSACTION_STATUS.completed;
+                    const initials = getInitials(tx.borrower);
+                    const avatarColor = getAvatarColor(tx.borrower);
                     return (
-                      <TableRow key={loan.id}>
-                        <TableCell className="font-medium text-xs">{loan.app_number}</TableCell>
-                        <TableCell className="text-sm">{loan.borrower}</TableCell>
-                        <TableCell className="text-right text-sm">
-                          {phpFormat.format(loan.amount)}
+                      <TableRow key={tx.id} className="hover:bg-muted/50 transition-colors">
+                        <TableCell className="pl-6">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarColor}`}
+                            >
+                              {initials}
+                            </div>
+                            <span className="font-medium text-sm whitespace-nowrap">{tx.borrower}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{tx.type}</TableCell>
+                        <TableCell className="text-right text-sm font-medium">
+                          ₱{tx.amount.toLocaleString("en-PH")}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
+                          {tx.date}
                         </TableCell>
                         <TableCell>
                           <span
@@ -447,12 +604,8 @@ export default function DashboardPage() {
                             {statusStyle.label}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/loans/${loan.id}`}>
-                            <Button size="xs" className={actionStyle.className}>
-                              {actionStyle.label}
-                            </Button>
-                          </Link>
+                        <TableCell className="text-sm text-muted-foreground hidden md:table-cell pr-6">
+                          {tx.method}
                         </TableCell>
                       </TableRow>
                     );
