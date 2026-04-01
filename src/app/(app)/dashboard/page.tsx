@@ -51,14 +51,18 @@ const SPARKLINE_BLUE = [
 
 // Mini area chart for left side of main card
 const COLLECTIONS_TREND = [
-  { day: "W1", value: 380000 },
-  { day: "W2", value: 520000 },
-  { day: "W3", value: 450000 },
-  { day: "W4", value: 680000 },
-  { day: "W5", value: 620000 },
-  { day: "W6", value: 890000 },
-  { day: "W7", value: 780000 },
-  { day: "W8", value: 950000 },
+  { day: "W1",  value: 380000 },
+  { day: "W2",  value: 520000 },
+  { day: "W3",  value: 450000 },
+  { day: "W4",  value: 680000 },
+  { day: "W5",  value: 620000 },
+  { day: "W6",  value: 890000 },
+  { day: "W7",  value: 780000 },
+  { day: "W8",  value: 950000 },
+  { day: "W9",  value: 870000 },
+  { day: "W10", value: 1020000 },
+  { day: "W11", value: 960000 },
+  { day: "W12", value: 1100000 },
 ];
 
 // Daily collections bar chart data (green = positive change, red = negative)
@@ -106,6 +110,7 @@ const KPI_CARDS = [
     color: "#8b5cf6",
     bgColor: "bg-purple-100",
     iconColor: "text-purple-600",
+    borderClass: "border-t-2 border-t-purple-500",
     sparkData: SPARKLINE_PURPLE,
   },
   {
@@ -115,6 +120,7 @@ const KPI_CARDS = [
     color: "#f97316",
     bgColor: "bg-orange-100",
     iconColor: "text-orange-600",
+    borderClass: "border-t-2 border-t-orange-500",
     sparkData: SPARKLINE_ORANGE,
   },
   {
@@ -124,6 +130,7 @@ const KPI_CARDS = [
     color: "#22c55e",
     bgColor: "bg-green-100",
     iconColor: "text-green-600",
+    borderClass: "border-t-2 border-t-green-500",
     sparkData: SPARKLINE_GREEN,
   },
   {
@@ -133,6 +140,7 @@ const KPI_CARDS = [
     color: "#3b82f6",
     bgColor: "bg-blue-100",
     iconColor: "text-blue-600",
+    borderClass: "border-t-2 border-t-blue-500",
     sparkData: SPARKLINE_BLUE,
   },
 ];
@@ -208,21 +216,21 @@ export default function DashboardPage() {
   const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ----------------------------------------------------------------- */}
       {/* Row 1: KPI Cards                                                  */}
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <Card key={kpi.label} className="rounded-xl border shadow-sm">
-            <CardContent className="py-4 px-4">
+          <Card key={kpi.label} className={`rounded-xl border shadow-sm ${kpi.borderClass}`}>
+            <CardContent className="py-5 px-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`rounded-full ${kpi.bgColor} p-2`}>
                     <kpi.icon className={`h-4 w-4 ${kpi.iconColor}`} />
                   </div>
                   <div>
-                    <p className="text-xl font-bold leading-tight">{kpi.value}</p>
+                    <p className="text-2xl font-bold leading-tight">{kpi.value}</p>
                     <p className="text-xs text-muted-foreground">{kpi.label}</p>
                   </div>
                 </div>
@@ -255,7 +263,7 @@ export default function DashboardPage() {
                   className={
                     activePeriod === p
                       ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
-                      : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
                   }
                 >
                   {p}
@@ -264,7 +272,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Mini area chart */}
-            <div className="mt-4" style={{ height: 140 }}>
+            <div className="mt-4" style={{ height: 180 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
                   <defs>
@@ -290,7 +298,7 @@ export default function DashboardPage() {
           {/* Right: daily collections bar chart */}
           <div className="p-6 lg:w-3/5 border-t lg:border-t-0 lg:border-l border-border/50">
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={DAILY_COLLECTIONS} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+              <BarChart data={DAILY_COLLECTIONS} margin={{ top: 8, right: 8, bottom: 4, left: 8 }} barGap={4}>
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 10 }}
@@ -299,7 +307,7 @@ export default function DashboardPage() {
                   interval={2}
                 />
                 <Tooltip content={<BarTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
-                <Bar dataKey="collected" radius={[3, 3, 0, 0]} maxBarSize={24}>
+                <Bar dataKey="collected" radius={[3, 3, 0, 0]} maxBarSize={14}>
                   {DAILY_COLLECTIONS.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -324,11 +332,11 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="pr-6 text-right">Date</TableHead>
+                <TableRow className="hover:bg-transparent bg-purple-50/50">
+                  <TableHead className="pl-6 text-purple-900/70">Name</TableHead>
+                  <TableHead className="text-purple-900/70">Description</TableHead>
+                  <TableHead className="text-right text-purple-900/70">Amount</TableHead>
+                  <TableHead className="pr-6 text-right text-purple-900/70">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
