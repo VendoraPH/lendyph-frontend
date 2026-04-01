@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import type { Borrower, BorrowerStatus } from "@/types";
-import { INITIAL_BORROWERS } from "./_components/mock-data";
+import { toast } from "sonner";
+import type { Borrower } from "@/types";
+import { Spinner } from "@/components/ui/spinner";
+import { borrowerService } from "@/services/borrower.service";
 import {
   BorrowerFilters,
   type StatusFilter,
@@ -30,13 +32,30 @@ import { AddBorrowerDialog } from "./_components/borrower-actions";
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50] as const;
 
 export default function BorrowersPage() {
-  const [borrowers, setBorrowers] = useState<Borrower[]>(INITIAL_BORROWERS);
+  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
+
+  const fetchBorrowers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await borrowerService.list();
+      setBorrowers(Array.isArray(res) ? res : res.data ?? []);
+    } catch {
+      toast.error("Failed to load borrowers");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBorrowers();
+  }, [fetchBorrowers]);
 
   // Counts for filter tabs
   const activeCount = borrowers.filter((b) => b.status === "active").length;
@@ -83,45 +102,73 @@ export default function BorrowersPage() {
     setCurrentPage(1);
   }
 
-  const handleAdd = (newBorrower: Borrower) => {
-    setBorrowers((prev) => [newBorrower, ...prev]);
+  const handleAdd = async (newBorrower: Borrower) => {
+    try {
+      await borrowerService.create(newBorrower);
+      toast.success("Borrower created successfully");
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to create borrower");
+    }
   };
 
-  const handleEdit = (updated: Borrower) => {
-    setBorrowers((prev) =>
-      prev.map((b) => (b.id === updated.id ? updated : b))
-    );
+  const handleEdit = async (updated: Borrower) => {
+    try {
+      await borrowerService.update(updated.id, updated);
+      toast.success("Borrower updated successfully");
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to update borrower");
+    }
   };
 
-  const handleToggleStatus = (id: number) => {
-    setBorrowers((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? {
-              ...b,
-              status: (b.status === "active"
-                ? "inactive"
-                : "active") as BorrowerStatus,
-            }
-          : b
-      )
-    );
+  const handleToggleStatus = async (id: number) => {
+    const borrower = borrowers.find((b) => b.id === id);
+    if (!borrower) return;
+
+    try {
+      if (borrower.status === "active") {
+        await borrowerService.deactivate(id);
+      } else {
+        await borrowerService.reactivate(id);
+      }
+      toast.success(
+        `Borrower ${borrower.status === "active" ? "deactivated" : "reactivated"} successfully`
+      );
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to update borrower status");
+    }
   };
 
-  const handleDelete = (id: number) => {
-    setBorrowers((prev) => prev.filter((b) => b.id !== id));
+  const handleDelete = async (id: number) => {
+    try {
+      await borrowerService.delete(id);
+      toast.success("Borrower deleted successfully");
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to delete borrower");
+    }
   };
 
-  const handleBulkDeactivate = (ids: number[]) => {
-    setBorrowers((prev) =>
-      prev.map((b) =>
-        ids.includes(b.id) ? { ...b, status: "inactive" as BorrowerStatus } : b
-      )
-    );
+  const handleBulkDeactivate = async (ids: number[]) => {
+    try {
+      await Promise.all(ids.map((id) => borrowerService.deactivate(id)));
+      toast.success(`${ids.length} borrower(s) deactivated`);
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to deactivate some borrowers");
+    }
   };
 
-  const handleBulkDelete = (ids: number[]) => {
-    setBorrowers((prev) => prev.filter((b) => !ids.includes(b.id)));
+  const handleBulkDelete = async (ids: number[]) => {
+    try {
+      await Promise.all(ids.map((id) => borrowerService.delete(id)));
+      toast.success(`${ids.length} borrower(s) deleted`);
+      fetchBorrowers();
+    } catch {
+      toast.error("Failed to delete some borrowers");
+    }
   };
 
   return (
@@ -216,14 +263,30 @@ export default function BorrowersPage() {
           />
         </div>
         <CardContent className="pt-4">
-          <BorrowerTable
-            borrowers={paginatedBorrowers}
-            onEdit={handleEdit}
-            onToggleStatus={handleToggleStatus}
-            onDelete={handleDelete}
-            onBulkDeactivate={handleBulkDeactivate}
-            onBulkDelete={handleBulkDelete}
-          />
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-muted-foreground" />
+            </div>
+          ) : borrowers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">
+                No borrowers yet
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                Click &quot;Add Borrower&quot; to create the first profile.
+              </p>
+            </div>
+          ) : (
+            <BorrowerTable
+              borrowers={paginatedBorrowers}
+              onEdit={handleEdit}
+              onToggleStatus={handleToggleStatus}
+              onDelete={handleDelete}
+              onBulkDeactivate={handleBulkDeactivate}
+              onBulkDelete={handleBulkDelete}
+            />
+          )}
 
           {/* Pagination Controls */}
           <div className="flex items-center justify-between pt-4 border-t mt-4">

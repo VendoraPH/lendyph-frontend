@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
+import { loanService } from "@/services/loan.service";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,285 +76,62 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-// ── Mock Data ──
-
-const MOCK_LOANS: Loan[] = [
-  {
-    id: 1,
-    application_number: "LA-20260001",
-    borrower_id: 1,
-    borrower_name: "Maria Santos",
-    loan_product_name: "Salary Loan",
-    principal_amount: 50000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    total_payable: 68000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Home renovation",
-    created_at: "2026-03-28T09:15:00Z",
-    updated_at: "2026-03-28T09:15:00Z",
-  },
-  {
-    id: 2,
-    application_number: "LA-20260002",
-    borrower_id: 2,
-    borrower_name: "Juan Dela Cruz",
-    loan_product_name: "Business Loan",
-    principal_amount: 150000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    total_payable: 195000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Sari-sari store expansion",
-    created_at: "2026-03-27T14:30:00Z",
-    updated_at: "2026-03-27T14:30:00Z",
-  },
-  {
-    id: 3,
-    application_number: "LA-20260003",
-    borrower_id: 3,
-    borrower_name: "Ana Reyes",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 20000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "bi_weekly",
-    total_payable: 24200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Medical expenses",
-    created_at: "2026-03-25T10:00:00Z",
-    updated_at: "2026-03-26T08:00:00Z",
-  },
-  {
-    id: 4,
-    application_number: "LA-20260004",
-    borrower_id: 4,
-    borrower_name: "Pedro Garcia",
-    loan_product_name: "Salary Loan",
-    principal_amount: 80000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 18,
-    payment_frequency: "monthly",
-    total_payable: 123200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Tuition fee",
-    created_at: "2026-03-24T16:45:00Z",
-    updated_at: "2026-03-25T09:30:00Z",
-  },
-  {
-    id: 5,
-    application_number: "LA-20260005",
-    borrower_id: 5,
-    borrower_name: "Rosa Mendoza",
-    loan_product_name: "Business Loan",
-    principal_amount: 200000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 36,
-    payment_frequency: "monthly",
-    total_payable: 290000,
-    outstanding_balance: 0,
-    status: "approved",
-    purpose: "Bakery equipment purchase",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-23T11:00:00Z",
-    approval_remarks: "Good credit history, approved for full amount",
-    created_at: "2026-03-20T08:30:00Z",
-    updated_at: "2026-03-23T11:00:00Z",
-  },
-  {
-    id: 6,
-    application_number: "LA-20260006",
-    borrower_id: 6,
-    borrower_name: "Carlo Ramos",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 30000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "weekly",
-    total_payable: 36300,
-    outstanding_balance: 0,
-    status: "rejected",
-    purpose: "Debt consolidation",
-    rejected_by: "Augustin Maputol",
-    rejected_at: "2026-03-22T14:00:00Z",
-    rejection_remarks: "Existing loan still outstanding, exceeds debt-to-income ratio",
-    created_at: "2026-03-19T13:00:00Z",
-    updated_at: "2026-03-22T14:00:00Z",
-  },
-  {
-    id: 7,
-    application_number: "LA-20260007",
-    borrower_id: 7,
-    borrower_name: "Elena Villanueva",
-    loan_product_name: "Salary Loan",
-    principal_amount: 100000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    total_payable: 136000,
-    outstanding_balance: 102000,
-    status: "released",
-    purpose: "Home improvement",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-10T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-03-12T10:00:00Z",
-    release_date: "2026-03-12",
-    maturity_date: "2027-03-12",
-    next_due_date: "2026-04-12",
-    created_at: "2026-03-08T11:00:00Z",
-    updated_at: "2026-03-12T10:00:00Z",
-  },
-  {
-    id: 8,
-    application_number: "LA-20260008",
-    borrower_id: 8,
-    borrower_name: "Roberto Tan",
-    loan_product_name: "Business Loan",
-    principal_amount: 300000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    total_payable: 390000,
-    outstanding_balance: 325000,
-    status: "ongoing",
-    purpose: "Trucking business capital",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-02-15T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-02-18T14:00:00Z",
-    release_date: "2026-02-18",
-    maturity_date: "2028-02-18",
-    next_due_date: "2026-04-18",
-    created_at: "2026-02-10T08:00:00Z",
-    updated_at: "2026-03-18T14:00:00Z",
-  },
-  {
-    id: 9,
-    application_number: "LA-20260009",
-    borrower_id: 9,
-    borrower_name: "Lorna Bautista",
-    loan_product_name: "Salary Loan",
-    principal_amount: 40000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "monthly",
-    total_payable: 47200,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Wedding expenses",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-09-05T10:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-09-08T09:00:00Z",
-    release_date: "2025-09-08",
-    maturity_date: "2026-03-08",
-    created_at: "2025-09-01T07:30:00Z",
-    updated_at: "2026-03-08T15:00:00Z",
-  },
-  {
-    id: 10,
-    application_number: "LA-20260010",
-    borrower_id: 10,
-    borrower_name: "Dennis Aquino",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 15000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 3,
-    payment_frequency: "weekly",
-    total_payable: 16575,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Appliance repair",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-12-10T11:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-12-12T09:00:00Z",
-    release_date: "2025-12-12",
-    maturity_date: "2026-03-12",
-    created_at: "2025-12-08T14:00:00Z",
-    updated_at: "2026-03-12T16:00:00Z",
-  },
-  {
-    id: 11,
-    application_number: "LA-20260011",
-    borrower_id: 11,
-    borrower_name: "Gloria Pascual",
-    loan_product_name: "Business Loan",
-    principal_amount: 250000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    total_payable: 325000,
-    outstanding_balance: 310000,
-    status: "defaulted",
-    purpose: "Restaurant startup",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-08-20T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-08-22T10:00:00Z",
-    release_date: "2025-08-22",
-    maturity_date: "2027-08-22",
-    next_due_date: "2026-01-22",
-    created_at: "2025-08-15T08:00:00Z",
-    updated_at: "2026-03-15T09:00:00Z",
-  },
-];
-
 // ── Main Page ──
 
 export default function LoansPage() {
   const router = useRouter();
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
 
+  const fetchLoans = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await loanService.list();
+      const data = Array.isArray(res) ? res : res.data ?? [];
+      setLoans(data);
+    } catch {
+      toast.error("Failed to load loans");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
+
   // Compute counts per status
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: MOCK_LOANS.length };
-    for (const loan of MOCK_LOANS) {
+    const counts: Record<string, number> = { all: loans.length };
+    for (const loan of loans) {
       counts[loan.status] = (counts[loan.status] ?? 0) + 1;
     }
     return counts;
-  }, []);
+  }, [loans]);
 
   // Summary stats
   const summaryStats = useMemo(() => {
-    const forReview = MOCK_LOANS.filter((l) => l.status === "for_review").length;
-    const active = MOCK_LOANS.filter(
+    const forReview = loans.filter((l) => l.status === "for_review").length;
+    const active = loans.filter(
       (l) => l.status === "released" || l.status === "ongoing"
     ).length;
-    const rejected = MOCK_LOANS.filter((l) => l.status === "rejected").length;
-    return { total: MOCK_LOANS.length, forReview, active, rejected };
-  }, []);
+    const rejected = loans.filter((l) => l.status === "rejected").length;
+    return { total: loans.length, forReview, active, rejected };
+  }, [loans]);
 
   // Filtered loans
   const filteredLoans = useMemo(() => {
-    let loans = MOCK_LOANS;
+    let filtered = loans;
 
     if (activeTab !== "all") {
-      loans = loans.filter((l) => l.status === activeTab);
+      filtered = filtered.filter((l) => l.status === activeTab);
     }
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      loans = loans.filter(
+      filtered = filtered.filter(
         (l) =>
           (l.application_number ?? "").toLowerCase().includes(q) ||
           (l.borrower_name ?? "").toLowerCase().includes(q) ||
@@ -360,8 +140,8 @@ export default function LoansPage() {
       );
     }
 
-    return loans;
-  }, [activeTab, search]);
+    return filtered;
+  }, [loans, activeTab, search]);
 
   return (
     <div className="space-y-6">
@@ -499,69 +279,75 @@ export default function LoansPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Application #</TableHead>
-                  <TableHead>Borrower</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Term</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLoans.map((loan) => (
-                  <TableRow
-                    key={loan.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/loans/${loan.id}`)}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      {loan.application_number}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {loan.borrower_name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {loan.loan_product_name}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(loan.principal_amount)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {loan.term_months}mo /{" "}
-                      {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency] ??
-                        loan.payment_frequency}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={statusColors[loan.status]}
-                      >
-                        {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(loan.created_at)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredLoans.length === 0 && (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-brand-orange" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      No loan applications found.
-                    </TableCell>
+                    <TableHead>Application #</TableHead>
+                    <TableHead>Borrower</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Term</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredLoans.map((loan) => (
+                    <TableRow
+                      key={loan.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/loans/${loan.id}`)}
+                    >
+                      <TableCell className="font-mono text-sm">
+                        {loan.application_number}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {loan.borrower_name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {loan.loan_product_name}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(loan.principal_amount)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {loan.term_months}mo /{" "}
+                        {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency] ??
+                          loan.payment_frequency}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={statusColors[loan.status]}
+                        >
+                          {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(loan.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredLoans.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        No loan applications found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

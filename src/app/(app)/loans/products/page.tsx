@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { loanProductService } from "@/services/loan-product.service";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,125 +71,6 @@ const statusBadge = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
 };
-
-// ── Mock Data ──
-
-const INITIAL_PRODUCTS: LoanProduct[] = [
-  {
-    id: 1,
-    name: "Salary Loan",
-    description: "Short-term loan for employed individuals based on monthly salary",
-    min_amount: 5000,
-    max_amount: 50000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    min_term: 1,
-    max_term: 12,
-    payment_frequency: "monthly",
-    processing_fee: 2,
-    service_fee: 1,
-    penalty_rate: 0.5,
-    grace_period: 3,
-    is_active: true,
-    created_at: "2026-01-15T00:00:00Z",
-    updated_at: "2026-01-15T00:00:00Z",
-  },
-  {
-    id: 2,
-    name: "Business Loan",
-    description: "Working capital and expansion financing for SMEs",
-    min_amount: 50000,
-    max_amount: 500000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    min_term: 6,
-    max_term: 36,
-    payment_frequency: "monthly",
-    processing_fee: 3,
-    service_fee: 1.5,
-    penalty_rate: 0.3,
-    grace_period: 5,
-    is_active: true,
-    created_at: "2026-01-20T00:00:00Z",
-    updated_at: "2026-01-20T00:00:00Z",
-  },
-  {
-    id: 3,
-    name: "Emergency Loan",
-    description: "Quick-release loan for urgent financial needs",
-    min_amount: 1000,
-    max_amount: 20000,
-    interest_rate: 5,
-    interest_type: "fixed",
-    min_term: 1,
-    max_term: 3,
-    payment_frequency: "weekly",
-    processing_fee: 1,
-    service_fee: 0,
-    penalty_rate: 1,
-    grace_period: 1,
-    is_active: true,
-    created_at: "2026-02-01T00:00:00Z",
-    updated_at: "2026-02-01T00:00:00Z",
-  },
-  {
-    id: 4,
-    name: "Agricultural Loan",
-    description: "Crop financing and farm equipment loans for farmers",
-    min_amount: 20000,
-    max_amount: 200000,
-    interest_rate: 2.5,
-    interest_type: "fixed",
-    min_term: 3,
-    max_term: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2,
-    service_fee: 1,
-    penalty_rate: 0.3,
-    grace_period: 7,
-    is_active: true,
-    created_at: "2026-02-10T00:00:00Z",
-    updated_at: "2026-02-10T00:00:00Z",
-  },
-  {
-    id: 5,
-    name: "OFW Loan",
-    description: "Pre-departure and family assistance loan for overseas Filipino workers",
-    min_amount: 30000,
-    max_amount: 300000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    min_term: 6,
-    max_term: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2.5,
-    service_fee: 1,
-    penalty_rate: 0.5,
-    grace_period: 5,
-    is_active: true,
-    created_at: "2026-02-20T00:00:00Z",
-    updated_at: "2026-02-20T00:00:00Z",
-  },
-  {
-    id: 6,
-    name: "Microfinance Loan",
-    description: "Daily collection micro-loan for market vendors and small traders",
-    min_amount: 1000,
-    max_amount: 10000,
-    interest_rate: 4,
-    interest_type: "fixed",
-    min_term: 1,
-    max_term: 6,
-    payment_frequency: "daily",
-    processing_fee: 1,
-    service_fee: 0.5,
-    penalty_rate: 1.5,
-    grace_period: 0,
-    is_active: false,
-    created_at: "2026-03-01T00:00:00Z",
-    updated_at: "2026-03-01T00:00:00Z",
-  },
-];
 
 // ── Form Types ──
 
@@ -694,45 +578,71 @@ function ProductActionsCell({
 // ── Main Page ──
 
 export default function LoanProductsPage() {
-  const [products, setProducts] = useState<LoanProduct[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<LoanProduct[]>([]);
+  const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await loanProductService.list();
+      setProducts(Array.isArray(res) ? res : (res as unknown as { data: LoanProduct[] }).data ?? []);
+    } catch {
+      toast.error("Failed to load loan products");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const activeCount = products.filter((p) => p.is_active).length;
   const inactiveCount = products.filter((p) => !p.is_active).length;
 
-  const handleAdd = (form: ProductForm) => {
-    const newProduct = formToProduct(form, Date.now());
-    setProducts((prev) => [newProduct, ...prev]);
+  const handleAdd = async (form: ProductForm) => {
+    try {
+      const payload = formToProduct(form, 0);
+      await loanProductService.create(payload as unknown as Parameters<typeof loanProductService.create>[0]);
+      toast.success("Loan product created");
+      fetchProducts();
+    } catch {
+      toast.error("Failed to create loan product");
+    }
   };
 
-  const handleEdit = (id: number, form: ProductForm) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              ...formToProduct(form, id),
-              is_active: p.is_active,
-              created_at: p.created_at,
-              updated_at: new Date().toISOString(),
-            }
-          : p
-      )
-    );
+  const handleEdit = async (id: number, form: ProductForm) => {
+    try {
+      const payload = formToProduct(form, id);
+      await loanProductService.update(id, payload as unknown as Parameters<typeof loanProductService.update>[1]);
+      toast.success("Loan product updated");
+      fetchProducts();
+    } catch {
+      toast.error("Failed to update loan product");
+    }
   };
 
-  const handleToggleStatus = (id: number) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, is_active: !p.is_active, updated_at: new Date().toISOString() }
-          : p
-      )
-    );
+  const handleToggleStatus = async (id: number) => {
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+    try {
+      await loanProductService.update(id, { is_active: !product.is_active } as unknown as Parameters<typeof loanProductService.update>[1]);
+      toast.success(product.is_active ? "Product deactivated" : "Product activated");
+      fetchProducts();
+    } catch {
+      toast.error("Failed to update product status");
+    }
   };
 
-  const handleDelete = (id: number) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+  const handleDelete = async (id: number) => {
+    try {
+      await loanProductService.delete(id);
+      toast.success("Loan product deleted");
+      fetchProducts();
+    } catch {
+      toast.error("Failed to delete loan product");
+    }
   };
 
   return (
@@ -795,6 +705,12 @@ export default function LoanProductsPage() {
         </Card>
       </div>
 
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Spinner className="size-6 text-brand-orange" />
+        </div>
+      ) : (
+      <>
       {/* Mobile Card View */}
       <div className="space-y-3 md:hidden">
         <p className="text-sm font-medium text-muted-foreground">
@@ -981,6 +897,9 @@ export default function LoanProductsPage() {
           </div>
         </CardContent>
       </Card>
+
+      </>
+      )}
 
       {/* Add Product Dialog */}
       <ProductFormDialog
