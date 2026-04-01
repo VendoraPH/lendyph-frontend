@@ -1,6 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { Loan, LoanSchedule, PaginatedResponse } from "@/types";
+import type { ApiAmortizationSchedule } from "@/lib/amortization";
 
 export const loanService = {
   list: (params?: Record<string, unknown>) =>
@@ -41,4 +42,7 @@ export const loanService = {
 
   void: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.VOID(id)),
+
+  amortizationSchedule: (id: number) =>
+    api.get<ApiAmortizationSchedule>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
 };

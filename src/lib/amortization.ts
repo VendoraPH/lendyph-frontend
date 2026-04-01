@@ -34,6 +34,46 @@ export interface ScheduleSummary {
   firstPayment: number;
   lastPayment: number;
   maturityDate: Date;
+  // Status counts (populated when from API)
+  paidPeriods?: number;
+  unpaidPeriods?: number;
+  overduePeriods?: number;
+  partialPeriods?: number;
+  totalPaid?: number;
+  totalRemaining?: number;
+}
+
+// ── API Response Types ──
+
+export interface ApiScheduleRow {
+  id: number;
+  period_number: number;
+  due_date: string;
+  beginning_balance: number;
+  principal_due: number;
+  interest_due: number;
+  penalty_amount: number;
+  total_due: number;
+  remaining_balance: number;
+  principal_paid: number;
+  interest_paid: number;
+  penalty_paid: number;
+  status: "paid" | "partial" | "overdue" | "pending";
+}
+
+export interface ApiAmortizationSchedule {
+  schedule: ApiScheduleRow[];
+  summary: {
+    total_principal: number;
+    total_interest: number;
+    total_payable: number;
+    total_paid: number;
+    total_remaining: number;
+    paid_periods: number;
+    unpaid_periods: number;
+    overdue_periods: number;
+    partial_periods: number;
+  };
 }
 
 export interface GeneratedSchedule {
@@ -56,8 +96,6 @@ export function getPeriodsCount(
   frequency: PaymentFrequency,
   interestMethod?: InterestMethod
 ): number {
-  if (interestMethod === "upon_maturity") return 1;
-
   switch (frequency) {
     case "monthly":
       return termMonths;
@@ -130,15 +168,19 @@ function generateFixed(input: AmortizationInput): AmortizationRow[] {
 function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
   const periods = getPeriodsCount(termMonths, frequency);
-  const principalPerPeriod = round(principal / periods);
+  const r = monthlyRate / 100;
+
+  // PMT formula: P * r / (1 - (1+r)^(-n))
+  const pmt = r > 0 ? round(principal * r / (1 - Math.pow(1 + r, -periods))) : round(principal / periods);
+
   const rows: AmortizationRow[] = [];
   let remaining = principal;
 
   for (let i = 1; i <= periods; i++) {
     const beginningBalance = round(remaining);
     const isLast = i === periods;
-    const periodPrincipal = isLast ? round(remaining) : principalPerPeriod;
-    const periodInterest = round(remaining * (monthlyRate / 100));
+    const periodInterest = round(remaining * r);
+    const periodPrincipal = isLast ? round(remaining) : round(pmt - periodInterest);
     remaining -= periodPrincipal;
     const endingBalance = isLast ? 0 : round(remaining);
 
@@ -149,7 +191,7 @@ function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
       principal: periodPrincipal,
       interest: periodInterest,
       penalty: 0,
-      totalDue: round(periodPrincipal + periodInterest),
+      totalDue: isLast ? round(periodPrincipal + periodInterest) : pmt,
       endingBalance,
     });
   }
@@ -158,22 +200,43 @@ function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
 }
 
 function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
-  const { principal, monthlyRate, termMonths, startDate } = input;
-  const totalInterest = round(principal * (monthlyRate / 100) * termMonths);
-  const maturityDate = addMonths(startDate, termMonths);
+  const { principal, monthlyRate, termMonths, frequency, startDate } = input;
 
-  return [
-    {
+  if (termMonths <= 1) {
+    // Single lump sum at maturity
+    const totalInterest = round(principal * (monthlyRate / 100) * termMonths);
+    return [{
       period: 1,
-      dueDate: maturityDate,
+      dueDate: addMonths(startDate, termMonths),
       beginningBalance: principal,
       principal,
       interest: totalInterest,
       penalty: 0,
       totalDue: round(principal + totalInterest),
       endingBalance: 0,
-    },
-  ];
+    }];
+  }
+
+  // Interest-only periodic payments + principal at maturity
+  const periods = getPeriodsCount(termMonths, frequency, "fixed"); // use "fixed" to get actual period count
+  const interestPerPeriod = round(principal * (monthlyRate / 100));
+  const rows: AmortizationRow[] = [];
+
+  for (let i = 1; i <= periods; i++) {
+    const isLast = i === periods;
+    rows.push({
+      period: i,
+      dueDate: getDueDate(startDate, i, frequency),
+      beginningBalance: principal,
+      principal: isLast ? principal : 0,
+      interest: interestPerPeriod,
+      penalty: 0,
+      totalDue: isLast ? round(principal + interestPerPeriod) : interestPerPeriod,
+      endingBalance: isLast ? 0 : principal,
+    });
+  }
+
+  return rows;
 }
 
 // ── Main API ──
@@ -205,9 +268,16 @@ export function generateSchedule(input: AmortizationInput): GeneratedSchedule {
   const firstPayment = rows[0]?.totalDue ?? 0;
   const lastPayment = rows[rows.length - 1]?.totalDue ?? 0;
 
-  // Per-period payment is constant for fixed and upon_maturity, null for diminishing
+  // Per-period payment is constant for fixed; null for diminishing;
+  // for upon_maturity with term > 1: interest-only amount (first payment), null if single lump sum
   const perPeriodPayment =
-    input.interestMethod === "diminishing" ? null : firstPayment;
+    input.interestMethod === "diminishing"
+      ? null
+      : input.interestMethod === "upon_maturity" && numberOfPayments > 1
+        ? firstPayment
+        : input.interestMethod === "upon_maturity"
+          ? null
+          : firstPayment;
 
   const maturityDate =
     rows.length > 0 ? rows[rows.length - 1]!.dueDate : input.startDate;

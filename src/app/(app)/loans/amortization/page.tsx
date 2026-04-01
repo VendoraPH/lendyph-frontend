@@ -110,6 +110,8 @@ export default function AmortizationPage() {
   } | null>(null);
 
   const isUponMaturity = interestMethod === "upon_maturity";
+  const parsedTerm = parseInt(termMonths) || 0;
+  const isUponMaturitySinglePayment = isUponMaturity && parsedTerm <= 1;
 
   const isFormValid = useMemo(() => {
     const p = parseFloat(principal);
@@ -138,8 +140,9 @@ export default function AmortizationPage() {
     const t = parseInt(termMonths);
     if (!p || !r || !t) return;
 
+    const uponMaturityFreq = t <= 1 ? "monthly" : frequency;
     const selected = generateSchedule(
-      buildInput(interestMethod, isUponMaturity ? "monthly" : frequency)
+      buildInput(interestMethod, isUponMaturity ? uponMaturityFreq : frequency)
     );
     setSchedule(selected);
 
@@ -149,7 +152,7 @@ export default function AmortizationPage() {
       buildInput("diminishing", frequency)
     );
     const upon_maturity = generateSchedule(
-      buildInput("upon_maturity", "monthly")
+      buildInput("upon_maturity", uponMaturityFreq)
     );
     setComparison({ fixed, diminishing, upon_maturity });
   }
@@ -241,7 +244,7 @@ export default function AmortizationPage() {
                 onValueChange={(val) =>
                   setFrequency(val as PaymentFrequency)
                 }
-                disabled={isUponMaturity}
+                disabled={isUponMaturitySinglePayment}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -254,9 +257,14 @@ export default function AmortizationPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {isUponMaturity && (
+              {isUponMaturitySinglePayment && (
                 <p className="text-xs text-muted-foreground">
                   Single payment at maturity
+                </p>
+              )}
+              {isUponMaturity && parsedTerm > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  Interest-only payments + principal at maturity
                 </p>
               )}
             </div>
@@ -348,7 +356,9 @@ export default function AmortizationPage() {
                   interestMethod === "diminishing"
                     ? "Varies"
                     : interestMethod === "upon_maturity"
-                      ? "Single Payment"
+                      ? schedule.summary.numberOfPayments > 1
+                        ? `${formatPHP(schedule.summary.perPeriodPayment ?? 0)} (interest only)`
+                        : "Single Payment"
                       : formatPHP(schedule.summary.perPeriodPayment ?? 0)
                 }
               />
@@ -589,7 +599,9 @@ function MethodComparison({
                     method.key === "diminishing"
                       ? `${formatPHP(s.firstPayment)} - ${formatPHP(s.lastPayment)}`
                       : method.key === "upon_maturity"
-                        ? `${formatPHP(s.totalPayable)} (single)`
+                        ? s.numberOfPayments > 1
+                          ? `${formatPHP(s.firstPayment)} interest + principal at end`
+                          : `${formatPHP(s.totalPayable)} (single)`
                         : formatPHP(s.perPeriodPayment ?? 0)
                   }
                 />
