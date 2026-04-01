@@ -13,13 +13,6 @@ export const authService = {
       credentials
     ),
 
-  register: (data: {
-    name: string;
-    email: string;
-    password: string;
-    password_confirmation: string;
-  }) => api.post<{ user: User }>(API_ENDPOINTS.AUTH.REGISTER, data),
-
   logout: () => api.post(API_ENDPOINTS.AUTH.LOGOUT),
 
   me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),

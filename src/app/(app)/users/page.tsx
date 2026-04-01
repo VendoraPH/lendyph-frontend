@@ -853,20 +853,24 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            User Management
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage users, roles, and permissions
-          </p>
-        </div>
-        <AddUserDialog onAdd={fetchData} roles={roles} branches={branches} />
-      </div>
+      <Card>
+        <CardContent className="py-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                User Management
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Manage users, roles, and permissions
+              </p>
+            </div>
+            <AddUserDialog onAdd={fetchData} roles={roles} branches={branches} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Role Summary Cards */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">

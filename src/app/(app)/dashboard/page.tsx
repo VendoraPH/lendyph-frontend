@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AreaChart,
   Area,
   BarChart,
   Bar,
   XAxis,
+  YAxis,
   Tooltip,
   ResponsiveContainer,
   Cell,
@@ -65,28 +66,28 @@ const COLLECTIONS_TREND = [
   { day: "W12", value: 1100000 },
 ];
 
-// Daily collections bar chart data (green = positive change, red = negative)
-const DAILY_COLLECTIONS = [
-  { date: "Mar 12", collected: 42000, prev: 38000 },
-  { date: "Mar 13", collected: 38000, prev: 42000 },
-  { date: "Mar 14", collected: 55000, prev: 38000 },
-  { date: "Mar 15", collected: 48000, prev: 55000 },
-  { date: "Mar 16", collected: 62000, prev: 48000 },
-  { date: "Mar 17", collected: 35000, prev: 62000 },
-  { date: "Mar 18", collected: 41000, prev: 35000 },
-  { date: "Mar 19", collected: 58000, prev: 41000 },
-  { date: "Mar 20", collected: 52000, prev: 58000 },
-  { date: "Mar 21", collected: 67000, prev: 52000 },
-  { date: "Mar 22", collected: 45000, prev: 67000 },
-  { date: "Mar 23", collected: 71000, prev: 45000 },
-  { date: "Mar 24", collected: 63000, prev: 71000 },
-  { date: "Mar 25", collected: 58000, prev: 63000 },
-  { date: "Mar 26", collected: 74000, prev: 58000 },
-  { date: "Mar 27", collected: 49000, prev: 74000 },
-  { date: "Mar 28", collected: 82000, prev: 49000 },
-  { date: "Mar 29", collected: 68000, prev: 82000 },
-  { date: "Mar 30", collected: 76000, prev: 68000 },
-  { date: "Mar 31", collected: 85000, prev: 76000 },
+// Candlestick data — open/close/high/low per day (like the reference screenshot)
+const CANDLESTICK_DATA = [
+  { date: "12", open: 42, close: 48, high: 52, low: 38 },
+  { date: "13", open: 48, close: 38, high: 50, low: 35 },
+  { date: "14", open: 38, close: 55, high: 58, low: 36 },
+  { date: "15", open: 55, close: 48, high: 57, low: 45 },
+  { date: "16", open: 48, close: 62, high: 65, low: 46 },
+  { date: "17", open: 62, close: 35, high: 64, low: 32 },
+  { date: "18", open: 35, close: 41, high: 44, low: 33 },
+  { date: "19", open: 41, close: 58, high: 61, low: 39 },
+  { date: "20", open: 58, close: 52, high: 60, low: 49 },
+  { date: "21", open: 52, close: 67, high: 70, low: 50 },
+  { date: "22", open: 67, close: 45, high: 69, low: 42 },
+  { date: "23", open: 45, close: 71, high: 74, low: 43 },
+  { date: "24", open: 71, close: 63, high: 73, low: 60 },
+  { date: "25", open: 63, close: 58, high: 66, low: 55 },
+  { date: "26", open: 58, close: 74, high: 78, low: 56 },
+  { date: "27", open: 74, close: 49, high: 76, low: 46 },
+  { date: "28", open: 49, close: 82, high: 85, low: 47 },
+  { date: "29", open: 82, close: 68, high: 84, low: 65 },
+  { date: "30", open: 68, close: 76, high: 80, low: 66 },
+  { date: "31", open: 76, close: 85, high: 88, low: 74 },
 ];
 
 const RECENT_TRANSACTIONS = [
@@ -107,40 +108,28 @@ const KPI_CARDS = [
     icon: Wallet,
     value: "₱15.2M",
     label: "Total Portfolio",
-    color: "#8b5cf6",
-    bgColor: "bg-purple-100",
-    iconColor: "text-purple-600",
-    borderClass: "border-t-2 border-t-purple-500",
+    color: "#7c3aed",
     sparkData: SPARKLINE_PURPLE,
   },
   {
     icon: FileText,
     value: "843",
     label: "Active Loans",
-    color: "#f97316",
-    bgColor: "bg-orange-100",
-    iconColor: "text-orange-600",
-    borderClass: "border-t-2 border-t-orange-500",
+    color: "#e879f9",
     sparkData: SPARKLINE_ORANGE,
   },
   {
     icon: DollarSign,
     value: "₱2.4M",
     label: "Collected",
-    color: "#22c55e",
-    bgColor: "bg-green-100",
-    iconColor: "text-green-600",
-    borderClass: "border-t-2 border-t-green-500",
+    color: "#10b981",
     sparkData: SPARKLINE_GREEN,
   },
   {
     icon: AlertTriangle,
     value: "47",
     label: "Overdue",
-    color: "#3b82f6",
-    bgColor: "bg-blue-100",
-    iconColor: "text-blue-600",
-    borderClass: "border-t-2 border-t-blue-500",
+    color: "#f87171",
     sparkData: SPARKLINE_BLUE,
   },
 ];
@@ -152,52 +141,104 @@ const KPI_CARDS = [
 function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
   const gradId = `spark-${color.replace("#", "")}`;
   return (
-    <div style={{ width: 80, height: 40 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.4} />
-              <stop offset="95%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Area
-            type="monotone"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            fill={`url(#${gradId})`}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
+    <AreaChart width={80} height={40} data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor={color} stopOpacity={0.4} />
+          <stop offset="95%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <Area
+        type="monotone"
+        dataKey="v"
+        stroke={color}
+        strokeWidth={1.5}
+        fill={`url(#${gradId})`}
+        dot={false}
+        isAnimationActive={false}
+      />
+    </AreaChart>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Custom tooltip for daily bar chart
+// Candlestick shape renderer
 // ---------------------------------------------------------------------------
 
-function BarTooltip({
+function CandlestickShape(props: Record<string, unknown>) {
+  const { x, y, width, height, payload } = props as {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    payload: (typeof CANDLESTICK_DATA)[0];
+  };
+
+  if (!payload) return null;
+
+  const isUp = payload.close >= payload.open;
+  const color = isUp ? "#10b981" : "#7c3aed";
+
+  // Scale values to chart coordinates
+  // The bar is rendered at (x, y) with given width/height
+  // We need to calculate wick positions relative to the bar
+  const centerX = x + width / 2;
+  const bodyWidth = Math.max(width * 0.35, 4);
+  const bodyX = centerX - bodyWidth / 2;
+
+  // Wick extends slightly above and below the body
+  const wickTop = y - (height * 0.15);
+  const wickBottom = y + height + (height * 0.15);
+
+  return (
+    <g>
+      {/* Wick (thin line) */}
+      <line
+        x1={centerX}
+        y1={wickTop}
+        x2={centerX}
+        y2={wickBottom}
+        stroke={color}
+        strokeWidth={1}
+      />
+      {/* Body (narrow rectangle) */}
+      <rect
+        x={bodyX}
+        y={y}
+        width={bodyWidth}
+        height={Math.max(height, 2)}
+        fill={color}
+        rx={1}
+        ry={1}
+      />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom tooltip for candlestick chart
+// ---------------------------------------------------------------------------
+
+function CandlestickTooltip({
   active,
   payload,
   label,
 }: {
   active?: boolean;
-  payload?: { value: number; payload: (typeof DAILY_COLLECTIONS)[0] }[];
+  payload?: { payload: (typeof CANDLESTICK_DATA)[0] }[];
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
-  const isUp = d.collected >= d.prev;
+  const isUp = d.close >= d.open;
   return (
     <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-medium mb-1">{label}</p>
-      <p className={isUp ? "text-[#22c55e] font-semibold" : "text-[#f43f5e] font-semibold"}>
-        ₱{d.collected.toLocaleString("en-PH")}
-      </p>
+      <p className="font-medium mb-1">Mar {label}</p>
+      <div className="space-y-0.5">
+        <p>Open: <span className="font-semibold">₱{d.open}K</span></p>
+        <p>Close: <span className={`font-semibold ${isUp ? "text-[#10b981]" : "text-[#7c3aed]"}`}>₱{d.close}K</span></p>
+        <p>High: ₱{d.high}K · Low: ₱{d.low}K</p>
+      </div>
     </div>
   );
 }
@@ -214,6 +255,11 @@ const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 
 export default function DashboardPage() {
   const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -222,16 +268,19 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <Card key={kpi.label} className={`rounded-xl border shadow-sm ${kpi.borderClass}`}>
-            <CardContent className="py-5 px-5">
+          <Card key={kpi.label} className="rounded-xl border shadow-sm">
+            <CardContent className="py-3 px-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`rounded-full ${kpi.bgColor} p-2`}>
-                    <kpi.icon className={`h-4 w-4 ${kpi.iconColor}`} />
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: kpi.color }}
+                  >
+                    <kpi.icon className="h-3.5 w-3.5 text-white" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold leading-tight">{kpi.value}</p>
-                    <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                    <p className="text-lg font-bold leading-tight">{kpi.value}</p>
+                    <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
                   </div>
                 </div>
                 <Sparkline data={kpi.sparkData} color={kpi.color} />
@@ -242,82 +291,86 @@ export default function DashboardPage() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Row 2: Main Chart Card — Left summary + Right bar chart           */}
+      {/* Row 2: Main Chart Card — full width single column                 */}
       {/* ----------------------------------------------------------------- */}
       <Card className="rounded-xl border shadow-sm overflow-hidden">
-        <div className="flex flex-col lg:flex-row">
-          {/* Left: value + mini area chart */}
-          <div className="p-6 lg:w-2/5 flex flex-col justify-between">
-            <div>
-              <p className="text-4xl font-bold tracking-tight">₱2,456,890</p>
-              <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
-              <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
-            </div>
-
-            {/* Time period toggles */}
-            <div className="flex items-center gap-1 mt-4">
-              {TIME_PERIODS.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setActivePeriod(p)}
-                  className={
-                    activePeriod === p
-                      ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
-                      : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
-                  }
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-
-            {/* Mini area chart */}
-            <div className="mt-4" style={{ height: 180 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-                  <defs>
-                    <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    fill="url(#collectionsGrad)"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Header: value + time toggles */}
+        <div className="flex items-start justify-between p-6 pb-2">
+          <div>
+            <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
+            <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
+            <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
           </div>
+          <div className="flex items-center gap-1">
+            {TIME_PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setActivePeriod(p)}
+                className={
+                  activePeriod === p
+                    ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
+                    : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
+                }
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* Right: daily collections bar chart */}
-          <div className="p-6 lg:w-3/5 border-t lg:border-t-0 lg:border-l border-border/50">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={DAILY_COLLECTIONS} margin={{ top: 8, right: 8, bottom: 4, left: 8 }} barGap={4}>
+        {/* Candlestick chart — full width */}
+        <div className="px-4">
+          {mounted ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
-                  interval={2}
                 />
-                <Tooltip content={<BarTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
-                <Bar dataKey="collected" radius={[3, 3, 0, 0]} maxBarSize={14}>
-                  {DAILY_COLLECTIONS.map((entry, index) => (
+                <YAxis hide domain={[20, 95]} />
+                <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
+                <Bar
+                  dataKey="close"
+                  shape={<CandlestickShape />}
+                  isAnimationActive={false}
+                >
+                  {CANDLESTICK_DATA.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.collected >= entry.prev ? "#22c55e" : "#f43f5e"}
+                      fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
                     />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          ) : null}
+        </div>
+
+        {/* Purple area chart below — full width */}
+        <div className="px-4 pb-4" style={{ height: 80 }}>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                <defs>
+                  <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#7c3aed"
+                  strokeWidth={2}
+                  fill="url(#collectionsGrad)"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : null}
         </div>
       </Card>
 
