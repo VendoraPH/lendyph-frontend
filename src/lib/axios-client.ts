@@ -1,8 +1,15 @@
 import axios from "axios";
 import { env } from "@/config/env";
 
+const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
+
+// Use Next.js API proxy on client-side to bypass CORS/CSRF issues
+// Server-side (SSR) calls go direct to the API
+const API_BASE_URL =
+  typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL;
+
 const axiosClient = axios.create({
-  baseURL: env.api.baseUrl,
+  baseURL: API_BASE_URL,
   timeout: env.api.timeout,
   headers: {
     "Content-Type": "application/json",
@@ -87,7 +94,7 @@ axiosClient.interceptors.response.use(
       try {
         const refreshToken = tokenManager.getRefreshToken();
         const { data } = await axios.post(
-          `${env.api.baseUrl}/auth/refresh`,
+          `${typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL}/auth/refresh`,
           { refresh_token: refreshToken }
         );
 

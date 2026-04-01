@@ -19,12 +19,10 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { Badge } from "@/components/ui/badge";
 import {
   LogOut,
   User,
   Menu,
-  Search,
   Bell,
   ChevronRight,
   Settings,
@@ -34,7 +32,6 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
-import { ROLES } from "@/constants/rbac";
 import { SIDEBAR_NAV } from "@/constants";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -146,12 +143,9 @@ export function Header({ onMenuClick }: HeaderProps) {
     .toUpperCase()
     .slice(0, 2);
 
-  const primaryRole = user?.roles?.[0];
-  const roleLabel = primaryRole ? ROLES[primaryRole as keyof typeof ROLES]?.label : "";
-
   return (
     <>
-      <header className="flex h-16 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+      <header className="flex h-14 items-center justify-between border-b border-border px-4 sm:px-6">
         {/* Left side: hamburger (mobile) + breadcrumb */}
         <div className="flex items-center gap-3">
           <Button
@@ -166,28 +160,8 @@ export function Header({ onMenuClick }: HeaderProps) {
           <Breadcrumb />
         </div>
 
-        {/* Right side: search + notifications + user */}
-        <div className="flex items-center gap-4">
-          {/* Command palette trigger */}
-          <button
-            onClick={() => setCommandOpen(true)}
-            className="hidden md:flex items-center gap-2 rounded-full border bg-muted/30 px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors w-64 lg:w-80"
-          >
-            <Search className="h-4 w-4" />
-            <span className="flex-1 text-left">Search...</span>
-            <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-background px-1.5 text-[10px] font-medium text-muted-foreground">⌘K</kbd>
-          </button>
-          {/* Mobile search icon */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground sm:hidden"
-            onClick={() => setCommandOpen(true)}
-          >
-            <Search className="h-4 w-4" />
-            <span className="sr-only">Search</span>
-          </Button>
-
+        {/* Right side: notifications + avatar */}
+        <div className="flex items-center gap-2">
           {/* Notification bell with red dot */}
           <Button
             variant="ghost"
@@ -199,62 +173,44 @@ export function Header({ onMenuClick }: HeaderProps) {
             <span className="sr-only">Notifications</span>
           </Button>
 
-          {/* User section */}
-          <div className="ml-1 flex items-center gap-3">
-            <div className="hidden items-center gap-2 sm:flex">
-              <div className="text-right">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold">{user?.full_name}</span>
-                  {roleLabel && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      {roleLabel}
-                    </Badge>
-                  )}
+          {/* User avatar only */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="rounded-full outline-none">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-semibold">{user?.full_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {user?.email}
+                  </p>
                 </div>
-              </div>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="rounded-full outline-none">
-                <div className="relative">
-                  <Avatar className="h-9 w-9 ring-2 ring-border">
-                    <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  {/* Online indicator */}
-                  <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold">{user?.full_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {user?.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => router.push("/settings/profile")}
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => router.push("/settings/loan-products")}
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => router.push("/settings/profile")}
+              >
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push("/settings/loan-products")}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 

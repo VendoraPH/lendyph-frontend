@@ -75,13 +75,17 @@ export default function LoginPage() {
           });
         } else if (status === 401) {
           toast.error("Invalid credentials. Please try again.");
+        } else if (status === 419) {
+          toast.error("Session expired. Please refresh the page and try again.");
+        } else if (status === 502 || status === 504) {
+          toast.error("Server is temporarily unavailable. Please try again in a moment.");
         } else {
           toast.error(
-            data?.message || "Something went wrong. Please try again."
+            data?.message || "Something went wrong. Please try again later."
           );
         }
       } else {
-        toast.error("Unable to connect. Please check your internet connection.");
+        toast.error("Unable to connect to server. The API may be down or unreachable.");
       }
     } finally {
       setIsLoading(false);
@@ -270,14 +274,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <a
-              href="/register"
-              className="font-medium text-brand-orange hover:text-brand-orange-dark"
-            >
-              Create an account
-            </a>
+          <p className="text-center text-xs text-muted-foreground">
+            Contact your administrator for account access.
           </p>
         </div>
       </div>

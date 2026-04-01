@@ -1,10 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { useState, useEffect } from "react";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -13,419 +21,407 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAuth } from "@/hooks";
-import {
-  FilePlus,
-  CreditCard,
-  ClipboardList,
-  Users,
-  FileText,
-  DollarSign,
-  AlertTriangle,
-  ArrowRight,
-  TrendingUp,
-  Wallet,
-  CalendarClock,
-} from "lucide-react";
+import { Wallet, FileText, DollarSign, AlertTriangle } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+function getInitials(name: string) {
+  const parts = name.split(" ").filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-
-function getFormattedDate() {
-  return new Date().toLocaleDateString("en-PH", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-const phpFormat = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-});
 
 // ---------------------------------------------------------------------------
 // Mock data
 // ---------------------------------------------------------------------------
 
-const ATTENTION_LOANS = [
-  { id: 2, app_number: "LA-20260002", borrower: "Roberto Garcia", amount: 100000, status: "for_review", date: "2026-03-28" },
-  { id: 4, app_number: "LA-20260004", borrower: "Eduardo Mendoza", amount: 50000, status: "for_review", date: "2026-03-29" },
-  { id: 3, app_number: "LA-20260003", borrower: "Maria L. Reyes", amount: 30000, status: "approved", date: "2026-03-27" },
-  { id: 7, app_number: "LA-20260007", borrower: "Ana Santos", amount: 15000, status: "approved", date: "2026-03-30" },
-  { id: 9, app_number: "LA-20260009", borrower: "Danilo Villanueva", amount: 80000, status: "defaulted", date: "2026-03-15" },
-  { id: 11, app_number: "LA-20260011", borrower: "Carmen Torres", amount: 5000, status: "defaulted", date: "2026-03-01" },
-] as const;
+const SPARKLINE_PURPLE = [
+  { v: 120 }, { v: 135 }, { v: 128 }, { v: 145 }, { v: 152 }, { v: 148 }, { v: 160 },
+];
+const SPARKLINE_ORANGE = [
+  { v: 800 }, { v: 810 }, { v: 820 }, { v: 815 }, { v: 830 }, { v: 838 }, { v: 843 },
+];
+const SPARKLINE_GREEN = [
+  { v: 180 }, { v: 195 }, { v: 210 }, { v: 205 }, { v: 220 }, { v: 235 }, { v: 240 },
+];
+const SPARKLINE_BLUE = [
+  { v: 40 }, { v: 42 }, { v: 41 }, { v: 43 }, { v: 44 }, { v: 46 }, { v: 47 },
+];
 
-const RECENT_ACTIVITY = [
-  { type: "released", title: "Loan Released", detail: "LA-20260005 — ₱50,000 to Eduardo Mendoza", time: "Today, 9:42 AM", href: "/loans/5" },
-  { type: "payment", title: "Payment Received", detail: "₱3,933 from Rosario Santos — GCash", time: "Today, 9:15 AM", href: "/payments/history" },
-  { type: "new", title: "New Borrower", detail: "Ana Santos registered as active borrower", time: "Today, 8:30 AM", href: "/borrowers" },
-  { type: "approved", title: "Loan Approved", detail: "LA-20260007 — ₱15,000 for Ana Santos", time: "Yesterday, 4:45 PM", href: "/loans/7" },
-  { type: "overdue", title: "Overdue Notice", detail: "Danilo Villanueva — 30 days past due", time: "Yesterday, 2:00 PM", href: "/collections" },
-  { type: "payment", title: "Payment Received", detail: "₱9,417 from Roberto Garcia — Cash", time: "Yesterday, 11:20 AM", href: "/payments/history" },
-  { type: "released", title: "Loan Released", detail: "LA-20260008 — ₱20,000 to Maria Reyes", time: "Mar 29, 3:30 PM", href: "/loans/8" },
-  { type: "completed", title: "Loan Completed", detail: "LA-20260001 — Rosario Santos fully paid", time: "Mar 29, 10:00 AM", href: "/loans/1" },
-] as const;
+// Mini area chart for left side of main card
+const COLLECTIONS_TREND = [
+  { day: "W1",  value: 380000 },
+  { day: "W2",  value: 520000 },
+  { day: "W3",  value: 450000 },
+  { day: "W4",  value: 680000 },
+  { day: "W5",  value: 620000 },
+  { day: "W6",  value: 890000 },
+  { day: "W7",  value: 780000 },
+  { day: "W8",  value: 950000 },
+  { day: "W9",  value: 870000 },
+  { day: "W10", value: 1020000 },
+  { day: "W11", value: 960000 },
+  { day: "W12", value: 1100000 },
+];
+
+// Candlestick data — open/close/high/low per day (like the reference screenshot)
+const CANDLESTICK_DATA = [
+  { date: "12", open: 42, close: 48, high: 52, low: 38 },
+  { date: "13", open: 48, close: 38, high: 50, low: 35 },
+  { date: "14", open: 38, close: 55, high: 58, low: 36 },
+  { date: "15", open: 55, close: 48, high: 57, low: 45 },
+  { date: "16", open: 48, close: 62, high: 65, low: 46 },
+  { date: "17", open: 62, close: 35, high: 64, low: 32 },
+  { date: "18", open: 35, close: 41, high: 44, low: 33 },
+  { date: "19", open: 41, close: 58, high: 61, low: 39 },
+  { date: "20", open: 58, close: 52, high: 60, low: 49 },
+  { date: "21", open: 52, close: 67, high: 70, low: 50 },
+  { date: "22", open: 67, close: 45, high: 69, low: 42 },
+  { date: "23", open: 45, close: 71, high: 74, low: 43 },
+  { date: "24", open: 71, close: 63, high: 73, low: 60 },
+  { date: "25", open: 63, close: 58, high: 66, low: 55 },
+  { date: "26", open: 58, close: 74, high: 78, low: 56 },
+  { date: "27", open: 74, close: 49, high: 76, low: 46 },
+  { date: "28", open: 49, close: 82, high: 85, low: 47 },
+  { date: "29", open: 82, close: 68, high: 84, low: 65 },
+  { date: "30", open: 68, close: 76, high: 80, low: 66 },
+  { date: "31", open: 76, close: 85, high: 88, low: 74 },
+];
+
+const RECENT_TRANSACTIONS = [
+  { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
+  { id: 2, name: "Roberto Garcia", desc: "Cash payment received", amount: 9417, date: "Mar 31, 9:15 AM", color: "bg-orange-500" },
+  { id: 3, name: "Ana Santos", desc: "Loan released — Bank Transfer", amount: 15000, date: "Mar 30, 3:20 PM", color: "bg-green-500" },
+  { id: 4, name: "Eduardo Mendoza", desc: "Payment via Bank Transfer", amount: 4708, date: "Mar 30, 2:10 PM", color: "bg-blue-500" },
+  { id: 5, name: "Maria L. Reyes", desc: "Payment via Maya", amount: 958, date: "Mar 29, 11:05 AM", color: "bg-purple-500" },
+  { id: 6, name: "Carmen Torres", desc: "Loan released — Bank Transfer", amount: 50000, date: "Mar 29, 10:30 AM", color: "bg-orange-500" },
+];
 
 // ---------------------------------------------------------------------------
-// Color maps
+// KPI Card data
 // ---------------------------------------------------------------------------
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  for_review: { bg: "bg-amber-100", text: "text-amber-700", label: "For Review" },
-  approved: { bg: "bg-blue-100", text: "text-blue-700", label: "Approved" },
-  defaulted: { bg: "bg-red-100", text: "text-red-700", label: "Defaulted" },
-};
+const KPI_CARDS = [
+  {
+    icon: Wallet,
+    value: "₱15.2M",
+    label: "Total Portfolio",
+    color: "#7c3aed",
+    sparkData: SPARKLINE_PURPLE,
+  },
+  {
+    icon: FileText,
+    value: "843",
+    label: "Active Loans",
+    color: "#e879f9",
+    sparkData: SPARKLINE_ORANGE,
+  },
+  {
+    icon: DollarSign,
+    value: "₱2.4M",
+    label: "Collected",
+    color: "#10b981",
+    sparkData: SPARKLINE_GREEN,
+  },
+  {
+    icon: AlertTriangle,
+    value: "47",
+    label: "Overdue",
+    color: "#f87171",
+    sparkData: SPARKLINE_BLUE,
+  },
+];
 
-const ACTION_STYLES: Record<string, { className: string; label: string }> = {
-  for_review: { className: "bg-amber-100 text-amber-700 hover:bg-amber-200", label: "Review" },
-  approved: { className: "bg-blue-100 text-blue-700 hover:bg-blue-200", label: "Release" },
-  defaulted: { className: "bg-red-100 text-red-700 hover:bg-red-200", label: "Follow Up" },
-};
+// ---------------------------------------------------------------------------
+// Sparkline component
+// ---------------------------------------------------------------------------
 
-const ACTIVITY_DOT_COLORS: Record<string, string> = {
-  released: "bg-brand-orange",
-  payment: "bg-green-500",
-  new: "bg-brand-blue",
-  approved: "bg-brand-orange",
-  overdue: "bg-red-500",
-  completed: "bg-green-500",
-};
+function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
+  const gradId = `spark-${color.replace("#", "")}`;
+  return (
+    <AreaChart width={80} height={40} data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor={color} stopOpacity={0.4} />
+          <stop offset="95%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <Area
+        type="monotone"
+        dataKey="v"
+        stroke={color}
+        strokeWidth={1.5}
+        fill={`url(#${gradId})`}
+        dot={false}
+        isAnimationActive={false}
+      />
+    </AreaChart>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Candlestick shape renderer
+// ---------------------------------------------------------------------------
+
+function CandlestickShape(props: Record<string, unknown>) {
+  const { x, y, width, height, payload } = props as {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    payload: (typeof CANDLESTICK_DATA)[0];
+  };
+
+  if (!payload) return null;
+
+  const isUp = payload.close >= payload.open;
+  const color = isUp ? "#10b981" : "#7c3aed";
+
+  // Scale values to chart coordinates
+  // The bar is rendered at (x, y) with given width/height
+  // We need to calculate wick positions relative to the bar
+  const centerX = x + width / 2;
+  const bodyWidth = Math.max(width * 0.35, 4);
+  const bodyX = centerX - bodyWidth / 2;
+
+  // Wick extends slightly above and below the body
+  const wickTop = y - (height * 0.15);
+  const wickBottom = y + height + (height * 0.15);
+
+  return (
+    <g>
+      {/* Wick (thin line) */}
+      <line
+        x1={centerX}
+        y1={wickTop}
+        x2={centerX}
+        y2={wickBottom}
+        stroke={color}
+        strokeWidth={1}
+      />
+      {/* Body (narrow rectangle) */}
+      <rect
+        x={bodyX}
+        y={y}
+        width={bodyWidth}
+        height={Math.max(height, 2)}
+        fill={color}
+        rx={1}
+        ry={1}
+      />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom tooltip for candlestick chart
+// ---------------------------------------------------------------------------
+
+function CandlestickTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { payload: (typeof CANDLESTICK_DATA)[0] }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const isUp = d.close >= d.open;
+  return (
+    <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
+      <p className="font-medium mb-1">Mar {label}</p>
+      <div className="space-y-0.5">
+        <p>Open: <span className="font-semibold">₱{d.open}K</span></p>
+        <p>Close: <span className={`font-semibold ${isUp ? "text-[#10b981]" : "text-[#7c3aed]"}`}>₱{d.close}K</span></p>
+        <p>High: ₱{d.high}K · Low: ₱{d.low}K</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Time period toggle
+// ---------------------------------------------------------------------------
+
+const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const greeting = useMemo(() => getGreeting(), []);
-  const formattedDate = useMemo(() => getFormattedDate(), []);
+  const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="space-y-6">
       {/* ----------------------------------------------------------------- */}
-      {/* Section 1: Welcome Banner                                         */}
+      {/* Row 1: KPI Cards                                                  */}
       {/* ----------------------------------------------------------------- */}
-      <div className="rounded-xl bg-gradient-to-br from-brand-blue/10 via-brand-orange/5 to-transparent border p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {greeting}, {user?.full_name ?? "Admin"}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {formattedDate} · {user?.branch?.name ?? "Main Branch"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <div className="rounded-lg bg-amber-100 text-amber-700 px-3 py-1.5 font-medium">
-              23 payments due today
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Section 2: Quick Actions                                          */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        {[
-          {
-            href: "/loans/new",
-            icon: FilePlus,
-            iconBg: "bg-brand-orange/10",
-            iconColor: "text-brand-orange",
-            title: "New Loan Application",
-            description: "Create a new loan application",
-          },
-          {
-            href: "/payments",
-            icon: CreditCard,
-            iconBg: "bg-brand-blue/10",
-            iconColor: "text-brand-blue",
-            title: "Record Payment",
-            description: "Post a borrower payment",
-          },
-          {
-            href: "/collections",
-            icon: ClipboardList,
-            iconBg: "bg-green-500/10",
-            iconColor: "text-green-600",
-            title: "View Collections",
-            description: "Check today's collections",
-          },
-        ].map((action) => (
-          <Link key={action.href} href={action.href}>
-            <Card className="hover:border-brand-orange hover:shadow-md transition-all cursor-pointer h-full">
-              <CardContent className="flex items-center gap-4 py-4">
-                <div className={`rounded-full p-2.5 ${action.iconBg}`}>
-                  <action.icon className={`h-5 w-5 ${action.iconColor}`} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {KPI_CARDS.map((kpi) => (
+          <Card key={kpi.label} className="rounded-xl border shadow-sm">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: kpi.color }}
+                  >
+                    <kpi.icon className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold leading-tight">{kpi.value}</p>
+                    <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">{action.title}</p>
-                  <p className="text-xs text-muted-foreground">{action.description}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+                <Sparkline data={kpi.sparkData} color={kpi.color} />
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Section 3: KPI Cards                                              */}
+      {/* Row 2: Main Chart Card — full width single column                 */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Link href="/borrowers">
-          <Card className="border-l-4 border-l-brand-blue group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Total Borrowers</p>
-                  <p className="text-2xl font-bold">1,248</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+12%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-brand-blue/10 p-2.5">
-                  <Users className="h-5 w-5 text-brand-blue" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/loans">
-          <Card className="border-l-4 border-l-brand-orange group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Active Loans</p>
-                  <p className="text-2xl font-bold">843</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+5%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-brand-orange/10 p-2.5">
-                  <FileText className="h-5 w-5 text-brand-orange" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/payments/history">
-          <Card className="border-l-4 border-l-green-500 group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Total Collected</p>
-                  <p className="text-2xl font-bold">₱2.4M</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+18%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-green-500/10 p-2.5">
-                  <DollarSign className="h-5 w-5 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/collections">
-          <Card className="border-l-4 border-l-red-500 group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Overdue Accounts</p>
-                  <p className="text-2xl font-bold text-destructive">47</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-destructive">+3</span> since yesterday
-                  </p>
-                </div>
-                <div className="rounded-full bg-red-500/10 p-2.5">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Section 4: Portfolio Stats Row                                     */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Portfolio</p>
-                <p className="text-2xl font-bold">₱15.2M</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Outstanding balance across all loans
-                </p>
-              </div>
-              <div className="rounded-full bg-brand-orange/10 p-2.5">
-                <Wallet className="h-5 w-5 text-brand-orange" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-xs font-medium text-muted-foreground">Collection Rate</p>
-                <p className="text-2xl font-bold text-green-600">94.5%</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  On-time payment percentage
-                </p>
-              </div>
-              <div className="rounded-full bg-green-500/10 p-2.5">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-            <Progress value={94.5} className="mt-3">
-              {/* Progress component renders its own track + indicator */}
-            </Progress>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Due Today</p>
-                <p className="text-2xl font-bold">23</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {phpFormat.format(145000)} total amount
-                </p>
-              </div>
-              <div className="rounded-full bg-brand-blue/10 p-2.5">
-                <CalendarClock className="h-5 w-5 text-brand-blue" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Section 5: Two-column bottom layout                               */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
-        {/* Left: Loans Needing Attention */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Loans Needing Attention
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Loan #</TableHead>
-                    <TableHead>Borrower</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ATTENTION_LOANS.map((loan) => {
-                    const statusStyle = STATUS_COLORS[loan.status];
-                    const actionStyle = ACTION_STYLES[loan.status];
-                    return (
-                      <TableRow key={loan.id}>
-                        <TableCell className="font-medium">{loan.app_number}</TableCell>
-                        <TableCell>{loan.borrower}</TableCell>
-                        <TableCell className="text-right">
-                          {phpFormat.format(loan.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                          >
-                            {statusStyle.label}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/loans/${loan.id}`}>
-                            <Button
-                              size="xs"
-                              className={actionStyle.className}
-                            >
-                              {actionStyle.label}
-                            </Button>
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right: Recent Activity */}
-        <div>
-          <Card className="h-full flex flex-col">
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1">
-              <div className="space-y-0">
-                {RECENT_ACTIVITY.map((item, i) => (
-                  <Link
-                    key={i}
-                    href={item.href}
-                    className="flex items-start gap-3 border-b border-border py-3 last:border-0 hover:bg-muted/50 -mx-4 px-4 transition-colors"
-                  >
-                    <div className="mt-1.5 shrink-0">
-                      <div
-                        className={`h-2 w-2 rounded-full ${ACTIVITY_DOT_COLORS[item.type] ?? "bg-muted-foreground"}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight">{item.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {item.detail}
-                      </p>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground shrink-0 mt-0.5">
-                      {item.time}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-            <div className="border-t px-4 py-3">
-              <Link
-                href="/audit-trail"
-                className="flex items-center justify-center gap-1 text-sm font-medium text-brand-orange hover:underline"
+      <Card className="rounded-xl border shadow-sm overflow-hidden">
+        {/* Header: value + time toggles */}
+        <div className="flex items-start justify-between p-6 pb-2">
+          <div>
+            <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
+            <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
+            <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
+          </div>
+          <div className="flex items-center gap-1">
+            {TIME_PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setActivePeriod(p)}
+                className={
+                  activePeriod === p
+                    ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
+                    : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
+                }
               >
-                View All Activity
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </Card>
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+
+        {/* Candlestick chart — full width */}
+        <div className="px-4">
+          {mounted ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis hide domain={[20, 95]} />
+                <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
+                <Bar
+                  dataKey="close"
+                  shape={<CandlestickShape />}
+                  isAnimationActive={false}
+                >
+                  {CANDLESTICK_DATA.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : null}
+        </div>
+
+        {/* Purple area chart below — full width */}
+        <div className="px-4 pb-4" style={{ height: 80 }}>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                <defs>
+                  <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#7c3aed"
+                  strokeWidth={2}
+                  fill="url(#collectionsGrad)"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : null}
+        </div>
+      </Card>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Row 3: Recent Transactions Table                                   */}
+      {/* ----------------------------------------------------------------- */}
+      <Card className="rounded-xl border shadow-sm">
+        <div className="px-6 pt-5 pb-3">
+          <h3 className="text-base font-semibold">Recent Transactions</h3>
+        </div>
+        <CardContent className="px-0 pb-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent bg-purple-50/50">
+                  <TableHead className="pl-6 text-purple-900/70">Name</TableHead>
+                  <TableHead className="text-purple-900/70">Description</TableHead>
+                  <TableHead className="text-right text-purple-900/70">Amount</TableHead>
+                  <TableHead className="pr-6 text-right text-purple-900/70">Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {RECENT_TRANSACTIONS.map((tx) => {
+                  const initials = getInitials(tx.name);
+                  return (
+                    <TableRow key={tx.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="pl-6">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${tx.color}`}
+                          >
+                            {initials}
+                          </div>
+                          <span className="font-medium text-sm whitespace-nowrap">{tx.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        ₱{tx.amount.toLocaleString("en-PH")}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground pr-6">
+                        {tx.date}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

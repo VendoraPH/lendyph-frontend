@@ -25,7 +25,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -35,39 +34,22 @@ import {
   Search,
   MoreHorizontal,
   Pencil,
-  Trash2,
   KeyRound,
   UserCheck,
   UserX,
   Users,
-  ShieldCheck,
-  FileText,
-  Wallet,
-  ClipboardList,
-  Eye,
   AlertTriangle,
-  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROLES, ROLE_OPTIONS } from "@/constants";
-import { userService, roleService, branchService } from "@/services";
 import { toast } from "sonner";
-import type { User, Role, UserStatus } from "@/types";
-import type { ApiBranch } from "@/services/branch.service";
+import { userService, roleService, branchService } from "@/services";
+import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
-import type { LucideIcon } from "lucide-react";
+import type { ApiBranch } from "@/services/branch.service";
 
-// ── Constants ──
+// ── Styling helpers ──
 
-const roleIcons: Record<Role, LucideIcon> = {
-  admin: ShieldCheck,
-  loan_officer: FileText,
-  cashier: Wallet,
-  collector: ClipboardList,
-  viewer: Eye,
-};
-
-const roleBadgeColor: Record<Role, string> = {
+const roleBadgeColor: Record<string, string> = {
   admin: "bg-brand-orange text-brand-orange-foreground",
   loan_officer: "bg-brand-blue text-brand-blue-foreground",
   cashier: "bg-green-600 text-white",
@@ -80,32 +62,46 @@ const statusBadge: Record<UserStatus, string> = {
   inactive: "bg-red-100 text-red-700 border-red-200",
 };
 
+function capitalize(s: string) {
+  return s
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// ── Loading Spinner ──
+
+function Spinner({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "h-8 w-8 animate-spin rounded-full border-4 border-brand-orange border-t-transparent",
+        className
+      )}
+    />
+  );
+}
+
 // ── Role Selector Component ──
 
 function RoleSelector({
   value,
   onChange,
-  apiRoles,
+  roles,
 }: {
   value: string;
-  onChange: (role: Role) => void;
-  apiRoles: ApiRole[];
+  onChange: (role: string) => void;
+  roles: ApiRole[];
 }) {
-  // Use ROLE_OPTIONS for the display (icons, descriptions), but filter to only show roles that exist in API
-  const options = ROLE_OPTIONS.filter(
-    (r) => apiRoles.length === 0 || apiRoles.some((ar) => ar.name === r.value)
-  );
-
   return (
     <div className="grid gap-2">
-      {options.map((role) => {
-        const Icon = roleIcons[role.value];
-        const isSelected = value === role.value;
+      {roles.map((role) => {
+        const isSelected = value === role.name;
         return (
           <button
-            key={role.value}
+            key={role.id}
             type="button"
-            onClick={() => onChange(role.value)}
+            onClick={() => onChange(role.name)}
             className={cn(
               "flex items-center gap-3 rounded-lg border p-3 text-left transition-all",
               isSelected
@@ -117,16 +113,16 @@ function RoleSelector({
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                 isSelected
-                  ? roleBadgeColor[role.value]
+                  ? roleBadgeColor[role.name] ?? "bg-brand-orange text-white"
                   : "bg-muted text-muted-foreground"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Users className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">{role.label}</p>
+              <p className="text-sm font-medium">{capitalize(role.name)}</p>
               <p className="text-xs text-muted-foreground">
-                {role.description}
+                {role.permissions.length} permissions
               </p>
             </div>
             <div
@@ -203,7 +199,7 @@ function AddUserDialog({
     mobile_number: "",
     password: "",
     password_confirmation: "",
-    role: "" as string,
+    role: "",
     branch_id: "" as number | "",
   });
 
@@ -253,10 +249,13 @@ function AddUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors">
-        <UserPlus className="h-4 w-4" />
+      <Button
+        onClick={() => setOpen(true)}
+        className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+      >
+        <UserPlus className="mr-2 h-4 w-4" />
         Add User
-      </DialogTrigger>
+      </Button>
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Add New User</DialogTitle>
@@ -312,17 +311,6 @@ function AddUserDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="add-mobile">Mobile Number</Label>
-            <Input
-              id="add-mobile"
-              type="tel"
-              placeholder="09171234567"
-              value={form.mobile_number}
-              onChange={(e) => update("mobile_number", e.target.value)}
-            />
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="add-password">Password</Label>
@@ -353,6 +341,17 @@ function AddUserDialog({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="add-mobile">Mobile Number</Label>
+            <Input
+              id="add-mobile"
+              type="tel"
+              placeholder="09171234567"
+              value={form.mobile_number}
+              onChange={(e) => update("mobile_number", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Branch</Label>
             <BranchSelector
               value={form.branch_id}
@@ -366,7 +365,7 @@ function AddUserDialog({
             <RoleSelector
               value={form.role}
               onChange={(v) => update("role", v)}
-              apiRoles={roles}
+              roles={roles}
             />
           </div>
 
@@ -378,10 +377,10 @@ function AddUserDialog({
             </DialogClose>
             <Button
               type="submit"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               disabled={submitting}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Create User
             </Button>
           </div>
@@ -430,8 +429,8 @@ function EditUserDialog({
         last_name: form.last_name,
         email: form.email,
         mobile_number: form.mobile_number || undefined,
-        branch_id: form.branch_id as number || undefined,
-        role: form.role || undefined,
+        branch_id: form.branch_id as number,
+        role: form.role,
       });
       toast.success("User updated successfully");
       onOpenChange(false);
@@ -509,8 +508,8 @@ function EditUserDialog({
             <Label>Role</Label>
             <RoleSelector
               value={form.role}
-              onChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
-              apiRoles={roles}
+              onChange={(v) => update("role", v)}
+              roles={roles}
             />
           </div>
 
@@ -524,10 +523,10 @@ function EditUserDialog({
             </Button>
             <Button
               type="submit"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               disabled={submitting}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Save Changes
             </Button>
           </div>
@@ -620,10 +619,10 @@ function ResetPasswordDialog({
             </Button>
             <Button
               type="submit"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               disabled={!password || password !== confirm || submitting}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Reset Password
             </Button>
           </div>
@@ -659,10 +658,12 @@ function ToggleStatusDialog({
         await userService.reactivate(user.id);
         toast.success("User reactivated successfully");
       }
-      onConfirm();
       onOpenChange(false);
+      onConfirm();
     } catch {
-      toast.error(isActive ? "Failed to deactivate user" : "Failed to reactivate user");
+      toast.error(
+        isActive ? "Failed to deactivate user" : "Failed to reactivate user"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -695,68 +696,8 @@ function ToggleStatusDialog({
                 : "bg-green-600 text-white hover:bg-green-700"
             }
           >
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
             {isActive ? "Deactivate" : "Activate"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Delete User Dialog (controlled) ──
-
-function DeleteUserDialog({
-  user,
-  open,
-  onOpenChange,
-  onConfirm,
-}: {
-  user: User;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleConfirm = async () => {
-    setSubmitting(true);
-    try {
-      await userService.delete(user.id);
-      toast.success("User deleted successfully");
-      onConfirm();
-      onOpenChange(false);
-    } catch {
-      toast.error("Failed to delete user");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <Trash2 className="h-5 w-5" />
-            Delete User
-          </DialogTitle>
-          <DialogDescription>
-            Are you sure you want to permanently delete {user.full_name}? This action
-            cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={submitting}
-            className="bg-destructive text-white hover:bg-destructive/90"
-          >
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Delete
           </Button>
         </div>
       </DialogContent>
@@ -768,12 +709,12 @@ function DeleteUserDialog({
 
 function UserActionsCell({
   user,
-  onRefetch,
+  onRefresh,
   roles,
   branches,
 }: {
   user: User;
-  onRefetch: () => void;
+  onRefresh: () => void;
   roles: ApiRole[];
   branches: ApiBranch[];
 }) {
@@ -804,13 +745,6 @@ function UserActionsCell({
             )}
             {isActive ? "Deactivate" : "Activate"}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => setOpenDialog("delete")}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -818,7 +752,7 @@ function UserActionsCell({
         user={user}
         open={openDialog === "edit"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
-        onSave={onRefetch}
+        onSave={onRefresh}
         roles={roles}
         branches={branches}
       />
@@ -831,77 +765,39 @@ function UserActionsCell({
         user={user}
         open={openDialog === "status"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
-        onConfirm={onRefetch}
-      />
-      <DeleteUserDialog
-        user={user}
-        open={openDialog === "delete"}
-        onOpenChange={(v) => !v && setOpenDialog(null)}
-        onConfirm={onRefetch}
+        onConfirm={onRefresh}
       />
     </>
   );
 }
 
-// ── Permissions Dialog ──
+// ── Role Summary Card ──
 
-function PermissionsDialog({
+function RoleSummaryCard({
   role,
-  userCount,
+  count,
 }: {
-  role: Role;
-  userCount: number;
+  role: ApiRole;
+  count: number;
 }) {
   return (
-    <Dialog>
-      <DialogTrigger className="w-full text-left">
-        <Card className="cursor-pointer hover:border-brand-orange/40 transition-colors">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <Badge className={roleBadgeColor[role]}>
-                {ROLES[role].label}
-              </Badge>
-              <span className="text-2xl font-bold">{userCount}</span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {ROLES[role].description}
-            </p>
-          </CardContent>
-        </Card>
-      </DialogTrigger>
-      <DialogContent size="default">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            {ROLES[role].label} Permissions
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {ROLES[role].description}
-          </p>
-          <div className="max-h-80 overflow-y-auto">
-            <div className="flex flex-wrap gap-2">
-              {ROLES[role].permissions.map((perm) => {
-                const [mod, action] = perm.split(":");
-                return (
-                  <Badge key={perm} variant="outline" className="text-xs gap-1">
-                    <span className="font-semibold text-brand-orange">
-                      {mod}
-                    </span>
-                    <span className="text-muted-foreground">:</span>
-                    <span>{action}</span>
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground pt-2 border-t">
-            {ROLES[role].permissions.length} permissions assigned
-          </p>
+    <Card>
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between">
+          <Badge
+            className={
+              roleBadgeColor[role.name] ?? "bg-muted text-muted-foreground"
+            }
+          >
+            {capitalize(role.name)}
+          </Badge>
+          <span className="text-2xl font-bold">{count}</span>
         </div>
-      </DialogContent>
-    </Dialog>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {role.permissions.length} permissions
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -914,78 +810,83 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const refetchUsers = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await userService.list();
-      setUsers(Array.isArray(res) ? res : (res as { data?: User[] }).data ?? []);
+      const [u, r, b] = await Promise.all([
+        userService.list(),
+        roleService.list(),
+        branchService.list(),
+      ]);
+      setUsers(Array.isArray(u) ? u : (u as unknown as { data: User[] }).data ?? []);
+      setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
+      setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
     } catch {
-      toast.error("Failed to load users");
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [usersRes, rolesRes, branchesRes] = await Promise.all([
-          userService.list(),
-          roleService.list(),
-          branchService.list(),
-        ]);
-        setUsers(Array.isArray(usersRes) ? usersRes : (usersRes as { data?: User[] }).data ?? []);
-        setRoles(Array.isArray(rolesRes) ? rolesRes : (rolesRes as { data?: ApiRole[] }).data ?? []);
-        setBranches(Array.isArray(branchesRes) ? branchesRes : (branchesRes as { data?: ApiBranch[] }).data ?? []);
-      } catch {
-        toast.error("Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+    fetchData();
+  }, [fetchData]);
 
   const filteredUsers = users.filter((user) => {
     const q = search.toLowerCase();
-    const roleLabel = user.roles?.[0] && ROLES[user.roles[0] as Role]
-      ? ROLES[user.roles[0] as Role].label
-      : user.roles?.[0] ?? "";
+    const role = user.roles?.[0] ?? "";
     return (
       user.full_name.toLowerCase().includes(q) ||
       user.username.toLowerCase().includes(q) ||
       user.email.toLowerCase().includes(q) ||
       (user.branch?.name ?? "").toLowerCase().includes(q) ||
-      roleLabel.toLowerCase().includes(q)
+      role.toLowerCase().includes(q)
     );
   });
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-orange" />
+      <div className="flex h-96 items-center justify-center">
+        <Spinner />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Team Management
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your team members and their roles
-          </p>
-        </div>
-        <AddUserDialog onAdd={refetchUsers} roles={roles} branches={branches} />
-      </div>
+      <Card>
+        <CardContent className="py-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                User Management
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Manage users, roles, and permissions
+              </p>
+            </div>
+            <AddUserDialog onAdd={fetchData} roles={roles} branches={branches} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Role Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        {ROLE_OPTIONS.map((r) => (
-          <PermissionsDialog
-            key={r.value}
-            role={r.value}
-            userCount={users.filter((u) => u.roles?.[0] === r.value).length}
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <Badge className="bg-foreground text-background">
+                Total
+              </Badge>
+              <span className="text-2xl font-bold">{users.length}</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">All users</p>
+          </CardContent>
+        </Card>
+        {roles.map((role) => (
+          <RoleSummaryCard
+            key={role.id}
+            role={role}
+            count={users.filter((u) => u.roles?.[0] === role.name).length}
           />
         ))}
       </div>
@@ -1012,9 +913,7 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Username</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Mobile</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Status</TableHead>
@@ -1023,27 +922,24 @@ export default function UsersPage() {
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((user) => {
-                  const userRole = user.roles?.[0] as Role | undefined;
+                  const role = user.roles?.[0] ?? "";
                   return (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {user.username}
+                      <TableCell className="font-medium">
+                        {user.full_name}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {user.email}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {user.mobile_number ?? "-"}
-                      </TableCell>
                       <TableCell>
-                        {userRole && ROLES[userRole] ? (
-                          <Badge className={roleBadgeColor[userRole]}>
-                            {ROLES[userRole].label}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">{userRole ?? "—"}</Badge>
-                        )}
+                        <Badge
+                          className={
+                            roleBadgeColor[role] ??
+                            "bg-muted text-muted-foreground"
+                          }
+                        >
+                          {capitalize(role)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {user.branch?.name ?? "-"}
@@ -1059,7 +955,7 @@ export default function UsersPage() {
                       <TableCell>
                         <UserActionsCell
                           user={user}
-                          onRefetch={refetchUsers}
+                          onRefresh={fetchData}
                           roles={roles}
                           branches={branches}
                         />
@@ -1070,7 +966,7 @@ export default function UsersPage() {
                 {filteredUsers.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No users found.

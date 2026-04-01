@@ -190,8 +190,8 @@ function SidebarContent({
         {/* Logo area */}
         <div
           className={cn(
-            "flex flex-col border-b border-sidebar-border",
-            collapsed ? "items-center px-2 py-4" : "gap-0.5 px-6 py-4"
+            "flex h-14 flex-col justify-center border-b border-border",
+            collapsed ? "items-center px-2" : "gap-0 px-6"
           )}
         >
           {collapsed ? (
