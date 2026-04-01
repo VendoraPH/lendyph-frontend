@@ -331,7 +331,7 @@ function CoMakerFormFields({
         <div className="space-y-2">
           <Label>Relationship to Borrower *</Label>
           <Select
-            value={form.relationship || undefined}
+            value={form.relationship || null}
             onValueChange={(v) => update("relationship", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -411,7 +411,7 @@ function CoMakerFormFields({
         <div className="space-y-2">
           <Label>Valid ID Type</Label>
           <Select
-            value={form.valid_id_type || undefined}
+            value={form.valid_id_type || null}
             onValueChange={(v) => update("valid_id_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
