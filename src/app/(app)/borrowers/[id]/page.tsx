@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Borrower, CoMaker } from "@/types";
-import { INITIAL_BORROWERS, MOCK_LOANS } from "../_components/mock-data";
-import { MOCK_PAYMENTS, MOCK_CO_MAKERS } from "./_components/mock-detail-data";
+import type { Borrower, CoMaker, Loan, Payment } from "@/types";
+import { borrowerService } from "@/services";
+import { toast } from "sonner";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -16,12 +16,56 @@ export default function BorrowerDetailPage() {
   const params = useParams();
   const borrowerId = Number(params.id);
 
-  const [borrower, setBorrower] = useState<Borrower | undefined>(() =>
-    INITIAL_BORROWERS.find((b) => b.id === borrowerId)
-  );
-  const [coMakers, setCoMakers] = useState<CoMaker[]>(
-    () => MOCK_CO_MAKERS[borrowerId] ?? []
-  );
+  const [borrower, setBorrower] = useState<Borrower | null>(null);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const borrowerData = await borrowerService.detail(borrowerId);
+      setBorrower(borrowerData);
+
+      // Fetch related data — these may fail if endpoints aren't ready
+      try {
+        const loansData = await borrowerService.loans(borrowerId);
+        setLoans(Array.isArray(loansData) ? loansData : []);
+      } catch {
+        setLoans([]);
+      }
+
+      try {
+        const paymentsData = await borrowerService.payments(borrowerId);
+        setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      } catch {
+        setPayments([]);
+      }
+
+      try {
+        const coMakersData = await borrowerService.coMakers(borrowerId);
+        setCoMakers(Array.isArray(coMakersData) ? coMakersData : []);
+      } catch {
+        setCoMakers([]);
+      }
+    } catch {
+      toast.error("Failed to load borrower details");
+    } finally {
+      setLoading(false);
+    }
+  }, [borrowerId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-orange border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!borrower) {
     return (
@@ -30,23 +74,6 @@ export default function BorrowerDetailPage() {
       </div>
     );
   }
-
-  const loans = MOCK_LOANS[borrower.id] ?? [];
-  const payments = MOCK_PAYMENTS[borrower.id] ?? [];
-
-  const handleAddCoMaker = (newCoMaker: CoMaker) => {
-    setCoMakers((prev) => [...prev, newCoMaker]);
-  };
-
-  const handleEditCoMaker = (updated: CoMaker) => {
-    setCoMakers((prev) =>
-      prev.map((cm) => (cm.id === updated.id ? updated : cm))
-    );
-  };
-
-  const handleDeleteCoMaker = (id: number) => {
-    setCoMakers((prev) => prev.filter((cm) => cm.id !== id));
-  };
 
   return (
     <div className="space-y-6">
@@ -80,9 +107,9 @@ export default function BorrowerDetailPage() {
             coMakers={coMakers}
             loans={loans}
             borrowerId={borrower.id}
-            onAdd={handleAddCoMaker}
-            onEdit={handleEditCoMaker}
-            onDelete={handleDeleteCoMaker}
+            onAdd={() => fetchData()}
+            onEdit={() => fetchData()}
+            onDelete={() => fetchData()}
           />
         </TabsContent>
       </Tabs>

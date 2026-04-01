@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import type { Borrower, Loan, CoMaker } from "@/types";
-import { VALID_ID_OPTIONS } from "@/constants";
+// Constants removed — valid_id_type not in API response
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
@@ -40,9 +40,6 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
     (l) => l.principal_amount >= 50000 && l.status !== "completed" && !coMakers.some((cm) => cm.loan_id === l.id)
   ).length;
 
-  const idLabel =
-    VALID_ID_OPTIONS.find((o) => o.value === borrower.valid_id_type)?.label ?? borrower.valid_id_type;
-
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {/* Personal Details */}
@@ -56,13 +53,12 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
         <CardContent className="grid grid-cols-2 gap-4">
           <InfoItem label="Full Name" value={borrower.full_name} />
           <InfoItem label="Birthdate" value={borrower.birthdate ? formatDate(borrower.birthdate) : undefined} />
-          <InfoItem label="Gender" value={borrower.gender === "male" ? "Male" : "Female"} />
+          <InfoItem label="Gender" value={borrower.gender ? (borrower.gender === "male" ? "Male" : "Female") : undefined} />
           <InfoItem
             label="Civil Status"
             value={borrower.civil_status ? borrower.civil_status.charAt(0).toUpperCase() + borrower.civil_status.slice(1) : undefined}
           />
-          <InfoItem label="Valid ID" value={idLabel} />
-          <InfoItem label="ID Number" value={borrower.valid_id_number} />
+          <InfoItem label="Borrower Code" value={borrower.borrower_code} />
         </CardContent>
       </Card>
 
@@ -75,12 +71,10 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
-          <InfoItem label="Street Address" value={borrower.address} />
-          <InfoItem label="Barangay" value={borrower.barangay} />
-          <InfoItem label="City / Municipality" value={borrower.city} />
-          <InfoItem label="Province" value={borrower.province} />
-          <InfoItem label="Zip Code" value={borrower.zip_code} />
-          <InfoItem label="Phone" value={borrower.phone} />
+          <InfoItem label="Address" value={borrower.address} />
+          <InfoItem label="Contact Number" value={borrower.contact_number || borrower.phone} />
+          <InfoItem label="Email" value={borrower.email} />
+          <InfoItem label="Branch" value={borrower.branch?.name} />
         </CardContent>
       </Card>
 
@@ -93,12 +87,8 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
-          <InfoItem
-            label="Employment Type"
-            value={borrower.employment_type ? borrower.employment_type.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) : undefined}
-          />
           <InfoItem label="Employer / Business" value={borrower.employer_or_business} />
-          <InfoItem label="Monthly Income" value={borrower.monthly_income ? formatCurrency(borrower.monthly_income) : undefined} />
+          <InfoItem label="Monthly Income" value={borrower.monthly_income ? formatCurrency(Number(borrower.monthly_income)) : undefined} />
         </CardContent>
       </Card>
 

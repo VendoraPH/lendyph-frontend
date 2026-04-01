@@ -73,7 +73,8 @@ export default function BorrowersPage() {
       return (
         b.full_name.toLowerCase().includes(q) ||
         b.borrower_code.toLowerCase().includes(q) ||
-        b.phone.includes(q)
+        (b.contact_number ?? "").includes(q) ||
+        (b.email ?? "").toLowerCase().includes(q)
       );
     }
     return true;

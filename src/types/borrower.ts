@@ -13,34 +13,36 @@ export type ValidIdType =
   | "tin_id";
 export type EmploymentType = "employed" | "self_employed" | "ofw" | "unemployed" | "retired";
 
+export interface BorrowerBranch {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export interface Borrower {
   id: number;
   borrower_code: string;
   first_name: string;
-  middle_name?: string;
+  middle_name?: string | null;
   last_name: string;
-  suffix?: string;
+  suffix?: string | null;
   full_name: string;
-  email?: string;
-  phone: string;
-  address?: string;
-  barangay?: string;
-  city?: string;
-  province?: string;
-  zip_code?: string;
-  birthdate: string;
-  civil_status: CivilStatus;
-  gender: Gender;
-  employer_or_business?: string;
-  employment_type?: EmploymentType;
-  monthly_income?: number;
-  valid_id_type?: ValidIdType;
-  valid_id_number?: string;
-  valid_id_photo?: string;
-  photo?: string;
+  birthdate?: string | null;
+  civil_status?: CivilStatus | null;
+  gender?: Gender | null;
+  address?: string | null;
+  contact_number?: string | null;
+  email?: string | null;
+  employer_or_business?: string | null;
+  monthly_income?: number | string | null;
+  photo_url?: string | null;
   status: BorrowerStatus;
-  total_loans: number;
-  total_outstanding: number;
+  branch?: BorrowerBranch | null;
+  // Legacy fields (kept for compatibility with existing components)
+  phone?: string;
+  photo?: string;
+  total_loans?: number;
+  total_outstanding?: number;
   created_at: string;
   updated_at: string;
 }
