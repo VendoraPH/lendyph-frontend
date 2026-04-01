@@ -7,6 +7,7 @@ import {
   Area,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -63,19 +64,20 @@ const phpFormat = new Intl.NumberFormat("en-PH", {
 // Mock data
 // ---------------------------------------------------------------------------
 
-const SPARKLINE_ORANGE = [
+const SPARKLINE_PURPLE = [
   { v: 120 }, { v: 135 }, { v: 128 }, { v: 145 }, { v: 152 }, { v: 148 }, { v: 160 },
 ];
-const SPARKLINE_GREEN = [
+const SPARKLINE_ORANGE = [
   { v: 800 }, { v: 810 }, { v: 820 }, { v: 815 }, { v: 830 }, { v: 838 }, { v: 843 },
 ];
-const SPARKLINE_BLUE = [
+const SPARKLINE_GREEN = [
   { v: 180 }, { v: 195 }, { v: 210 }, { v: 205 }, { v: 220 }, { v: 235 }, { v: 240 },
 ];
-const SPARKLINE_RED = [
+const SPARKLINE_BLUE = [
   { v: 40 }, { v: 42 }, { v: 41 }, { v: 43 }, { v: 44 }, { v: 46 }, { v: 47 },
 ];
 
+const TARGET = 50000;
 const CHART_DATA = Array.from({ length: 15 }, (_, i) => ({
   date: `Mar ${16 + i}`,
   collected: Math.floor(35000 + (((i * 7 + 3) % 10) / 10) * 30000),
@@ -112,7 +114,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
 };
 
 const ACTION_STYLES: Record<string, { className: string; label: string }> = {
-  for_review: { className: "bg-amber-100 text-amber-700 hover:bg-amber-200", label: "Review" },
+  for_review: { className: "bg-purple-100 text-purple-700 hover:bg-purple-200", label: "Review" },
   approved: { className: "bg-blue-100 text-blue-700 hover:bg-blue-200", label: "Release" },
   defaulted: { className: "bg-red-100 text-red-700 hover:bg-red-200", label: "Follow Up" },
 };
@@ -130,13 +132,13 @@ const ACTIVITY_DOT: Record<string, string> = {
 // Sparkline component
 // ---------------------------------------------------------------------------
 
-type SparklineColor = "orange" | "green" | "blue" | "red";
+type SparklineColor = "purple" | "orange" | "green" | "blue";
 
 const SPARKLINE_HEX: Record<SparklineColor, string> = {
+  purple: "#8b5cf6",
   orange: "#f97316",
   green: "#22c55e",
   blue: "#3b82f6",
-  red: "#ef4444",
 };
 
 function Sparkline({ data, color }: { data: { v: number }[]; color: SparklineColor }) {
@@ -178,10 +180,13 @@ function CollectionTooltip({ active, payload, label }: {
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
+  const isAboveTarget = payload[0].value >= TARGET;
   return (
     <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
       <p className="font-medium mb-1">{label}</p>
-      <p className="text-[#f97316] font-semibold">{phpFormat.format(payload[0].value)}</p>
+      <p className={isAboveTarget ? "text-[#22c55e] font-semibold" : "text-[#f43f5e] font-semibold"}>
+        {phpFormat.format(payload[0].value)}
+      </p>
     </div>
   );
 }
@@ -209,7 +214,7 @@ export default function DashboardPage() {
         </h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground hidden sm:block">{formattedDate}</span>
-          <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
+          <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 px-3 py-1 text-xs font-medium">
             23 payments due today
           </span>
         </div>
@@ -224,10 +229,10 @@ export default function DashboardPage() {
           <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardContent className="py-4 px-4">
               <div className="flex items-start justify-between mb-3">
-                <div className="rounded-full bg-orange-100 p-2">
-                  <Wallet className="h-4 w-4 text-orange-500" />
+                <div className="rounded-full bg-purple-100 p-2">
+                  <Wallet className="h-4 w-4 text-purple-600" />
                 </div>
-                <Sparkline data={SPARKLINE_ORANGE} color="orange" />
+                <Sparkline data={SPARKLINE_PURPLE} color="purple" />
               </div>
               <p className="text-2xl font-bold">₱15.2M</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -243,10 +248,10 @@ export default function DashboardPage() {
           <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardContent className="py-4 px-4">
               <div className="flex items-start justify-between mb-3">
-                <div className="rounded-full bg-green-100 p-2">
-                  <FileText className="h-4 w-4 text-green-600" />
+                <div className="rounded-full bg-orange-100 p-2">
+                  <FileText className="h-4 w-4 text-orange-600" />
                 </div>
-                <Sparkline data={SPARKLINE_GREEN} color="green" />
+                <Sparkline data={SPARKLINE_ORANGE} color="orange" />
               </div>
               <p className="text-2xl font-bold">843</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -262,10 +267,10 @@ export default function DashboardPage() {
           <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardContent className="py-4 px-4">
               <div className="flex items-start justify-between mb-3">
-                <div className="rounded-full bg-blue-100 p-2">
-                  <DollarSign className="h-4 w-4 text-blue-600" />
+                <div className="rounded-full bg-green-100 p-2">
+                  <DollarSign className="h-4 w-4 text-green-600" />
                 </div>
-                <Sparkline data={SPARKLINE_BLUE} color="blue" />
+                <Sparkline data={SPARKLINE_GREEN} color="green" />
               </div>
               <p className="text-2xl font-bold">₱2.4M</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -281,15 +286,15 @@ export default function DashboardPage() {
           <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardContent className="py-4 px-4">
               <div className="flex items-start justify-between mb-3">
-                <div className="rounded-full bg-red-100 p-2">
-                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                <div className="rounded-full bg-blue-100 p-2">
+                  <AlertTriangle className="h-4 w-4 text-blue-600" />
                 </div>
-                <Sparkline data={SPARKLINE_RED} color="red" />
+                <Sparkline data={SPARKLINE_BLUE} color="blue" />
               </div>
               <p className="text-2xl font-bold text-destructive">47</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Overdue Accounts{" "}
-                <span className="text-destructive font-medium">+3</span>
+                <span className="text-red-600 font-medium">+3</span>
               </p>
             </CardContent>
           </Card>
@@ -310,8 +315,8 @@ export default function DashboardPage() {
                   onClick={() => setActivePeriod(p)}
                   className={
                     activePeriod === p
-                      ? "bg-brand-orange text-white rounded-md px-3 py-1 text-xs font-medium"
-                      : "rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      ? "bg-purple-600 text-white rounded-md px-3 py-1 text-xs font-medium"
+                      : "rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-purple-50 transition-colors"
                   }
                 >
                   {p}
@@ -342,10 +347,16 @@ export default function DashboardPage() {
               <Tooltip content={<CollectionTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
               <Bar
                 dataKey="collected"
-                fill="#f97316"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={32}
-              />
+              >
+                {CHART_DATA.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.collected >= TARGET ? "#22c55e" : "#f43f5e"}
+                  />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -359,8 +370,8 @@ export default function DashboardPage() {
           {
             href: "/loans/new",
             icon: FilePlus,
-            iconBg: "bg-orange-100",
-            iconColor: "text-orange-500",
+            iconBg: "bg-purple-100",
+            iconColor: "text-purple-600",
             title: "New Loan",
             description: "Create a new loan application",
           },
@@ -382,7 +393,7 @@ export default function DashboardPage() {
           },
         ].map((action) => (
           <Link key={action.href} href={action.href}>
-            <Card className="rounded-xl border bg-card shadow-sm hover:border-brand-orange hover:shadow-md transition-all cursor-pointer h-full">
+            <Card className="rounded-xl border bg-card shadow-sm hover:border-purple-400 hover:shadow-md transition-all cursor-pointer h-full">
               <CardContent className="flex items-center gap-4 py-4">
                 <div className={`rounded-full p-2.5 ${action.iconBg}`}>
                   <action.icon className={`h-5 w-5 ${action.iconColor}`} />
@@ -487,7 +498,7 @@ export default function DashboardPage() {
             <div className="border-t px-4 py-3">
               <Link
                 href="/audit-trail"
-                className="flex items-center justify-center gap-1 text-sm font-medium text-brand-orange hover:underline"
+                className="flex items-center justify-center gap-1 text-sm font-medium text-purple-600 hover:underline"
               >
                 View All →
               </Link>
