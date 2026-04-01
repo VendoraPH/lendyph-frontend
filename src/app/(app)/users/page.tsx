@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -35,106 +34,22 @@ import {
   Search,
   MoreHorizontal,
   Pencil,
-  Trash2,
   KeyRound,
   UserCheck,
   UserX,
   Users,
-  ShieldCheck,
-  FileText,
-  Wallet,
-  ClipboardList,
-  Eye,
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROLES, ROLE_OPTIONS, BRANCHES } from "@/constants";
-import type { Role, UserStatus } from "@/types";
-import type { LucideIcon } from "lucide-react";
+import { toast } from "sonner";
+import { userService, roleService, branchService } from "@/services";
+import type { User, UserStatus } from "@/types";
+import type { ApiRole } from "@/services/role.service";
+import type { ApiBranch } from "@/services/branch.service";
 
-// ── Types ──
+// ── Styling helpers ──
 
-interface MockUser {
-  id: number;
-  name: string;
-  username: string;
-  email: string;
-  mobile: string;
-  role: Role;
-  branch: string;
-  status: UserStatus;
-  created_at: string;
-}
-
-// ── Constants ──
-
-const INITIAL_USERS: MockUser[] = [
-  {
-    id: 1,
-    name: "Augustin Maputol",
-    username: "augustin",
-    email: "augustin@lendy.ph",
-    mobile: "09171234567",
-    role: "admin",
-    branch: "main",
-    status: "active",
-    created_at: "2026-01-15",
-  },
-  {
-    id: 2,
-    name: "Maria Santos",
-    username: "maria.santos",
-    email: "maria@lendy.ph",
-    mobile: "09181234567",
-    role: "loan_officer",
-    branch: "cebu",
-    status: "active",
-    created_at: "2026-02-01",
-  },
-  {
-    id: 3,
-    name: "Juan Dela Cruz",
-    username: "juan.dc",
-    email: "juan@lendy.ph",
-    mobile: "09191234567",
-    role: "cashier",
-    branch: "main",
-    status: "active",
-    created_at: "2026-02-10",
-  },
-  {
-    id: 4,
-    name: "Ana Reyes",
-    username: "ana.reyes",
-    email: "ana@lendy.ph",
-    mobile: "09201234567",
-    role: "collector",
-    branch: "davao",
-    status: "active",
-    created_at: "2026-03-01",
-  },
-  {
-    id: 5,
-    name: "Pedro Garcia",
-    username: "pedro.g",
-    email: "pedro@lendy.ph",
-    mobile: "09211234567",
-    role: "viewer",
-    branch: "manila",
-    status: "inactive",
-    created_at: "2026-03-15",
-  },
-];
-
-const roleIcons: Record<Role, LucideIcon> = {
-  admin: ShieldCheck,
-  loan_officer: FileText,
-  cashier: Wallet,
-  collector: ClipboardList,
-  viewer: Eye,
-};
-
-const roleBadgeColor: Record<Role, string> = {
+const roleBadgeColor: Record<string, string> = {
   admin: "bg-brand-orange text-brand-orange-foreground",
   loan_officer: "bg-brand-blue text-brand-blue-foreground",
   cashier: "bg-green-600 text-white",
@@ -147,8 +62,24 @@ const statusBadge: Record<UserStatus, string> = {
   inactive: "bg-red-100 text-red-700 border-red-200",
 };
 
-function getBranchLabel(value: string) {
-  return BRANCHES.find((b) => b.value === value)?.label ?? value;
+function capitalize(s: string) {
+  return s
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// ── Loading Spinner ──
+
+function Spinner({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "h-8 w-8 animate-spin rounded-full border-4 border-brand-orange border-t-transparent",
+        className
+      )}
+    />
+  );
 }
 
 // ── Role Selector Component ──
@@ -156,20 +87,21 @@ function getBranchLabel(value: string) {
 function RoleSelector({
   value,
   onChange,
+  roles,
 }: {
-  value: Role | "";
-  onChange: (role: Role) => void;
+  value: string;
+  onChange: (role: string) => void;
+  roles: ApiRole[];
 }) {
   return (
     <div className="grid gap-2">
-      {ROLE_OPTIONS.map((role) => {
-        const Icon = roleIcons[role.value];
-        const isSelected = value === role.value;
+      {roles.map((role) => {
+        const isSelected = value === role.name;
         return (
           <button
-            key={role.value}
+            key={role.id}
             type="button"
-            onClick={() => onChange(role.value)}
+            onClick={() => onChange(role.name)}
             className={cn(
               "flex items-center gap-3 rounded-lg border p-3 text-left transition-all",
               isSelected
@@ -181,16 +113,16 @@ function RoleSelector({
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                 isSelected
-                  ? roleBadgeColor[role.value]
+                  ? roleBadgeColor[role.name] ?? "bg-brand-orange text-white"
                   : "bg-muted text-muted-foreground"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Users className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">{role.label}</p>
+              <p className="text-sm font-medium">{capitalize(role.name)}</p>
               <p className="text-xs text-muted-foreground">
-                {role.description}
+                {role.permissions.length} permissions
               </p>
             </div>
             <div
@@ -219,25 +151,27 @@ function RoleSelector({
 function BranchSelector({
   value,
   onChange,
+  branches,
 }: {
-  value: string;
-  onChange: (branch: string) => void;
+  value: number | "";
+  onChange: (branchId: number) => void;
+  branches: ApiBranch[];
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-      {BRANCHES.map((branch) => (
+      {branches.map((branch) => (
         <button
-          key={branch.value}
+          key={branch.id}
           type="button"
-          onClick={() => onChange(branch.value)}
+          onClick={() => onChange(branch.id)}
           className={cn(
             "rounded-lg border px-3 py-2 text-sm font-medium transition-all text-left",
-            value === branch.value
+            value === branch.id
               ? "border-brand-orange bg-brand-orange/5 ring-1 ring-brand-orange text-brand-orange"
               : "border-border hover:border-brand-orange/40 hover:bg-muted/50 text-foreground"
           )}
         >
-          {branch.label}
+          {branch.name}
         </button>
       ))}
     </div>
@@ -246,58 +180,82 @@ function BranchSelector({
 
 // ── Add User Dialog ──
 
-function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
+function AddUserDialog({
+  onAdd,
+  roles,
+  branches,
+}: {
+  onAdd: () => void;
+  roles: ApiRole[];
+  branches: ApiBranch[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    name: "",
+    first_name: "",
+    last_name: "",
     username: "",
     email: "",
-    mobile: "",
+    mobile_number: "",
     password: "",
     password_confirmation: "",
-    role: "" as Role | "",
-    branch: "",
+    role: "",
+    branch_id: "" as number | "",
   });
 
-  const update = (field: string, value: string) =>
+  const update = (field: string, value: string | number) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const resetForm = () =>
     setForm({
-      name: "",
+      first_name: "",
+      last_name: "",
       username: "",
       email: "",
-      mobile: "",
+      mobile_number: "",
       password: "",
       password_confirmation: "",
       role: "",
-      branch: "",
+      branch_id: "",
     });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.role || !form.branch) return;
+    if (!form.role || !form.branch_id) return;
 
-    const newUser: MockUser = {
-      id: Date.now(),
-      name: form.name,
-      username: form.username,
-      email: form.email,
-      mobile: form.mobile,
-      role: form.role as Role,
-      branch: form.branch,
-      status: "active",
-      created_at: new Date().toISOString().split("T")[0]!,
-    };
-    onAdd(newUser);
-    resetForm();
+    setSubmitting(true);
+    try {
+      await userService.create({
+        first_name: form.first_name,
+        last_name: form.last_name,
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        password_confirmation: form.password_confirmation,
+        mobile_number: form.mobile_number || undefined,
+        branch_id: form.branch_id as number,
+        role: form.role,
+      });
+      toast.success("User created successfully");
+      resetForm();
+      setOpen(false);
+      onAdd();
+    } catch {
+      toast.error("Failed to create user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Dialog>
-      <DialogTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors">
-        <UserPlus className="h-4 w-4" />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button
+        onClick={() => setOpen(true)}
+        className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+      >
+        <UserPlus className="mr-2 h-4 w-4" />
         Add User
-      </DialogTrigger>
+      </Button>
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Add New User</DialogTitle>
@@ -308,15 +266,28 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="add-name">Full Name</Label>
+              <Label htmlFor="add-first-name">First Name</Label>
               <Input
-                id="add-name"
-                placeholder="Juan Dela Cruz"
-                value={form.name}
-                onChange={(e) => update("name", e.target.value)}
+                id="add-first-name"
+                placeholder="Juan"
+                value={form.first_name}
+                onChange={(e) => update("first_name", e.target.value)}
                 required
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-last-name">Last Name</Label>
+              <Input
+                id="add-last-name"
+                placeholder="Dela Cruz"
+                value={form.last_name}
+                onChange={(e) => update("last_name", e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="add-username">Username</Label>
               <Input
@@ -327,9 +298,6 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
                 required
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="add-email">Email</Label>
               <Input
@@ -338,17 +306,6 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
                 placeholder="name@lendy.ph"
                 value={form.email}
                 onChange={(e) => update("email", e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-mobile">Mobile Number</Label>
-              <Input
-                id="add-mobile"
-                type="tel"
-                placeholder="09171234567"
-                value={form.mobile}
-                onChange={(e) => update("mobile", e.target.value)}
                 required
               />
             </div>
@@ -384,10 +341,22 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="add-mobile">Mobile Number</Label>
+            <Input
+              id="add-mobile"
+              type="tel"
+              placeholder="09171234567"
+              value={form.mobile_number}
+              onChange={(e) => update("mobile_number", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Branch</Label>
             <BranchSelector
-              value={form.branch}
-              onChange={(v) => update("branch", v)}
+              value={form.branch_id}
+              onChange={(v) => update("branch_id", v)}
+              branches={branches}
             />
           </div>
 
@@ -396,6 +365,7 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
             <RoleSelector
               value={form.role}
               onChange={(v) => update("role", v)}
+              roles={roles}
             />
           </div>
 
@@ -407,8 +377,10 @@ function AddUserDialog({ onAdd }: { onAdd: (user: MockUser) => void }) {
             </DialogClose>
             <Button
               type="submit"
+              disabled={submitting}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Create User
             </Button>
           </div>
@@ -425,21 +397,49 @@ function EditUserDialog({
   open,
   onOpenChange,
   onSave,
+  roles,
+  branches,
 }: {
-  user: MockUser;
+  user: User;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (updated: MockUser) => void;
+  onSave: () => void;
+  roles: ApiRole[];
+  branches: ApiBranch[];
 }) {
-  const [form, setForm] = useState({ ...user });
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    mobile_number: user.mobile_number ?? "",
+    role: user.roles?.[0] ?? "",
+    branch_id: user.branch?.id ?? ("" as number | ""),
+  });
 
-  const update = (field: string, value: string) =>
+  const update = (field: string, value: string | number) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(form);
-    onOpenChange(false);
+    setSubmitting(true);
+    try {
+      await userService.update(user.id, {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        email: form.email,
+        mobile_number: form.mobile_number || undefined,
+        branch_id: form.branch_id as number,
+        role: form.role,
+      });
+      toast.success("User updated successfully");
+      onOpenChange(false);
+      onSave();
+    } catch {
+      toast.error("Failed to update user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -448,26 +448,26 @@ function EditUserDialog({
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
           <DialogDescription>
-            Update account details for {user.name}.
+            Update account details for {user.full_name}.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Full Name</Label>
+              <Label htmlFor="edit-first-name">First Name</Label>
               <Input
-                id="edit-name"
-                value={form.name}
-                onChange={(e) => update("name", e.target.value)}
+                id="edit-first-name"
+                value={form.first_name}
+                onChange={(e) => update("first_name", e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-username">Username</Label>
+              <Label htmlFor="edit-last-name">Last Name</Label>
               <Input
-                id="edit-username"
-                value={form.username}
-                onChange={(e) => update("username", e.target.value)}
+                id="edit-last-name"
+                value={form.last_name}
+                onChange={(e) => update("last_name", e.target.value)}
                 required
               />
             </div>
@@ -489,9 +489,8 @@ function EditUserDialog({
               <Input
                 id="edit-mobile"
                 type="tel"
-                value={form.mobile}
-                onChange={(e) => update("mobile", e.target.value)}
-                required
+                value={form.mobile_number}
+                onChange={(e) => update("mobile_number", e.target.value)}
               />
             </div>
           </div>
@@ -499,8 +498,9 @@ function EditUserDialog({
           <div className="space-y-2">
             <Label>Branch</Label>
             <BranchSelector
-              value={form.branch}
-              onChange={(v) => update("branch", v)}
+              value={form.branch_id}
+              onChange={(v) => update("branch_id", v)}
+              branches={branches}
             />
           </div>
 
@@ -508,7 +508,8 @@ function EditUserDialog({
             <Label>Role</Label>
             <RoleSelector
               value={form.role}
-              onChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
+              onChange={(v) => update("role", v)}
+              roles={roles}
             />
           </div>
 
@@ -522,8 +523,10 @@ function EditUserDialog({
             </Button>
             <Button
               type="submit"
+              disabled={submitting}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Save Changes
             </Button>
           </div>
@@ -540,20 +543,33 @@ function ResetPasswordDialog({
   open,
   onOpenChange,
 }: {
-  user: MockUser;
+  user: User;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) return;
-    // TODO: call userService.resetPassword(user.id, { password, password_confirmation: confirm })
-    setPassword("");
-    setConfirm("");
-    onOpenChange(false);
+
+    setSubmitting(true);
+    try {
+      await userService.resetPassword(user.id, {
+        password,
+        password_confirmation: confirm,
+      });
+      toast.success("Password reset successfully");
+      setPassword("");
+      setConfirm("");
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to reset password");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -562,7 +578,7 @@ function ResetPasswordDialog({
         <DialogHeader>
           <DialogTitle>Reset Password</DialogTitle>
           <DialogDescription>
-            Set a new password for {user.name}.
+            Set a new password for {user.full_name}.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -603,9 +619,10 @@ function ResetPasswordDialog({
             </Button>
             <Button
               type="submit"
+              disabled={!password || password !== confirm || submitting}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              disabled={!password || password !== confirm}
             >
+              {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
               Reset Password
             </Button>
           </div>
@@ -623,12 +640,34 @@ function ToggleStatusDialog({
   onOpenChange,
   onConfirm,
 }: {
-  user: MockUser;
+  user: User;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
   const isActive = user.status === "active";
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    try {
+      if (isActive) {
+        await userService.deactivate(user.id);
+        toast.success("User deactivated successfully");
+      } else {
+        await userService.reactivate(user.id);
+        toast.success("User reactivated successfully");
+      }
+      onOpenChange(false);
+      onConfirm();
+    } catch {
+      toast.error(
+        isActive ? "Failed to deactivate user" : "Failed to reactivate user"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -640,8 +679,8 @@ function ToggleStatusDialog({
           </DialogTitle>
           <DialogDescription>
             {isActive
-              ? `Are you sure you want to deactivate ${user.name}? They will no longer be able to access the system.`
-              : `Are you sure you want to activate ${user.name}? They will regain access to the system.`}
+              ? `Are you sure you want to deactivate ${user.full_name}? They will no longer be able to access the system.`
+              : `Are you sure you want to activate ${user.full_name}? They will regain access to the system.`}
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-3 pt-2">
@@ -649,62 +688,16 @@ function ToggleStatusDialog({
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
-            }}
+            onClick={handleConfirm}
+            disabled={submitting}
             className={
               isActive
                 ? "bg-destructive text-white hover:bg-destructive/90"
                 : "bg-green-600 text-white hover:bg-green-700"
             }
           >
+            {submitting && <Spinner className="mr-2 h-4 w-4 border-2" />}
             {isActive ? "Deactivate" : "Activate"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Delete User Dialog (controlled) ──
-
-function DeleteUserDialog({
-  user,
-  open,
-  onOpenChange,
-  onConfirm,
-}: {
-  user: MockUser;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <Trash2 className="h-5 w-5" />
-            Delete User
-          </DialogTitle>
-          <DialogDescription>
-            Are you sure you want to permanently delete {user.name}? This action
-            cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
-            }}
-            className="bg-destructive text-white hover:bg-destructive/90"
-          >
-            Delete
           </Button>
         </div>
       </DialogContent>
@@ -716,14 +709,14 @@ function DeleteUserDialog({
 
 function UserActionsCell({
   user,
-  onEdit,
-  onToggleStatus,
-  onDelete,
+  onRefresh,
+  roles,
+  branches,
 }: {
-  user: MockUser;
-  onEdit: (updated: MockUser) => void;
-  onToggleStatus: () => void;
-  onDelete: () => void;
+  user: User;
+  onRefresh: () => void;
+  roles: ApiRole[];
+  branches: ApiBranch[];
 }) {
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = user.status === "active";
@@ -752,13 +745,6 @@ function UserActionsCell({
             )}
             {isActive ? "Deactivate" : "Activate"}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => setOpenDialog("delete")}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -766,7 +752,9 @@ function UserActionsCell({
         user={user}
         open={openDialog === "edit"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
-        onSave={onEdit}
+        onSave={onRefresh}
+        roles={roles}
+        branches={branches}
       />
       <ResetPasswordDialog
         user={user}
@@ -777,135 +765,125 @@ function UserActionsCell({
         user={user}
         open={openDialog === "status"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
-        onConfirm={onToggleStatus}
-      />
-      <DeleteUserDialog
-        user={user}
-        open={openDialog === "delete"}
-        onOpenChange={(v) => !v && setOpenDialog(null)}
-        onConfirm={onDelete}
+        onConfirm={onRefresh}
       />
     </>
   );
 }
 
-// ── Permissions Dialog ──
+// ── Role Summary Card ──
 
-function PermissionsDialog({ role }: { role: Role }) {
+function RoleSummaryCard({
+  role,
+  count,
+}: {
+  role: ApiRole;
+  count: number;
+}) {
   return (
-    <Dialog>
-      <DialogTrigger className="w-full text-left">
-        <Card className="cursor-pointer hover:border-brand-orange/40 transition-colors">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <Badge className={roleBadgeColor[role]}>
-                {ROLES[role].label}
-              </Badge>
-              <span className="text-2xl font-bold">
-                {INITIAL_USERS.filter((u) => u.role === role).length}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {ROLES[role].description}
-            </p>
-          </CardContent>
-        </Card>
-      </DialogTrigger>
-      <DialogContent size="default">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            {ROLES[role].label} Permissions
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {ROLES[role].description}
-          </p>
-          <div className="max-h-80 overflow-y-auto">
-            <div className="flex flex-wrap gap-2">
-              {ROLES[role].permissions.map((perm) => {
-                const [mod, action] = perm.split(":");
-                return (
-                  <Badge key={perm} variant="outline" className="text-xs gap-1">
-                    <span className="font-semibold text-brand-orange">
-                      {mod}
-                    </span>
-                    <span className="text-muted-foreground">:</span>
-                    <span>{action}</span>
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground pt-2 border-t">
-            {ROLES[role].permissions.length} permissions assigned
-          </p>
+    <Card>
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between">
+          <Badge
+            className={
+              roleBadgeColor[role.name] ?? "bg-muted text-muted-foreground"
+            }
+          >
+            {capitalize(role.name)}
+          </Badge>
+          <span className="text-2xl font-bold">{count}</span>
         </div>
-      </DialogContent>
-    </Dialog>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {role.permissions.length} permissions
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
 // ── Main Page ──
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<MockUser[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<ApiRole[]>([]);
+  const [branches, setBranches] = useState<ApiBranch[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [u, r, b] = await Promise.all([
+        userService.list(),
+        roleService.list(),
+        branchService.list(),
+      ]);
+      setUsers(Array.isArray(u) ? u : (u as unknown as { data: User[] }).data ?? []);
+      setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
+      setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
+    } catch {
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const filteredUsers = users.filter((user) => {
     const q = search.toLowerCase();
+    const role = user.roles?.[0] ?? "";
     return (
-      user.name.toLowerCase().includes(q) ||
+      user.full_name.toLowerCase().includes(q) ||
       user.username.toLowerCase().includes(q) ||
       user.email.toLowerCase().includes(q) ||
-      getBranchLabel(user.branch).toLowerCase().includes(q) ||
-      ROLES[user.role].label.toLowerCase().includes(q)
+      (user.branch?.name ?? "").toLowerCase().includes(q) ||
+      role.toLowerCase().includes(q)
     );
   });
 
-  const handleAdd = (newUser: MockUser) => {
-    setUsers((prev) => [newUser, ...prev]);
-  };
-
-  const handleEdit = (updated: MockUser) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === updated.id ? updated : u))
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Spinner />
+      </div>
     );
-  };
-
-  const handleToggleStatus = (id: number) => {
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === id
-          ? { ...u, status: u.status === "active" ? "inactive" : "active" as UserStatus }
-          : u
-      )
-    );
-  };
-
-  const handleDelete = (id: number) => {
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-  };
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Team Management
+            User Management
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage your team members and their roles
+            Manage users, roles, and permissions
           </p>
         </div>
-        <AddUserDialog onAdd={handleAdd} />
+        <AddUserDialog onAdd={fetchData} roles={roles} branches={branches} />
       </div>
 
       {/* Role Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        {ROLE_OPTIONS.map((r) => (
-          <PermissionsDialog key={r.value} role={r.value} />
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <Badge className="bg-foreground text-background">
+                Total
+              </Badge>
+              <span className="text-2xl font-bold">{users.length}</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">All users</p>
+          </CardContent>
+        </Card>
+        {roles.map((role) => (
+          <RoleSummaryCard
+            key={role.id}
+            role={role}
+            count={users.filter((u) => u.roles?.[0] === role.name).length}
+          />
         ))}
       </div>
 
@@ -931,9 +909,7 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Username</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Mobile</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Status</TableHead>
@@ -941,48 +917,52 @@ export default function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {user.username}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {user.email}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {user.mobile}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={roleBadgeColor[user.role]}>
-                        {ROLES[user.role].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {getBranchLabel(user.branch)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={statusBadge[user.status]}
-                      >
-                        {user.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <UserActionsCell
-                        user={user}
-                        onEdit={handleEdit}
-                        onToggleStatus={() => handleToggleStatus(user.id)}
-                        onDelete={() => handleDelete(user.id)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredUsers.map((user) => {
+                  const role = user.roles?.[0] ?? "";
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">
+                        {user.full_name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.email}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            roleBadgeColor[role] ??
+                            "bg-muted text-muted-foreground"
+                          }
+                        >
+                          {capitalize(role)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.branch?.name ?? "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={statusBadge[user.status]}
+                        >
+                          {user.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <UserActionsCell
+                          user={user}
+                          onRefresh={fetchData}
+                          roles={roles}
+                          branches={branches}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {filteredUsers.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No users found.
