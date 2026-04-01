@@ -1,10 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -18,14 +28,10 @@ import {
   FilePlus,
   CreditCard,
   ClipboardList,
-  Users,
   FileText,
   DollarSign,
   AlertTriangle,
-  ArrowRight,
-  TrendingUp,
   Wallet,
-  CalendarClock,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -57,24 +63,42 @@ const phpFormat = new Intl.NumberFormat("en-PH", {
 // Mock data
 // ---------------------------------------------------------------------------
 
+const SPARKLINE_ORANGE = [
+  { v: 120 }, { v: 135 }, { v: 128 }, { v: 145 }, { v: 152 }, { v: 148 }, { v: 160 },
+];
+const SPARKLINE_GREEN = [
+  { v: 800 }, { v: 810 }, { v: 820 }, { v: 815 }, { v: 830 }, { v: 838 }, { v: 843 },
+];
+const SPARKLINE_BLUE = [
+  { v: 180 }, { v: 195 }, { v: 210 }, { v: 205 }, { v: 220 }, { v: 235 }, { v: 240 },
+];
+const SPARKLINE_RED = [
+  { v: 40 }, { v: 42 }, { v: 41 }, { v: 43 }, { v: 44 }, { v: 46 }, { v: 47 },
+];
+
+const CHART_DATA = Array.from({ length: 15 }, (_, i) => ({
+  date: `Mar ${16 + i}`,
+  collected: Math.floor(35000 + (((i * 7 + 3) % 10) / 10) * 30000),
+}));
+
 const ATTENTION_LOANS = [
-  { id: 2, app_number: "LA-20260002", borrower: "Roberto Garcia", amount: 100000, status: "for_review", date: "2026-03-28" },
-  { id: 4, app_number: "LA-20260004", borrower: "Eduardo Mendoza", amount: 50000, status: "for_review", date: "2026-03-29" },
-  { id: 3, app_number: "LA-20260003", borrower: "Maria L. Reyes", amount: 30000, status: "approved", date: "2026-03-27" },
-  { id: 7, app_number: "LA-20260007", borrower: "Ana Santos", amount: 15000, status: "approved", date: "2026-03-30" },
-  { id: 9, app_number: "LA-20260009", borrower: "Danilo Villanueva", amount: 80000, status: "defaulted", date: "2026-03-15" },
-  { id: 11, app_number: "LA-20260011", borrower: "Carmen Torres", amount: 5000, status: "defaulted", date: "2026-03-01" },
+  { id: 2, app_number: "LA-20260002", borrower: "Roberto Garcia", amount: 100000, status: "for_review" },
+  { id: 4, app_number: "LA-20260004", borrower: "Eduardo Mendoza", amount: 50000, status: "for_review" },
+  { id: 3, app_number: "LA-20260003", borrower: "Maria L. Reyes", amount: 30000, status: "approved" },
+  { id: 7, app_number: "LA-20260007", borrower: "Ana Santos", amount: 15000, status: "approved" },
+  { id: 9, app_number: "LA-20260009", borrower: "Danilo Villanueva", amount: 80000, status: "defaulted" },
+  { id: 11, app_number: "LA-20260011", borrower: "Carmen Torres", amount: 5000, status: "defaulted" },
 ] as const;
 
 const RECENT_ACTIVITY = [
-  { type: "released", title: "Loan Released", detail: "LA-20260005 — ₱50,000 to Eduardo Mendoza", time: "Today, 9:42 AM", href: "/loans/5" },
-  { type: "payment", title: "Payment Received", detail: "₱3,933 from Rosario Santos — GCash", time: "Today, 9:15 AM", href: "/payments/history" },
-  { type: "new", title: "New Borrower", detail: "Ana Santos registered as active borrower", time: "Today, 8:30 AM", href: "/borrowers" },
-  { type: "approved", title: "Loan Approved", detail: "LA-20260007 — ₱15,000 for Ana Santos", time: "Yesterday, 4:45 PM", href: "/loans/7" },
-  { type: "overdue", title: "Overdue Notice", detail: "Danilo Villanueva — 30 days past due", time: "Yesterday, 2:00 PM", href: "/collections" },
-  { type: "payment", title: "Payment Received", detail: "₱9,417 from Roberto Garcia — Cash", time: "Yesterday, 11:20 AM", href: "/payments/history" },
-  { type: "released", title: "Loan Released", detail: "LA-20260008 — ₱20,000 to Maria Reyes", time: "Mar 29, 3:30 PM", href: "/loans/8" },
-  { type: "completed", title: "Loan Completed", detail: "LA-20260001 — Rosario Santos fully paid", time: "Mar 29, 10:00 AM", href: "/loans/1" },
+  { type: "released", title: "Loan Released", detail: "LA-20260005 — ₱50,000 to Eduardo Mendoza", time: "9:42 AM", href: "/loans/5" },
+  { type: "payment", title: "Payment Received", detail: "₱3,933 from Rosario Santos — GCash", time: "9:15 AM", href: "/payments/history" },
+  { type: "new", title: "New Borrower", detail: "Ana Santos registered as active borrower", time: "8:30 AM", href: "/borrowers" },
+  { type: "approved", title: "Loan Approved", detail: "LA-20260007 — ₱15,000 for Ana Santos", time: "Yesterday", href: "/loans/7" },
+  { type: "overdue", title: "Overdue Notice", detail: "Danilo Villanueva — 30 days past due", time: "Yesterday", href: "/collections" },
+  { type: "payment", title: "Payment Received", detail: "₱9,417 from Roberto Garcia — Cash", time: "Yesterday", href: "/payments/history" },
+  { type: "released", title: "Loan Released", detail: "LA-20260008 — ₱20,000 to Maria Reyes", time: "Mar 29", href: "/loans/8" },
+  { type: "completed", title: "Loan Completed", detail: "LA-20260001 — Rosario Santos fully paid", time: "Mar 29", href: "/loans/1" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -93,7 +117,7 @@ const ACTION_STYLES: Record<string, { className: string; label: string }> = {
   defaulted: { className: "bg-red-100 text-red-700 hover:bg-red-200", label: "Follow Up" },
 };
 
-const ACTIVITY_DOT_COLORS: Record<string, string> = {
+const ACTIVITY_DOT: Record<string, string> = {
   released: "bg-brand-orange",
   payment: "bg-green-500",
   new: "bg-brand-blue",
@@ -103,69 +127,262 @@ const ACTIVITY_DOT_COLORS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Sparkline component
+// ---------------------------------------------------------------------------
+
+type SparklineColor = "orange" | "green" | "blue" | "red";
+
+const SPARKLINE_HEX: Record<SparklineColor, string> = {
+  orange: "#f97316",
+  green: "#22c55e",
+  blue: "#3b82f6",
+  red: "#ef4444",
+};
+
+function Sparkline({ data, color }: { data: { v: number }[]; color: SparklineColor }) {
+  const hex = SPARKLINE_HEX[color];
+  const gradId = `gradient-${color}`;
+
+  return (
+    <div style={{ width: 80, height: 40 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={hex} stopOpacity={0.4} />
+              <stop offset="95%" stopColor={hex} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Area
+            type="monotone"
+            dataKey="v"
+            stroke={hex}
+            strokeWidth={1.5}
+            fill={`url(#${gradId})`}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom bar chart tooltip
+// ---------------------------------------------------------------------------
+
+function CollectionTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: { value: number }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
+      <p className="font-medium mb-1">{label}</p>
+      <p className="text-[#f97316] font-semibold">{phpFormat.format(payload[0].value)}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+
+const TIME_PERIODS = ["1W", "1M", "3M", "6M", "1Y"] as const;
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const greeting = useMemo(() => getGreeting(), []);
   const formattedDate = useMemo(() => getFormattedDate(), []);
+  const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
 
   return (
     <div className="space-y-6">
       {/* ----------------------------------------------------------------- */}
-      {/* Section 1: Welcome Banner                                         */}
+      {/* Section 1: Slim welcome header                                     */}
       {/* ----------------------------------------------------------------- */}
-      <div className="rounded-xl bg-gradient-to-br from-brand-blue/10 via-brand-orange/5 to-transparent border p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {greeting}, {user?.full_name ?? "Admin"}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {formattedDate} · {user?.branch?.name ?? "Main Branch"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <div className="rounded-lg bg-amber-100 text-amber-700 px-3 py-1.5 font-medium">
-              23 payments due today
-            </div>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">
+          {greeting}, {user?.full_name ?? "Admin"}
+        </h1>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground hidden sm:block">{formattedDate}</span>
+          <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
+            23 payments due today
+          </span>
         </div>
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Section 2: Quick Actions                                          */}
+      {/* Section 2: KPI Cards with sparklines                              */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Portfolio */}
+        <Link href="/loans">
+          <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardContent className="py-4 px-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="rounded-full bg-orange-100 p-2">
+                  <Wallet className="h-4 w-4 text-orange-500" />
+                </div>
+                <Sparkline data={SPARKLINE_ORANGE} color="orange" />
+              </div>
+              <p className="text-2xl font-bold">₱15.2M</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Total Portfolio{" "}
+                <span className="text-green-600 font-medium">+12%</span>
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Active Loans */}
+        <Link href="/loans">
+          <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardContent className="py-4 px-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="rounded-full bg-green-100 p-2">
+                  <FileText className="h-4 w-4 text-green-600" />
+                </div>
+                <Sparkline data={SPARKLINE_GREEN} color="green" />
+              </div>
+              <p className="text-2xl font-bold">843</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Active Loans{" "}
+                <span className="text-green-600 font-medium">+5%</span>
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Collected This Month */}
+        <Link href="/payments/history">
+          <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardContent className="py-4 px-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="rounded-full bg-blue-100 p-2">
+                  <DollarSign className="h-4 w-4 text-blue-600" />
+                </div>
+                <Sparkline data={SPARKLINE_BLUE} color="blue" />
+              </div>
+              <p className="text-2xl font-bold">₱2.4M</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Collected This Month{" "}
+                <span className="text-green-600 font-medium">+18%</span>
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Overdue Accounts */}
+        <Link href="/collections">
+          <Card className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardContent className="py-4 px-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="rounded-full bg-red-100 p-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                </div>
+                <Sparkline data={SPARKLINE_RED} color="red" />
+              </div>
+              <p className="text-2xl font-bold text-destructive">47</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Overdue Accounts{" "}
+                <span className="text-destructive font-medium">+3</span>
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Section 3: Main Chart Card                                         */}
+      {/* ----------------------------------------------------------------- */}
+      <Card className="rounded-xl border bg-card shadow-sm" style={{ minHeight: 350 }}>
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="text-base font-semibold">Collection Overview</CardTitle>
+            <div className="flex items-center gap-1">
+              {TIME_PERIODS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setActivePeriod(p)}
+                  className={
+                    activePeriod === p
+                      ? "bg-brand-orange text-white rounded-md px-3 py-1 text-xs font-medium"
+                      : "rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  }
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={CHART_DATA} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tickFormatter={(v: number) =>
+                  v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`
+                }
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+              />
+              <Tooltip content={<CollectionTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
+              <Bar
+                dataKey="collected"
+                fill="#f97316"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={32}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Section 4: Quick Actions                                           */}
+      {/* ----------------------------------------------------------------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           {
             href: "/loans/new",
             icon: FilePlus,
-            iconBg: "bg-brand-orange/10",
-            iconColor: "text-brand-orange",
-            title: "New Loan Application",
+            iconBg: "bg-orange-100",
+            iconColor: "text-orange-500",
+            title: "New Loan",
             description: "Create a new loan application",
           },
           {
             href: "/payments",
             icon: CreditCard,
-            iconBg: "bg-brand-blue/10",
-            iconColor: "text-brand-blue",
+            iconBg: "bg-blue-100",
+            iconColor: "text-blue-600",
             title: "Record Payment",
             description: "Post a borrower payment",
           },
           {
             href: "/collections",
             icon: ClipboardList,
-            iconBg: "bg-green-500/10",
+            iconBg: "bg-green-100",
             iconColor: "text-green-600",
             title: "View Collections",
             description: "Check today's collections",
           },
         ].map((action) => (
           <Link key={action.href} href={action.href}>
-            <Card className="hover:border-brand-orange hover:shadow-md transition-all cursor-pointer h-full">
+            <Card className="rounded-xl border bg-card shadow-sm hover:border-brand-orange hover:shadow-md transition-all cursor-pointer h-full">
               <CardContent className="flex items-center gap-4 py-4">
                 <div className={`rounded-full p-2.5 ${action.iconBg}`}>
                   <action.icon className={`h-5 w-5 ${action.iconColor}`} />
@@ -181,156 +398,14 @@ export default function DashboardPage() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Section 3: KPI Cards                                              */}
+      {/* Section 5: Two-column bottom layout                                */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Link href="/borrowers">
-          <Card className="border-l-4 border-l-brand-blue group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Total Borrowers</p>
-                  <p className="text-2xl font-bold">1,248</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+12%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-brand-blue/10 p-2.5">
-                  <Users className="h-5 w-5 text-brand-blue" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/loans">
-          <Card className="border-l-4 border-l-brand-orange group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Active Loans</p>
-                  <p className="text-2xl font-bold">843</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+5%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-brand-orange/10 p-2.5">
-                  <FileText className="h-5 w-5 text-brand-orange" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/payments/history">
-          <Card className="border-l-4 border-l-green-500 group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Total Collected</p>
-                  <p className="text-2xl font-bold">₱2.4M</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-green-600">+18%</span> from last month
-                  </p>
-                </div>
-                <div className="rounded-full bg-green-500/10 p-2.5">
-                  <DollarSign className="h-5 w-5 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/collections">
-          <Card className="border-l-4 border-l-red-500 group hover:shadow-md transition-shadow cursor-pointer h-full">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Overdue Accounts</p>
-                  <p className="text-2xl font-bold text-destructive">47</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <span className="text-destructive">+3</span> since yesterday
-                  </p>
-                </div>
-                <div className="rounded-full bg-red-500/10 p-2.5">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Section 4: Portfolio Stats Row                                     */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Portfolio</p>
-                <p className="text-2xl font-bold">₱15.2M</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Outstanding balance across all loans
-                </p>
-              </div>
-              <div className="rounded-full bg-brand-orange/10 p-2.5">
-                <Wallet className="h-5 w-5 text-brand-orange" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-xs font-medium text-muted-foreground">Collection Rate</p>
-                <p className="text-2xl font-bold text-green-600">94.5%</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  On-time payment percentage
-                </p>
-              </div>
-              <div className="rounded-full bg-green-500/10 p-2.5">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-            <Progress value={94.5} className="mt-3">
-              {/* Progress component renders its own track + indicator */}
-            </Progress>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Due Today</p>
-                <p className="text-2xl font-bold">23</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {phpFormat.format(145000)} total amount
-                </p>
-              </div>
-              <div className="rounded-full bg-brand-blue/10 p-2.5">
-                <CalendarClock className="h-5 w-5 text-brand-blue" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Section 5: Two-column bottom layout                               */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Loans Needing Attention */}
         <div className="lg:col-span-2">
-          <Card>
+          <Card className="rounded-xl border bg-card shadow-sm h-full">
             <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Loans Needing Attention
-              </CardTitle>
+              <CardTitle className="text-base font-semibold">Loans Needing Attention</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -349,9 +424,9 @@ export default function DashboardPage() {
                     const actionStyle = ACTION_STYLES[loan.status];
                     return (
                       <TableRow key={loan.id}>
-                        <TableCell className="font-medium">{loan.app_number}</TableCell>
-                        <TableCell>{loan.borrower}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="font-medium text-xs">{loan.app_number}</TableCell>
+                        <TableCell className="text-sm">{loan.borrower}</TableCell>
+                        <TableCell className="text-right text-sm">
                           {phpFormat.format(loan.amount)}
                         </TableCell>
                         <TableCell>
@@ -363,10 +438,7 @@ export default function DashboardPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Link href={`/loans/${loan.id}`}>
-                            <Button
-                              size="xs"
-                              className={actionStyle.className}
-                            >
+                            <Button size="xs" className={actionStyle.className}>
                               {actionStyle.label}
                             </Button>
                           </Link>
@@ -382,23 +454,21 @@ export default function DashboardPage() {
 
         {/* Right: Recent Activity */}
         <div>
-          <Card className="h-full flex flex-col">
+          <Card className="rounded-xl border bg-card shadow-sm h-full flex flex-col">
             <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Recent Activity
-              </CardTitle>
+              <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
             </CardHeader>
-            <CardContent className="flex-1">
-              <div className="space-y-0">
+            <CardContent className="flex-1 px-0 pb-0">
+              <div>
                 {RECENT_ACTIVITY.map((item, i) => (
                   <Link
                     key={i}
                     href={item.href}
-                    className="flex items-start gap-3 border-b border-border py-3 last:border-0 hover:bg-muted/50 -mx-4 px-4 transition-colors"
+                    className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-0 hover:bg-muted/50 transition-colors"
                   >
                     <div className="mt-1.5 shrink-0">
                       <div
-                        className={`h-2 w-2 rounded-full ${ACTIVITY_DOT_COLORS[item.type] ?? "bg-muted-foreground"}`}
+                        className={`h-2 w-2 rounded-full ${ACTIVITY_DOT[item.type] ?? "bg-muted-foreground"}`}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -419,8 +489,7 @@ export default function DashboardPage() {
                 href="/audit-trail"
                 className="flex items-center justify-center gap-1 text-sm font-medium text-brand-orange hover:underline"
               >
-                View All Activity
-                <ArrowRight className="h-3.5 w-3.5" />
+                View All →
               </Link>
             </div>
           </Card>
