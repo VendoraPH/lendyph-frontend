@@ -67,6 +67,25 @@ const formatCurrency = (amount: number) =>
     currency: "PHP",
   }).format(amount);
 
+// Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
+function getProductField(product: LoanProduct, field: string): string {
+  const p = product as unknown as Record<string, unknown>;
+  switch (field) {
+    case "interest_method": return String(p.interest_method ?? p.interest_type ?? "straight");
+    case "frequency": return String(p.frequency ?? p.payment_frequency ?? "monthly");
+    case "term": return String(p.term ?? p.min_term ?? "");
+    case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
+    default: return String(p[field] ?? "");
+  }
+}
+
+const INTEREST_METHOD_LABELS: Record<string, string> = {
+  straight: "Straight",
+  fixed: "Fixed",
+  diminishing: "Diminishing",
+  upon_maturity: "Upon Maturity",
+};
+
 const statusBadge = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
@@ -79,15 +98,14 @@ interface ProductForm {
   description: string;
   min_amount: string;
   max_amount: string;
-  min_term: string;
-  max_term: string;
-  payment_frequency: string;
+  term: string;
+  frequency: string;
   interest_rate: string;
-  interest_type: string;
+  interest_method: string;
   processing_fee: string;
   service_fee: string;
   penalty_rate: string;
-  grace_period: string;
+  grace_period_days: string;
 }
 
 const EMPTY_FORM: ProductForm = {
@@ -95,55 +113,48 @@ const EMPTY_FORM: ProductForm = {
   description: "",
   min_amount: "",
   max_amount: "",
-  min_term: "",
-  max_term: "",
-  payment_frequency: "monthly",
+  term: "",
+  frequency: "monthly",
   interest_rate: "",
-  interest_type: "fixed",
+  interest_method: "straight",
   processing_fee: "",
   service_fee: "",
   penalty_rate: "",
-  grace_period: "",
+  grace_period_days: "",
 };
 
 function productToForm(p: LoanProduct): ProductForm {
+  // Map API response fields to form fields
+  const apiProduct = p as unknown as Record<string, unknown>;
   return {
     name: p.name,
     description: p.description ?? "",
-    min_amount: String(p.min_amount),
-    max_amount: String(p.max_amount),
-    min_term: String(p.min_term),
-    max_term: String(p.max_term),
-    payment_frequency: p.payment_frequency,
+    min_amount: String(apiProduct.min_amount ?? p.min_amount ?? ""),
+    max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
+    term: String(apiProduct.term ?? p.min_term ?? ""),
+    frequency: String(apiProduct.frequency ?? p.payment_frequency ?? "monthly"),
     interest_rate: String(p.interest_rate),
-    interest_type: p.interest_type,
-    processing_fee: String(p.processing_fee),
-    service_fee: String(p.service_fee),
-    penalty_rate: String(p.penalty_rate),
-    grace_period: String(p.grace_period),
+    interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
+    processing_fee: String(apiProduct.processing_fee ?? p.processing_fee ?? ""),
+    service_fee: String(apiProduct.service_fee ?? p.service_fee ?? ""),
+    penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
+    grace_period_days: String(apiProduct.grace_period_days ?? p.grace_period ?? ""),
   };
 }
 
-function formToProduct(form: ProductForm, id: number): LoanProduct {
-  const now = new Date().toISOString();
+function formToApiPayload(form: ProductForm) {
   return {
-    id,
     name: form.name,
-    description: form.description || undefined,
-    min_amount: Number(form.min_amount),
-    max_amount: Number(form.max_amount),
     interest_rate: Number(form.interest_rate),
-    interest_type: form.interest_type as LoanProduct["interest_type"],
-    min_term: Number(form.min_term),
-    max_term: Number(form.max_term),
-    payment_frequency: form.payment_frequency as LoanProduct["payment_frequency"],
-    processing_fee: Number(form.processing_fee),
-    service_fee: Number(form.service_fee),
-    penalty_rate: Number(form.penalty_rate),
-    grace_period: Number(form.grace_period),
-    is_active: true,
-    created_at: now,
-    updated_at: now,
+    interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
+    term: Number(form.term),
+    frequency: form.frequency as "daily" | "weekly" | "semi_monthly" | "monthly",
+    processing_fee: form.processing_fee ? Number(form.processing_fee) : undefined,
+    service_fee: form.service_fee ? Number(form.service_fee) : undefined,
+    penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
+    grace_period_days: form.grace_period_days ? Number(form.grace_period_days) : undefined,
+    min_amount: form.min_amount ? Number(form.min_amount) : undefined,
+    max_amount: form.max_amount ? Number(form.max_amount) : undefined,
   };
 }
 
@@ -243,36 +254,24 @@ function ProductFormDialog({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-term">Min Term (months) *</Label>
+                <Label htmlFor="term">Term (months) <span className="text-red-500">*</span></Label>
                 <Input
-                  id="min-term"
-                  type="number"
-                  min={1}
-                  placeholder="1"
-                  value={form.min_term}
-                  onChange={(e) => update("min_term", e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="max-term">Max Term (months) *</Label>
-                <Input
-                  id="max-term"
+                  id="term"
                   type="number"
                   min={1}
                   placeholder="12"
-                  value={form.max_term}
-                  onChange={(e) => update("max_term", e.target.value)}
+                  value={form.term}
+                  onChange={(e) => update("term", e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
                 <Label>Payment Frequency *</Label>
                 <Select
-                  value={form.payment_frequency}
-                  onValueChange={(v) => update("payment_frequency", v as string)}
+                  value={form.frequency}
+                  onValueChange={(v) => update("frequency", v as string)}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select frequency" />
@@ -311,8 +310,8 @@ function ProductFormDialog({
               <div className="space-y-2">
                 <Label>Interest Method *</Label>
                 <Select
-                  value={form.interest_type}
-                  onValueChange={(v) => update("interest_type", v as string)}
+                  value={form.interest_method}
+                  onValueChange={(v) => update("interest_method", v as string)}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select method" />
@@ -380,8 +379,8 @@ function ProductFormDialog({
                   type="number"
                   min={0}
                   placeholder="3"
-                  value={form.grace_period}
-                  onChange={(e) => update("grace_period", e.target.value)}
+                  value={form.grace_period_days}
+                  onChange={(e) => update("grace_period_days", e.target.value)}
                 />
               </div>
             </div>
@@ -603,23 +602,31 @@ export default function LoanProductsPage() {
 
   const handleAdd = async (form: ProductForm) => {
     try {
-      const payload = formToProduct(form, 0);
-      await loanProductService.create(payload as unknown as Parameters<typeof loanProductService.create>[0]);
+      const payload = formToApiPayload(form);
+      await loanProductService.create(payload);
       toast.success("Loan product created");
       fetchProducts();
-    } catch {
-      toast.error("Failed to create loan product");
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
+      const apiErrors = err?.response?.data?.errors;
+      if (apiErrors) {
+        const firstError = Object.values(apiErrors)[0]?.[0];
+        toast.error(firstError || "Validation failed");
+      } else {
+        toast.error(err?.response?.data?.message || "Failed to create loan product");
+      }
     }
   };
 
   const handleEdit = async (id: number, form: ProductForm) => {
     try {
-      const payload = formToProduct(form, id);
-      await loanProductService.update(id, payload as unknown as Parameters<typeof loanProductService.update>[1]);
+      const payload = formToApiPayload(form);
+      await loanProductService.update(id, payload);
       toast.success("Loan product updated");
       fetchProducts();
-    } catch {
-      toast.error("Failed to update loan product");
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err?.response?.data?.message || "Failed to update loan product");
     }
   };
 
@@ -753,13 +760,13 @@ export default function LoanProductsPage() {
                   <p className="font-medium">
                     {product.interest_rate}%{" "}
                     <span className="text-muted-foreground font-normal">
-                      {product.interest_type === "fixed" ? "Fixed" : "Diminishing"}
+                      {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
                     </span>
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Frequency</p>
-                  <p>{PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}</p>
+                  <p>{PAYMENT_FREQUENCY_LABELS[getProductField(product, "frequency")]}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Amount</p>
@@ -769,7 +776,7 @@ export default function LoanProductsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Term</p>
-                  <p>{product.min_term}–{product.max_term} months</p>
+                  <p>{getProductField(product, "term")} months</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Fees</p>
@@ -780,7 +787,7 @@ export default function LoanProductsPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Penalty</p>
                   <p className="text-xs">
-                    {product.penalty_rate}%/day · {product.grace_period}d grace
+                    {product.penalty_rate}%/day · {getProductField(product, "grace_period_days")}d grace
                   </p>
                 </div>
               </div>
@@ -837,21 +844,19 @@ export default function LoanProductsPage() {
                           {product.interest_rate}%
                         </span>
                         <span className="text-muted-foreground ml-1">
-                          {product.interest_type === "fixed"
-                            ? "Fixed"
-                            : "Diminishing"}
+                          {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {product.min_term}–{product.max_term} months
+                      {getProductField(product, "term")} months
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {formatCurrency(product.min_amount)} —{" "}
                       {formatCurrency(product.max_amount)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {PAYMENT_FREQUENCY_LABELS[product.payment_frequency]}
+                      {PAYMENT_FREQUENCY_LABELS[getProductField(product, "frequency")]}
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground whitespace-nowrap">
