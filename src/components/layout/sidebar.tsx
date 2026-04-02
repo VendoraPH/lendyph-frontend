@@ -23,14 +23,14 @@ interface SidebarProps {
 
 const iconColors: Record<string, string> = {
   "/dashboard": "bg-brand-orange/15 text-brand-orange",
-  "/users": "bg-purple-100 text-purple-600",
-  "/borrowers": "bg-blue-100 text-blue-600",
-  "/loans": "bg-green-100 text-green-600",
-  "/payments": "bg-cyan-100 text-cyan-600",
-  "/collections": "bg-amber-100 text-amber-600",
-  "/reports": "bg-pink-100 text-pink-600",
-  "/audit-trail": "bg-gray-100 text-gray-600",
-  "/settings": "bg-slate-100 text-slate-600",
+  "/users": "bg-purple-100 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400",
+  "/borrowers": "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  "/loans": "bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  "/payments": "bg-cyan-100 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-400",
+  "/collections": "bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400",
+  "/reports": "bg-pink-100 text-pink-600 dark:bg-pink-500/15 dark:text-pink-400",
+  "/audit-trail": "bg-gray-100 text-gray-600 dark:bg-gray-500/15 dark:text-gray-400",
+  "/settings": "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-400",
 };
 
 function NavLink({
@@ -57,7 +57,7 @@ function NavLink({
 
   const [expanded, setExpanded] = useState(isOpen);
 
-  const iconColorClass = iconColors[item.href] || "bg-gray-100 text-gray-600";
+  const iconColorClass = iconColors[item.href] || "bg-gray-100 text-gray-600 dark:bg-gray-500/15 dark:text-gray-400";
 
   // Collapsed mode: icon-only with tooltip
   if (collapsed) {

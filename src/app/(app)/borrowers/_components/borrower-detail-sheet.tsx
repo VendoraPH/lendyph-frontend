@@ -34,14 +34,14 @@ import { MOCK_LOANS } from "./mock-data";
 import { LOAN_STATUS_LABELS } from "@/constants";
 
 const loanStatusColor: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  approved: "bg-blue-100 text-blue-700 border-blue-200",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  ongoing: "bg-green-100 text-green-700 border-green-200",
-  completed: "bg-gray-100 text-gray-600 border-gray-200",
-  defaulted: "bg-red-100 text-red-700 border-red-200",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200",
-  rejected: "bg-red-100 text-red-500 border-red-200",
+  pending: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-800",
+  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
+  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
+  rejected: "bg-red-100 text-red-500 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
 };
 
 interface BorrowerDetailSheetProps {
