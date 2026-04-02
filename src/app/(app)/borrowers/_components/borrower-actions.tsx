@@ -246,7 +246,7 @@ export function BorrowerFormTabs({
           <div className="space-y-2">
             <Label>Suffix</Label>
             <Select
-              value={form.suffix || undefined}
+              value={form.suffix || null}
               onValueChange={(v) => update("suffix", v ?? "")}
             >
               <SelectTrigger className="w-full">
@@ -303,7 +303,7 @@ export function BorrowerFormTabs({
             <Label>Gender *</Label>
             <RadioGroup
               className="flex gap-4 pt-1"
-              value={form.gender || undefined}
+              value={form.gender || null}
               onValueChange={(v) => update("gender", v ?? "")}
             >
               {GENDER_OPTIONS.map((opt) => (
@@ -322,7 +322,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Civil Status *</Label>
           <Select
-            value={form.civil_status || undefined}
+            value={form.civil_status || null}
             onValueChange={(v) => update("civil_status", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -400,7 +400,7 @@ export function BorrowerFormTabs({
           <div className="space-y-2">
             <Label>Province</Label>
             <Select
-              value={form.province || undefined}
+              value={form.province || null}
               onValueChange={(v) => update("province", v ?? "")}
             >
               <SelectTrigger className="w-full">
@@ -432,7 +432,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Employment Type</Label>
           <Select
-            value={form.employment_type || undefined}
+            value={form.employment_type || null}
             onValueChange={(v) => update("employment_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -477,7 +477,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Valid ID Type</Label>
           <Select
-            value={form.valid_id_type || undefined}
+            value={form.valid_id_type || null}
             onValueChange={(v) => update("valid_id_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
