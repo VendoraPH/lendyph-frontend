@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
+import { loanService } from "@/services";
+import type { LoanSchedule } from "@/types/loan";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,12 +186,6 @@ function generateSchedule(
   return rows;
 }
 
-function generateLoanAccountNumber(loanId: number): string {
-  const year = new Date().getFullYear();
-  const seq = String(loanId).padStart(4, "0");
-  return `LN-${year}${seq}`;
-}
-
 // ── Status Colors ──
 
 const statusColors: Record<string, string> = {
@@ -220,296 +218,6 @@ function getStepIndex(status: LoanStatus): number {
   if (idx === -1) return WORKFLOW_STEPS.length - 1;
   return idx;
 }
-
-// ── Mock Data ──
-
-const MOCK_LOANS: Loan[] = [
-  {
-    id: 1,
-    application_number: "LA-20260001",
-    borrower_id: 1,
-    borrower_name: "Maria Santos",
-    loan_product_name: "Salary Loan",
-    principal_amount: 50000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    processing_fee: 500,
-    service_fee: 250,
-    other_deductions: 0,
-    net_proceeds: 49250,
-    total_payable: 68000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Home renovation",
-    created_at: "2026-03-28T09:15:00Z",
-    updated_at: "2026-03-28T09:15:00Z",
-  },
-  {
-    id: 2,
-    application_number: "LA-20260002",
-    borrower_id: 2,
-    borrower_name: "Juan Dela Cruz",
-    co_maker_name: "Pedro Santos",
-    loan_product_name: "Business Loan",
-    principal_amount: 150000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 1500,
-    service_fee: 750,
-    other_deductions: 200,
-    net_proceeds: 147550,
-    total_payable: 195000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Sari-sari store expansion",
-    created_at: "2026-03-27T14:30:00Z",
-    updated_at: "2026-03-27T14:30:00Z",
-  },
-  {
-    id: 3,
-    application_number: "LA-20260003",
-    borrower_id: 3,
-    borrower_name: "Ana Reyes",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 20000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "bi_weekly",
-    processing_fee: 200,
-    service_fee: 100,
-    net_proceeds: 19700,
-    total_payable: 24200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Medical expenses",
-    created_at: "2026-03-25T10:00:00Z",
-    updated_at: "2026-03-26T08:00:00Z",
-  },
-  {
-    id: 4,
-    application_number: "LA-20260004",
-    borrower_id: 4,
-    borrower_name: "Pedro Garcia",
-    loan_product_name: "Salary Loan",
-    principal_amount: 80000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 18,
-    payment_frequency: "monthly",
-    processing_fee: 800,
-    service_fee: 400,
-    net_proceeds: 78800,
-    total_payable: 123200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Tuition fee",
-    created_at: "2026-03-24T16:45:00Z",
-    updated_at: "2026-03-25T09:30:00Z",
-  },
-  {
-    id: 5,
-    application_number: "LA-20260005",
-    borrower_id: 5,
-    borrower_name: "Rosa Mendoza",
-    co_maker_name: "Elena Cruz",
-    loan_product_name: "Business Loan",
-    principal_amount: 200000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 36,
-    payment_frequency: "monthly",
-    processing_fee: 2000,
-    service_fee: 1000,
-    net_proceeds: 197000,
-    total_payable: 290000,
-    outstanding_balance: 0,
-    status: "approved",
-    purpose: "Bakery equipment purchase",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-23T11:00:00Z",
-    approval_remarks: "Good credit history, approved for full amount",
-    created_at: "2026-03-20T08:30:00Z",
-    updated_at: "2026-03-23T11:00:00Z",
-  },
-  {
-    id: 6,
-    application_number: "LA-20260006",
-    borrower_id: 6,
-    borrower_name: "Carlo Ramos",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 30000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "weekly",
-    processing_fee: 300,
-    service_fee: 150,
-    net_proceeds: 29550,
-    total_payable: 36300,
-    outstanding_balance: 0,
-    status: "rejected",
-    purpose: "Debt consolidation",
-    rejected_by: "Augustin Maputol",
-    rejected_at: "2026-03-22T14:00:00Z",
-    rejection_remarks:
-      "Existing loan still outstanding, exceeds debt-to-income ratio",
-    created_at: "2026-03-19T13:00:00Z",
-    updated_at: "2026-03-22T14:00:00Z",
-  },
-  {
-    id: 7,
-    application_number: "LA-20260007",
-    loan_account_number: "LN-20260007",
-    borrower_id: 7,
-    borrower_name: "Elena Villanueva",
-    loan_product_name: "Salary Loan",
-    principal_amount: 100000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    processing_fee: 1000,
-    service_fee: 500,
-    net_proceeds: 98500,
-    total_payable: 136000,
-    outstanding_balance: 102000,
-    status: "released",
-    purpose: "Home improvement",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-10T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-03-12T10:00:00Z",
-    release_date: "2026-03-12",
-    maturity_date: "2027-03-12",
-    next_due_date: "2026-04-12",
-    created_at: "2026-03-08T11:00:00Z",
-    updated_at: "2026-03-12T10:00:00Z",
-  },
-  {
-    id: 8,
-    application_number: "LA-20260008",
-    loan_account_number: "LN-20260008",
-    borrower_id: 8,
-    borrower_name: "Roberto Tan",
-    co_maker_name: "Gloria Reyes",
-    loan_product_name: "Business Loan",
-    principal_amount: 300000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 3000,
-    service_fee: 1500,
-    net_proceeds: 295500,
-    total_payable: 390000,
-    outstanding_balance: 325000,
-    status: "ongoing",
-    purpose: "Trucking business capital",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-02-15T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-02-18T14:00:00Z",
-    release_date: "2026-02-18",
-    maturity_date: "2028-02-18",
-    next_due_date: "2026-04-18",
-    created_at: "2026-02-10T08:00:00Z",
-    updated_at: "2026-03-18T14:00:00Z",
-  },
-  {
-    id: 9,
-    application_number: "LA-20260009",
-    loan_account_number: "LN-20260009",
-    borrower_id: 9,
-    borrower_name: "Lorna Bautista",
-    loan_product_name: "Salary Loan",
-    principal_amount: 40000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "monthly",
-    processing_fee: 400,
-    service_fee: 200,
-    net_proceeds: 39400,
-    total_payable: 47200,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Wedding expenses",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-09-05T10:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-09-08T09:00:00Z",
-    release_date: "2025-09-08",
-    maturity_date: "2026-03-08",
-    created_at: "2025-09-01T07:30:00Z",
-    updated_at: "2026-03-08T15:00:00Z",
-  },
-  {
-    id: 10,
-    application_number: "LA-20260010",
-    loan_account_number: "LN-20260010",
-    borrower_id: 10,
-    borrower_name: "Dennis Aquino",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 15000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 3,
-    payment_frequency: "weekly",
-    processing_fee: 150,
-    service_fee: 75,
-    net_proceeds: 14775,
-    total_payable: 16575,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Appliance repair",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-12-10T11:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-12-12T09:00:00Z",
-    release_date: "2025-12-12",
-    maturity_date: "2026-03-12",
-    created_at: "2025-12-08T14:00:00Z",
-    updated_at: "2026-03-12T16:00:00Z",
-  },
-  {
-    id: 11,
-    application_number: "LA-20260011",
-    loan_account_number: "LN-20260011",
-    borrower_id: 11,
-    borrower_name: "Gloria Pascual",
-    loan_product_name: "Business Loan",
-    principal_amount: 250000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2500,
-    service_fee: 1250,
-    net_proceeds: 246250,
-    total_payable: 325000,
-    outstanding_balance: 310000,
-    status: "defaulted",
-    purpose: "Restaurant startup",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-08-20T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-08-22T10:00:00Z",
-    release_date: "2025-08-22",
-    maturity_date: "2027-08-22",
-    next_due_date: "2026-01-22",
-    created_at: "2025-08-15T08:00:00Z",
-    updated_at: "2026-03-15T09:00:00Z",
-  },
-];
-
-// ── Mock Acting User ──
-
-const ACTING_USER = "Juan Admin";
 
 // ── Status Stepper Component ──
 
@@ -738,8 +446,44 @@ export default function LoanDetailPage({
   const { id } = use(params);
   const loanId = Number(id);
 
-  const initialLoan = MOCK_LOANS.find((l) => l.id === loanId);
-  const [loan, setLoan] = useState<Loan | undefined>(initialLoan);
+  const [loan, setLoan] = useState<Loan | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+
+  // Fetch loan on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLoan() {
+      try {
+        setLoading(true);
+        const data = await loanService.detail(loanId);
+        if (!cancelled) setLoan(data);
+      } catch {
+        if (!cancelled) toast.error("Failed to load loan details");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchLoan();
+    return () => { cancelled = true; };
+  }, [loanId]);
+
+  // Fetch schedule for released+ loans
+  const fetchSchedule = useCallback(async (id: number) => {
+    try {
+      const schedule = await loanService.schedule(id);
+      setApiSchedule(Array.isArray(schedule) ? schedule : []);
+    } catch {
+      setApiSchedule(null); // fallback to client-side generation
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
+      fetchSchedule(loan.id);
+    }
+  }, [loan?.id, loan?.status, fetchSchedule]);
 
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
@@ -751,12 +495,6 @@ export default function LoanDetailPage({
   const [approvalRemarks, setApprovalRemarks] = useState("");
   const [rejectionRemarks, setRejectionRemarks] = useState("");
   const [releaseDate, setReleaseDate] = useState<Date>(new Date());
-
-  // Generated loan account number for release dialog
-  const generatedAccountNumber = useMemo(
-    () => (loan ? generateLoanAccountNumber(loan.id) : ""),
-    [loan?.id],
-  );
 
   // Amortization schedule preview for release dialog
   const releaseSchedule = useMemo(() => {
@@ -788,11 +526,23 @@ export default function LoanDetailPage({
     return addMonths(releaseDate, loan.term_months);
   }, [releaseDate, loan?.term_months]);
 
-  // Post-release: compute stored schedule for display
+  // Post-release: prefer API schedule, fallback to client-side generation
   const storedSchedule = useMemo(() => {
     if (!loan || !loan.release_date) return [];
     const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
     if (!isReleased) return [];
+    // Use API schedule if available, map to display format
+    if (apiSchedule && apiSchedule.length > 0) {
+      return apiSchedule.map((row, idx) => ({
+        period: idx + 1,
+        dueDate: new Date(row.due_date),
+        principal: row.principal,
+        interest: row.interest,
+        totalPayment: row.amount_due,
+        balance: row.balance,
+      }));
+    }
+    // Fallback to client-side generation
     return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
@@ -801,7 +551,7 @@ export default function LoanDetailPage({
       loan.interest_type,
       new Date(loan.release_date),
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status, apiSchedule]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -815,6 +565,14 @@ export default function LoanDetailPage({
   }, [storedSchedule]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!loan) {
     return (
@@ -834,64 +592,69 @@ export default function LoanDetailPage({
     );
   }
 
-  const now = new Date().toISOString();
-
-  const handleSubmitForReview = () => {
-    setLoan({
-      ...loan,
-      status: "for_review",
-      updated_at: now,
-    });
-    setSubmitOpen(false);
+  const handleSubmitForReview = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.submit(loan.id);
+      setLoan(updated);
+      toast.success("Loan submitted for review");
+      setSubmitOpen(false);
+    } catch {
+      toast.error("Failed to submit loan for review");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleApprove = () => {
-    setLoan({
-      ...loan,
-      status: "approved",
-      approved_by: ACTING_USER,
-      approved_at: now,
-      approval_remarks: approvalRemarks || undefined,
-      updated_at: now,
-    });
-    setApprovalRemarks("");
-    setApproveOpen(false);
+  const handleApprove = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.approve(loan.id, {
+        approval_remarks: approvalRemarks || undefined,
+      });
+      setLoan(updated);
+      toast.success("Loan approved");
+      setApprovalRemarks("");
+      setApproveOpen(false);
+    } catch {
+      toast.error("Failed to approve loan");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectionRemarks.trim()) return;
-    setLoan({
-      ...loan,
-      status: "rejected",
-      rejected_by: ACTING_USER,
-      rejected_at: now,
-      rejection_remarks: rejectionRemarks,
-      updated_at: now,
-    });
-    setRejectionRemarks("");
-    setRejectOpen(false);
+    try {
+      setActionLoading(true);
+      const updated = await loanService.reject(loan.id, {
+        approval_remarks: rejectionRemarks,
+      });
+      setLoan(updated);
+      toast.success("Loan rejected");
+      setRejectionRemarks("");
+      setRejectOpen(false);
+    } catch {
+      toast.error("Failed to reject loan");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleRelease = () => {
-    const releaseDateStr = formatDateISO(releaseDate);
-    const maturityDate = addMonths(releaseDate, loan.term_months);
-    const firstDueDate = releaseSchedule.length > 0
-      ? formatDateISO(releaseSchedule[0].dueDate)
-      : formatDateISO(addMonths(releaseDate, 1));
-
-    setLoan({
-      ...loan,
-      status: "released",
-      loan_account_number: generatedAccountNumber,
-      released_by: ACTING_USER,
-      released_at: now,
-      release_date: releaseDateStr,
-      maturity_date: formatDateISO(maturityDate),
-      next_due_date: firstDueDate,
-      outstanding_balance: scheduleTotals.totalPayment,
-      updated_at: now,
-    });
-    setReleaseOpen(false);
+  const handleRelease = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.release(loan.id);
+      setLoan(updated);
+      toast.success("Loan released successfully");
+      setReleaseOpen(false);
+      // Fetch the server-generated schedule
+      fetchSchedule(loan.id);
+    } catch {
+      toast.error("Failed to release loan");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const totalDeductions =
@@ -1440,12 +1203,6 @@ export default function LoanDetailPage({
             {/* Summary Grid */}
             <div className="rounded-lg border bg-muted/50 p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Loan Account Number</p>
-                  <p className="text-sm font-bold font-mono text-brand-orange">
-                    {generatedAccountNumber}
-                  </p>
-                </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Application Number</p>
                   <p className="text-sm font-medium font-mono">{loan.application_number}</p>
