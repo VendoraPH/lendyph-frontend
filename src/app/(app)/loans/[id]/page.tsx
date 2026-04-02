@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, useCallback, useEffect, use } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import {
   ArrowLeft,
   Check,
@@ -52,7 +53,10 @@ import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { loanService } from "@/services/loan.service";
+import { toast } from "sonner";
 import type { Loan, LoanStatus } from "@/types/loan";
+import type { ApiAmortizationSchedule, ApiScheduleRow } from "@/lib/amortization";
 
 // ── Currency & Date Formatters ──
 
@@ -87,12 +91,12 @@ const formatDateObj = (date: Date) =>
 
 const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
 
-// ── Amortization Schedule Helpers ──
+// ── Local helpers for release preview ──
 
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
 type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
-interface AmortizationRow {
+interface PreviewRow {
   period: number;
   dueDate: Date;
   principal: number;
@@ -127,38 +131,38 @@ function getIntervalDays(frequency: PaymentFrequency): number {
   }
 }
 
-function addMonths(date: Date, months: number): Date {
+function addMonthsLocal(date: Date, months: number): Date {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
   return result;
 }
 
-function addDays(date: Date, days: number): Date {
+function addDaysLocal(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-function generateSchedule(
+function generatePreviewSchedule(
   principal: number,
   rate: number,
   termMonths: number,
   frequency: PaymentFrequency,
   interestType: InterestType,
   startDate: Date,
-): AmortizationRow[] {
+): PreviewRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
   const principalPerPeriod = principal / totalPeriods;
-  const rows: AmortizationRow[] = [];
+  const rows: PreviewRow[] = [];
 
   let remainingBalance = principal;
 
   for (let i = 1; i <= totalPeriods; i++) {
     const dueDate =
       frequency === "monthly"
-        ? addMonths(startDate, i)
-        : addDays(startDate, i * intervalDays);
+        ? addMonthsLocal(startDate, i)
+        : addDaysLocal(startDate, i * intervalDays);
 
     let interest: number;
     if (interestType === "fixed") {
@@ -182,12 +186,6 @@ function generateSchedule(
   return rows;
 }
 
-function generateLoanAccountNumber(loanId: number): string {
-  const year = new Date().getFullYear();
-  const seq = String(loanId).padStart(4, "0");
-  return `LN-${year}${seq}`;
-}
-
 // ── Status Colors ──
 
 const statusColors: Record<string, string> = {
@@ -201,6 +199,20 @@ const statusColors: Record<string, string> = {
   defaulted: "bg-red-100 text-red-700 border-red-200",
   restructured: "bg-orange-100 text-orange-700 border-orange-200",
   closed: "bg-gray-200 text-gray-500 border-gray-300",
+};
+
+const scheduleStatusColors: Record<string, string> = {
+  paid: "bg-green-50 text-green-700",
+  partial: "bg-amber-50 text-amber-700",
+  overdue: "bg-red-50 text-red-700",
+  pending: "",
+};
+
+const scheduleStatusBadgeColors: Record<string, string> = {
+  paid: "bg-green-100 text-green-700 border-green-200",
+  partial: "bg-amber-100 text-amber-700 border-amber-200",
+  overdue: "bg-red-100 text-red-700 border-red-200",
+  pending: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
 // ── Workflow Steps ──
@@ -221,295 +233,35 @@ function getStepIndex(status: LoanStatus): number {
   return idx;
 }
 
-// ── Mock Data ──
+// ── Helper: resolve borrower/co-maker name from API response ──
 
-const MOCK_LOANS: Loan[] = [
-  {
-    id: 1,
-    application_number: "LA-20260001",
-    borrower_id: 1,
-    borrower_name: "Maria Santos",
-    loan_product_name: "Salary Loan",
-    principal_amount: 50000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    processing_fee: 500,
-    service_fee: 250,
-    other_deductions: 0,
-    net_proceeds: 49250,
-    total_payable: 68000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Home renovation",
-    created_at: "2026-03-28T09:15:00Z",
-    updated_at: "2026-03-28T09:15:00Z",
-  },
-  {
-    id: 2,
-    application_number: "LA-20260002",
-    borrower_id: 2,
-    borrower_name: "Juan Dela Cruz",
-    co_maker_name: "Pedro Santos",
-    loan_product_name: "Business Loan",
-    principal_amount: 150000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 1500,
-    service_fee: 750,
-    other_deductions: 200,
-    net_proceeds: 147550,
-    total_payable: 195000,
-    outstanding_balance: 0,
-    status: "draft",
-    purpose: "Sari-sari store expansion",
-    created_at: "2026-03-27T14:30:00Z",
-    updated_at: "2026-03-27T14:30:00Z",
-  },
-  {
-    id: 3,
-    application_number: "LA-20260003",
-    borrower_id: 3,
-    borrower_name: "Ana Reyes",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 20000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "bi_weekly",
-    processing_fee: 200,
-    service_fee: 100,
-    net_proceeds: 19700,
-    total_payable: 24200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Medical expenses",
-    created_at: "2026-03-25T10:00:00Z",
-    updated_at: "2026-03-26T08:00:00Z",
-  },
-  {
-    id: 4,
-    application_number: "LA-20260004",
-    borrower_id: 4,
-    borrower_name: "Pedro Garcia",
-    loan_product_name: "Salary Loan",
-    principal_amount: 80000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 18,
-    payment_frequency: "monthly",
-    processing_fee: 800,
-    service_fee: 400,
-    net_proceeds: 78800,
-    total_payable: 123200,
-    outstanding_balance: 0,
-    status: "for_review",
-    purpose: "Tuition fee",
-    created_at: "2026-03-24T16:45:00Z",
-    updated_at: "2026-03-25T09:30:00Z",
-  },
-  {
-    id: 5,
-    application_number: "LA-20260005",
-    borrower_id: 5,
-    borrower_name: "Rosa Mendoza",
-    co_maker_name: "Elena Cruz",
-    loan_product_name: "Business Loan",
-    principal_amount: 200000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 36,
-    payment_frequency: "monthly",
-    processing_fee: 2000,
-    service_fee: 1000,
-    net_proceeds: 197000,
-    total_payable: 290000,
-    outstanding_balance: 0,
-    status: "approved",
-    purpose: "Bakery equipment purchase",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-23T11:00:00Z",
-    approval_remarks: "Good credit history, approved for full amount",
-    created_at: "2026-03-20T08:30:00Z",
-    updated_at: "2026-03-23T11:00:00Z",
-  },
-  {
-    id: 6,
-    application_number: "LA-20260006",
-    borrower_id: 6,
-    borrower_name: "Carlo Ramos",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 30000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "weekly",
-    processing_fee: 300,
-    service_fee: 150,
-    net_proceeds: 29550,
-    total_payable: 36300,
-    outstanding_balance: 0,
-    status: "rejected",
-    purpose: "Debt consolidation",
-    rejected_by: "Augustin Maputol",
-    rejected_at: "2026-03-22T14:00:00Z",
-    rejection_remarks:
-      "Existing loan still outstanding, exceeds debt-to-income ratio",
-    created_at: "2026-03-19T13:00:00Z",
-    updated_at: "2026-03-22T14:00:00Z",
-  },
-  {
-    id: 7,
-    application_number: "LA-20260007",
-    loan_account_number: "LN-20260007",
-    borrower_id: 7,
-    borrower_name: "Elena Villanueva",
-    loan_product_name: "Salary Loan",
-    principal_amount: 100000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    processing_fee: 1000,
-    service_fee: 500,
-    net_proceeds: 98500,
-    total_payable: 136000,
-    outstanding_balance: 102000,
-    status: "released",
-    purpose: "Home improvement",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-03-10T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-03-12T10:00:00Z",
-    release_date: "2026-03-12",
-    maturity_date: "2027-03-12",
-    next_due_date: "2026-04-12",
-    created_at: "2026-03-08T11:00:00Z",
-    updated_at: "2026-03-12T10:00:00Z",
-  },
-  {
-    id: 8,
-    application_number: "LA-20260008",
-    loan_account_number: "LN-20260008",
-    borrower_id: 8,
-    borrower_name: "Roberto Tan",
-    co_maker_name: "Gloria Reyes",
-    loan_product_name: "Business Loan",
-    principal_amount: 300000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 3000,
-    service_fee: 1500,
-    net_proceeds: 295500,
-    total_payable: 390000,
-    outstanding_balance: 325000,
-    status: "ongoing",
-    purpose: "Trucking business capital",
-    approved_by: "Augustin Maputol",
-    approved_at: "2026-02-15T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2026-02-18T14:00:00Z",
-    release_date: "2026-02-18",
-    maturity_date: "2028-02-18",
-    next_due_date: "2026-04-18",
-    created_at: "2026-02-10T08:00:00Z",
-    updated_at: "2026-03-18T14:00:00Z",
-  },
-  {
-    id: 9,
-    application_number: "LA-20260009",
-    loan_account_number: "LN-20260009",
-    borrower_id: 9,
-    borrower_name: "Lorna Bautista",
-    loan_product_name: "Salary Loan",
-    principal_amount: 40000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "monthly",
-    processing_fee: 400,
-    service_fee: 200,
-    net_proceeds: 39400,
-    total_payable: 47200,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Wedding expenses",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-09-05T10:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-09-08T09:00:00Z",
-    release_date: "2025-09-08",
-    maturity_date: "2026-03-08",
-    created_at: "2025-09-01T07:30:00Z",
-    updated_at: "2026-03-08T15:00:00Z",
-  },
-  {
-    id: 10,
-    application_number: "LA-20260010",
-    loan_account_number: "LN-20260010",
-    borrower_id: 10,
-    borrower_name: "Dennis Aquino",
-    loan_product_name: "Emergency Loan",
-    principal_amount: 15000,
-    interest_rate: 3.5,
-    interest_type: "fixed",
-    term_months: 3,
-    payment_frequency: "weekly",
-    processing_fee: 150,
-    service_fee: 75,
-    net_proceeds: 14775,
-    total_payable: 16575,
-    outstanding_balance: 0,
-    status: "completed",
-    purpose: "Appliance repair",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-12-10T11:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-12-12T09:00:00Z",
-    release_date: "2025-12-12",
-    maturity_date: "2026-03-12",
-    created_at: "2025-12-08T14:00:00Z",
-    updated_at: "2026-03-12T16:00:00Z",
-  },
-  {
-    id: 11,
-    application_number: "LA-20260011",
-    loan_account_number: "LN-20260011",
-    borrower_id: 11,
-    borrower_name: "Gloria Pascual",
-    loan_product_name: "Business Loan",
-    principal_amount: 250000,
-    interest_rate: 2.5,
-    interest_type: "diminishing",
-    term_months: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2500,
-    service_fee: 1250,
-    net_proceeds: 246250,
-    total_payable: 325000,
-    outstanding_balance: 310000,
-    status: "defaulted",
-    purpose: "Restaurant startup",
-    approved_by: "Augustin Maputol",
-    approved_at: "2025-08-20T09:00:00Z",
-    released_by: "Maria Santos",
-    released_at: "2025-08-22T10:00:00Z",
-    release_date: "2025-08-22",
-    maturity_date: "2027-08-22",
-    next_due_date: "2026-01-22",
-    created_at: "2025-08-15T08:00:00Z",
-    updated_at: "2026-03-15T09:00:00Z",
-  },
-];
+function getBorrowerName(loan: Loan): string {
+  // API may return nested borrower object or flat borrower_name
+  const anyLoan = loan as unknown as Record<string, unknown>;
+  if (anyLoan.borrower && typeof anyLoan.borrower === "object") {
+    const borrower = anyLoan.borrower as Record<string, unknown>;
+    if (borrower.full_name) return String(borrower.full_name);
+  }
+  return loan.borrower_name ?? "N/A";
+}
 
-// ── Mock Acting User ──
+function getCoMakerName(loan: Loan): string {
+  const anyLoan = loan as unknown as Record<string, unknown>;
+  if (anyLoan.co_maker && typeof anyLoan.co_maker === "object") {
+    const coMaker = anyLoan.co_maker as Record<string, unknown>;
+    if (coMaker.full_name) return String(coMaker.full_name);
+  }
+  return loan.co_maker_name ?? "None";
+}
 
-const ACTING_USER = "Juan Admin";
+function getLoanProductName(loan: Loan): string {
+  const anyLoan = loan as unknown as Record<string, unknown>;
+  if (anyLoan.loan_product && typeof anyLoan.loan_product === "object") {
+    const product = anyLoan.loan_product as Record<string, unknown>;
+    if (product.name) return String(product.name);
+  }
+  return loan.loan_product_name ?? "N/A";
+}
 
 // ── Status Stepper Component ──
 
@@ -738,8 +490,10 @@ export default function LoanDetailPage({
   const { id } = use(params);
   const loanId = Number(id);
 
-  const initialLoan = MOCK_LOANS.find((l) => l.id === loanId);
-  const [loan, setLoan] = useState<Loan | undefined>(initialLoan);
+  const [loan, setLoan] = useState<Loan | null>(null);
+  const [schedule, setSchedule] = useState<ApiAmortizationSchedule | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
@@ -752,16 +506,99 @@ export default function LoanDetailPage({
   const [rejectionRemarks, setRejectionRemarks] = useState("");
   const [releaseDate, setReleaseDate] = useState<Date>(new Date());
 
-  // Generated loan account number for release dialog
-  const generatedAccountNumber = useMemo(
-    () => (loan ? generateLoanAccountNumber(loan.id) : ""),
-    [loan?.id],
-  );
+  // ── Data Fetching ──
 
-  // Amortization schedule preview for release dialog
+  const fetchLoan = useCallback(async () => {
+    try {
+      const data = await loanService.detail(loanId);
+      setLoan(Array.isArray(data) ? null : data);
+
+      // Fetch schedule for released/ongoing/completed/defaulted loans
+      if (data && !Array.isArray(data) && ["released", "ongoing", "completed", "defaulted"].includes(data.status)) {
+        try {
+          const scheduleData = await loanService.amortizationSchedule(loanId);
+          setSchedule(scheduleData);
+        } catch {
+          // Schedule might not be available yet
+        }
+      }
+    } catch {
+      toast.error("Failed to load loan details");
+    } finally {
+      setLoading(false);
+    }
+  }, [loanId]);
+
+  useEffect(() => {
+    fetchLoan();
+  }, [fetchLoan]);
+
+  // ── Workflow Actions ──
+
+  const handleSubmitForReview = async () => {
+    setActionLoading(true);
+    try {
+      await loanService.submit(loanId);
+      toast.success("Loan submitted for review");
+      setSubmitOpen(false);
+      fetchLoan();
+    } catch {
+      toast.error("Failed to submit loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    setActionLoading(true);
+    try {
+      await loanService.approve(loanId, approvalRemarks ? { approval_remarks: approvalRemarks } : undefined);
+      toast.success("Loan approved");
+      setApprovalRemarks("");
+      setApproveOpen(false);
+      fetchLoan();
+    } catch {
+      toast.error("Failed to approve loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionRemarks.trim()) return;
+    setActionLoading(true);
+    try {
+      await loanService.reject(loanId, { approval_remarks: rejectionRemarks });
+      toast.success("Loan rejected");
+      setRejectionRemarks("");
+      setRejectOpen(false);
+      fetchLoan();
+    } catch {
+      toast.error("Failed to reject loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRelease = async () => {
+    setActionLoading(true);
+    try {
+      await loanService.release(loanId);
+      toast.success("Loan released successfully");
+      setReleaseOpen(false);
+      fetchLoan();
+    } catch {
+      toast.error("Failed to release loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Release Preview Schedule (local computation) ──
+
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
-    return generateSchedule(
+    return generatePreviewSchedule(
       loan.principal_amount,
       loan.interest_rate,
       loan.term_months,
@@ -785,36 +622,23 @@ export default function LoanDetailPage({
   // Maturity date computed from release date + term
   const computedMaturityDate = useMemo(() => {
     if (!loan) return null;
-    return addMonths(releaseDate, loan.term_months);
+    return addMonthsLocal(releaseDate, loan.term_months);
   }, [releaseDate, loan?.term_months]);
 
-  // Post-release: compute stored schedule for display
-  const storedSchedule = useMemo(() => {
-    if (!loan || !loan.release_date) return [];
-    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-    if (!isReleased) return [];
-    return generateSchedule(
-      loan.principal_amount,
-      loan.interest_rate,
-      loan.term_months,
-      loan.payment_frequency,
-      loan.interest_type,
-      new Date(loan.release_date),
-    );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status]);
-
-  const storedScheduleTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
-
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+
+  // ── Loading State ──
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <Spinner className="h-8 w-8" />
+        <p className="text-muted-foreground">Loading loan details...</p>
+      </div>
+    );
+  }
+
+  // ── Not Found State ──
 
   if (!loan) {
     return (
@@ -834,65 +658,9 @@ export default function LoanDetailPage({
     );
   }
 
-  const now = new Date().toISOString();
-
-  const handleSubmitForReview = () => {
-    setLoan({
-      ...loan,
-      status: "for_review",
-      updated_at: now,
-    });
-    setSubmitOpen(false);
-  };
-
-  const handleApprove = () => {
-    setLoan({
-      ...loan,
-      status: "approved",
-      approved_by: ACTING_USER,
-      approved_at: now,
-      approval_remarks: approvalRemarks || undefined,
-      updated_at: now,
-    });
-    setApprovalRemarks("");
-    setApproveOpen(false);
-  };
-
-  const handleReject = () => {
-    if (!rejectionRemarks.trim()) return;
-    setLoan({
-      ...loan,
-      status: "rejected",
-      rejected_by: ACTING_USER,
-      rejected_at: now,
-      rejection_remarks: rejectionRemarks,
-      updated_at: now,
-    });
-    setRejectionRemarks("");
-    setRejectOpen(false);
-  };
-
-  const handleRelease = () => {
-    const releaseDateStr = formatDateISO(releaseDate);
-    const maturityDate = addMonths(releaseDate, loan.term_months);
-    const firstDueDate = releaseSchedule.length > 0
-      ? formatDateISO(releaseSchedule[0].dueDate)
-      : formatDateISO(addMonths(releaseDate, 1));
-
-    setLoan({
-      ...loan,
-      status: "released",
-      loan_account_number: generatedAccountNumber,
-      released_by: ACTING_USER,
-      released_at: now,
-      release_date: releaseDateStr,
-      maturity_date: formatDateISO(maturityDate),
-      next_due_date: firstDueDate,
-      outstanding_balance: scheduleTotals.totalPayment,
-      updated_at: now,
-    });
-    setReleaseOpen(false);
-  };
+  const borrowerName = getBorrowerName(loan);
+  const coMakerName = getCoMakerName(loan);
+  const loanProductName = getLoanProductName(loan);
 
   const totalDeductions =
     (loan.processing_fee ?? 0) +
@@ -942,7 +710,7 @@ export default function LoanDetailPage({
                 </Badge>
               )}
             </div>
-            <p className="text-lg text-foreground">{loan.borrower_name}</p>
+            <p className="text-lg text-foreground">{borrowerName}</p>
           </div>
         </div>
       </div>
@@ -1064,7 +832,7 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Loan Product</p>
                 <p className="text-sm font-medium">
-                  {loan.loan_product_name ?? "N/A"}
+                  {loanProductName}
                 </p>
               </div>
               <div className="col-span-2">
@@ -1205,13 +973,13 @@ export default function LoanDetailPage({
             <div>
               <p className="text-xs text-muted-foreground">Borrower</p>
               <p className="text-sm font-medium">
-                {loan.borrower_name ?? "N/A"}
+                {borrowerName}
               </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Co-Maker</p>
               <p className="text-sm font-medium">
-                {loan.co_maker_name ?? "None"}
+                {coMakerName}
               </p>
             </div>
           </CardContent>
@@ -1267,8 +1035,8 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Amortization Schedule — only for released+ loans */}
-      {storedSchedule.length > 0 && (
+      {/* Amortization Schedule — from API for released+ loans */}
+      {schedule && schedule.schedule.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1277,6 +1045,35 @@ export default function LoanDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Summary badges */}
+            {schedule.summary && (
+              <div className="flex flex-wrap gap-3 mb-4">
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Paid: </span>
+                  <span className="font-semibold text-green-700">{schedule.summary.paid_periods}</span>
+                </div>
+                {schedule.summary.partial_periods > 0 && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Partial: </span>
+                    <span className="font-semibold text-amber-700">{schedule.summary.partial_periods}</span>
+                  </div>
+                )}
+                {schedule.summary.overdue_periods > 0 && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Overdue: </span>
+                    <span className="font-semibold text-red-700">{schedule.summary.overdue_periods}</span>
+                  </div>
+                )}
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Remaining: </span>
+                  <span className="font-semibold">{schedule.summary.unpaid_periods}</span>
+                </div>
+                <div className="ml-auto text-xs">
+                  <span className="text-muted-foreground">Total Paid: </span>
+                  <span className="font-semibold text-green-700">{formatCurrency(schedule.summary.total_paid)}</span>
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -1285,28 +1082,41 @@ export default function LoanDetailPage({
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    <TableHead className="text-right">Total Payment</TableHead>
+                    <TableHead className="text-right">Penalty</TableHead>
+                    <TableHead className="text-right">Total Due</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {storedSchedule.map((row) => (
-                    <TableRow key={row.period}>
-                      <TableCell className="text-center">{row.period}</TableCell>
-                      <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                  {schedule.schedule.map((row: ApiScheduleRow) => (
+                    <TableRow key={row.id ?? row.period_number} className={scheduleStatusColors[row.status]}>
+                      <TableCell className="text-center">{row.period_number}</TableCell>
+                      <TableCell>{formatDate(row.due_date)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.penalty_amount)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(row.total_due)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.remaining_balance)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={cn("text-xs capitalize", scheduleStatusBadgeColors[row.status])}
+                        >
+                          {row.status}
+                        </Badge>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
                 <TableFooter>
                   <TableRow>
                     <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
-                    <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(schedule.summary.total_principal)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(schedule.summary.total_interest)}</TableCell>
+                    <TableCell />
+                    <TableCell className="text-right font-bold">{formatCurrency(schedule.summary.total_payable)}</TableCell>
+                    <TableCell />
                     <TableCell />
                   </TableRow>
                 </TableFooter>
@@ -1329,13 +1139,15 @@ export default function LoanDetailPage({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
+            <Button variant="outline" onClick={() => setSubmitOpen(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleSubmitForReview}
+              disabled={actionLoading}
             >
+              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <Send className="mr-2 h-4 w-4" />
               Submit
             </Button>
@@ -1351,7 +1163,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to approve{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loan.borrower_name}</span>.
+              <span className="font-medium">{borrowerName}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">
@@ -1367,13 +1179,15 @@ export default function LoanDetailPage({
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>
+            <Button variant="outline" onClick={() => setApproveOpen(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               className="bg-green-600 text-white hover:bg-green-700"
               onClick={handleApprove}
+              disabled={actionLoading}
             >
+              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Approve
             </Button>
@@ -1389,7 +1203,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to reject{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loan.borrower_name}</span>. Please
+              <span className="font-medium">{borrowerName}</span>. Please
               provide a reason.
             </DialogDescription>
           </DialogHeader>
@@ -1410,14 +1224,15 @@ export default function LoanDetailPage({
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
+            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={!rejectionRemarks.trim()}
+              disabled={!rejectionRemarks.trim() || actionLoading}
             >
+              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <XCircle className="mr-2 h-4 w-4" />
               Reject
             </Button>
@@ -1441,22 +1256,16 @@ export default function LoanDetailPage({
             <div className="rounded-lg border bg-muted/50 p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Loan Account Number</p>
-                  <p className="text-sm font-bold font-mono text-brand-orange">
-                    {generatedAccountNumber}
-                  </p>
-                </div>
-                <div>
                   <p className="text-xs text-muted-foreground">Application Number</p>
                   <p className="text-sm font-medium font-mono">{loan.application_number}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Borrower</p>
-                  <p className="text-sm font-medium">{loan.borrower_name}</p>
+                  <p className="text-sm font-medium">{borrowerName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Loan Product</p>
-                  <p className="text-sm font-medium">{loan.loan_product_name ?? "N/A"}</p>
+                  <p className="text-sm font-medium">{loanProductName}</p>
                 </div>
               </div>
 
@@ -1589,13 +1398,15 @@ export default function LoanDetailPage({
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setReleaseOpen(false)}>
+            <Button variant="outline" onClick={() => setReleaseOpen(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRelease}
+              disabled={actionLoading}
             >
+              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <Unlock className="mr-2 h-4 w-4" />
               Confirm Release
             </Button>
