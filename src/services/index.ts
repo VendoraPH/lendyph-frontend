@@ -12,3 +12,7 @@ export { auditService } from "./audit.service";
 export { coMakerService } from "./co-maker.service";
 export { documentService } from "./document.service";
 export { loanProductService } from "./loan-product.service";
+export { loanDocumentService } from "./loan-document.service";
+export { loanAdjustmentService } from "./loan-adjustment.service";
+export { repaymentService } from "./repayment.service";
+export { systemService } from "./system.service";

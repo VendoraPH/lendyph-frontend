@@ -8,3 +8,6 @@ export type { DashboardOverview, PortfolioSummary } from "./dashboard";
 export type { ApiResponse, PaginatedResponse } from "./api";
 export type { Role, Module, Action, Permission, RoleConfig } from "./rbac";
 export type { AuditLog, AuditAction, AuditModule, AuditChange } from "./audit";
+export type { LoanDisclosure, LoanPromissoryNote } from "./loan-document";
+export type { LoanAdjustment, LoanAdjustmentType, LoanAdjustmentStatus, CreateLoanAdjustmentData } from "./loan-adjustment";
+export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
