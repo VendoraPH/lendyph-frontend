@@ -24,8 +24,8 @@ interface BorrowerHeaderProps {
 
 export function BorrowerHeader({ borrower, onEdit }: BorrowerHeaderProps) {
   const details = [
-    borrower.gender === "male" ? "Male" : "Female",
-    borrower.civil_status?.charAt(0).toUpperCase() + borrower.civil_status?.slice(1),
+    borrower.gender ? (borrower.gender === "male" ? "Male" : "Female") : null,
+    borrower.civil_status ? borrower.civil_status.charAt(0).toUpperCase() + borrower.civil_status.slice(1) : null,
     borrower.birthdate
       ? `${new Date().getFullYear() - new Date(borrower.birthdate).getFullYear()} yrs old`
       : null,
@@ -70,7 +70,7 @@ export function BorrowerHeader({ borrower, onEdit }: BorrowerHeaderProps) {
             </p>
             <p className="text-sm text-muted-foreground">{details}</p>
             <p className="text-sm text-muted-foreground">
-              {borrower.phone}
+              {borrower.contact_number || borrower.phone}
               {borrower.email ? ` · ${borrower.email}` : ""}
             </p>
           </div>

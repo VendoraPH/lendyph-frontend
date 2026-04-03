@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
+import { auditService } from "@/services";
 import {
   Table,
   TableBody,
@@ -93,269 +96,6 @@ const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
   { value: "reports", label: "Reports" },
 ];
 
-// ── Mock Data ──
-
-const MOCK_AUDIT_LOGS: AuditLog[] = [
-  {
-    id: 1,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "login",
-    module: "auth",
-    description: "Logged in from 192.168.1.10",
-    target: null,
-    changes: [],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-31T14:15:00Z",
-  },
-  {
-    id: 2,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "created",
-    module: "borrowers",
-    description: 'Created borrower "Juan Dela Cruz"',
-    target: { id: 101, type: "borrower", label: "Juan Dela Cruz" },
-    changes: [
-      { field: "full_name", old: null, new: "Juan Dela Cruz" },
-      { field: "phone", old: null, new: "09171234567" },
-      { field: "email", old: null, new: "juan@email.com" },
-      { field: "address", old: null, new: "123 Main St, Manila" },
-      { field: "status", old: null, new: "active" },
-    ],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-31T14:20:00Z",
-  },
-  {
-    id: 3,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "created",
-    module: "loans",
-    description: 'Created loan #1024 for "Juan Dela Cruz"',
-    target: { id: 1024, type: "loan", label: "Loan #1024" },
-    changes: [
-      { field: "borrower", old: null, new: "Juan Dela Cruz" },
-      { field: "principal_amount", old: null, new: "50,000.00" },
-      { field: "interest_rate", old: null, new: "3%" },
-      { field: "term_months", old: null, new: "12" },
-      { field: "status", old: null, new: "pending" },
-    ],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-31T13:45:00Z",
-  },
-  {
-    id: 4,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "approved",
-    module: "loans",
-    description: "Approved loan #1024",
-    target: { id: 1024, type: "loan", label: "Loan #1024" },
-    changes: [{ field: "status", old: "pending", new: "approved" }],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-31T13:50:00Z",
-  },
-  {
-    id: 5,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "released",
-    module: "loans",
-    description: "Released loan #1024",
-    target: { id: 1024, type: "loan", label: "Loan #1024" },
-    changes: [{ field: "status", old: "approved", new: "released" }],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-31T14:00:00Z",
-  },
-  {
-    id: 6,
-    user: { id: 3, full_name: "Juan Dela Cruz", roles: ["cashier"] },
-    action: "created",
-    module: "payments",
-    description: "Recorded payment of \u20B15,000 for loan #1024",
-    target: { id: 201, type: "payment", label: "Payment #201" },
-    changes: [
-      { field: "amount", old: null, new: "5,000.00" },
-      { field: "method", old: null, new: "cash" },
-      { field: "reference_number", old: null, new: "PAY-20260331-001" },
-      { field: "status", old: null, new: "completed" },
-    ],
-    ip_address: "192.168.1.20",
-    created_at: "2026-03-31T10:30:00Z",
-  },
-  {
-    id: 7,
-    user: { id: 3, full_name: "Juan Dela Cruz", roles: ["cashier"] },
-    action: "voided",
-    module: "payments",
-    description: "Voided payment #199 — duplicate entry",
-    target: { id: 199, type: "payment", label: "Payment #199" },
-    changes: [
-      { field: "status", old: "completed", new: "voided" },
-      { field: "void_reason", old: null, new: "Duplicate entry" },
-    ],
-    ip_address: "192.168.1.20",
-    created_at: "2026-03-31T09:15:00Z",
-  },
-  {
-    id: 8,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "updated",
-    module: "borrowers",
-    description: 'Updated borrower "Ana Reyes" profile',
-    target: { id: 102, type: "borrower", label: "Ana Reyes" },
-    changes: [
-      { field: "phone", old: "09181234567", new: "09189876543" },
-      { field: "address", old: "456 Old St, Cebu", new: "789 New Ave, Cebu" },
-    ],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-30T16:20:00Z",
-  },
-  {
-    id: 9,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "created",
-    module: "users",
-    description: 'Created user account "pedro.g"',
-    target: { id: 5, type: "user", label: "Pedro Garcia" },
-    changes: [
-      { field: "name", old: null, new: "Pedro Garcia" },
-      { field: "username", old: null, new: "pedro.g" },
-      { field: "email", old: null, new: "pedro@lendy.ph" },
-      { field: "role", old: null, new: "viewer" },
-      { field: "branch", old: null, new: "manila" },
-    ],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-30T15:00:00Z",
-  },
-  {
-    id: 10,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "status_changed",
-    module: "users",
-    description: 'Deactivated user "Pedro Garcia"',
-    target: { id: 5, type: "user", label: "Pedro Garcia" },
-    changes: [{ field: "status", old: "active", new: "inactive" }],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-30T15:30:00Z",
-  },
-  {
-    id: 11,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "reset_password",
-    module: "users",
-    description: 'Reset password for "Maria Santos"',
-    target: { id: 2, type: "user", label: "Maria Santos" },
-    changes: [],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-30T14:45:00Z",
-  },
-  {
-    id: 12,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "rejected",
-    module: "loans",
-    description: "Rejected loan #1020 — insufficient collateral",
-    target: { id: 1020, type: "loan", label: "Loan #1020" },
-    changes: [
-      { field: "status", old: "pending", new: "rejected" },
-      { field: "reject_reason", old: null, new: "Insufficient collateral" },
-    ],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-30T11:00:00Z",
-  },
-  {
-    id: 13,
-    user: { id: 4, full_name: "Ana Reyes", roles: ["collector"] },
-    action: "updated",
-    module: "collections",
-    description: "Marked collection #301 as collected",
-    target: { id: 301, type: "collection", label: "Collection #301" },
-    changes: [{ field: "status", old: "pending", new: "collected" }],
-    ip_address: "192.168.1.25",
-    created_at: "2026-03-30T09:30:00Z",
-  },
-  {
-    id: 14,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "printed",
-    module: "loans",
-    description: "Printed disclosure statement for loan #1024",
-    target: { id: 1024, type: "loan", label: "Loan #1024" },
-    changes: [],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-30T08:00:00Z",
-  },
-  {
-    id: 15,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "printed",
-    module: "loans",
-    description: "Printed promissory note for loan #1024",
-    target: { id: 1024, type: "loan", label: "Loan #1024" },
-    changes: [],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-30T08:05:00Z",
-  },
-  {
-    id: 16,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "deleted",
-    module: "borrowers",
-    description: 'Deleted borrower "Test Borrower"',
-    target: { id: 999, type: "borrower", label: "Test Borrower" },
-    changes: [
-      { field: "full_name", old: "Test Borrower", new: null },
-      { field: "status", old: "active", new: null },
-    ],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-29T17:00:00Z",
-  },
-  {
-    id: 17,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "login",
-    module: "auth",
-    description: "Logged in from 192.168.1.15",
-    target: null,
-    changes: [],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-29T08:00:00Z",
-  },
-  {
-    id: 18,
-    user: { id: 2, full_name: "Maria Santos", roles: ["loan_officer"] },
-    action: "logout",
-    module: "auth",
-    description: "Logged out",
-    target: null,
-    changes: [],
-    ip_address: "192.168.1.15",
-    created_at: "2026-03-29T17:30:00Z",
-  },
-  {
-    id: 19,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "updated",
-    module: "loans",
-    description: "Restructured loan #1018 — extended term",
-    target: { id: 1018, type: "loan", label: "Loan #1018" },
-    changes: [
-      { field: "term_months", old: "6", new: "12" },
-      { field: "interest_rate", old: "5%", new: "3.5%" },
-      { field: "monthly_payment", old: "9,500.00", new: "4,800.00" },
-    ],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-29T14:00:00Z",
-  },
-  {
-    id: 20,
-    user: { id: 1, full_name: "Augustin Maputol", roles: ["admin"] },
-    action: "updated",
-    module: "users",
-    description: 'Updated role for "Ana Reyes"',
-    target: { id: 4, type: "user", label: "Ana Reyes" },
-    changes: [{ field: "role", old: "viewer", new: "collector" }],
-    ip_address: "192.168.1.10",
-    created_at: "2026-03-29T10:00:00Z",
-  },
-];
 
 // ── Helpers ──
 
@@ -397,7 +137,7 @@ function AuditDetailDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const actionCfg = ACTION_CONFIG[log.action];
+  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -416,12 +156,12 @@ function AuditDetailDrawer({
           {/* User Info */}
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-orange text-white text-sm font-semibold">
-              {getInitials(log.user.full_name)}
+              {getInitials(log.user?.full_name ?? "?")}
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm">{log.user.full_name}</p>
+              <p className="font-medium text-sm">{log.user?.full_name ?? "System"}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {log.user.roles?.[0].replace("_", " ")}
+                {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
               </p>
             </div>
           </div>
@@ -441,7 +181,7 @@ function AuditDetailDrawer({
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Module</p>
                 <p className="text-sm font-medium">
-                  {MODULE_CONFIG[log.module].label}
+                  {MODULE_CONFIG[log.module]?.label ?? log.module}
                 </p>
               </div>
               <div className="space-y-1">
@@ -551,26 +291,55 @@ export default function AuditTrailPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
 
-  const filteredLogs = MOCK_AUDIT_LOGS.filter((log) => {
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params: Record<string, unknown> = { per_page: 100 };
+      if (actionFilter !== "all") params.action = actionFilter;
+      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      const res = await auditService.list(params);
+      if (Array.isArray(res)) {
+        setLogs(res);
+        setMeta(null);
+      } else if (res && typeof res === "object" && "data" in res) {
+        setLogs((res as { data: AuditLog[] }).data ?? []);
+        setMeta((res as { meta: typeof meta }).meta ?? null);
+      } else {
+        setLogs([]);
+      }
+    } catch {
+      toast.error("Failed to load audit logs");
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [actionFilter, moduleFilter]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const filteredLogs = useMemo(() => {
+    const sorted = [...logs].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    if (!search.trim()) return sorted;
     const q = search.toLowerCase();
-    const matchesSearch =
-      !q ||
-      log.description.toLowerCase().includes(q) ||
-      log.user.full_name.toLowerCase().includes(q) ||
-      log.module.toLowerCase().includes(q) ||
-      (log.target?.label.toLowerCase().includes(q) ?? false);
-
-    const matchesModule =
-      moduleFilter === "all" || log.module === moduleFilter;
-    const matchesAction =
-      actionFilter === "all" || log.action === actionFilter;
-
-    return matchesSearch && matchesModule && matchesAction;
-  }).sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+    return sorted.filter(
+      (log) =>
+        log.description.toLowerCase().includes(q) ||
+        (log.user?.full_name?.toLowerCase().includes(q) ?? false) ||
+        log.module.toLowerCase().includes(q) ||
+        (log.target?.label.toLowerCase().includes(q) ?? false)
+    );
+  }, [logs, search]);
 
   const hasFilters =
     search || moduleFilter !== "all" || actionFilter !== "all";
@@ -602,7 +371,7 @@ export default function AuditTrailPage() {
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Total Events</p>
-            <p className="text-2xl font-bold">{MOCK_AUDIT_LOGS.length}</p>
+            <p className="text-2xl font-bold">{meta?.total ?? logs.length}</p>
           </CardContent>
         </Card>
         <Card>
@@ -610,8 +379,8 @@ export default function AuditTrailPage() {
             <p className="text-xs text-muted-foreground">Today</p>
             <p className="text-2xl font-bold">
               {
-                MOCK_AUDIT_LOGS.filter((l) =>
-                  l.created_at.startsWith("2026-03-31")
+                logs.filter((l) =>
+                  l.created_at.startsWith(todayStr)
                 ).length
               }
             </p>
@@ -621,7 +390,7 @@ export default function AuditTrailPage() {
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Active Users</p>
             <p className="text-2xl font-bold">
-              {new Set(MOCK_AUDIT_LOGS.map((l) => l.user.id)).size}
+              {new Set(logs.filter((l) => l.user).map((l) => l.user.id)).size}
             </p>
           </CardContent>
         </Card>
@@ -632,7 +401,7 @@ export default function AuditTrailPage() {
             </p>
             <p className="text-2xl font-bold text-red-600">
               {
-                MOCK_AUDIT_LOGS.filter((l) =>
+                logs.filter((l) =>
                   ["deleted", "voided", "rejected"].includes(l.action)
                 ).length
               }
@@ -697,6 +466,11 @@ export default function AuditTrailPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <Spinner className="size-6 text-muted-foreground" />
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -713,7 +487,7 @@ export default function AuditTrailPage() {
               </TableHeader>
               <TableBody>
                 {filteredLogs.map((log) => {
-                  const actionCfg = ACTION_CONFIG[log.action];
+                  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
                   return (
                     <TableRow
                       key={log.id}
@@ -733,14 +507,14 @@ export default function AuditTrailPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            {getInitials(log.user.full_name)}
+                            {getInitials(log.user?.full_name ?? "?")}
                           </div>
                           <div>
                             <p className="text-sm font-medium">
-                              {log.user.full_name}
+                              {log.user?.full_name ?? "System"}
                             </p>
                             <p className="text-xs text-muted-foreground capitalize">
-                              {log.user.roles?.[0].replace("_", " ")}
+                              {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
                             </p>
                           </div>
                         </div>
@@ -755,7 +529,7 @@ export default function AuditTrailPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {MODULE_CONFIG[log.module].label}
+                          {MODULE_CONFIG[log.module]?.label ?? log.module}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -782,6 +556,7 @@ export default function AuditTrailPage() {
               </TableBody>
             </Table>
           </div>
+          )}
         </CardContent>
       </Card>
 

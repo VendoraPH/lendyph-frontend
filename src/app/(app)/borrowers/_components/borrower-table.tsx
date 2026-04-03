@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -45,9 +46,6 @@ interface BorrowerTableProps {
 
 type SortKey =
   | "full_name"
-  | "city"
-  | "total_loans"
-  | "total_outstanding"
   | "status";
 type SortDirection = "asc" | "desc" | null;
 
@@ -56,13 +54,13 @@ interface SortState {
   direction: SortDirection;
 }
 
-type ToggleableColumn = "phone" | "location" | "loans" | "outstanding";
+type ToggleableColumn = "contact" | "branch" | "email" | "income";
 
 const TOGGLEABLE_COLUMNS: { key: ToggleableColumn; label: string }[] = [
-  { key: "phone", label: "Phone" },
-  { key: "location", label: "Location" },
-  { key: "loans", label: "Loans" },
-  { key: "outstanding", label: "Outstanding" },
+  { key: "contact", label: "Contact" },
+  { key: "branch", label: "Branch" },
+  { key: "email", label: "Email" },
+  { key: "income", label: "Income" },
 ];
 
 function SortIcon({ direction }: { direction: SortDirection }) {
@@ -93,10 +91,10 @@ export function BorrowerTable({
   const [visibleColumns, setVisibleColumns] = useState<
     Record<ToggleableColumn, boolean>
   >({
-    phone: true,
-    location: true,
-    loans: true,
-    outstanding: true,
+    contact: true,
+    branch: true,
+    email: false,
+    income: false,
   });
 
   // Handle sort toggle: asc -> desc -> none
@@ -168,10 +166,10 @@ export function BorrowerTable({
   // Count visible columns for empty state colspan
   const visibleCount =
     2 + // checkbox + borrower (always visible)
-    (visibleColumns.phone ? 1 : 0) +
-    (visibleColumns.location ? 1 : 0) +
-    (visibleColumns.loans ? 1 : 0) +
-    (visibleColumns.outstanding ? 1 : 0) +
+    (visibleColumns.contact ? 1 : 0) +
+    (visibleColumns.branch ? 1 : 0) +
+    (visibleColumns.email ? 1 : 0) +
+    (visibleColumns.income ? 1 : 0) +
     2; // status + actions (always visible)
 
   return (
@@ -217,18 +215,20 @@ export function BorrowerTable({
             Columns
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {TOGGLEABLE_COLUMNS.map((col) => (
-              <DropdownMenuCheckboxItem
-                key={col.key}
-                checked={visibleColumns[col.key]}
-                onCheckedChange={() => toggleColumn(col.key)}
-                closeOnClick={false}
-              >
-                {col.label}
-              </DropdownMenuCheckboxItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {TOGGLEABLE_COLUMNS.map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.key}
+                  checked={visibleColumns[col.key]}
+                  onCheckedChange={() => toggleColumn(col.key)}
+                  closeOnClick={false}
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -256,45 +256,10 @@ export function BorrowerTable({
                   <SortIcon direction={getSortDirection("full_name")} />
                 </button>
               </TableHead>
-              {visibleColumns.phone && <TableHead>Phone</TableHead>}
-              {visibleColumns.location && (
-                <TableHead>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
-                    onClick={() => handleSort("city")}
-                  >
-                    Location
-                    <SortIcon direction={getSortDirection("city")} />
-                  </button>
-                </TableHead>
-              )}
-              {visibleColumns.loans && (
-                <TableHead className="text-right">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors ml-auto"
-                    onClick={() => handleSort("total_loans")}
-                  >
-                    Loans
-                    <SortIcon direction={getSortDirection("total_loans")} />
-                  </button>
-                </TableHead>
-              )}
-              {visibleColumns.outstanding && (
-                <TableHead className="text-right">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors ml-auto"
-                    onClick={() => handleSort("total_outstanding")}
-                  >
-                    Outstanding
-                    <SortIcon
-                      direction={getSortDirection("total_outstanding")}
-                    />
-                  </button>
-                </TableHead>
-              )}
+              {visibleColumns.contact && <TableHead>Contact</TableHead>}
+              {visibleColumns.branch && <TableHead>Branch</TableHead>}
+              {visibleColumns.email && <TableHead>Email</TableHead>}
+              {visibleColumns.income && <TableHead className="text-right">Income</TableHead>}
               <TableHead>
                 <button
                   type="button"
@@ -345,27 +310,25 @@ export function BorrowerTable({
                     </div>
                   </div>
                 </TableCell>
-                {visibleColumns.phone && (
+                {visibleColumns.contact && (
                   <TableCell className="text-muted-foreground">
-                    {borrower.phone}
+                    {borrower.contact_number || "\u2014"}
                   </TableCell>
                 )}
-                {visibleColumns.location && (
+                {visibleColumns.branch && (
                   <TableCell className="text-muted-foreground">
-                    {[borrower.city, borrower.province]
-                      .filter(Boolean)
-                      .join(", ") || "\u2014"}
+                    {borrower.branch?.name || "\u2014"}
                   </TableCell>
                 )}
-                {visibleColumns.loans && (
-                  <TableCell className="text-right tabular-nums">
-                    {borrower.total_loans}
+                {visibleColumns.email && (
+                  <TableCell className="text-muted-foreground">
+                    {borrower.email || "\u2014"}
                   </TableCell>
                 )}
-                {visibleColumns.outstanding && (
+                {visibleColumns.income && (
                   <TableCell className="text-right tabular-nums text-brand-orange font-medium">
-                    {borrower.total_outstanding
-                      ? formatCurrency(borrower.total_outstanding)
+                    {borrower.monthly_income
+                      ? formatCurrency(Number(borrower.monthly_income))
                       : "\u2014"}
                   </TableCell>
                 )}

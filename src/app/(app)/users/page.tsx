@@ -221,7 +221,27 @@ function AddUserDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.role || !form.branch_id) return;
+
+    if (!form.first_name || !form.last_name || !form.username || !form.email) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    if (!form.password || form.password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (form.password !== form.password_confirmation) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (!form.branch_id) {
+      toast.error("Please select a branch");
+      return;
+    }
+    if (!form.role) {
+      toast.error("Please select a role");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -240,8 +260,15 @@ function AddUserDialog({
       resetForm();
       setOpen(false);
       onAdd();
-    } catch {
-      toast.error("Failed to create user");
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
+      const apiErrors = err?.response?.data?.errors;
+      if (apiErrors) {
+        const firstError = Object.values(apiErrors)[0]?.[0];
+        toast.error(firstError || "Validation failed");
+      } else {
+        toast.error(err?.response?.data?.message || "Failed to create user");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -266,7 +293,7 @@ function AddUserDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="add-first-name">First Name</Label>
+              <Label htmlFor="add-first-name">First Name <span className="text-red-500">*</span></Label>
               <Input
                 id="add-first-name"
                 placeholder="Juan"
@@ -276,7 +303,7 @@ function AddUserDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-last-name">Last Name</Label>
+              <Label htmlFor="add-last-name">Last Name <span className="text-red-500">*</span></Label>
               <Input
                 id="add-last-name"
                 placeholder="Dela Cruz"
@@ -289,7 +316,7 @@ function AddUserDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="add-username">Username</Label>
+              <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
               <Input
                 id="add-username"
                 placeholder="juan.dc"
@@ -299,7 +326,7 @@ function AddUserDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-email">Email</Label>
+              <Label htmlFor="add-email">Email <span className="text-red-500">*</span></Label>
               <Input
                 id="add-email"
                 type="email"
@@ -313,7 +340,7 @@ function AddUserDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="add-password">Password</Label>
+              <Label htmlFor="add-password">Password <span className="text-red-500">*</span></Label>
               <Input
                 id="add-password"
                 type="password"
@@ -325,7 +352,7 @@ function AddUserDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-confirm">Confirm Password</Label>
+              <Label htmlFor="add-confirm">Confirm Password <span className="text-red-500">*</span></Label>
               <Input
                 id="add-confirm"
                 type="password"
@@ -352,21 +379,27 @@ function AddUserDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Branch</Label>
+            <Label>Branch <span className="text-red-500">*</span></Label>
             <BranchSelector
               value={form.branch_id}
               onChange={(v) => update("branch_id", v)}
               branches={branches}
             />
+            {!form.branch_id && submitting && (
+              <p className="text-xs text-red-500">Please select a branch</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label>Role</Label>
+            <Label>Role <span className="text-red-500">*</span></Label>
             <RoleSelector
               value={form.role}
               onChange={(v) => update("role", v)}
               roles={roles}
             />
+            {!form.role && submitting && (
+              <p className="text-xs text-red-500">Please select a role</p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">

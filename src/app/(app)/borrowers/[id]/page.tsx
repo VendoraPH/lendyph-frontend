@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Borrower, CoMaker } from "@/types";
-import { INITIAL_BORROWERS, MOCK_LOANS } from "../_components/mock-data";
-import { MOCK_PAYMENTS, MOCK_CO_MAKERS } from "./_components/mock-detail-data";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
+import type { Borrower, CoMaker, Loan, Payment } from "@/types";
+import { borrowerService, loanService, coMakerService } from "@/services";
+import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -16,12 +18,98 @@ export default function BorrowerDetailPage() {
   const params = useParams();
   const borrowerId = Number(params.id);
 
-  const [borrower, setBorrower] = useState<Borrower | undefined>(() =>
-    INITIAL_BORROWERS.find((b) => b.id === borrowerId)
-  );
-  const [coMakers, setCoMakers] = useState<CoMaker[]>(
-    () => MOCK_CO_MAKERS[borrowerId] ?? []
-  );
+  const [borrower, setBorrower] = useState<Borrower | undefined>();
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCoMakers = useCallback(async () => {
+    try {
+      const res = await coMakerService.list(borrowerId);
+      setCoMakers(Array.isArray(res) ? res : []);
+    } catch {
+      setCoMakers([]);
+    }
+  }, [borrowerId]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const [borrowerRes, loansRes] = await Promise.all([
+        borrowerService.detail(borrowerId),
+        loanService.list({ borrower_id: borrowerId }),
+      ]);
+
+      setBorrower(borrowerRes);
+
+      // Loans may be paginated or a plain array
+      if (Array.isArray(loansRes)) {
+        setLoans(loansRes);
+      } else if (loansRes && typeof loansRes === "object" && "data" in loansRes) {
+        setLoans((loansRes as { data: Loan[] }).data ?? []);
+      } else {
+        setLoans([]);
+      }
+
+      // Payments endpoint may not exist yet — fail gracefully
+      try {
+        const paymentsRes = await borrowerService.payments(borrowerId);
+        setPayments(Array.isArray(paymentsRes) ? paymentsRes : []);
+      } catch {
+        setPayments([]);
+      }
+
+      await fetchCoMakers();
+    } catch {
+      toast.error("Failed to load borrower details");
+    } finally {
+      setLoading(false);
+    }
+  }, [borrowerId, fetchCoMakers]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleAddCoMaker = async (newCoMaker: CreateCoMakerData | CoMaker) => {
+    try {
+      await coMakerService.create(borrowerId, newCoMaker as CreateCoMakerData);
+      toast.success("Co-maker added successfully");
+      await fetchCoMakers();
+    } catch {
+      toast.error("Failed to add co-maker");
+    }
+  };
+
+  const handleEditCoMaker = async (updated: CoMaker) => {
+    try {
+      await coMakerService.update(updated.id, updated as UpdateCoMakerData);
+      toast.success("Co-maker updated successfully");
+      await fetchCoMakers();
+    } catch {
+      toast.error("Failed to update co-maker");
+    }
+  };
+
+  const handleDeleteCoMaker = async (id: number) => {
+    try {
+      await coMakerService.delete(id);
+      toast.success("Co-maker deleted successfully");
+      await fetchCoMakers();
+    } catch {
+      toast.error("Failed to delete co-maker");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!borrower) {
     return (
@@ -30,23 +118,6 @@ export default function BorrowerDetailPage() {
       </div>
     );
   }
-
-  const loans = MOCK_LOANS[borrower.id] ?? [];
-  const payments = MOCK_PAYMENTS[borrower.id] ?? [];
-
-  const handleAddCoMaker = (newCoMaker: CoMaker) => {
-    setCoMakers((prev) => [...prev, newCoMaker]);
-  };
-
-  const handleEditCoMaker = (updated: CoMaker) => {
-    setCoMakers((prev) =>
-      prev.map((cm) => (cm.id === updated.id ? updated : cm))
-    );
-  };
-
-  const handleDeleteCoMaker = (id: number) => {
-    setCoMakers((prev) => prev.filter((cm) => cm.id !== id));
-  };
 
   return (
     <div className="space-y-6">

@@ -126,23 +126,23 @@ export function borrowerToForm(b: Borrower): BorrowerForm {
     middle_name: b.middle_name ?? "",
     last_name: b.last_name,
     suffix: b.suffix ?? "",
-    birthdate: b.birthdate,
-    civil_status: b.civil_status,
-    gender: b.gender,
+    birthdate: b.birthdate ?? "",
+    civil_status: (b.civil_status as BorrowerForm["civil_status"]) ?? "",
+    gender: (b.gender as BorrowerForm["gender"]) ?? "",
     email: b.email ?? "",
-    phone: b.phone,
+    phone: b.contact_number ?? b.phone ?? "",
     address: b.address ?? "",
-    barangay: b.barangay ?? "",
-    city: b.city ?? "",
-    province: b.province ?? "",
-    zip_code: b.zip_code ?? "",
+    barangay: "",
+    city: "",
+    province: "",
+    zip_code: "",
     employer_or_business: b.employer_or_business ?? "",
-    employment_type: b.employment_type ?? "",
+    employment_type: "",
     monthly_income: b.monthly_income?.toString() ?? "",
-    valid_id_type: b.valid_id_type ?? "",
-    valid_id_number: b.valid_id_number ?? "",
-    photo: b.photo,
-    valid_id_photo: b.valid_id_photo,
+    valid_id_type: "",
+    valid_id_number: "",
+    photo: b.photo_url ?? b.photo,
+    valid_id_photo: undefined,
   };
 }
 
@@ -246,7 +246,7 @@ export function BorrowerFormTabs({
           <div className="space-y-2">
             <Label>Suffix</Label>
             <Select
-              value={form.suffix || undefined}
+              value={form.suffix || null}
               onValueChange={(v) => update("suffix", v ?? "")}
             >
               <SelectTrigger className="w-full">
@@ -303,7 +303,7 @@ export function BorrowerFormTabs({
             <Label>Gender *</Label>
             <RadioGroup
               className="flex gap-4 pt-1"
-              value={form.gender || undefined}
+              value={form.gender || null}
               onValueChange={(v) => update("gender", v ?? "")}
             >
               {GENDER_OPTIONS.map((opt) => (
@@ -322,7 +322,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Civil Status *</Label>
           <Select
-            value={form.civil_status || undefined}
+            value={form.civil_status || null}
             onValueChange={(v) => update("civil_status", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -400,7 +400,7 @@ export function BorrowerFormTabs({
           <div className="space-y-2">
             <Label>Province</Label>
             <Select
-              value={form.province || undefined}
+              value={form.province || null}
               onValueChange={(v) => update("province", v ?? "")}
             >
               <SelectTrigger className="w-full">
@@ -432,7 +432,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Employment Type</Label>
           <Select
-            value={form.employment_type || undefined}
+            value={form.employment_type || null}
             onValueChange={(v) => update("employment_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -477,7 +477,7 @@ export function BorrowerFormTabs({
         <div className="space-y-2">
           <Label>Valid ID Type</Label>
           <Select
-            value={form.valid_id_type || undefined}
+            value={form.valid_id_type || null}
             onValueChange={(v) => update("valid_id_type", v ?? "")}
           >
             <SelectTrigger className="w-full">
@@ -565,28 +565,16 @@ export function AddBorrowerDialog({
       last_name: form.last_name,
       full_name: buildFullName(form),
       suffix: form.suffix || undefined,
-      birthdate: form.birthdate,
-      civil_status: (form.civil_status || "single") as CivilStatus,
-      gender: (form.gender || "male") as Gender,
+      birthdate: form.birthdate || undefined,
+      civil_status: (form.civil_status || undefined) as CivilStatus | undefined,
+      gender: (form.gender || undefined) as Gender | undefined,
       email: form.email || undefined,
-      phone: form.phone,
+      contact_number: form.phone || undefined,
       address: form.address || undefined,
-      barangay: form.barangay || undefined,
-      city: form.city || undefined,
-      province: form.province || undefined,
-      zip_code: form.zip_code || undefined,
       employer_or_business: form.employer_or_business || undefined,
-      employment_type: (form.employment_type || undefined) as
-        | EmploymentType
-        | undefined,
       monthly_income: form.monthly_income
         ? Number(form.monthly_income)
         : undefined,
-      valid_id_type: (form.valid_id_type || undefined) as
-        | ValidIdType
-        | undefined,
-      valid_id_number: form.valid_id_number || undefined,
-      valid_id_photo: form.valid_id_photo,
       photo: form.photo,
       status: "active",
       total_loans: 0,
@@ -660,28 +648,16 @@ export function EditBorrowerDialog({
       last_name: form.last_name,
       full_name: buildFullName(form),
       suffix: form.suffix || undefined,
-      birthdate: form.birthdate,
-      civil_status: (form.civil_status || borrower.civil_status) as CivilStatus,
-      gender: (form.gender || borrower.gender) as Gender,
+      birthdate: form.birthdate || undefined,
+      civil_status: (form.civil_status || borrower.civil_status || undefined) as CivilStatus | undefined,
+      gender: (form.gender || borrower.gender || undefined) as Gender | undefined,
       email: form.email || undefined,
-      phone: form.phone,
+      contact_number: form.phone || undefined,
       address: form.address || undefined,
-      barangay: form.barangay || undefined,
-      city: form.city || undefined,
-      province: form.province || undefined,
-      zip_code: form.zip_code || undefined,
       employer_or_business: form.employer_or_business || undefined,
-      employment_type: (form.employment_type || undefined) as
-        | EmploymentType
-        | undefined,
       monthly_income: form.monthly_income
         ? Number(form.monthly_income)
         : undefined,
-      valid_id_type: (form.valid_id_type || undefined) as
-        | ValidIdType
-        | undefined,
-      valid_id_number: form.valid_id_number || undefined,
-      valid_id_photo: form.valid_id_photo,
       photo: form.photo,
       updated_at: new Date().toISOString().split("T")[0]!,
     });

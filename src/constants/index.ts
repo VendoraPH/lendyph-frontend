@@ -41,6 +41,7 @@ export const PAYMENT_FREQUENCY_LABELS: Record<string, string> = {
   daily: "Daily",
   weekly: "Weekly",
   bi_weekly: "Bi-Weekly",
+  semi_monthly: "Semi-Monthly",
   monthly: "Monthly",
 };
 
@@ -71,7 +72,7 @@ export const PAGINATION = {
 } as const;
 
 export const INTEREST_TYPE_OPTIONS = [
-  { value: "fixed", label: "Fixed" },
+  { value: "straight", label: "Straight (Fixed)" },
   { value: "diminishing", label: "Diminishing" },
   { value: "upon_maturity", label: "Upon Maturity" },
 ] as const;
@@ -79,7 +80,7 @@ export const INTEREST_TYPE_OPTIONS = [
 export const PAYMENT_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
-  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "semi_monthly", label: "Semi-Monthly" },
   { value: "monthly", label: "Monthly" },
 ] as const;
 export const CIVIL_STATUS_OPTIONS = [

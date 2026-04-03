@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { cn } from "@/lib/utils";
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
+  GripVertical,
+} from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -21,17 +26,23 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
+const MIN_WIDTH = 64;
+const DEFAULT_WIDTH = 260;
+const MAX_WIDTH = 600;
+
 const iconColors: Record<string, string> = {
-  "/dashboard": "bg-brand-orange/15 text-brand-orange",
-  "/users": "bg-purple-100 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400",
-  "/borrowers": "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
-  "/loans": "bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400",
-  "/payments": "bg-cyan-100 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-400",
-  "/collections": "bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400",
-  "/reports": "bg-pink-100 text-pink-600 dark:bg-pink-500/15 dark:text-pink-400",
-  "/audit-trail": "bg-gray-100 text-gray-600 dark:bg-gray-500/15 dark:text-gray-400",
-  "/settings": "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-400",
+  "/dashboard": "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-orange-200 dark:shadow-orange-900/30",
+  "/users": "bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-purple-200 dark:shadow-purple-900/30",
+  "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/30",
+  "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/30",
+  "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200 dark:shadow-cyan-900/30",
+  "/collections": "bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-amber-200 dark:shadow-amber-900/30",
+  "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200 dark:shadow-pink-900/30",
+  "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
+  "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
 };
+
+// ── Nav Link ──
 
 function NavLink({
   item,
@@ -45,21 +56,15 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const hasChildren = item.children && item.children.length > 0;
-  const isActive =
-    pathname === item.href || pathname.startsWith(item.href + "/");
+  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
   const isChildActive = hasChildren
-    ? item.children!.some(
-        (child) =>
-          pathname === child.href || pathname.startsWith(child.href + "/")
-      )
+    ? item.children!.some((c) => pathname === c.href || pathname.startsWith(c.href + "/"))
     : false;
   const isOpen = isActive || isChildActive;
-
   const [expanded, setExpanded] = useState(isOpen);
+  const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
-  const iconColorClass = iconColors[item.href] || "bg-gray-100 text-gray-600 dark:bg-gray-500/15 dark:text-gray-400";
-
-  // Collapsed mode: icon-only with tooltip
+  // ── Collapsed ──
   if (collapsed) {
     return (
       <Tooltip>
@@ -69,98 +74,99 @@ function NavLink({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center justify-center rounded-lg p-2 transition-colors",
-                "hover:bg-sidebar-accent",
-                (isActive || isChildActive) &&
-                  "bg-brand-orange/10"
+                "flex items-center justify-center rounded-2xl p-2 transition-all duration-200",
+                "hover:bg-gray-100",
+                (isActive || isChildActive) && "bg-brand-orange/8 ring-1 ring-brand-orange/20"
               )}
             />
           }
         >
-          <span
-            className={cn(
-              "flex items-center justify-center rounded-lg h-8 w-8",
-              iconColorClass
-            )}
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
+          <span className={cn("flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
+            <item.icon className="h-4 w-4" />
           </span>
         </TooltipTrigger>
-        <TooltipContent side="right">{item.title}</TooltipContent>
+        <TooltipContent side="right" className={hasChildren ? "flex flex-col gap-1 p-2.5 min-w-[140px]" : undefined}>
+          {hasChildren ? (
+            <>
+              <span className="font-semibold text-xs mb-1 text-foreground">{item.title}</span>
+              {item.children!.map((child) => (
+                <Link
+                  key={child.href}
+                  href={child.href}
+                  onClick={onNavigate}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-accent",
+                    pathname === child.href && "bg-brand-orange/10 text-brand-orange font-medium"
+                  )}
+                >
+                  {child.title}
+                </Link>
+              ))}
+            </>
+          ) : (
+            item.title
+          )}
+        </TooltipContent>
       </Tooltip>
     );
   }
 
-  // Expanded mode: full nav with text labels
+  // ── Expanded no children ──
   if (!hasChildren) {
     return (
       <Link
         href={item.href}
         onClick={onNavigate}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
           isActive
-            ? "bg-brand-orange/10 text-brand-orange font-semibold"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            ? "bg-gradient-to-r from-brand-orange/10 to-brand-orange/5 text-brand-orange font-semibold shadow-sm ring-1 ring-brand-orange/10"
+            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
         )}
       >
-        <span
-          className={cn(
-            "flex items-center justify-center rounded-lg h-8 w-8",
-            iconColorClass
-          )}
-        >
-          <item.icon className="h-4 w-4 shrink-0" />
+        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
+          <item.icon className="h-3.5 w-3.5" />
         </span>
-        {item.title}
+        <span className="truncate">{item.title}</span>
+        {isActive && (
+          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-orange animate-pulse" />
+        )}
       </Link>
     );
   }
 
+  // ── Expanded with children ──
   return (
     <div>
       <button
         onClick={() => setExpanded((prev) => !prev)}
         className={cn(
-          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
           isOpen
-            ? "bg-brand-orange/10 text-brand-orange font-semibold"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            ? "bg-gradient-to-r from-brand-orange/10 to-brand-orange/5 text-brand-orange font-semibold shadow-sm ring-1 ring-brand-orange/10"
+            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
         )}
       >
-        <span
-          className={cn(
-            "flex items-center justify-center rounded-lg h-8 w-8",
-            iconColorClass
-          )}
-        >
-          <item.icon className="h-4 w-4 shrink-0" />
+        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
+          <item.icon className="h-3.5 w-3.5" />
         </span>
-        <span className="flex-1 text-left">{item.title}</span>
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 transition-transform",
-            expanded && "rotate-180"
-          )}
-        />
+        <span className="flex-1 text-left truncate">{item.title}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
-      {expanded && (
-        <div className="ml-7 mt-0.5 flex flex-col gap-0.5 border-l border-border/50 pl-3">
+      <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", expanded ? "max-h-96 opacity-100 mt-1" : "max-h-0 opacity-0")}>
+        <div className="ml-6 flex flex-col gap-0.5 border-l-2 border-brand-orange/15 pl-4">
           {item.children!.map((child) => {
-            const childActive =
-              pathname === child.href ||
-              pathname.startsWith(child.href + "/");
-
+            const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
             return (
               <Link
                 key={child.href}
                 href={child.href}
                 onClick={onNavigate}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-sm transition-colors",
+                  "relative rounded-xl px-3 py-1.5 text-[13px] transition-all duration-200",
                   childActive
-                    ? "bg-brand-orange/10 text-brand-orange font-medium"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    ? "bg-brand-orange/8 text-brand-orange font-medium before:absolute before:-left-[18px] before:top-1/2 before:-translate-y-1/2 before:h-2 before:w-2 before:rounded-full before:bg-brand-orange"
+                    : "text-gray-400 hover:bg-gray-50 hover:text-gray-700"
                 )}
               >
                 {child.title}
@@ -168,10 +174,12 @@ function NavLink({
             );
           })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
+
+// ── Sidebar Content ──
 
 function SidebarContent({
   collapsed,
@@ -186,35 +194,57 @@ function SidebarContent({
 
   return (
     <TooltipProvider>
-      <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-        {/* Logo area */}
-        <div
-          className={cn(
-            "flex h-14 flex-col justify-center border-b border-border",
-            collapsed ? "items-center px-2" : "gap-0 px-6"
-          )}
-        >
+      <div className="flex h-full flex-col">
+        {/* Header */}
+        <div className={cn(
+          "flex h-14 items-center shrink-0 border-b border-gray-100",
+          collapsed ? "justify-center px-2" : "px-4"
+        )}>
           {collapsed ? (
-            <span className="text-xl font-bold text-brand-orange">L</span>
+            <button
+              onClick={onToggle}
+              className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
           ) : (
             <>
-              <span className="text-xl font-bold text-brand-orange">
-                Lendy.PH
-              </span>
-              <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                Lending Management
-              </span>
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-gradient-to-br from-brand-orange to-brand-orange-dark shadow-sm">
+                  <span className="text-sm font-bold text-white">L</span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-bold text-gray-900 leading-tight">
+                    Lendy.PH
+                  </span>
+                  <span className="text-[9px] font-medium tracking-wider text-gray-400 uppercase">
+                    Lending System
+                  </span>
+                </div>
+              </div>
+              {onToggle && (
+                <button
+                  onClick={onToggle}
+                  className="rounded-xl p-1.5 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all"
+                  title="Collapse sidebar"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+              )}
             </>
           )}
         </div>
 
         {/* Navigation */}
-        <nav
-          className={cn(
-            "flex-1 flex flex-col gap-0.5 overflow-y-auto",
-            collapsed ? "items-center p-1.5" : "p-3"
+        <nav className={cn(
+          "flex-1 flex flex-col gap-0.5 overflow-y-auto scrollbar-thin",
+          collapsed ? "items-center px-2 py-3" : "px-3 py-3"
+        )}>
+          {!collapsed && (
+            <span className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-300">
+              Navigation
+            </span>
           )}
-        >
           {SIDEBAR_NAV.map((item) => (
             <NavLink
               key={item.href}
@@ -226,35 +256,13 @@ function SidebarContent({
           ))}
         </nav>
 
-        {/* Collapse toggle (desktop only) */}
-        {onToggle && (
-          <div className="border-t border-sidebar-border">
-            <button
-              onClick={onToggle}
-              className={cn(
-                "flex w-full items-center gap-3 px-3 py-3 text-sm text-muted-foreground transition-colors",
-                "hover:bg-accent/50 hover:text-foreground",
-                collapsed && "justify-center"
-              )}
-            >
-              {collapsed ? (
-                <PanelLeftOpen className="h-4 w-4 shrink-0" />
-              ) : (
-                <>
-                  <PanelLeftClose className="h-4 w-4 shrink-0" />
-                  <span>Collapse</span>
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Footer (hidden when collapsed) */}
+        {/* Footer */}
         {!collapsed && (
-          <div className="border-t border-sidebar-border px-6 py-3">
-            <span className="text-[11px] text-muted-foreground/60">
-              v1.0.0
-            </span>
+          <div className="border-t border-gray-100 px-5 py-2.5 shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-300 font-medium">v1.0.0</span>
+              <span className="text-[10px] text-gray-300">© Lendy.PH</span>
+            </div>
           </div>
         )}
       </div>
@@ -262,27 +270,110 @@ function SidebarContent({
   );
 }
 
+// ── Resize Handle ──
+
+function ResizeHandle({
+  onResize,
+  onResizeEnd,
+}: {
+  onResize: (deltaX: number) => void;
+  onResizeEnd: () => void;
+}) {
+  const startXRef = useRef(0);
+  const isDragging = useRef(false);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      startXRef.current = e.clientX;
+      isDragging.current = true;
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (!isDragging.current) return;
+        const delta = ev.clientX - startXRef.current;
+        startXRef.current = ev.clientX;
+        onResize(delta);
+      };
+
+      const handleMouseUp = () => {
+        isDragging.current = false;
+        onResizeEnd();
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [onResize, onResizeEnd]
+  );
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize group z-10 flex items-center justify-center transition-colors hover:bg-brand-orange/10"
+    >
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-brand-orange/20 p-0.5">
+        <GripVertical className="h-3 w-3 text-brand-orange/50" />
+      </div>
+    </div>
+  );
+}
+
+// ── Main Sidebar ──
+
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+  const [customWidth, setCustomWidth] = useState(DEFAULT_WIDTH);
+  const shouldCollapseRef = useRef(false);
+
+  const handleResize = useCallback(
+    (deltaX: number) => {
+      if (sidebarCollapsed) return;
+      setCustomWidth((prev) => {
+        const next = prev + deltaX;
+        if (next < MIN_WIDTH + 20) {
+          shouldCollapseRef.current = true;
+          return DEFAULT_WIDTH;
+        }
+        return Math.min(Math.max(next, MIN_WIDTH + 40), MAX_WIDTH);
+      });
+    },
+    [sidebarCollapsed]
+  );
+
+  const handleResizeEnd = useCallback(() => {
+    if (shouldCollapseRef.current) {
+      shouldCollapseRef.current = false;
+      toggleSidebarCollapsed();
+    }
+  }, [toggleSidebarCollapsed]);
+
+  const sidebarWidth = sidebarCollapsed ? MIN_WIDTH : customWidth;
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop */}
       <aside
-        className={cn(
-          "hidden md:block shrink-0 border-r border-sidebar-border min-h-screen sticky top-0 overflow-y-auto bg-sidebar transition-all duration-200 ease-in-out",
-          sidebarCollapsed ? "w-14" : "w-64"
-        )}
+        className="hidden md:block shrink-0 min-h-screen sticky top-0 overflow-hidden bg-white border-r border-gray-100 transition-[width] duration-200 ease-in-out relative"
+        style={{ width: sidebarWidth }}
       >
         <SidebarContent
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebarCollapsed}
         />
+        {!sidebarCollapsed && (
+          <ResizeHandle onResize={handleResize} onResizeEnd={handleResizeEnd} />
+        )}
       </aside>
 
-      {/* Mobile drawer — always expanded */}
+      {/* Mobile */}
       <Sheet open={mobileOpen} onOpenChange={onMobileClose}>
-        <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
+        <SheetContent side="left" className="w-72 p-0 border-0" showCloseButton={false}>
           <SidebarContent collapsed={false} onNavigate={onMobileClose} />
         </SheetContent>
       </Sheet>
