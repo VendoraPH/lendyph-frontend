@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, CalendarIcon, Info } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { borrowerService, coMakerService, loanProductService, loanService } from "@/services";
+import type { Borrower, CoMaker } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -48,169 +52,7 @@ const formatCurrency = (amount: number) =>
     amount
   );
 
-// ── Mock Data ──
-
-const MOCK_BORROWERS = [
-  {
-    id: 1,
-    borrower_code: "BRW-20260001",
-    full_name: "Rosario D. Santos",
-    phone: "09171234567",
-    status: "active",
-  },
-  {
-    id: 2,
-    borrower_code: "BRW-20260002",
-    full_name: "Roberto Garcia",
-    phone: "09181234567",
-    status: "active",
-  },
-  {
-    id: 3,
-    borrower_code: "BRW-20260003",
-    full_name: "Maria L. Reyes",
-    phone: "09191234567",
-    status: "active",
-  },
-  {
-    id: 4,
-    borrower_code: "BRW-20260004",
-    full_name: "Eduardo Mendoza",
-    phone: "09201234567",
-    status: "active",
-  },
-  {
-    id: 5,
-    borrower_code: "BRW-20260005",
-    full_name: "Carmen A. Torres",
-    phone: "09211234567",
-    status: "inactive",
-  },
-  {
-    id: 6,
-    borrower_code: "BRW-20260006",
-    full_name: "Danilo Villanueva",
-    phone: "09221234567",
-    status: "blacklisted",
-  },
-] as const;
-
-const MOCK_CO_MAKERS: Record<
-  number,
-  { id: number; full_name: string; relationship: string }[]
-> = {
-  1: [{ id: 1, full_name: "Ricardo Santos", relationship: "Spouse" }],
-  2: [
-    { id: 2, full_name: "Elena Garcia", relationship: "Spouse" },
-    { id: 3, full_name: "Pedro Garcia", relationship: "Sibling" },
-  ],
-  3: [],
-  4: [{ id: 4, full_name: "Gloria Mendoza", relationship: "Sister" }],
-  5: [],
-  6: [{ id: 5, full_name: "Rosa Villanueva", relationship: "Spouse" }],
-};
-
-const MOCK_PRODUCTS: LoanProduct[] = [
-  {
-    id: 1,
-    name: "Salary Loan",
-    description: "Short-term loan for employed individuals",
-    min_amount: 5000,
-    max_amount: 50000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    min_term: 1,
-    max_term: 12,
-    payment_frequency: "monthly",
-    processing_fee: 2,
-    service_fee: 1,
-    penalty_rate: 0.5,
-    grace_period: 3,
-    is_active: true,
-    created_at: "2026-01-15",
-    updated_at: "2026-01-15",
-  },
-  {
-    id: 2,
-    name: "Business Loan",
-    description: "Working capital for SMEs",
-    min_amount: 50000,
-    max_amount: 500000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    min_term: 6,
-    max_term: 36,
-    payment_frequency: "monthly",
-    processing_fee: 3,
-    service_fee: 1.5,
-    penalty_rate: 0.3,
-    grace_period: 5,
-    is_active: true,
-    created_at: "2026-01-20",
-    updated_at: "2026-01-20",
-  },
-  {
-    id: 3,
-    name: "Emergency Loan",
-    description: "Quick-release for urgent needs",
-    min_amount: 1000,
-    max_amount: 20000,
-    interest_rate: 5,
-    interest_type: "fixed",
-    min_term: 1,
-    max_term: 3,
-    payment_frequency: "weekly",
-    processing_fee: 1,
-    service_fee: 0,
-    penalty_rate: 1,
-    grace_period: 1,
-    is_active: true,
-    created_at: "2026-02-01",
-    updated_at: "2026-02-01",
-  },
-  {
-    id: 4,
-    name: "Agricultural Loan",
-    description: "Crop financing and farm equipment",
-    min_amount: 20000,
-    max_amount: 200000,
-    interest_rate: 2.5,
-    interest_type: "fixed",
-    min_term: 3,
-    max_term: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2,
-    service_fee: 1,
-    penalty_rate: 0.3,
-    grace_period: 7,
-    is_active: true,
-    created_at: "2026-02-10",
-    updated_at: "2026-02-10",
-  },
-  {
-    id: 5,
-    name: "OFW Loan",
-    description: "Pre-departure and family assistance",
-    min_amount: 30000,
-    max_amount: 300000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    min_term: 6,
-    max_term: 24,
-    payment_frequency: "monthly",
-    processing_fee: 2.5,
-    service_fee: 1,
-    penalty_rate: 0.5,
-    grace_period: 5,
-    is_active: true,
-    created_at: "2026-02-20",
-    updated_at: "2026-02-20",
-  },
-];
-
 // ── Helpers ──
-
-const APPLICATION_NUMBER = "LA-20260001";
 
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
 type InterestType = "fixed" | "diminishing" | "upon_maturity";
@@ -321,6 +163,15 @@ function computeAmortization(
 // ── Main Page Component ──
 
 export default function NewLoanApplicationPage() {
+  const router = useRouter();
+
+  // ── API Data ──
+  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
+  const [products, setProducts] = useState<LoanProduct[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerId, setCoMakerId] = useState<number | null>(null);
@@ -348,15 +199,48 @@ export default function NewLoanApplicationPage() {
   );
   const [otherDeductions, setOtherDeductions] = useState<string>("0");
 
+  // ── Fetch borrowers and products on mount ──
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoadingData(true);
+        const [borrowersRes, productsRes] = await Promise.all([
+          borrowerService.list({ per_page: 200 }),
+          loanProductService.list(),
+        ]);
+        const borrowerData = Array.isArray(borrowersRes) ? borrowersRes : (borrowersRes as { data: Borrower[] }).data ?? [];
+        setBorrowers(borrowerData);
+        setProducts(Array.isArray(productsRes) ? productsRes : []);
+      } catch {
+        toast.error("Failed to load form data");
+      } finally {
+        setLoadingData(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // ── Fetch co-makers when borrower changes ──
+  useEffect(() => {
+    if (!borrowerId) {
+      setCoMakers([]);
+      return;
+    }
+    async function fetchCoMakers() {
+      try {
+        const res = await coMakerService.list(borrowerId!);
+        setCoMakers(Array.isArray(res) ? res : []);
+      } catch {
+        setCoMakers([]);
+      }
+    }
+    fetchCoMakers();
+  }, [borrowerId]);
+
   // ── Derived ──
   const selectedProduct = useMemo(
-    () => MOCK_PRODUCTS.find((p) => p.id === productId) ?? null,
-    [productId]
-  );
-
-  const coMakers = useMemo(
-    () => (borrowerId ? MOCK_CO_MAKERS[borrowerId] ?? [] : []),
-    [borrowerId]
+    () => products.find((p) => p.id === productId) ?? null,
+    [productId, products]
   );
 
   const principal = parseFloat(principalAmount) || 0;
@@ -454,7 +338,7 @@ export default function NewLoanApplicationPage() {
   const handleProductChange = useCallback(
     (id: number | null) => {
       setProductId(id);
-      const product = MOCK_PRODUCTS.find((p) => p.id === id);
+      const product = products.find((p) => p.id === id);
       if (product) {
         setInterestRate(String(product.interest_rate));
         setInterestType(product.interest_type);
@@ -463,7 +347,7 @@ export default function NewLoanApplicationPage() {
         setServiceFeeOverride(null);
       }
     },
-    []
+    [products]
   );
 
   // ── Borrower Selection Handler ──
@@ -485,14 +369,42 @@ export default function NewLoanApplicationPage() {
     rate > 0 &&
     releaseDate !== undefined;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-
-    const borrower = MOCK_BORROWERS.find((b) => b.id === borrowerId);
-    toast.success("Loan Application Submitted", {
-      description: `Application ${APPLICATION_NUMBER} for ${borrower?.full_name} — ${formatCurrency(principal)} has been submitted successfully.`,
-    });
+  const handleSubmit = async () => {
+    if (!canSubmit || !releaseDate) return;
+    try {
+      setSubmitting(true);
+      const payload = {
+        borrower_id: borrowerId,
+        co_maker_ids: coMakerId ? [coMakerId] : [],
+        loan_product_id: productId,
+        principal_amount: principal,
+        interest_rate: rate,
+        start_date: formatDateISO(releaseDate),
+      };
+      const loan = await loanService.create(payload);
+      toast.success("Loan Application Created", {
+        description: `Loan application has been created successfully.`,
+      });
+      router.push(`/loans/${loan.id}`);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } };
+      if (axiosErr?.response?.status === 422) {
+        toast.error(axiosErr.response.data?.message ?? "Validation error. Please check your inputs.");
+      } else {
+        toast.error("Failed to create loan application");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loadingData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
@@ -509,12 +421,6 @@ export default function NewLoanApplicationPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             New Loan Application
           </h1>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          Application No.{" "}
-          <span className="font-mono font-semibold text-foreground">
-            {APPLICATION_NUMBER}
-          </span>
         </div>
       </div>
 
@@ -538,7 +444,7 @@ export default function NewLoanApplicationPage() {
                   <SelectValue placeholder="Select a borrower" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MOCK_BORROWERS.map((b) => (
+                  {borrowers.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.full_name}{" "}
                       <span className="text-muted-foreground">
@@ -615,7 +521,7 @@ export default function NewLoanApplicationPage() {
                 <SelectValue placeholder="Select a loan product" />
               </SelectTrigger>
               <SelectContent>
-                {MOCK_PRODUCTS.map((p) => (
+                {products.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
                     {p.description && (
@@ -954,10 +860,10 @@ export default function NewLoanApplicationPage() {
         <Button
           size="lg"
           className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark sm:w-auto"
-          disabled={!canSubmit}
+          disabled={!canSubmit || submitting}
           onClick={handleSubmit}
         >
-          Submit Loan Application
+          {submitting ? "Submitting..." : "Submit Loan Application"}
         </Button>
       </div>
     </div>
