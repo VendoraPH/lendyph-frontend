@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, use } from "react";
+import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
+import { loanService, loanDocumentService, loanAdjustmentService, repaymentService } from "@/services";
+import type { LoanSchedule } from "@/types/loan";
+import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,9 +33,16 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Spinner } from "@/components/ui/spinner";
 import {
   ArrowLeft,
   Check,
@@ -47,16 +59,17 @@ import {
   XCircle,
   AlertCircle,
   CalendarIcon,
+  Download,
+  Plus,
+  DollarSign,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
-import { loanService } from "@/services/loan.service";
-import { toast } from "sonner";
 import type { Loan, LoanStatus } from "@/types/loan";
-import type { ApiAmortizationSchedule, ApiScheduleRow } from "@/lib/amortization";
 
 // ── Currency & Date Formatters ──
 
@@ -91,12 +104,12 @@ const formatDateObj = (date: Date) =>
 
 const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
 
-// ── Local helpers for release preview ──
+// ── Amortization Schedule Helpers ──
 
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
 type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
-interface PreviewRow {
+interface AmortizationRow {
   period: number;
   dueDate: Date;
   principal: number;
@@ -131,38 +144,38 @@ function getIntervalDays(frequency: PaymentFrequency): number {
   }
 }
 
-function addMonthsLocal(date: Date, months: number): Date {
+function addMonths(date: Date, months: number): Date {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
   return result;
 }
 
-function addDaysLocal(date: Date, days: number): Date {
+function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-function generatePreviewSchedule(
+function generateSchedule(
   principal: number,
   rate: number,
   termMonths: number,
   frequency: PaymentFrequency,
   interestType: InterestType,
   startDate: Date,
-): PreviewRow[] {
+): AmortizationRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
   const principalPerPeriod = principal / totalPeriods;
-  const rows: PreviewRow[] = [];
+  const rows: AmortizationRow[] = [];
 
   let remainingBalance = principal;
 
   for (let i = 1; i <= totalPeriods; i++) {
     const dueDate =
       frequency === "monthly"
-        ? addMonthsLocal(startDate, i)
-        : addDaysLocal(startDate, i * intervalDays);
+        ? addMonths(startDate, i)
+        : addDays(startDate, i * intervalDays);
 
     let interest: number;
     if (interestType === "fixed") {
@@ -201,20 +214,6 @@ const statusColors: Record<string, string> = {
   closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
 };
 
-const scheduleStatusColors: Record<string, string> = {
-  paid: "bg-green-50 text-green-700",
-  partial: "bg-amber-50 text-amber-700",
-  overdue: "bg-red-50 text-red-700",
-  pending: "",
-};
-
-const scheduleStatusBadgeColors: Record<string, string> = {
-  paid: "bg-green-100 text-green-700 border-green-200",
-  partial: "bg-amber-100 text-amber-700 border-amber-200",
-  overdue: "bg-red-100 text-red-700 border-red-200",
-  pending: "bg-gray-100 text-gray-600 border-gray-200",
-};
-
 // ── Workflow Steps ──
 
 const WORKFLOW_STEPS: { status: LoanStatus; label: string }[] = [
@@ -231,36 +230,6 @@ function getStepIndex(status: LoanStatus): number {
   // For closed/defaulted/restructured, treat as completed-level
   if (idx === -1) return WORKFLOW_STEPS.length - 1;
   return idx;
-}
-
-// ── Helper: resolve borrower/co-maker name from API response ──
-
-function getBorrowerName(loan: Loan): string {
-  // API may return nested borrower object or flat borrower_name
-  const anyLoan = loan as unknown as Record<string, unknown>;
-  if (anyLoan.borrower && typeof anyLoan.borrower === "object") {
-    const borrower = anyLoan.borrower as Record<string, unknown>;
-    if (borrower.full_name) return String(borrower.full_name);
-  }
-  return loan.borrower_name ?? "N/A";
-}
-
-function getCoMakerName(loan: Loan): string {
-  const anyLoan = loan as unknown as Record<string, unknown>;
-  if (anyLoan.co_maker && typeof anyLoan.co_maker === "object") {
-    const coMaker = anyLoan.co_maker as Record<string, unknown>;
-    if (coMaker.full_name) return String(coMaker.full_name);
-  }
-  return loan.co_maker_name ?? "None";
-}
-
-function getLoanProductName(loan: Loan): string {
-  const anyLoan = loan as unknown as Record<string, unknown>;
-  if (anyLoan.loan_product && typeof anyLoan.loan_product === "object") {
-    const product = anyLoan.loan_product as Record<string, unknown>;
-    if (product.name) return String(product.name);
-  }
-  return loan.loan_product_name ?? "N/A";
 }
 
 // ── Status Stepper Component ──
@@ -490,10 +459,98 @@ export default function LoanDetailPage({
   const { id } = use(params);
   const loanId = Number(id);
 
-  const [loan, setLoan] = useState<Loan | null>(null);
-  const [schedule, setSchedule] = useState<ApiAmortizationSchedule | null>(null);
+  const [loan, setLoan] = useState<Loan | undefined>();
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+
+  // Repayments state
+  const [repayments, setRepayments] = useState<Repayment[]>([]);
+  const [repaymentsLoading, setRepaymentsLoading] = useState(false);
+  const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const [paymentDate, setPaymentDate] = useState<Date>(new Date());
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentRemarks, setPaymentRemarks] = useState("");
+  const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
+
+  // Loan Adjustments state
+  const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
+  const [adjustmentsLoading, setAdjustmentsLoading] = useState(false);
+  const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
+  const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
+  const [adjDescription, setAdjDescription] = useState("");
+  const [adjRemarks, setAdjRemarks] = useState("");
+  const [adjNewValues, setAdjNewValues] = useState("");
+
+  // Loan Documents state
+  const [docLoading, setDocLoading] = useState<string | null>(null);
+
+  // Fetch loan on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLoan() {
+      try {
+        setLoading(true);
+        const data = await loanService.detail(loanId);
+        if (!cancelled) setLoan(data);
+      } catch {
+        if (!cancelled) toast.error("Failed to load loan details");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchLoan();
+    return () => { cancelled = true; };
+  }, [loanId]);
+
+  // Fetch schedule for released+ loans
+  const fetchSchedule = useCallback(async (id: number) => {
+    try {
+      const schedule = await loanService.schedule(id);
+      setApiSchedule(Array.isArray(schedule) ? schedule : []);
+    } catch {
+      setApiSchedule(null); // fallback to client-side generation
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
+      fetchSchedule(loan.id);
+    }
+  }, [loan?.id, loan?.status, fetchSchedule]);
+
+  // Fetch repayments for released+ loans
+  const fetchRepayments = useCallback(async (id: number) => {
+    try {
+      setRepaymentsLoading(true);
+      const res = await repaymentService.list(id);
+      setRepayments(Array.isArray(res) ? res : res.data ?? []);
+    } catch {
+      // silently fail
+    } finally {
+      setRepaymentsLoading(false);
+    }
+  }, []);
+
+  // Fetch adjustments for released+ loans
+  const fetchAdjustments = useCallback(async (id: number) => {
+    try {
+      setAdjustmentsLoading(true);
+      const res = await loanAdjustmentService.list(id);
+      setAdjustments(Array.isArray(res) ? res : []);
+    } catch {
+      // silently fail
+    } finally {
+      setAdjustmentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
+      fetchRepayments(loan.id);
+      fetchAdjustments(loan.id);
+    }
+  }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments]);
 
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
@@ -506,99 +563,10 @@ export default function LoanDetailPage({
   const [rejectionRemarks, setRejectionRemarks] = useState("");
   const [releaseDate, setReleaseDate] = useState<Date>(new Date());
 
-  // ── Data Fetching ──
-
-  const fetchLoan = useCallback(async () => {
-    try {
-      const data = await loanService.detail(loanId);
-      setLoan(Array.isArray(data) ? null : data);
-
-      // Fetch schedule for released/ongoing/completed/defaulted loans
-      if (data && !Array.isArray(data) && ["released", "ongoing", "completed", "defaulted"].includes(data.status)) {
-        try {
-          const scheduleData = await loanService.amortizationSchedule(loanId);
-          setSchedule(scheduleData);
-        } catch {
-          // Schedule might not be available yet
-        }
-      }
-    } catch {
-      toast.error("Failed to load loan details");
-    } finally {
-      setLoading(false);
-    }
-  }, [loanId]);
-
-  useEffect(() => {
-    fetchLoan();
-  }, [fetchLoan]);
-
-  // ── Workflow Actions ──
-
-  const handleSubmitForReview = async () => {
-    setActionLoading(true);
-    try {
-      await loanService.submit(loanId);
-      toast.success("Loan submitted for review");
-      setSubmitOpen(false);
-      fetchLoan();
-    } catch {
-      toast.error("Failed to submit loan");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleApprove = async () => {
-    setActionLoading(true);
-    try {
-      await loanService.approve(loanId, approvalRemarks ? { approval_remarks: approvalRemarks } : undefined);
-      toast.success("Loan approved");
-      setApprovalRemarks("");
-      setApproveOpen(false);
-      fetchLoan();
-    } catch {
-      toast.error("Failed to approve loan");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectionRemarks.trim()) return;
-    setActionLoading(true);
-    try {
-      await loanService.reject(loanId, { approval_remarks: rejectionRemarks });
-      toast.success("Loan rejected");
-      setRejectionRemarks("");
-      setRejectOpen(false);
-      fetchLoan();
-    } catch {
-      toast.error("Failed to reject loan");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRelease = async () => {
-    setActionLoading(true);
-    try {
-      await loanService.release(loanId);
-      toast.success("Loan released successfully");
-      setReleaseOpen(false);
-      fetchLoan();
-    } catch {
-      toast.error("Failed to release loan");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // ── Release Preview Schedule (local computation) ──
-
+  // Amortization schedule preview for release dialog
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
-    return generatePreviewSchedule(
+    return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
       loan.term_months,
@@ -622,23 +590,56 @@ export default function LoanDetailPage({
   // Maturity date computed from release date + term
   const computedMaturityDate = useMemo(() => {
     if (!loan) return null;
-    return addMonthsLocal(releaseDate, loan.term_months);
+    return addMonths(releaseDate, loan.term_months);
   }, [releaseDate, loan?.term_months]);
+
+  // Post-release: prefer API schedule, fallback to client-side generation
+  const storedSchedule = useMemo(() => {
+    if (!loan || !loan.release_date) return [];
+    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+    if (!isReleased) return [];
+    // Use API schedule if available, map to display format
+    if (apiSchedule && apiSchedule.length > 0) {
+      return apiSchedule.map((row, idx) => ({
+        period: idx + 1,
+        dueDate: new Date(row.due_date),
+        principal: row.principal,
+        interest: row.interest,
+        totalPayment: row.amount_due,
+        balance: row.balance,
+      }));
+    }
+    // Fallback to client-side generation
+    return generateSchedule(
+      loan.principal_amount,
+      loan.interest_rate,
+      loan.term_months,
+      loan.payment_frequency,
+      loan.interest_type,
+      new Date(loan.release_date),
+    );
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status, apiSchedule]);
+
+  const storedScheduleTotals = useMemo(() => {
+    return storedSchedule.reduce(
+      (acc, row) => ({
+        principal: acc.principal + row.principal,
+        interest: acc.interest + row.interest,
+        totalPayment: acc.totalPayment + row.totalPayment,
+      }),
+      { principal: 0, interest: 0, totalPayment: 0 },
+    );
+  }, [storedSchedule]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
-  // ── Loading State ──
-
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Spinner className="h-8 w-8" />
-        <p className="text-muted-foreground">Loading loan details...</p>
+      <div className="flex items-center justify-center h-64">
+        <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
   }
-
-  // ── Not Found State ──
 
   if (!loan) {
     return (
@@ -658,9 +659,189 @@ export default function LoanDetailPage({
     );
   }
 
-  const borrowerName = getBorrowerName(loan);
-  const coMakerName = getCoMakerName(loan);
-  const loanProductName = getLoanProductName(loan);
+  const handleSubmitForReview = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.submit(loan.id);
+      setLoan(updated);
+      toast.success("Loan submitted for review");
+      setSubmitOpen(false);
+    } catch {
+      toast.error("Failed to submit loan for review");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.approve(loan.id, {
+        approval_remarks: approvalRemarks || undefined,
+      });
+      setLoan(updated);
+      toast.success("Loan approved");
+      setApprovalRemarks("");
+      setApproveOpen(false);
+    } catch {
+      toast.error("Failed to approve loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionRemarks.trim()) return;
+    try {
+      setActionLoading(true);
+      const updated = await loanService.reject(loan.id, {
+        approval_remarks: rejectionRemarks,
+      });
+      setLoan(updated);
+      toast.success("Loan rejected");
+      setRejectionRemarks("");
+      setRejectOpen(false);
+    } catch {
+      toast.error("Failed to reject loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRelease = async () => {
+    try {
+      setActionLoading(true);
+      const updated = await loanService.release(loan.id);
+      setLoan(updated);
+      toast.success("Loan released successfully");
+      setReleaseOpen(false);
+      // Fetch the server-generated schedule
+      fetchSchedule(loan.id);
+    } catch {
+      toast.error("Failed to release loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Repayment Handlers ──
+
+  const handleRecordPayment = async () => {
+    if (!paymentAmount || Number(paymentAmount) <= 0) return;
+    try {
+      setActionLoading(true);
+      await repaymentService.create(loan.id, {
+        payment_date: formatDateISO(paymentDate),
+        amount_paid: Number(paymentAmount),
+        remarks: paymentRemarks || undefined,
+      });
+      toast.success("Payment recorded");
+      setRecordPaymentOpen(false);
+      setPaymentAmount("");
+      setPaymentRemarks("");
+      setPaymentDate(new Date());
+      fetchRepayments(loan.id);
+      const updated = await loanService.detail(loan.id);
+      setLoan(updated);
+    } catch {
+      toast.error("Failed to record payment");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleVoidRepayment = async (repaymentId: number) => {
+    const reason = prompt("Reason for voiding this payment:");
+    if (!reason?.trim()) return;
+    try {
+      setActionLoading(true);
+      await repaymentService.void(repaymentId, { void_reason: reason });
+      toast.success("Payment voided");
+      fetchRepayments(loan.id);
+      const updated = await loanService.detail(loan.id);
+      setLoan(updated);
+    } catch {
+      toast.error("Failed to void payment");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Loan Adjustment Handlers ──
+
+  const handleCreateAdjustment = async () => {
+    let parsedValues: Record<string, unknown>;
+    try {
+      parsedValues = JSON.parse(adjNewValues || "{}");
+    } catch {
+      toast.error("New values must be valid JSON");
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await loanAdjustmentService.create(loan.id, {
+        adjustment_type: adjType,
+        new_values: parsedValues,
+        description: adjDescription || undefined,
+        remarks: adjRemarks || undefined,
+      });
+      toast.success("Adjustment created");
+      setCreateAdjustmentOpen(false);
+      setAdjDescription("");
+      setAdjRemarks("");
+      setAdjNewValues("");
+      fetchAdjustments(loan.id);
+    } catch {
+      toast.error("Failed to create adjustment");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAdjustmentAction = async (adjId: number, action: "approve" | "reject" | "apply") => {
+    try {
+      setActionLoading(true);
+      if (action === "approve") {
+        const remarks = prompt("Approval remarks (optional):");
+        await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
+        toast.success("Adjustment approved");
+      } else if (action === "reject") {
+        const remarks = prompt("Rejection remarks:");
+        if (!remarks?.trim()) return;
+        await loanAdjustmentService.reject(adjId, { remarks });
+        toast.success("Adjustment rejected");
+      } else {
+        await loanAdjustmentService.apply(adjId);
+        toast.success("Adjustment applied");
+        const updated = await loanService.detail(loan.id);
+        setLoan(updated);
+      }
+      fetchAdjustments(loan.id);
+    } catch {
+      toast.error(`Failed to ${action} adjustment`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Loan Document Handlers ──
+
+  const handleDownloadDocument = async (type: "disclosure" | "promissory-note") => {
+    try {
+      setDocLoading(type);
+      const data = type === "disclosure"
+        ? await loanDocumentService.disclosure(loan.id)
+        : await loanDocumentService.promissoryNote(loan.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      toast.success(`${type === "disclosure" ? "Disclosure Statement" : "Promissory Note"} opened`);
+    } catch {
+      toast.error(`Failed to load ${type === "disclosure" ? "disclosure statement" : "promissory note"}`);
+    } finally {
+      setDocLoading(null);
+    }
+  };
 
   const totalDeductions =
     (loan.processing_fee ?? 0) +
@@ -710,7 +891,7 @@ export default function LoanDetailPage({
                 </Badge>
               )}
             </div>
-            <p className="text-lg text-foreground">{borrowerName}</p>
+            <p className="text-lg text-foreground">{loan.borrower_name}</p>
           </div>
         </div>
       </div>
@@ -832,7 +1013,7 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Loan Product</p>
                 <p className="text-sm font-medium">
-                  {loanProductName}
+                  {loan.loan_product_name ?? "N/A"}
                 </p>
               </div>
               <div className="col-span-2">
@@ -973,13 +1154,13 @@ export default function LoanDetailPage({
             <div>
               <p className="text-xs text-muted-foreground">Borrower</p>
               <p className="text-sm font-medium">
-                {borrowerName}
+                {loan.borrower_name ?? "N/A"}
               </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Co-Maker</p>
               <p className="text-sm font-medium">
-                {coMakerName}
+                {loan.co_maker_name ?? "None"}
               </p>
             </div>
           </CardContent>
@@ -1035,8 +1216,8 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Amortization Schedule — from API for released+ loans */}
-      {schedule && schedule.schedule.length > 0 && (
+      {/* Amortization Schedule — only for released+ loans */}
+      {storedSchedule.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1045,35 +1226,6 @@ export default function LoanDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Summary badges */}
-            {schedule.summary && (
-              <div className="flex flex-wrap gap-3 mb-4">
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Paid: </span>
-                  <span className="font-semibold text-green-700">{schedule.summary.paid_periods}</span>
-                </div>
-                {schedule.summary.partial_periods > 0 && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Partial: </span>
-                    <span className="font-semibold text-amber-700">{schedule.summary.partial_periods}</span>
-                  </div>
-                )}
-                {schedule.summary.overdue_periods > 0 && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Overdue: </span>
-                    <span className="font-semibold text-red-700">{schedule.summary.overdue_periods}</span>
-                  </div>
-                )}
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Remaining: </span>
-                  <span className="font-semibold">{schedule.summary.unpaid_periods}</span>
-                </div>
-                <div className="ml-auto text-xs">
-                  <span className="text-muted-foreground">Total Paid: </span>
-                  <span className="font-semibold text-green-700">{formatCurrency(schedule.summary.total_paid)}</span>
-                </div>
-              </div>
-            )}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -1082,46 +1234,245 @@ export default function LoanDetailPage({
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    <TableHead className="text-right">Penalty</TableHead>
-                    <TableHead className="text-right">Total Due</TableHead>
+                    <TableHead className="text-right">Total Payment</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {schedule.schedule.map((row: ApiScheduleRow) => (
-                    <TableRow key={row.id ?? row.period_number} className={scheduleStatusColors[row.status]}>
-                      <TableCell className="text-center">{row.period_number}</TableCell>
-                      <TableCell>{formatDate(row.due_date)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.penalty_amount)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(row.total_due)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.remaining_balance)}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn("text-xs capitalize", scheduleStatusBadgeColors[row.status])}
-                        >
-                          {row.status}
-                        </Badge>
-                      </TableCell>
+                  {storedSchedule.map((row) => (
+                    <TableRow key={row.period}>
+                      <TableCell className="text-center">{row.period}</TableCell>
+                      <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
                 <TableFooter>
                   <TableRow>
                     <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(schedule.summary.total_principal)}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(schedule.summary.total_interest)}</TableCell>
-                    <TableCell />
-                    <TableCell className="text-right font-bold">{formatCurrency(schedule.summary.total_payable)}</TableCell>
-                    <TableCell />
+                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                    <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableFooter>
               </Table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loan Documents — only for approved+ loans */}
+      {loan.status !== "draft" && loan.status !== "for_review" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Loan Documents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleDownloadDocument("disclosure")}
+                disabled={docLoading !== null}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {docLoading === "disclosure" ? "Loading..." : "Disclosure Statement"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleDownloadDocument("promissory-note")}
+                disabled={docLoading !== null}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {docLoading === "promissory-note" ? "Loading..." : "Promissory Note"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Repayments — only for released+ loans */}
+      {isLocked && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                Repayments
+              </CardTitle>
+              {["released", "ongoing"].includes(loan.status) && (
+                <Button
+                  size="sm"
+                  className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                  onClick={() => setRecordPaymentOpen(true)}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Record Payment
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {repaymentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="size-5 text-muted-foreground" />
+              </div>
+            ) : repayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No repayments recorded yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Remarks</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-20" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {repayments.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>{formatDate(r.payment_date)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(r.amount_paid)}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.remarks ?? "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={r.status === "voided" ? "destructive" : "default"} className="text-xs">
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {r.status !== "voided" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 text-xs"
+                              onClick={() => handleVoidRepayment(r.id)}
+                              disabled={actionLoading}
+                            >
+                              Void
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loan Adjustments — only for released+ loans */}
+      {isLocked && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                Loan Adjustments
+              </CardTitle>
+              {["released", "ongoing"].includes(loan.status) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCreateAdjustmentOpen(true)}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  New Adjustment
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {adjustmentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="size-5 text-muted-foreground" />
+              </div>
+            ) : adjustments.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No adjustments.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="w-32" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adjustments.map((adj) => (
+                      <TableRow key={adj.id}>
+                        <TableCell className="capitalize text-sm">{adj.adjustment_type.replace(/_/g, " ")}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{adj.description ?? "—"}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              adj.status === "approved" ? "default" :
+                              adj.status === "rejected" ? "destructive" :
+                              adj.status === "applied" ? "secondary" :
+                              "outline"
+                            }
+                            className="text-xs"
+                          >
+                            {adj.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{formatDate(adj.created_at)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {adj.status === "pending" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-green-600 hover:text-green-700 text-xs"
+                                  onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                                  disabled={actionLoading}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 text-xs"
+                                  onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                                  disabled={actionLoading}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {adj.status === "approved" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-brand-orange hover:text-brand-orange-dark text-xs"
+                                onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                                disabled={actionLoading}
+                              >
+                                Apply
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1139,15 +1490,13 @@ export default function LoanDetailPage({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setSubmitOpen(false)} disabled={actionLoading}>
+            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
               Cancel
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleSubmitForReview}
-              disabled={actionLoading}
             >
-              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <Send className="mr-2 h-4 w-4" />
               Submit
             </Button>
@@ -1163,7 +1512,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to approve{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{borrowerName}</span>.
+              <span className="font-medium">{loan.borrower_name}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">
@@ -1179,15 +1528,13 @@ export default function LoanDetailPage({
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setApproveOpen(false)} disabled={actionLoading}>
+            <Button variant="outline" onClick={() => setApproveOpen(false)}>
               Cancel
             </Button>
             <Button
               className="bg-green-600 text-white hover:bg-green-700"
               onClick={handleApprove}
-              disabled={actionLoading}
             >
-              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Approve
             </Button>
@@ -1203,7 +1550,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to reject{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{borrowerName}</span>. Please
+              <span className="font-medium">{loan.borrower_name}</span>. Please
               provide a reason.
             </DialogDescription>
           </DialogHeader>
@@ -1224,15 +1571,14 @@ export default function LoanDetailPage({
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={actionLoading}>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={!rejectionRemarks.trim() || actionLoading}
+              disabled={!rejectionRemarks.trim()}
             >
-              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <XCircle className="mr-2 h-4 w-4" />
               Reject
             </Button>
@@ -1261,11 +1607,11 @@ export default function LoanDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Borrower</p>
-                  <p className="text-sm font-medium">{borrowerName}</p>
+                  <p className="text-sm font-medium">{loan.borrower_name}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Loan Product</p>
-                  <p className="text-sm font-medium">{loanProductName}</p>
+                  <p className="text-sm font-medium">{loan.loan_product_name ?? "N/A"}</p>
                 </div>
               </div>
 
@@ -1398,17 +1744,159 @@ export default function LoanDetailPage({
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setReleaseOpen(false)} disabled={actionLoading}>
+            <Button variant="outline" onClick={() => setReleaseOpen(false)}>
               Cancel
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRelease}
-              disabled={actionLoading}
             >
-              {actionLoading && <Spinner className="mr-2 h-4 w-4" />}
               <Unlock className="mr-2 h-4 w-4" />
               Confirm Release
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={recordPaymentOpen} onOpenChange={setRecordPaymentOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>
+              Record a repayment for loan {loan.loan_account_number || loan.application_number}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Payment Date</Label>
+              <Popover open={paymentDatePickerOpen} onOpenChange={setPaymentDatePickerOpen}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    />
+                  }
+                >
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  <span>{formatDateObj(paymentDate)}</span>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={paymentDate}
+                    onSelect={(date) => {
+                      if (date) setPaymentDate(date);
+                      setPaymentDatePickerOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="payment-amount">Amount <span className="text-red-500">*</span></Label>
+              <Input
+                id="payment-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="payment-remarks">Remarks (optional)</Label>
+              <Textarea
+                id="payment-remarks"
+                placeholder="Add notes about this payment..."
+                value={paymentRemarks}
+                onChange={(e) => setPaymentRemarks(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setRecordPaymentOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              onClick={handleRecordPayment}
+              disabled={actionLoading || !paymentAmount || Number(paymentAmount) <= 0}
+            >
+              <DollarSign className="mr-2 h-4 w-4" />
+              Record Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Adjustment Dialog */}
+      <Dialog open={createAdjustmentOpen} onOpenChange={setCreateAdjustmentOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Loan Adjustment</DialogTitle>
+            <DialogDescription>
+              Submit an adjustment request for loan {loan.loan_account_number || loan.application_number}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Adjustment Type <span className="text-red-500">*</span></Label>
+              <Select value={adjType} onValueChange={(v) => setAdjType(v as LoanAdjustmentType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="restructure">Restructure</SelectItem>
+                  <SelectItem value="penalty_waiver">Penalty Waiver</SelectItem>
+                  <SelectItem value="balance_adjustment">Balance Adjustment</SelectItem>
+                  <SelectItem value="term_extension">Term Extension</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adj-description">Description</Label>
+              <Input
+                id="adj-description"
+                placeholder="Brief description of the adjustment"
+                value={adjDescription}
+                onChange={(e) => setAdjDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adj-new-values">New Values (JSON) <span className="text-red-500">*</span></Label>
+              <Textarea
+                id="adj-new-values"
+                placeholder='e.g. {"interest_rate": 2.5, "term_months": 12}'
+                value={adjNewValues}
+                onChange={(e) => setAdjNewValues(e.target.value)}
+                className="font-mono text-sm"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adj-remarks">Remarks</Label>
+              <Textarea
+                id="adj-remarks"
+                placeholder="Additional notes..."
+                value={adjRemarks}
+                onChange={(e) => setAdjRemarks(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setCreateAdjustmentOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              onClick={handleCreateAdjustment}
+              disabled={actionLoading || !adjNewValues.trim()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Submit Adjustment
             </Button>
           </div>
         </DialogContent>

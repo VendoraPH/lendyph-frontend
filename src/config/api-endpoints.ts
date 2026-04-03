@@ -59,6 +59,24 @@ export const API_ENDPOINTS = {
     VOID: (id: number) => `/loans/${id}/void`,
     AMORTIZATION_SCHEDULE: (id: number) => `/loans/${id}/amortization-schedule`,
   },
+  LOAN_DOCUMENTS: {
+    DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
+    PROMISSORY_NOTE: (loanId: number) => `/loans/${loanId}/promissory-note`,
+  },
+  LOAN_ADJUSTMENTS: {
+    LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
+    CREATE: (loanId: number) => `/loans/${loanId}/adjustments`,
+    DETAIL: (id: number) => `/loan-adjustments/${id}`,
+    APPROVE: (id: number) => `/loan-adjustments/${id}/approve`,
+    REJECT: (id: number) => `/loan-adjustments/${id}/reject`,
+    APPLY: (id: number) => `/loan-adjustments/${id}/apply`,
+  },
+  REPAYMENTS: {
+    LIST: (loanId: number) => `/loans/${loanId}/repayments`,
+    CREATE: (loanId: number) => `/loans/${loanId}/repayments`,
+    DETAIL: (id: number) => `/repayments/${id}`,
+    VOID: (id: number) => `/repayments/${id}/void`,
+  },
   LOAN_PRODUCTS: {
     LIST: "/loan-products",
     CREATE: "/loan-products",
