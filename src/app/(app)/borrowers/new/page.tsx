@@ -39,6 +39,11 @@ interface BorrowerFormData {
   employer_or_business: string;
   monthly_income: string;
   branch_id: string;
+  spouse_first_name: string;
+  spouse_middle_name: string;
+  spouse_last_name: string;
+  spouse_contact_number: string;
+  spouse_occupation: string;
 }
 
 function emptyForm(): BorrowerFormData {
@@ -56,6 +61,11 @@ function emptyForm(): BorrowerFormData {
     employer_or_business: "",
     monthly_income: "",
     branch_id: "",
+    spouse_first_name: "",
+    spouse_middle_name: "",
+    spouse_last_name: "",
+    spouse_contact_number: "",
+    spouse_occupation: "",
   };
 }
 
@@ -125,6 +135,15 @@ export default function NewBorrowerPage() {
       if (form.address.trim()) payload.address = form.address.trim();
       if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
       if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
+
+      // Spouse info (only when married)
+      if (form.civil_status === "married") {
+        if (form.spouse_first_name.trim()) payload.spouse_first_name = form.spouse_first_name.trim();
+        if (form.spouse_middle_name.trim()) payload.spouse_middle_name = form.spouse_middle_name.trim();
+        if (form.spouse_last_name.trim()) payload.spouse_last_name = form.spouse_last_name.trim();
+        if (form.spouse_contact_number.trim()) payload.spouse_contact_number = form.spouse_contact_number.trim();
+        if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
+      }
 
       await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
       toast.success("Borrower created successfully");
@@ -214,7 +233,7 @@ export default function NewBorrowerPage() {
               <div className="space-y-2">
                 <Label>Suffix</Label>
                 <Select
-                  value={form.suffix}
+                  value={form.suffix || null}
                   onValueChange={(v) => update("suffix", v ?? "")}
                 >
                   <SelectTrigger className="w-full">
@@ -245,7 +264,7 @@ export default function NewBorrowerPage() {
                 <Label>Gender</Label>
                 <RadioGroup
                   className="flex gap-4 pt-2"
-                  value={form.gender}
+                  value={form.gender || null}
                   onValueChange={(v) => update("gender", v ?? "")}
                 >
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -263,7 +282,7 @@ export default function NewBorrowerPage() {
             <div className="space-y-2">
               <Label>Civil Status</Label>
               <Select
-                value={form.civil_status}
+                value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
                 <SelectTrigger className="w-full sm:w-1/2">
@@ -280,6 +299,67 @@ export default function NewBorrowerPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Spouse Information (visible only when married) */}
+        {form.civil_status === "married" && (
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <h2 className="text-base font-semibold">Spouse Information</h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_first_name">First Name</Label>
+                  <Input
+                    id="spouse_first_name"
+                    placeholder="First name"
+                    value={form.spouse_first_name ?? ""}
+                    onChange={(e) => update("spouse_first_name", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_middle_name">Middle Name</Label>
+                  <Input
+                    id="spouse_middle_name"
+                    placeholder="Middle name"
+                    value={form.spouse_middle_name ?? ""}
+                    onChange={(e) => update("spouse_middle_name", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_last_name">Last Name</Label>
+                  <Input
+                    id="spouse_last_name"
+                    placeholder="Last name"
+                    value={form.spouse_last_name ?? ""}
+                    onChange={(e) => update("spouse_last_name", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_contact_number">Contact Number</Label>
+                  <Input
+                    id="spouse_contact_number"
+                    type="tel"
+                    placeholder="09XXXXXXXXX"
+                    value={form.spouse_contact_number ?? ""}
+                    onChange={(e) => update("spouse_contact_number", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_occupation">Occupation</Label>
+                  <Input
+                    id="spouse_occupation"
+                    placeholder="Occupation or employer"
+                    value={form.spouse_occupation ?? ""}
+                    onChange={(e) => update("spouse_occupation", e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Contact Information */}
         <Card>
@@ -370,7 +450,7 @@ export default function NewBorrowerPage() {
                 </div>
               ) : (
                 <Select
-                  value={form.branch_id ? String(form.branch_id) : ""}
+                  value={form.branch_id ? String(form.branch_id) : null}
                   onValueChange={(v) => update("branch_id", v ?? "")}
                 >
                   <SelectTrigger className="w-full sm:w-1/2">
