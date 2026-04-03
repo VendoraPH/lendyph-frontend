@@ -21,7 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Wallet, FileText, DollarSign, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -68,27 +69,42 @@ const COLLECTIONS_TREND = [
 
 // Candlestick data — open/close/high/low per day (like the reference screenshot)
 const CANDLESTICK_DATA = [
-  { date: "12", open: 42, close: 48, high: 52, low: 38 },
-  { date: "13", open: 48, close: 38, high: 50, low: 35 },
-  { date: "14", open: 38, close: 55, high: 58, low: 36 },
-  { date: "15", open: 55, close: 48, high: 57, low: 45 },
-  { date: "16", open: 48, close: 62, high: 65, low: 46 },
-  { date: "17", open: 62, close: 35, high: 64, low: 32 },
-  { date: "18", open: 35, close: 41, high: 44, low: 33 },
-  { date: "19", open: 41, close: 58, high: 61, low: 39 },
-  { date: "20", open: 58, close: 52, high: 60, low: 49 },
-  { date: "21", open: 52, close: 67, high: 70, low: 50 },
-  { date: "22", open: 67, close: 45, high: 69, low: 42 },
-  { date: "23", open: 45, close: 71, high: 74, low: 43 },
-  { date: "24", open: 71, close: 63, high: 73, low: 60 },
-  { date: "25", open: 63, close: 58, high: 66, low: 55 },
-  { date: "26", open: 58, close: 74, high: 78, low: 56 },
-  { date: "27", open: 74, close: 49, high: 76, low: 46 },
-  { date: "28", open: 49, close: 82, high: 85, low: 47 },
-  { date: "29", open: 82, close: 68, high: 84, low: 65 },
-  { date: "30", open: 68, close: 76, high: 80, low: 66 },
-  { date: "31", open: 76, close: 85, high: 88, low: 74 },
+  { date: "12", open: 42, close: 48, high: 52, low: 38, volume: 35 },
+  { date: "13", open: 48, close: 38, high: 50, low: 35, volume: 28 },
+  { date: "14", open: 38, close: 55, high: 58, low: 36, volume: 52 },
+  { date: "15", open: 55, close: 48, high: 57, low: 45, volume: 40 },
+  { date: "16", open: 48, close: 62, high: 65, low: 46, volume: 60 },
+  { date: "17", open: 62, close: 35, high: 64, low: 32, volume: 45 },
+  { date: "18", open: 35, close: 41, high: 44, low: 33, volume: 22 },
+  { date: "19", open: 41, close: 58, high: 61, low: 39, volume: 55 },
+  { date: "20", open: 58, close: 52, high: 60, low: 49, volume: 30 },
+  { date: "21", open: 52, close: 67, high: 70, low: 50, volume: 65 },
+  { date: "22", open: 67, close: 45, high: 69, low: 42, volume: 48 },
+  { date: "23", open: 45, close: 71, high: 74, low: 43, volume: 70 },
+  { date: "24", open: 71, close: 63, high: 73, low: 60, volume: 38 },
+  { date: "25", open: 63, close: 58, high: 66, low: 55, volume: 25 },
+  { date: "26", open: 58, close: 74, high: 78, low: 56, volume: 58 },
+  { date: "27", open: 74, close: 49, high: 76, low: 46, volume: 42 },
+  { date: "28", open: 49, close: 82, high: 85, low: 47, volume: 72 },
+  { date: "29", open: 82, close: 68, high: 84, low: 65, volume: 50 },
+  { date: "30", open: 68, close: 76, high: 80, low: 66, volume: 44 },
+  { date: "31", open: 76, close: 85, high: 88, low: 74, volume: 68 },
 ];
+
+// Mock data — Loans due today vs actual collections
+const DAILY_DUE_ITEMS = [
+  { id: 1, borrower: "Rosario D. Santos", loanId: "LN-2026-0042", amountDue: 5500, amountPaid: 5500, status: "collected" as const },
+  { id: 2, borrower: "Roberto Garcia", loanId: "LN-2026-0078", amountDue: 9417, amountPaid: 9417, status: "collected" as const },
+  { id: 3, borrower: "Eduardo Mendoza", loanId: "LN-2026-0103", amountDue: 4708, amountPaid: 4708, status: "collected" as const },
+  { id: 4, borrower: "Maria L. Reyes", loanId: "LN-2026-0055", amountDue: 3200, amountPaid: 958, status: "partial" as const },
+  { id: 5, borrower: "Ana Santos", loanId: "LN-2026-0091", amountDue: 6800, amountPaid: 0, status: "pending" as const },
+  { id: 6, borrower: "Carmen Torres", loanId: "LN-2026-0112", amountDue: 12000, amountPaid: 0, status: "pending" as const },
+  { id: 7, borrower: "Jose Dela Cruz", loanId: "LN-2026-0067", amountDue: 2500, amountPaid: 0, status: "pending" as const },
+];
+
+const TOTAL_DUE = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountDue, 0);
+const TOTAL_COLLECTED = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountPaid, 0);
+const COLLECTION_RATE = Math.round((TOTAL_COLLECTED / TOTAL_DUE) * 100);
 
 const RECENT_TRANSACTIONS = [
   { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
@@ -183,7 +199,7 @@ function CandlestickShape(props: Record<string, unknown>) {
   // The bar is rendered at (x, y) with given width/height
   // We need to calculate wick positions relative to the bar
   const centerX = x + width / 2;
-  const bodyWidth = Math.max(width * 0.35, 4);
+  const bodyWidth = Math.max(width * 0.25, 3);
   const bodyX = centerX - bodyWidth / 2;
 
   // Wick extends slightly above and below the body
@@ -268,7 +284,7 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <Card key={kpi.label} className="rounded-xl border shadow-sm">
+          <Card key={kpi.label} className="rounded-xl border border-purple-100 shadow-sm">
             <CardContent className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -291,93 +307,234 @@ export default function DashboardPage() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Row 2: Main Chart Card — full width single column                 */}
+      {/* Row 2: Expected vs Actual Daily Collection                        */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border shadow-sm overflow-hidden">
-        {/* Header: value + time toggles */}
-        <div className="flex items-start justify-between p-6 pb-2">
-          <div>
-            <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
-            <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
-            <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
+      <Card className="rounded-xl border border-purple-100 shadow-sm">
+        <div className="px-6 pt-5 pb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold">Expected Daily Collection vs Actual Collection</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              </p>
+            </div>
+            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-200 bg-green-50 text-green-700" : COLLECTION_RATE >= 50 ? "border-yellow-200 bg-yellow-50 text-yellow-700" : "border-red-200 bg-red-50 text-red-700"}>
+              <TrendingUp className="h-3 w-3 mr-1" />
+              {COLLECTION_RATE}% collected
+            </Badge>
           </div>
-          <div className="flex items-center gap-1">
-            {TIME_PERIODS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setActivePeriod(p)}
-                className={
-                  activePeriod === p
-                    ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
-                    : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
-                }
-              >
-                {p}
-              </button>
-            ))}
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="rounded-lg border bg-blue-50/50 border-blue-100 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <CircleAlert className="h-3.5 w-3.5 text-blue-500" />
+                <p className="text-[11px] font-medium text-blue-600">Expected Collection</p>
+              </div>
+              <p className="text-xl font-bold text-blue-700">₱{TOTAL_DUE.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-blue-500 mt-0.5">{DAILY_DUE_ITEMS.length} loans due today</p>
+            </div>
+            <div className="rounded-lg border bg-green-50/50 border-green-100 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <CircleCheck className="h-3.5 w-3.5 text-green-500" />
+                <p className="text-[11px] font-medium text-green-600">Actual Collection</p>
+              </div>
+              <p className="text-xl font-bold text-green-700">₱{TOTAL_COLLECTED.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-green-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "collected").length} paid in full</p>
+            </div>
+            <div className="rounded-lg border bg-orange-50/50 border-orange-100 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="h-3.5 w-3.5 text-orange-500" />
+                <p className="text-[11px] font-medium text-orange-600">Remaining</p>
+              </div>
+              <p className="text-xl font-bold text-orange-700">₱{(TOTAL_DUE - TOTAL_COLLECTED).toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-orange-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-muted-foreground">Collection Progress</span>
+              <span className="font-medium">₱{TOTAL_COLLECTED.toLocaleString("en-PH")} / ₱{TOTAL_DUE.toLocaleString("en-PH")}</span>
+            </div>
+            <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
+                style={{ width: `${COLLECTION_RATE}%` }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Candlestick chart — full width */}
-        <div className="px-4">
-          {mounted ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis hide domain={[20, 95]} />
-                <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
-                <Bar
-                  dataKey="close"
-                  shape={<CandlestickShape />}
-                  isAnimationActive={false}
-                >
-                  {CANDLESTICK_DATA.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
+        {/* Breakdown table */}
+        <CardContent className="px-0 pb-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent bg-purple-50/50">
+                  <TableHead className="pl-6 text-purple-900/70">Borrower</TableHead>
+                  <TableHead className="text-purple-900/70">Loan ID</TableHead>
+                  <TableHead className="text-right text-purple-900/70">Amount Due</TableHead>
+                  <TableHead className="text-right text-purple-900/70">Paid</TableHead>
+                  <TableHead className="pr-6 text-right text-purple-900/70">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {DAILY_DUE_ITEMS.map((item) => (
+                  <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center text-xs font-semibold text-purple-700 shrink-0">
+                          {getInitials(item.borrower)}
+                        </div>
+                        <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
+                    <TableCell className="text-right text-sm font-medium">₱{item.amountDue.toLocaleString("en-PH")}</TableCell>
+                    <TableCell className="text-right text-sm font-medium">
+                      {item.amountPaid > 0 ? `₱${item.amountPaid.toLocaleString("en-PH")}` : "—"}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Badge
+                        variant="outline"
+                        className={
+                          item.status === "collected"
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : item.status === "partial"
+                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              : "bg-gray-50 text-gray-500 border-gray-200"
+                        }
+                      >
+                        {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Row 3: Main Chart Card — full width single column                 */}
+      {/* ----------------------------------------------------------------- */}
+      <Card className="rounded-xl border border-purple-100 shadow-sm overflow-hidden">
+        <div className="flex flex-col lg:flex-row">
+          {/* Left column: value + area chart */}
+          <div className="flex flex-col justify-between p-6 lg:w-[35%] lg:border-r border-purple-100">
+            <div>
+              <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
+              <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
+              <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
+            </div>
+            {/* Purple area chart */}
+            <div className="mt-4" style={{ height: 120 }}>
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                    <defs>
+                      <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      fill="url(#collectionsGrad)"
+                      dot={false}
+                      isAnimationActive={false}
                     />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : null}
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Right column: time toggles + candlestick chart */}
+          <div className="flex-1 p-4 pt-6">
+            <div className="flex justify-end mb-2">
+              <div className="flex items-center gap-1">
+                {TIME_PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setActivePeriod(p)}
+                    className={
+                      activePeriod === p
+                        ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
+                        : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
+                    }
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Candlestick chart */}
+            {mounted ? (
+              <>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis hide domain={[20, 95]} />
+                    <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
+                    <Bar
+                      dataKey="close"
+                      shape={<CandlestickShape />}
+                      isAnimationActive={false}
+                    >
+                      {CANDLESTICK_DATA.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Volume bars below candlestick */}
+                <ResponsiveContainer width="100%" height={60}>
+                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 0, right: 8, bottom: 4, left: 8 }}>
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis hide />
+                    <Bar dataKey="volume" isAnimationActive={false} radius={[2, 2, 0, 0]}>
+                      {CANDLESTICK_DATA.map((entry, index) => (
+                        <Cell
+                          key={`vol-${index}`}
+                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : null}
+          </div>
         </div>
 
-        {/* Purple area chart below — full width */}
-        <div className="px-4 pb-4" style={{ height: 80 }}>
-          {mounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-                <defs>
-                  <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#7c3aed"
-                  strokeWidth={2}
-                  fill="url(#collectionsGrad)"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : null}
+        {/* Month labels */}
+        <div className="flex justify-between px-6 pb-4 pt-1">
+          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m) => (
+            <span key={m} className="text-[11px] text-muted-foreground">{m}</span>
+          ))}
         </div>
       </Card>
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Recent Transactions Table                                   */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border shadow-sm">
+      <Card className="rounded-xl border border-purple-100 shadow-sm">
         <div className="px-6 pt-5 pb-3">
           <h3 className="text-base font-semibold">Recent Transactions</h3>
         </div>
