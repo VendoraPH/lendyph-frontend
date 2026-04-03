@@ -47,18 +47,18 @@ const ACTION_CONFIG: Record<
   AuditAction,
   { label: string; color: string }
 > = {
-  login: { label: "Login", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  logout: { label: "Logout", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  created: { label: "Created", color: "bg-green-100 text-green-700 border-green-200" },
-  updated: { label: "Updated", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  deleted: { label: "Deleted", color: "bg-red-100 text-red-700 border-red-200" },
-  voided: { label: "Voided", color: "bg-red-100 text-red-700 border-red-200" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-700 border-green-200" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-700 border-red-200" },
-  released: { label: "Released", color: "bg-green-100 text-green-700 border-green-200" },
-  printed: { label: "Printed", color: "bg-gray-100 text-gray-700 border-gray-200" },
-  reset_password: { label: "Reset Password", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  status_changed: { label: "Status Changed", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  login: { label: "Login", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
+  logout: { label: "Logout", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
+  created: { label: "Created", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
+  updated: { label: "Updated", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
+  deleted: { label: "Deleted", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
+  voided: { label: "Voided", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
+  approved: { label: "Approved", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
+  rejected: { label: "Rejected", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
+  released: { label: "Released", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
+  printed: { label: "Printed", color: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700" },
+  reset_password: { label: "Reset Password", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
+  status_changed: { label: "Status Changed", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
 };
 
 const MODULE_CONFIG: Record<AuditModule, { label: string }> = {

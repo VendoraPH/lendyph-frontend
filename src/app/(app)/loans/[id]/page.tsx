@@ -189,16 +189,16 @@ function generatePreviewSchedule(
 // ── Status Colors ──
 
 const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 border-gray-200",
-  for_review: "bg-amber-100 text-amber-700 border-amber-200",
-  approved: "bg-blue-100 text-blue-700 border-blue-200",
-  rejected: "bg-red-100 text-red-700 border-red-200",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  ongoing: "bg-green-100 text-green-700 border-green-200",
-  completed: "bg-gray-100 text-gray-600 border-gray-200",
-  defaulted: "bg-red-100 text-red-700 border-red-200",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200",
-  closed: "bg-gray-200 text-gray-500 border-gray-300",
+  draft: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
+  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
+  closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
 };
 
 const scheduleStatusColors: Record<string, string> = {
@@ -292,7 +292,7 @@ function StatusStepper({ loan }: { loan: Loan }) {
                         ? "border-brand-orange bg-brand-orange text-white"
                         : isRejectedStep
                           ? "border-red-500 bg-red-500 text-white"
-                          : "border-gray-300 bg-white text-gray-400"
+                          : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
                   )}
                 >
                   {isCompleted || isPast ? (
@@ -360,7 +360,7 @@ function StatusStepper({ loan }: { loan: Loan }) {
                         ? "border-brand-orange bg-brand-orange text-white"
                         : isRejectedStep
                           ? "border-red-500 bg-red-500 text-white"
-                          : "border-gray-300 bg-white text-gray-400"
+                          : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
                   )}
                 >
                   {isCompleted || isPast ? (

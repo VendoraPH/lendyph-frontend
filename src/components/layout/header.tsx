@@ -36,6 +36,7 @@ import { tokenManager } from "@/lib/axios-client";
 import { SIDEBAR_NAV } from "@/constants";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -163,6 +164,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right side: notifications + avatar */}
         <div className="flex items-center gap-2">
+          {/* Theme toggle */}
+          <ThemeToggle />
+
           {/* Notification bell with red dot */}
           <Button
             variant="ghost"

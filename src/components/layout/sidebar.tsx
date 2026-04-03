@@ -31,15 +31,15 @@ const DEFAULT_WIDTH = 260;
 const MAX_WIDTH = 600;
 
 const iconColors: Record<string, string> = {
-  "/dashboard": "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-orange-200",
-  "/users": "bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-purple-200",
-  "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200",
-  "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200",
-  "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200",
-  "/collections": "bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-amber-200",
-  "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200",
-  "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200",
-  "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200",
+  "/dashboard": "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-orange-200 dark:shadow-orange-900/30",
+  "/users": "bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-purple-200 dark:shadow-purple-900/30",
+  "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/30",
+  "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/30",
+  "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200 dark:shadow-cyan-900/30",
+  "/collections": "bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-amber-200 dark:shadow-amber-900/30",
+  "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200 dark:shadow-pink-900/30",
+  "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
+  "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
 };
 
 // ── Nav Link ──

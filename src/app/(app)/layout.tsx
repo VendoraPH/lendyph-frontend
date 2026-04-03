@@ -71,7 +71,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
         <div className="flex flex-1 flex-col min-w-0">
           <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 overflow-auto bg-gray-50 p-4 sm:p-6">{children}</main>
+          <main className="flex-1 overflow-auto bg-muted/40 p-4 sm:p-6">{children}</main>
         </div>
       </div>
     </SessionProvider>
