@@ -30,6 +30,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   UserPlus,
   Search,
   MoreHorizontal,
@@ -94,54 +101,57 @@ function RoleSelector({
   roles: ApiRole[];
 }) {
   return (
-    <div className="grid gap-2">
-      {roles.map((role) => {
-        const isSelected = value === role.name;
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {roles.map((role) => {
+          const isSelected = value === role.name;
+          return (
+            <button
+              key={role.id}
+              type="button"
+              onClick={() => onChange(role.name)}
+              className={cn(
+                "flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center transition-all",
+                isSelected
+                  ? "border-brand-orange bg-brand-orange/5 ring-1 ring-brand-orange"
+                  : "border-border hover:border-brand-orange/40 hover:bg-muted/50"
+              )}
+            >
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  isSelected
+                    ? roleBadgeColor[role.name] ?? "bg-brand-orange text-white"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                <Users className="h-3.5 w-3.5" />
+              </div>
+              <p className="text-xs font-medium leading-tight">{capitalize(role.name)}</p>
+            </button>
+          );
+        })}
+      </div>
+      {value && (() => {
+        const selected = roles.find((r) => r.name === value);
+        if (!selected) return null;
         return (
-          <button
-            key={role.id}
-            type="button"
-            onClick={() => onChange(role.name)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border p-3 text-left transition-all",
-              isSelected
-                ? "border-brand-orange bg-brand-orange/5 ring-1 ring-brand-orange"
-                : "border-border hover:border-brand-orange/40 hover:bg-muted/50"
+          <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
+            <p className="text-xs font-medium mb-1">{capitalize(selected.name)} can access:</p>
+            {selected.permissions.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {selected.permissions.map((p) => (
+                  <span key={p} className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {capitalize(p)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">Full access to all features</p>
             )}
-          >
-            <div
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                isSelected
-                  ? roleBadgeColor[role.name] ?? "bg-brand-orange text-white"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              <Users className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">{capitalize(role.name)}</p>
-              <p className="text-xs text-muted-foreground">
-                {role.permissions.length} permissions
-              </p>
-            </div>
-            <div
-              className={cn(
-                "h-4 w-4 shrink-0 rounded-full border-2 transition-colors",
-                isSelected
-                  ? "border-brand-orange bg-brand-orange"
-                  : "border-muted-foreground/30"
-              )}
-            >
-              {isSelected && (
-                <div className="h-full w-full flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 rounded-full bg-white" />
-                </div>
-              )}
-            </div>
-          </button>
+          </div>
         );
-      })}
+      })()}
     </div>
   );
 }
@@ -158,23 +168,21 @@ function BranchSelector({
   branches: ApiBranch[];
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-      {branches.map((branch) => (
-        <button
-          key={branch.id}
-          type="button"
-          onClick={() => onChange(branch.id)}
-          className={cn(
-            "rounded-lg border px-3 py-2 text-sm font-medium transition-all text-left",
-            value === branch.id
-              ? "border-brand-orange bg-brand-orange/5 ring-1 ring-brand-orange text-brand-orange"
-              : "border-border hover:border-brand-orange/40 hover:bg-muted/50 text-foreground"
-          )}
-        >
-          {branch.name}
-        </button>
-      ))}
-    </div>
+    <Select
+      value={value === "" ? undefined : value}
+      onValueChange={(val) => onChange(val as number)}
+    >
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select a branch" />
+      </SelectTrigger>
+      <SelectContent>
+        {branches.map((branch) => (
+          <SelectItem key={branch.id} value={branch.id}>
+            {branch.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -284,125 +292,128 @@ function AddUserDialog({
         Add User
       </Button>
       <DialogContent size="lg">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Add New User</DialogTitle>
           <DialogDescription>
             Create a new user account and assign a role.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-first-name">First Name <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-first-name"
-                placeholder="Juan"
-                value={form.first_name}
-                onChange={(e) => update("first_name", e.target.value)}
-                required
-              />
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="flex-1 overflow-y-auto space-y-3 pb-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-first-name">First Name <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-first-name"
+                  placeholder="Juan"
+                  value={form.first_name}
+                  onChange={(e) => update("first_name", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-last-name">Last Name <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-last-name"
+                  placeholder="Dela Cruz"
+                  value={form.last_name}
+                  onChange={(e) => update("last_name", e.target.value)}
+                  required
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-last-name">Last Name <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-last-name"
-                placeholder="Dela Cruz"
-                value={form.last_name}
-                onChange={(e) => update("last_name", e.target.value)}
-                required
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-username"
+                  placeholder="juan.dc"
+                  value={form.username}
+                  onChange={(e) => update("username", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-email">Email <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-email"
+                  type="email"
+                  placeholder="name@lendy.ph"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-password">Password <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-password"
+                  type="password"
+                  placeholder="Min 8 characters"
+                  value={form.password}
+                  onChange={(e) => update("password", e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-confirm">Confirm Password <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-confirm"
+                  type="password"
+                  placeholder="Re-enter password"
+                  value={form.password_confirmation}
+                  onChange={(e) =>
+                    update("password_confirmation", e.target.value)
+                  }
+                  required
+                  minLength={8}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-mobile">Mobile Number</Label>
+                <Input
+                  id="add-mobile"
+                  type="tel"
+                  placeholder="09171234567"
+                  value={form.mobile_number}
+                  onChange={(e) => update("mobile_number", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Branch <span className="text-red-500">*</span></Label>
+                <BranchSelector
+                  value={form.branch_id}
+                  onChange={(v) => update("branch_id", v)}
+                  branches={branches}
+                />
+                {!form.branch_id && submitting && (
+                  <p className="text-xs text-red-500">Please select a branch</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Role <span className="text-red-500">*</span></Label>
+              <RoleSelector
+                value={form.role}
+                onChange={(v) => update("role", v)}
+                roles={roles}
               />
+              {!form.role && submitting && (
+                <p className="text-xs text-red-500">Please select a role</p>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-username"
-                placeholder="juan.dc"
-                value={form.username}
-                onChange={(e) => update("username", e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-email">Email <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-email"
-                type="email"
-                placeholder="name@lendy.ph"
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-password">Password <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-password"
-                type="password"
-                placeholder="Minimum 8 characters"
-                value={form.password}
-                onChange={(e) => update("password", e.target.value)}
-                required
-                minLength={8}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-confirm">Confirm Password <span className="text-red-500">*</span></Label>
-              <Input
-                id="add-confirm"
-                type="password"
-                placeholder="Re-enter password"
-                value={form.password_confirmation}
-                onChange={(e) =>
-                  update("password_confirmation", e.target.value)
-                }
-                required
-                minLength={8}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="add-mobile">Mobile Number</Label>
-            <Input
-              id="add-mobile"
-              type="tel"
-              placeholder="09171234567"
-              value={form.mobile_number}
-              onChange={(e) => update("mobile_number", e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Branch <span className="text-red-500">*</span></Label>
-            <BranchSelector
-              value={form.branch_id}
-              onChange={(v) => update("branch_id", v)}
-              branches={branches}
-            />
-            {!form.branch_id && submitting && (
-              <p className="text-xs text-red-500">Please select a branch</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Role <span className="text-red-500">*</span></Label>
-            <RoleSelector
-              value={form.role}
-              onChange={(v) => update("role", v)}
-              roles={roles}
-            />
-            {!form.role && submitting && (
-              <p className="text-xs text-red-500">Please select a role</p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-3 border-t shrink-0">
             <DialogClose
               render={<Button type="button" variant="outline" />}
             >
@@ -478,75 +489,79 @@ function EditUserDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Edit User</DialogTitle>
           <DialogDescription>
             Update account details for {user.full_name}.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-first-name">First Name</Label>
-              <Input
-                id="edit-first-name"
-                value={form.first_name}
-                onChange={(e) => update("first_name", e.target.value)}
-                required
-              />
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="flex-1 overflow-y-auto space-y-3 pb-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-first-name">First Name</Label>
+                <Input
+                  id="edit-first-name"
+                  value={form.first_name}
+                  onChange={(e) => update("first_name", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-last-name">Last Name</Label>
+                <Input
+                  id="edit-last-name"
+                  value={form.last_name}
+                  onChange={(e) => update("last_name", e.target.value)}
+                  required
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-last-name">Last Name</Label>
-              <Input
-                id="edit-last-name"
-                value={form.last_name}
-                onChange={(e) => update("last_name", e.target.value)}
-                required
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-mobile">Mobile Number</Label>
+                <Input
+                  id="edit-mobile"
+                  type="tel"
+                  value={form.mobile_number}
+                  onChange={(e) => update("mobile_number", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Branch</Label>
+                <BranchSelector
+                  value={form.branch_id}
+                  onChange={(v) => update("branch_id", v)}
+                  branches={branches}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <RoleSelector
+                value={form.role}
+                onChange={(v) => update("role", v)}
+                roles={roles}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-mobile">Mobile Number</Label>
-              <Input
-                id="edit-mobile"
-                type="tel"
-                value={form.mobile_number}
-                onChange={(e) => update("mobile_number", e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Branch</Label>
-            <BranchSelector
-              value={form.branch_id}
-              onChange={(v) => update("branch_id", v)}
-              branches={branches}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Role</Label>
-            <RoleSelector
-              value={form.role}
-              onChange={(v) => update("role", v)}
-              roles={roles}
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-3 border-t shrink-0">
             <Button
               type="button"
               variant="outline"
