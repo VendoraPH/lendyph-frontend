@@ -1,0 +1,187 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Upload, FileText, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
+import { documentService } from "@/services";
+import type { Document } from "@/services/document.service";
+import { env } from "@/config/env";
+
+interface DocumentsTabProps {
+  borrowerId: number;
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchDocuments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await documentService.borrowerList(borrowerId);
+      setDocuments(Array.isArray(data) ? data : []);
+    } catch {
+      setDocuments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [borrowerId]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", file.name.split(".").pop()?.toUpperCase() || "FILE");
+      formData.append("label", file.name);
+      await documentService.borrowerUpload(borrowerId, formData);
+      toast.success("Document uploaded successfully");
+      fetchDocuments();
+    } catch {
+      toast.error("Failed to upload document");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDelete(id: number) {
+    setDeleting(id);
+    try {
+      await documentService.delete(id);
+      toast.success("Document deleted");
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+    } catch {
+      toast.error("Failed to delete document");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <p className="text-sm font-medium">
+            Documents ({documents.length})
+          </p>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={handleUpload}
+            />
+            <Button
+              size="sm"
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-1.5"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              {uploading ? "Uploading..." : "Upload"}
+            </Button>
+          </div>
+        </div>
+
+        {documents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+            <FileText className="h-8 w-8 opacity-40" />
+            <p className="text-sm">No documents uploaded yet</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Document</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Uploaded</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documents.map((doc) => (
+                <TableRow key={doc.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium truncate">
+                        {doc.label || `Document #${doc.id}`}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {doc.type}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatDate(doc.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => window.open(`${env.storage.url || ""}${doc.url}`, "_blank")}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        disabled={deleting === doc.id}
+                        onClick={() => handleDelete(doc.id)}
+                      >
+                        {deleting === doc.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

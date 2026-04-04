@@ -29,4 +29,7 @@ export const authService = {
     password: string;
     password_confirmation: string;
   }) => api.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, data),
+
+  verifyEmail: (data: { token: string }) =>
+    api.post(API_ENDPOINTS.AUTH.VERIFY_EMAIL, data),
 };

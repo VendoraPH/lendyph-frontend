@@ -767,6 +767,20 @@ export default function LoanDetailPage({
     }
   };
 
+  const handleVoidLoan = async () => {
+    try {
+      setActionLoading(true);
+      await loanService.void(loan.id);
+      toast.success("Loan voided");
+      const updated = await loanService.detail(loan.id);
+      setLoan(updated);
+    } catch {
+      toast.error("Failed to void loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // ── Loan Adjustment Handlers ──
 
   const handleCreateAdjustment = async () => {
@@ -919,6 +933,15 @@ export default function LoanDetailPage({
               >
                 <Send className="mr-2 h-4 w-4" />
                 Submit for Review
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto"
+                disabled={actionLoading}
+                onClick={handleVoidLoan}
+              >
+                <Ban className="mr-2 h-4 w-4" />
+                Void Loan
               </Button>
             </div>
           </CardContent>

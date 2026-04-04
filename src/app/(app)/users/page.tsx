@@ -778,6 +778,23 @@ function UserActionsCell({
             )}
             {isActive ? "Deactivate" : "Activate"}
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={async () => {
+              if (!confirm(`Delete user ${user.full_name}? This cannot be undone.`)) return;
+              try {
+                await userService.delete(user.id);
+                toast.success("User deleted");
+                onRefresh();
+              } catch {
+                toast.error("Failed to delete user");
+              }
+            }}
+          >
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            Delete User
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

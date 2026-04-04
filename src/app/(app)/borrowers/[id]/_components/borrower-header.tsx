@@ -1,10 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Camera } from "lucide-react";
+import { toast } from "sonner";
+import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
 
 const statusBadgeColor: Record<string, string> = {
@@ -20,9 +23,26 @@ function getInitials(name: string): string {
 interface BorrowerHeaderProps {
   borrower: Borrower;
   onEdit: () => void;
+  onPhotoUpdate?: () => void;
 }
 
-export function BorrowerHeader({ borrower, onEdit }: BorrowerHeaderProps) {
+export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHeaderProps) {
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      await borrowerService.uploadPhoto(borrower.id, formData);
+      toast.success("Photo updated");
+      onPhotoUpdate?.();
+    } catch {
+      toast.error("Failed to upload photo");
+    }
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
   const details = [
     borrower.gender ? (borrower.gender === "male" ? "Male" : "Female") : null,
     borrower.civil_status ? borrower.civil_status.charAt(0).toUpperCase() + borrower.civil_status.slice(1) : null,
@@ -45,14 +65,26 @@ export function BorrowerHeader({ borrower, onEdit }: BorrowerHeaderProps) {
 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <Avatar size="lg">
-            {borrower.photo ? (
-              <AvatarImage src={borrower.photo} alt={borrower.full_name} />
-            ) : null}
-            <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xl font-semibold">
-              {getInitials(borrower.full_name)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative group cursor-pointer" onClick={() => photoInputRef.current?.click()}>
+            <Avatar size="lg">
+              {borrower.photo ? (
+                <AvatarImage src={borrower.photo} alt={borrower.full_name} />
+              ) : null}
+              <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xl font-semibold">
+                {getInitials(borrower.full_name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera className="h-5 w-5 text-white" />
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+            />
+          </div>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">

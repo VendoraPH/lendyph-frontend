@@ -360,7 +360,24 @@ export default function AuditTrailPage() {
             Track and review all user actions across the system
           </p>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={async () => {
+            try {
+              const blob = await auditService.export({ module: moduleFilter !== "all" ? moduleFilter : undefined, action: actionFilter !== "all" ? actionFilter : undefined });
+              const url = URL.createObjectURL(blob as Blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `audit-trail-${new Date().toISOString().split("T")[0]}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success("Audit trail exported");
+            } catch {
+              toast.error("Failed to export audit trail");
+            }
+          }}
+        >
           <Download className="h-4 w-4" />
           Export
         </Button>

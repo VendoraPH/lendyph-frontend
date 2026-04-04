@@ -52,4 +52,10 @@ export const userService = {
 
   resetPassword: (id: number, data: ResetPasswordData) =>
     api.post<void>(API_ENDPOINTS.USERS.RESET_PASSWORD(id), data),
+
+  updateRole: (id: number, data: { role: string }) =>
+    api.put<User>(API_ENDPOINTS.USERS.UPDATE_ROLE(id), data),
+
+  toggleStatus: (id: number) =>
+    api.patch<User>(API_ENDPOINTS.USERS.TOGGLE_STATUS(id)),
 };
