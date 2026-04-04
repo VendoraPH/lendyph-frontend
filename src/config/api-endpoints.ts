@@ -1,18 +1,15 @@
+/**
+ * API Endpoints — synced with Swagger spec at
+ * https://api-lendyph.abedubas.dev/api/documentation
+ *
+ * Last synced: 2026-04-04
+ */
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: "/auth/login",
     LOGOUT: "/auth/logout",
     REFRESH: "/auth/refresh",
     ME: "/auth/me",
-    FORGOT_PASSWORD: "/auth/forgot-password",
-    RESET_PASSWORD: "/auth/reset-password",
-    VERIFY_EMAIL: "/auth/verify-email",
-  },
-  DASHBOARD: {
-    OVERVIEW: "/dashboard/overview",
-    PORTFOLIO_SUMMARY: "/dashboard/portfolio-summary",
-    COLLECTION_RATE: "/dashboard/collection-rate",
-    CHARTS: "/dashboard/charts",
   },
   BORROWERS: {
     LIST: "/borrowers",
@@ -20,9 +17,6 @@ export const API_ENDPOINTS = {
     CREATE: "/borrowers",
     UPDATE: (id: number) => `/borrowers/${id}`,
     DELETE: (id: number) => `/borrowers/${id}`,
-    LOANS: (id: number) => `/borrowers/${id}/loans`,
-    PAYMENTS: (id: number) => `/borrowers/${id}/payments`,
-    LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     DEACTIVATE: (id: number) => `/borrowers/${id}/deactivate`,
     REACTIVATE: (id: number) => `/borrowers/${id}/reactivate`,
     UPLOAD_PHOTO: (id: number) => `/borrowers/${id}/photo`,
@@ -52,12 +46,11 @@ export const API_ENDPOINTS = {
     APPROVE: (id: number) => `/loans/${id}/approve`,
     REJECT: (id: number) => `/loans/${id}/reject`,
     RELEASE: (id: number) => `/loans/${id}/release`,
-    SCHEDULE: (id: number) => `/loans/${id}/schedule`,
-    RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
-    AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
     SUBMIT: (id: number) => `/loans/${id}/submit`,
     VOID: (id: number) => `/loans/${id}/void`,
+    AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
     AMORTIZATION_SCHEDULE: (id: number) => `/loans/${id}/amortization-schedule`,
+    SUMMARY: (id: number) => `/loans/${id}/summary`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
@@ -84,35 +77,19 @@ export const API_ENDPOINTS = {
     UPDATE: (id: number) => `/loan-products/${id}`,
     DELETE: (id: number) => `/loan-products/${id}`,
   },
-  PAYMENTS: {
-    LIST: "/payments",
-    DETAIL: (id: number) => `/payments/${id}`,
-    CREATE: "/payments",
-    UPDATE: (id: number) => `/payments/${id}`,
-    VOID: (id: number) => `/payments/${id}/void`,
-  },
-  COLLECTIONS: {
-    LIST: "/collections",
-    OVERDUE: "/collections/overdue",
-    DUE_TODAY: "/collections/due-today",
-    UPCOMING: "/collections/upcoming",
-    MARK_COLLECTED: (id: number) => `/collections/${id}/collected`,
-  },
   REPORTS: {
-    GENERATE: "/reports/generate",
-    LIST: "/reports",
-    DAILY_COLLECTION: "/reports/daily-collection",
-    PORTFOLIO: "/reports/portfolio",
-    INCOME: "/reports/income",
+    DUE_PAST_DUE: "/reports/due-past-due",
+    LOAN_BALANCE_SUMMARY: "/reports/loan-balance-summary",
+    RELEASES: "/reports/releases",
+    REPAYMENTS: "/reports/repayments",
+    STATEMENT_OF_ACCOUNT: (loanId: number) => `/reports/statement-of-account/${loanId}`,
+    SUBSIDIARY_LEDGER: (borrowerId: number) => `/reports/subsidiary-ledger/${borrowerId}`,
   },
   USERS: {
     LIST: "/users",
     DETAIL: (id: number) => `/users/${id}`,
     CREATE: "/users",
     UPDATE: (id: number) => `/users/${id}`,
-    DELETE: (id: number) => `/users/${id}`,
-    UPDATE_ROLE: (id: number) => `/users/${id}/role`,
-    TOGGLE_STATUS: (id: number) => `/users/${id}/status`,
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
@@ -120,7 +97,6 @@ export const API_ENDPOINTS = {
   AUDIT_LOGS: {
     LIST: "/audit-logs",
     DETAIL: (id: number) => `/audit-logs/${id}`,
-    EXPORT: "/audit-logs/export",
   },
   ROLES: {
     LIST: "/roles",
@@ -131,12 +107,6 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,
-  },
-  SETTINGS: {
-    PROFILE: "/settings/profile",
-    BUSINESS: "/settings/business",
-    LOAN_PRODUCTS: "/settings/loan-products",
-    INTEREST_RATES: "/settings/interest-rates",
   },
   SYSTEM: {
     HEALTH: "/health",

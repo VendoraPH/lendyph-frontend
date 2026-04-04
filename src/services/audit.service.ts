@@ -10,10 +10,4 @@ export const auditService = {
 
   detail: (id: number) =>
     api.get<AuditLog>(API_ENDPOINTS.AUDIT_LOGS.DETAIL(id)),
-
-  export: (params?: Record<string, unknown>) =>
-    api.get<Blob>(API_ENDPOINTS.AUDIT_LOGS.EXPORT, {
-      params,
-      responseType: "blob",
-    } as Record<string, unknown>),
 };

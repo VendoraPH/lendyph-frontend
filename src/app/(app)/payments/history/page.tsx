@@ -658,7 +658,6 @@ export default function PaymentHistoryPage() {
               void_reason: reason,
               voided_by: "Augustin Maputol",
               voided_at: new Date().toISOString(),
-              // Restore balance: balance_after goes back to balance_before
               balance_after: p.balance_before,
             }
           : p

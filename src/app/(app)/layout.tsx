@@ -64,14 +64,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar
           mobileOpen={sidebarOpen}
           onMobileClose={() => setSidebarOpen(false)}
         />
         <div className="flex flex-1 flex-col min-w-0">
           <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 overflow-auto bg-muted/40 p-4 sm:p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
         </div>
       </div>
     </SessionProvider>

@@ -2,17 +2,21 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 
 export const reportService = {
-  list: () => api.get(API_ENDPOINTS.REPORTS.LIST),
+  duePastDue: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.DUE_PAST_DUE, { params }),
 
-  generate: (data: { type: string; date_from?: string; date_to?: string }) =>
-    api.post(API_ENDPOINTS.REPORTS.GENERATE, data),
+  loanBalanceSummary: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.LOAN_BALANCE_SUMMARY, { params }),
 
-  dailyCollection: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.DAILY_COLLECTION, { params }),
+  releases: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.RELEASES, { params }),
 
-  portfolio: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.PORTFOLIO, { params }),
+  repayments: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.REPAYMENTS, { params }),
 
-  income: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.INCOME, { params }),
+  statementOfAccount: (loanId: number) =>
+    api.get(API_ENDPOINTS.REPORTS.STATEMENT_OF_ACCOUNT(loanId)),
+
+  subsidiaryLedger: (borrowerId: number) =>
+    api.get(API_ENDPOINTS.REPORTS.SUBSIDIARY_LEDGER(borrowerId)),
 };

@@ -1,13 +1,17 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Printer, Receipt } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Printer, Receipt, Ban, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { repaymentService } from "@/services";
+import { toast } from "sonner";
+import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,7 +39,77 @@ interface ReceiptData {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank Transfer",
+  gcash: "GCash",
+  maya: "Maya",
+  online: "Online",
+};
+
+const STATUS_STYLES: Record<
+  ReceiptData["status"],
+  { label: string; className: string }
+> = {
+  completed: {
+    label: "Completed",
+    className: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30",
+  },
+  voided: {
+    label: "Voided",
+    className: "bg-destructive/10 text-destructive border-destructive/20",
+  },
+  pending: {
+    label: "Pending",
+    className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30",
+  },
+};
+
+/** Map API Repayment response to local ReceiptData shape */
+function mapPaymentToReceipt(payment: Repayment): ReceiptData {
+  const p = payment as Repayment & Record<string, unknown>;
+  return {
+    id: p.id,
+    receipt_number: (p.receipt_number as string) || `OR-${String(p.id).padStart(8, "0")}`,
+    borrower_name: (p.borrower_name as string) || "—",
+    loan_account_number: (p.loan_account_number as string) || "—",
+    loan_product_name: (p.loan_product_name as string) || "—",
+    payment_date: p.payment_date || p.created_at,
+    method: (p.method as ReceiptData["method"]) || "cash",
+    reference_number: p.reference_number as string | undefined,
+    penalty: (p.penalty_amount as number) || 0,
+    interest: (p.interest_amount as number) || 0,
+    principal: (p.principal_amount as number) || 0,
+    total: p.amount_paid,
+    previous_balance: (p.previous_balance as number) || 0,
+    new_balance: (p.new_balance as number) || 0,
+    next_due_date: (p.next_due_date as string) || "—",
+    collected_by: (p.collected_by as string) || "—",
+    remarks: p.remarks || "",
+    status: p.status,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fallback mock data (used when API is unavailable)
 // ---------------------------------------------------------------------------
 
 const MOCK_RECEIPTS: ReceiptData[] = [
@@ -67,7 +141,6 @@ const MOCK_RECEIPTS: ReceiptData[] = [
     loan_product_name: "Business Loan",
     payment_date: "2026-03-20",
     method: "cash",
-    reference_number: undefined,
     penalty: 500,
     interest: 1500,
     principal: 7417,
@@ -79,112 +152,7 @@ const MOCK_RECEIPTS: ReceiptData[] = [
     remarks: "Payment with penalty for late",
     status: "completed",
   },
-  {
-    id: 3,
-    receipt_number: "OR-20260003",
-    borrower_name: "Maria L. Reyes",
-    loan_account_number: "LN-20260003",
-    loan_product_name: "Emergency Loan",
-    payment_date: "2026-03-28",
-    method: "maya",
-    reference_number: "MY-20260328-001",
-    penalty: 0,
-    interest: 350,
-    principal: 608,
-    total: 958,
-    previous_balance: 7000,
-    new_balance: 6042,
-    next_due_date: "2026-04-05",
-    collected_by: "Juan Cashier",
-    remarks: "Weekly payment",
-    status: "completed",
-  },
-  {
-    id: 4,
-    receipt_number: "OR-20260004",
-    borrower_name: "Eduardo Mendoza",
-    loan_account_number: "LN-20260004",
-    loan_product_name: "OFW Loan",
-    payment_date: "2026-03-25",
-    method: "bank_transfer",
-    reference_number: "BDO-20260325-001",
-    penalty: 0,
-    interest: 600,
-    principal: 4108,
-    total: 4708,
-    previous_balance: 30000,
-    new_balance: 25292,
-    next_due_date: "2026-04-25",
-    collected_by: "Juan Cashier",
-    remarks: "",
-    status: "completed",
-  },
-  {
-    id: 5,
-    receipt_number: "OR-20260005",
-    borrower_name: "Roberto Garcia",
-    loan_account_number: "LN-20260002",
-    loan_product_name: "Business Loan",
-    payment_date: "2026-02-20",
-    method: "cash",
-    reference_number: undefined,
-    penalty: 0,
-    interest: 1500,
-    principal: 7917,
-    total: 9417,
-    previous_balance: 84417,
-    new_balance: 75000,
-    next_due_date: "2026-03-20",
-    collected_by: "Maria Cashier",
-    remarks: "Regular monthly",
-    status: "voided",
-  },
 ];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-const METHOD_LABELS: Record<ReceiptData["method"], string> = {
-  cash: "Cash",
-  bank_transfer: "Bank Transfer",
-  gcash: "GCash",
-  maya: "Maya",
-  online: "Online",
-};
-
-const STATUS_STYLES: Record<
-  ReceiptData["status"],
-  { label: string; className: string }
-> = {
-  completed: {
-    label: "Completed",
-    className: "bg-green-100 text-green-800 border-green-200",
-  },
-  voided: {
-    label: "Voided",
-    className: "bg-destructive/10 text-destructive border-destructive/20",
-  },
-  pending: {
-    label: "Pending",
-    className: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -225,11 +193,62 @@ export default function PaymentReceiptPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const receiptId = parseInt(id, 10);
+  const router = useRouter();
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
 
-  const receipt = MOCK_RECEIPTS.find((r) => r.id === receiptId);
+  const fetchReceipt = useCallback(async () => {
+    setLoading(true);
+    try {
+      const repayment = await repaymentService.detail(Number(id));
+      setReceipt(mapPaymentToReceipt(repayment));
+    } catch {
+      // Fallback to mock data if API fails
+      const mock = MOCK_RECEIPTS.find((r) => r.id === Number(id));
+      if (mock) {
+        setReceipt(mock);
+      } else {
+        setNotFound(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  if (!receipt) {
+  useEffect(() => {
+    fetchReceipt();
+  }, [fetchReceipt]);
+
+  async function handleVoid() {
+    if (!receipt || !voidReason.trim()) return;
+    setVoiding(true);
+    try {
+      await repaymentService.void(receipt.id, { void_reason: voidReason.trim() });
+      toast.success("Payment voided successfully");
+      setShowVoidConfirm(false);
+      setVoidReason("");
+      fetchReceipt();
+    } catch {
+      toast.error("Failed to void payment");
+    } finally {
+      setVoiding(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading receipt...</p>
+      </div>
+    );
+  }
+
+  if (notFound || !receipt) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-24">
         <Receipt className="h-12 w-12 text-muted-foreground" />
@@ -252,9 +271,7 @@ export default function PaymentReceiptPage({
 
   return (
     <div className="space-y-6">
-      {/* ------------------------------------------------------------------ */}
-      {/* Screen-only header                                                  */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Screen-only header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <Link
           href="/payments"
@@ -265,6 +282,16 @@ export default function PaymentReceiptPage({
         </Link>
 
         <div className="flex gap-2">
+          {receipt.status === "completed" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowVoidConfirm(true)}
+            >
+              <Ban className="mr-2 h-4 w-4" />
+              Void Payment
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -280,9 +307,48 @@ export default function PaymentReceiptPage({
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Receipt card                                                         */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Void confirmation dialog */}
+      {showVoidConfirm && (
+        <div className="print:hidden">
+          <Card className="mx-auto max-w-md border-destructive/30">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-semibold text-destructive">Void this payment?</p>
+              <p className="text-xs text-muted-foreground">
+                This action cannot be undone. The payment of ₱{formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
+              </p>
+              <textarea
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Reason for voiding (required)"
+                rows={2}
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowVoidConfirm(false);
+                    setVoidReason("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={voiding || !voidReason.trim()}
+                  onClick={handleVoid}
+                >
+                  {voiding ? "Voiding..." : "Confirm Void"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Receipt card */}
       <div className="mx-auto w-full max-w-md">
         <Card className="overflow-hidden border shadow-md print:shadow-none print:border-0">
           <CardContent className="p-0">
@@ -358,7 +424,7 @@ export default function PaymentReceiptPage({
                   />
                   <ReceiptRow
                     label="Payment Method"
-                    value={METHOD_LABELS[receipt.method]}
+                    value={METHOD_LABELS[receipt.method] || receipt.method}
                   />
                   {receipt.reference_number && (
                     <ReceiptRow
@@ -416,10 +482,12 @@ export default function PaymentReceiptPage({
                     value={`₱ ${formatCurrency(receipt.new_balance)}`}
                     bold
                   />
-                  <ReceiptRow
-                    label="Next Due Date"
-                    value={formatDate(receipt.next_due_date)}
-                  />
+                  {receipt.next_due_date !== "—" && (
+                    <ReceiptRow
+                      label="Next Due Date"
+                      value={formatDate(receipt.next_due_date)}
+                    />
+                  )}
                 </div>
               </div>
 

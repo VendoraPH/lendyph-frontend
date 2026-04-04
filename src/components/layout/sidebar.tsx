@@ -75,7 +75,7 @@ function NavLink({
               onClick={onNavigate}
               className={cn(
                 "flex items-center justify-center rounded-2xl p-2 transition-all duration-200",
-                "hover:bg-gray-100",
+                "hover:bg-muted",
                 (isActive || isChildActive) && "bg-brand-orange/8 ring-1 ring-brand-orange/20"
               )}
             />
@@ -121,7 +121,7 @@ function NavLink({
           "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
           isActive
             ? "bg-gradient-to-r from-brand-orange/10 to-brand-orange/5 text-brand-orange font-semibold shadow-sm ring-1 ring-brand-orange/10"
-            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
         <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
@@ -144,7 +144,7 @@ function NavLink({
           "group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
           isOpen
             ? "bg-gradient-to-r from-brand-orange/10 to-brand-orange/5 text-brand-orange font-semibold shadow-sm ring-1 ring-brand-orange/10"
-            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
         <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
@@ -166,7 +166,7 @@ function NavLink({
                   "relative rounded-xl px-3 py-1.5 text-[13px] transition-all duration-200",
                   childActive
                     ? "bg-brand-orange/8 text-brand-orange font-medium before:absolute before:-left-[18px] before:top-1/2 before:-translate-y-1/2 before:h-2 before:w-2 before:rounded-full before:bg-brand-orange"
-                    : "text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+                    : "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
                 )}
               >
                 {child.title}
@@ -197,13 +197,13 @@ function SidebarContent({
       <div className="flex h-full flex-col">
         {/* Header */}
         <div className={cn(
-          "flex h-14 items-center shrink-0 border-b border-gray-100",
+          "flex h-14 items-center shrink-0 border-b border-border",
           collapsed ? "justify-center px-2" : "px-4"
         )}>
           {collapsed ? (
             <button
               onClick={onToggle}
-              className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all"
+              className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
             >
               <ChevronsRight className="h-4 w-4" />
             </button>
@@ -214,10 +214,10 @@ function SidebarContent({
                   <span className="text-sm font-bold text-white">L</span>
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-gray-900 leading-tight">
+                  <span className="text-sm font-bold text-foreground leading-tight">
                     Lendy.PH
                   </span>
-                  <span className="text-[9px] font-medium tracking-wider text-gray-400 uppercase">
+                  <span className="text-[9px] font-medium tracking-wider text-muted-foreground uppercase">
                     Lending System
                   </span>
                 </div>
@@ -225,7 +225,7 @@ function SidebarContent({
               {onToggle && (
                 <button
                   onClick={onToggle}
-                  className="rounded-xl p-1.5 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all"
+                  className="rounded-xl p-1.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-all"
                   title="Collapse sidebar"
                 >
                   <ChevronsLeft className="h-4 w-4" />
@@ -241,7 +241,7 @@ function SidebarContent({
           collapsed ? "items-center px-2 py-3" : "px-3 py-3"
         )}>
           {!collapsed && (
-            <span className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-300">
+            <span className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50">
               Navigation
             </span>
           )}
@@ -258,10 +258,10 @@ function SidebarContent({
 
         {/* Footer */}
         {!collapsed && (
-          <div className="border-t border-gray-100 px-5 py-2.5 shrink-0">
+          <div className="border-t border-border px-5 py-2.5 shrink-0">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-gray-300 font-medium">v1.0.0</span>
-              <span className="text-[10px] text-gray-300">© Lendy.PH</span>
+              <span className="text-[10px] text-muted-foreground/50 font-medium">v1.0.0</span>
+              <span className="text-[10px] text-muted-foreground/50">© Lendy.PH</span>
             </div>
           </div>
         )}
@@ -359,7 +359,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     <>
       {/* Desktop */}
       <aside
-        className="hidden md:block shrink-0 min-h-screen sticky top-0 overflow-hidden bg-white border-r border-gray-100 transition-[width] duration-200 ease-in-out relative"
+        className="hidden md:block shrink-0 min-h-screen sticky top-0 overflow-hidden bg-sidebar border-r border-sidebar-border transition-[width] duration-200 ease-in-out relative"
         style={{ width: sidebarWidth }}
       >
         <SidebarContent

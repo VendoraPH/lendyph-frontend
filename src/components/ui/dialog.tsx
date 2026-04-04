@@ -91,8 +91,8 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed inset-0 z-50 m-auto grid h-fit w-full max-w-[calc(100%-2rem)] gap-4 bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
-          isFullScreen ? "rounded-lg overflow-auto" : "rounded-xl",
+          "fixed inset-0 z-50 m-auto flex h-fit w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-4 bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
+          isFullScreen ? "rounded-lg overflow-auto" : "rounded-xl overflow-hidden",
           dialogSizeClasses[size],
           className
         )}

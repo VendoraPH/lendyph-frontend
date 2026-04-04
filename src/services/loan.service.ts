@@ -28,21 +28,23 @@ export const loanService = {
   release: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id)),
 
-  schedule: (id: number) =>
-    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.SCHEDULE(id)),
-
-  restructure: (id: number, data: Partial<Loan>) =>
-    api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
-
-  amortizationPreview: (id: number) =>
-    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
-
   submit: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.SUBMIT(id)),
 
   void: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.VOID(id)),
 
+  amortizationPreview: (id: number) =>
+    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
+
   amortizationSchedule: (id: number) =>
     api.get<ApiAmortizationSchedule>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
+
+  /** Loan balance summary (replaces the old /schedule endpoint) */
+  summary: (id: number) =>
+    api.get(API_ENDPOINTS.LOANS.SUMMARY(id)),
+
+  /** Alias — maps to amortization-schedule for backward compat */
+  schedule: (id: number) =>
+    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
 };
