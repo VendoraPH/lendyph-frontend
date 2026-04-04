@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AreaChart,
   Area,
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert } from "lucide-react";
+import { dashboardService, collectionService } from "@/services";
+import type { DashboardOverview } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -272,10 +274,58 @@ const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 export default function DashboardPage() {
   const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
   const [mounted, setMounted] = useState(false);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [dailyDueItems, setDailyDueItems] = useState(DAILY_DUE_ITEMS);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const data = await dashboardService.overview();
+      if (data) setOverview(data);
+    } catch {
+      // Keep mock KPI values on API failure
+    }
+
+    try {
+      const [dueToday, overdue] = await Promise.all([
+        collectionService.dueToday(),
+        collectionService.overdue(),
+      ]);
+      const items = [...(Array.isArray(dueToday) ? dueToday : []), ...(Array.isArray(overdue) ? overdue : [])];
+      if (items.length > 0) {
+        setDailyDueItems(
+          items.map((c, i) => ({
+            id: c.id || i + 1,
+            borrower: c.borrower_name || "—",
+            loanId: `LN-${c.loan_id}`,
+            amountDue: c.amount_due,
+            amountPaid: 0,
+            status: (c.status === "collected" ? "collected" : c.days_overdue > 0 ? "pending" : "pending") as "collected" | "partial" | "pending",
+          }))
+        );
+      }
+    } catch {
+      // Keep mock daily due items on API failure
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Compute KPI values from API data or fallback to mock
+  const kpiCards = overview
+    ? [
+        { ...KPI_CARDS[0], value: `₱${(overview.total_outstanding / 1_000_000).toFixed(1)}M` },
+        { ...KPI_CARDS[1], value: String(overview.active_loans) },
+        { ...KPI_CARDS[2], value: `₱${(overview.total_collected / 1_000_000).toFixed(1)}M` },
+        { ...KPI_CARDS[3], value: String(overview.overdue_count) },
+      ]
+    : KPI_CARDS;
+
+  const totalDue = dailyDueItems.reduce((sum, item) => sum + item.amountDue, 0);
+  const totalCollected = dailyDueItems.reduce((sum, item) => sum + item.amountPaid, 0);
+  const collectionRate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -283,7 +333,7 @@ export default function DashboardPage() {
       {/* Row 1: KPI Cards                                                  */}
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {KPI_CARDS.map((kpi) => (
+        {kpiCards.map((kpi) => (
           <Card key={kpi.label} className="rounded-xl border border-purple-100 shadow-sm">
             <CardContent className="py-3 px-4">
               <div className="flex items-center justify-between">
@@ -318,9 +368,9 @@ export default function DashboardPage() {
                 {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
-            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-200 bg-green-50 text-green-700" : COLLECTION_RATE >= 50 ? "border-yellow-200 bg-yellow-50 text-yellow-700" : "border-red-200 bg-red-50 text-red-700"}>
+            <Badge variant="outline" className={collectionRate >= 80 ? "border-green-200 bg-green-50 text-green-700" : collectionRate >= 50 ? "border-yellow-200 bg-yellow-50 text-yellow-700" : "border-red-200 bg-red-50 text-red-700"}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              {COLLECTION_RATE}% collected
+              {collectionRate}% collected
             </Badge>
           </div>
 
@@ -331,24 +381,24 @@ export default function DashboardPage() {
                 <CircleAlert className="h-3.5 w-3.5 text-blue-500" />
                 <p className="text-[11px] font-medium text-blue-600">Expected Collection</p>
               </div>
-              <p className="text-xl font-bold text-blue-700">₱{TOTAL_DUE.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-blue-500 mt-0.5">{DAILY_DUE_ITEMS.length} loans due today</p>
+              <p className="text-xl font-bold text-blue-700">₱{totalDue.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-blue-500 mt-0.5">{dailyDueItems.length} loans due today</p>
             </div>
             <div className="rounded-lg border bg-green-50/50 border-green-100 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <CircleCheck className="h-3.5 w-3.5 text-green-500" />
                 <p className="text-[11px] font-medium text-green-600">Actual Collection</p>
               </div>
-              <p className="text-xl font-bold text-green-700">₱{TOTAL_COLLECTED.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-green-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "collected").length} paid in full</p>
+              <p className="text-xl font-bold text-green-700">₱{totalCollected.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-green-500 mt-0.5">{dailyDueItems.filter((i) => i.status === "collected").length} paid in full</p>
             </div>
             <div className="rounded-lg border bg-orange-50/50 border-orange-100 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="h-3.5 w-3.5 text-orange-500" />
                 <p className="text-[11px] font-medium text-orange-600">Remaining</p>
               </div>
-              <p className="text-xl font-bold text-orange-700">₱{(TOTAL_DUE - TOTAL_COLLECTED).toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-orange-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
+              <p className="text-xl font-bold text-orange-700">₱{(totalDue - totalCollected).toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-orange-500 mt-0.5">{dailyDueItems.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
             </div>
           </div>
 
@@ -356,12 +406,12 @@ export default function DashboardPage() {
           <div className="mb-5">
             <div className="flex items-center justify-between text-xs mb-1.5">
               <span className="text-muted-foreground">Collection Progress</span>
-              <span className="font-medium">₱{TOTAL_COLLECTED.toLocaleString("en-PH")} / ₱{TOTAL_DUE.toLocaleString("en-PH")}</span>
+              <span className="font-medium">₱{totalCollected.toLocaleString("en-PH")} / ₱{totalDue.toLocaleString("en-PH")}</span>
             </div>
             <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
-                style={{ width: `${COLLECTION_RATE}%` }}
+                style={{ width: `${collectionRate}%` }}
               />
             </div>
           </div>
@@ -381,7 +431,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {DAILY_DUE_ITEMS.map((item) => (
+                {dailyDueItems.map((item) => (
                   <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-3">

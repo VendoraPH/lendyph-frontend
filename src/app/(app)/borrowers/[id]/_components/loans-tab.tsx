@@ -1,15 +1,15 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, ChevronDown, ChevronRight, UserCheck } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lucide-react";
 import type { CoMaker, Loan, LoanSchedule } from "@/types";
 import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
-import { MOCK_SCHEDULES } from "./mock-detail-data";
+import { loanService } from "@/services";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
@@ -77,6 +77,28 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
 
 export function LoansTab({ loans, coMakers }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
+  const [schedules, setSchedules] = useState<Record<number, LoanSchedule[]>>({});
+  const [loadingSchedule, setLoadingSchedule] = useState<number | null>(null);
+
+  const fetchSchedule = useCallback(async (loanId: number) => {
+    if (schedules[loanId]) return;
+    setLoadingSchedule(loanId);
+    try {
+      const data = await loanService.schedule(loanId);
+      const items = Array.isArray(data) ? data : [];
+      setSchedules((prev) => ({ ...prev, [loanId]: items }));
+    } catch {
+      setSchedules((prev) => ({ ...prev, [loanId]: [] }));
+    } finally {
+      setLoadingSchedule(null);
+    }
+  }, [schedules]);
+
+  useEffect(() => {
+    if (expandedLoan && !schedules[expandedLoan]) {
+      fetchSchedule(expandedLoan);
+    }
+  }, [expandedLoan, schedules, fetchSchedule]);
 
   const sortedLoans = [...loans].sort((a, b) => {
     const order: Record<string, number> = {
@@ -106,8 +128,8 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
             </TableHeader>
             <TableBody>
               {sortedLoans.map((loan) => {
-                const schedule = MOCK_SCHEDULES[loan.id] ?? [];
-                const hasSchedule = schedule.length > 0;
+                const schedule = schedules[loan.id] ?? [];
+                const hasSchedule = schedule.length > 0 || (expandedLoan === loan.id && loadingSchedule === loan.id);
                 const isExpanded = expandedLoan === loan.id;
 
                 const loanCoMakers = coMakers.filter((cm) => cm.loan_id === loan.id);
@@ -194,7 +216,13 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                             </div>
                           )}
                           {/* Repayment schedule */}
-                          {hasSchedule && <ScheduleTable schedule={schedule} />}
+                          {loadingSchedule === loan.id && (
+                            <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">Loading schedule...</span>
+                            </div>
+                          )}
+                          {schedule.length > 0 && <ScheduleTable schedule={schedule} />}
                           {/* Warning if no co-maker needed */}
                           {needsCoMaker && (
                             <div className="mx-4 mt-2 mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
