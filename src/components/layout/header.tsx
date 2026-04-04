@@ -29,6 +29,10 @@ import {
   Settings,
   FilePlus,
   CreditCard,
+  DollarSign,
+  AlertTriangle,
+  FileText,
+  Check,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
@@ -36,6 +40,7 @@ import { tokenManager } from "@/lib/axios-client";
 import { SIDEBAR_NAV } from "@/constants";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HeaderProps {
@@ -96,6 +101,74 @@ function Breadcrumb() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+interface Notification {
+  id: number;
+  title: string;
+  description: string;
+  time: string;
+  read: boolean;
+  icon: React.ElementType;
+  iconColor: string;
+  iconBg: string;
+}
+
+const INITIAL_NOTIFICATIONS: Notification[] = [
+  {
+    id: 1,
+    title: "Payment Received",
+    description: "Rosario D. Santos paid ₱3,933 via GCash",
+    time: "2 min ago",
+    read: false,
+    icon: DollarSign,
+    iconColor: "text-green-600 dark:text-green-400",
+    iconBg: "bg-green-500/10",
+  },
+  {
+    id: 2,
+    title: "Loan Overdue",
+    description: "Ana Santos — LN-2026-0091 is 3 days overdue",
+    time: "15 min ago",
+    read: false,
+    icon: AlertTriangle,
+    iconColor: "text-red-600 dark:text-red-400",
+    iconBg: "bg-red-500/10",
+  },
+  {
+    id: 3,
+    title: "New Loan Application",
+    description: "Carmen Torres applied for a ₱50,000 loan",
+    time: "1 hr ago",
+    read: false,
+    icon: FileText,
+    iconColor: "text-blue-600 dark:text-blue-400",
+    iconBg: "bg-blue-500/10",
+  },
+  {
+    id: 4,
+    title: "Payment Received",
+    description: "Roberto Garcia paid ₱9,417 — cash payment",
+    time: "2 hrs ago",
+    read: true,
+    icon: DollarSign,
+    iconColor: "text-green-600 dark:text-green-400",
+    iconBg: "bg-green-500/10",
+  },
+  {
+    id: 5,
+    title: "Loan Approved",
+    description: "Eduardo Mendoza — LN-2026-0103 has been approved",
+    time: "3 hrs ago",
+    read: true,
+    icon: Check,
+    iconColor: "text-purple-600 dark:text-purple-400",
+    iconBg: "bg-purple-500/10",
+  },
+];
+
 const QUICK_ACTIONS = [
   { title: "New Loan", href: "/loans/new", icon: FilePlus },
   { title: "Record Payment", href: "/payments", icon: CreditCard },
@@ -105,6 +178,19 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const markAsRead = (id: number) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const markAllAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
 
   // Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -167,16 +253,77 @@ export function Header({ onMenuClick }: HeaderProps) {
           {/* Theme toggle */}
           <ThemeToggle />
 
-          {/* Notification bell with red dot */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="relative rounded-full text-muted-foreground hover:bg-muted/50"
-          >
-            <Bell className="h-4 w-4" />
-            <div className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          {/* Notification bell with popover */}
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="relative rounded-full text-muted-foreground hover:bg-muted/50"
+                />
+              }
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                  {unreadCount}
+                </span>
+              )}
+              <span className="sr-only">Notifications</span>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h4 className="text-sm font-semibold">Notifications</h4>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-brand-orange hover:text-brand-orange-dark font-medium transition-colors"
+                  >
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                    <Bell className="h-8 w-8 mb-2 opacity-40" />
+                    <p className="text-sm">No notifications</p>
+                  </div>
+                ) : (
+                  notifications.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => markAsRead(n.id)}
+                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
+                        !n.read ? "bg-brand-orange/5" : ""
+                      }`}
+                    >
+                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${n.iconBg}`}>
+                        <n.icon className={`h-4 w-4 ${n.iconColor}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm truncate ${!n.read ? "font-semibold" : "font-medium"}`}>
+                            {n.title}
+                          </p>
+                          {!n.read && (
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-orange" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {n.description}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">
+                          {n.time}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* User avatar only */}
           <DropdownMenu>

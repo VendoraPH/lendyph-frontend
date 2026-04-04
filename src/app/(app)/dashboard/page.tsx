@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   AreaChart,
   Area,
@@ -126,6 +127,7 @@ const KPI_CARDS = [
     label: "Total Portfolio",
     color: "#7c3aed",
     sparkData: SPARKLINE_PURPLE,
+    href: "/loans",
   },
   {
     icon: FileText,
@@ -133,6 +135,7 @@ const KPI_CARDS = [
     label: "Active Loans",
     color: "#e879f9",
     sparkData: SPARKLINE_ORANGE,
+    href: "/loans",
   },
   {
     icon: DollarSign,
@@ -140,6 +143,7 @@ const KPI_CARDS = [
     label: "Collected",
     color: "#10b981",
     sparkData: SPARKLINE_GREEN,
+    href: "/payments",
   },
   {
     icon: AlertTriangle,
@@ -147,6 +151,7 @@ const KPI_CARDS = [
     label: "Overdue",
     color: "#f87171",
     sparkData: SPARKLINE_BLUE,
+    href: "/collections",
   },
 ];
 
@@ -284,25 +289,27 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <Card key={kpi.label} className="rounded-xl border border-border shadow-sm">
-            <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: kpi.color }}
-                  >
-                    <kpi.icon className="h-3.5 w-3.5 text-white" />
+          <Link key={kpi.label} href={kpi.href} className="group">
+            <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
+              <CardContent className="py-3 px-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: kpi.color }}
+                    >
+                      <kpi.icon className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold leading-tight">{kpi.value}</p>
+                      <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-lg font-bold leading-tight">{kpi.value}</p>
-                    <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
-                  </div>
+                  <Sparkline data={kpi.sparkData} color={kpi.color} />
                 </div>
-                <Sparkline data={kpi.sparkData} color={kpi.color} />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
