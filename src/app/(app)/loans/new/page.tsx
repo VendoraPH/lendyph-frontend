@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Info } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { borrowerService, coMakerService, loanProductService, loanService } from "@/services";
 import type { Borrower, CoMaker } from "@/types";
@@ -37,6 +37,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -186,6 +195,10 @@ export default function NewLoanApplicationPage() {
   const [interestRate, setInterestRate] = useState<string>("");
   const [interestType, setInterestType] = useState<InterestType | null>(null);
 
+  // ── Combobox Open State ──
+  const [borrowerOpen, setBorrowerOpen] = useState(false);
+  const [coMakerOpen, setCoMakerOpen] = useState(false);
+
   // ── Dates State ──
   const [releaseDate, setReleaseDate] = useState<Date | undefined>(undefined);
   const [releaseDateOpen, setReleaseDateOpen] = useState(false);
@@ -238,6 +251,14 @@ export default function NewLoanApplicationPage() {
   }, [borrowerId]);
 
   // ── Derived ──
+  const selectedBorrower = useMemo(
+    () => borrowers.find((b) => b.id === borrowerId) ?? null,
+    [borrowerId, borrowers]
+  );
+  const selectedCoMaker = useMemo(
+    () => coMakers.find((cm) => cm.id === coMakerId) ?? null,
+    [coMakerId, coMakers]
+  );
   const selectedProduct = useMemo(
     () => products.find((p) => p.id === productId) ?? null,
     [productId, products]
@@ -436,56 +457,124 @@ export default function NewLoanApplicationPage() {
               <Label>
                 Borrower <span className="text-destructive">*</span>
               </Label>
-              <Select
-                value={borrowerId}
-                onValueChange={(value) => handleBorrowerChange(value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a borrower" />
-                </SelectTrigger>
-                <SelectContent>
-                  {borrowers.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.full_name}{" "}
-                      <span className="text-muted-foreground">
-                        ({b.borrower_code})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={borrowerOpen}
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    />
+                  }
+                >
+                  <span className={cn("truncate", !selectedBorrower && "text-muted-foreground")}>
+                    {selectedBorrower
+                      ? selectedBorrower.full_name
+                      : "Search borrower..."}
+                  </span>
+                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                </PopoverTrigger>
+                <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Type a name to search..." />
+                    <CommandList>
+                      <CommandEmpty>No borrower found.</CommandEmpty>
+                      <CommandGroup>
+                        {borrowers.map((b) => (
+                          <CommandItem
+                            key={b.id}
+                            value={`${b.full_name} ${b.borrower_code}`}
+                            onSelect={() => {
+                              handleBorrowerChange(
+                                b.id === borrowerId ? null : b.id
+                              );
+                              setBorrowerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 size-4",
+                                borrowerId === b.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {b.full_name}{" "}
+                            <span className="text-muted-foreground">
+                              ({b.borrower_code})
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Co-Maker */}
             <div className="space-y-2">
               <Label>Co-Maker</Label>
-              <Select
-                value={coMakerId}
-                onValueChange={(value) => setCoMakerId(value)}
-                disabled={!borrowerId || coMakers.length === 0}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      !borrowerId
+              <Popover open={coMakerOpen} onOpenChange={setCoMakerOpen}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={coMakerOpen}
+                      disabled={!borrowerId || coMakers.length === 0}
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                    />
+                  }
+                >
+                  <span className={cn("truncate", !selectedCoMaker && "text-muted-foreground")}>
+                    {selectedCoMaker
+                      ? selectedCoMaker.full_name
+                      : !borrowerId
                         ? "Select borrower first"
                         : coMakers.length === 0
                           ? "No co-makers available"
-                          : "Select a co-maker (optional)"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {coMakers.map((cm) => (
-                    <SelectItem key={cm.id} value={cm.id}>
-                      {cm.full_name}{" "}
-                      <span className="text-muted-foreground">
-                        ({cm.relationship})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                          : "Search co-maker (optional)..."}
+                  </span>
+                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                </PopoverTrigger>
+                <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Type a name to search..." />
+                    <CommandList>
+                      <CommandEmpty>No co-maker found.</CommandEmpty>
+                      <CommandGroup>
+                        {coMakers.map((cm) => (
+                          <CommandItem
+                            key={cm.id}
+                            value={`${cm.full_name} ${cm.relationship}`}
+                            onSelect={() => {
+                              setCoMakerId(
+                                cm.id === coMakerId ? null : cm.id
+                              );
+                              setCoMakerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 size-4",
+                                coMakerId === cm.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {cm.full_name}{" "}
+                            <span className="text-muted-foreground">
+                              ({cm.relationship})
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
