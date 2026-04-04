@@ -893,8 +893,8 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Spinner />
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+        <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
   }
