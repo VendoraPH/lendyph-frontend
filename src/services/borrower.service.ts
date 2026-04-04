@@ -1,6 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { Borrower, CoMaker, Loan, Payment, PaginatedResponse } from "@/types";
+import type { Borrower, CoMaker, PaginatedResponse } from "@/types";
 
 export const borrowerService = {
   list: (params?: Record<string, unknown>) =>
@@ -19,15 +19,6 @@ export const borrowerService = {
 
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.BORROWERS.DELETE(id)),
-
-  loans: (id: number) =>
-    api.get<Loan[]>(API_ENDPOINTS.BORROWERS.LOANS(id)),
-
-  payments: (id: number) =>
-    api.get<Payment[]>(API_ENDPOINTS.BORROWERS.PAYMENTS(id)),
-
-  ledger: (id: number) =>
-    api.get(API_ENDPOINTS.BORROWERS.LEDGER(id)),
 
   coMakers: (borrowerId: number) =>
     api.get<CoMaker[]>(API_ENDPOINTS.CO_MAKERS.LIST(borrowerId)),

@@ -53,13 +53,8 @@ export default function BorrowerDetailPage() {
         setLoans([]);
       }
 
-      // Payments endpoint may not exist yet — fail gracefully
-      try {
-        const paymentsRes = await borrowerService.payments(borrowerId);
-        setPayments(Array.isArray(paymentsRes) ? paymentsRes : []);
-      } catch {
-        setPayments([]);
-      }
+      // Payments: fetched per-loan via repayments endpoint (no borrower-level payments API)
+      setPayments([]);
 
       await fetchCoMakers();
     } catch {

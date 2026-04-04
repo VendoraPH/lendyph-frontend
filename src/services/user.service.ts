@@ -41,9 +41,6 @@ export const userService = {
   update: (id: number, data: UpdateUserData) =>
     api.put<User>(API_ENDPOINTS.USERS.UPDATE(id), data),
 
-  delete: (id: number) =>
-    api.delete(API_ENDPOINTS.USERS.DELETE(id)),
-
   deactivate: (id: number) =>
     api.patch<User>(API_ENDPOINTS.USERS.DEACTIVATE(id)),
 

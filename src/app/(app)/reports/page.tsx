@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
+import { reportService } from "@/services";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -212,8 +214,30 @@ export default function ReportsPage() {
     setPreview(null);
   }
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (!generateTarget) return;
+
+    try {
+      const params = { date_from: fromDate, date_to: toDate };
+      switch (generateTarget.id) {
+        case "daily_collection":
+          await reportService.duePastDue(params);
+          break;
+        case "portfolio_summary":
+          await reportService.loanBalanceSummary(params);
+          break;
+        case "disbursement_report":
+          await reportService.releases(params);
+          break;
+        default:
+          await reportService.repayments(params);
+          break;
+      }
+      toast.success("Report generated from API");
+    } catch {
+      // Fall through to sample preview
+    }
+
     setPreview({ reportId: generateTarget.id, from: fromDate, to: toDate });
   }
 

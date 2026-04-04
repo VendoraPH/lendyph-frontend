@@ -19,14 +19,4 @@ export const authService = {
 
   refresh: () =>
     api.post<{ token: string }>(API_ENDPOINTS.AUTH.REFRESH),
-
-  forgotPassword: (data: { email: string }) =>
-    api.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, data),
-
-  resetPassword: (data: {
-    token: string;
-    email: string;
-    password: string;
-    password_confirmation: string;
-  }) => api.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, data),
 };
