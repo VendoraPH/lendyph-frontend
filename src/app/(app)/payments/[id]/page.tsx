@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { paymentService } from "@/services";
+import { repaymentService } from "@/services";
 import { toast } from "sonner";
-import type { Payment } from "@/types";
+import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,23 +83,22 @@ const STATUS_STYLES: Record<
   },
 };
 
-/** Map API Payment response to local ReceiptData shape */
-function mapPaymentToReceipt(payment: Payment): ReceiptData {
-  // The API might return nested data — adapt based on actual response shape
-  const p = payment as Payment & Record<string, unknown>;
+/** Map API Repayment response to local ReceiptData shape */
+function mapPaymentToReceipt(payment: Repayment): ReceiptData {
+  const p = payment as Repayment & Record<string, unknown>;
   return {
     id: p.id,
     receipt_number: (p.receipt_number as string) || `OR-${String(p.id).padStart(8, "0")}`,
     borrower_name: (p.borrower_name as string) || "—",
     loan_account_number: (p.loan_account_number as string) || "—",
     loan_product_name: (p.loan_product_name as string) || "—",
-    payment_date: p.paid_at || p.created_at,
-    method: p.method,
-    reference_number: p.reference_number,
+    payment_date: p.payment_date || p.created_at,
+    method: (p.method as ReceiptData["method"]) || "cash",
+    reference_number: p.reference_number as string | undefined,
     penalty: (p.penalty_amount as number) || 0,
     interest: (p.interest_amount as number) || 0,
     principal: (p.principal_amount as number) || 0,
-    total: p.amount,
+    total: p.amount_paid,
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
     next_due_date: (p.next_due_date as string) || "—",
@@ -205,8 +204,8 @@ export default function PaymentReceiptPage({
   const fetchReceipt = useCallback(async () => {
     setLoading(true);
     try {
-      const payment = await paymentService.detail(Number(id));
-      setReceipt(mapPaymentToReceipt(payment));
+      const repayment = await repaymentService.detail(Number(id));
+      setReceipt(mapPaymentToReceipt(repayment));
     } catch {
       // Fallback to mock data if API fails
       const mock = MOCK_RECEIPTS.find((r) => r.id === Number(id));
@@ -228,7 +227,7 @@ export default function PaymentReceiptPage({
     if (!receipt || !voidReason.trim()) return;
     setVoiding(true);
     try {
-      await paymentService.void(receipt.id, voidReason.trim());
+      await repaymentService.void(receipt.id, { void_reason: voidReason.trim() });
       toast.success("Payment voided successfully");
       setShowVoidConfirm(false);
       setVoidReason("");
