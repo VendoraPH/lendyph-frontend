@@ -284,7 +284,7 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <Card key={kpi.label} className="rounded-xl border border-purple-100 shadow-sm">
+          <Card key={kpi.label} className="rounded-xl border border-border shadow-sm">
             <CardContent className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -309,7 +309,7 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       {/* Row 2: Expected vs Actual Daily Collection                        */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-purple-100 shadow-sm">
+      <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -318,7 +318,7 @@ export default function DashboardPage() {
                 {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
-            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-200 bg-green-50 text-green-700" : COLLECTION_RATE >= 50 ? "border-yellow-200 bg-yellow-50 text-yellow-700" : "border-red-200 bg-red-50 text-red-700"}>
+            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : COLLECTION_RATE >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
               <TrendingUp className="h-3 w-3 mr-1" />
               {COLLECTION_RATE}% collected
             </Badge>
@@ -326,29 +326,29 @@ export default function DashboardPage() {
 
           {/* Summary cards */}
           <div className="grid grid-cols-3 gap-4 mb-5">
-            <div className="rounded-lg border bg-blue-50/50 border-blue-100 p-3">
+            <div className="rounded-lg border bg-blue-500/10 border-blue-500/20 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <CircleAlert className="h-3.5 w-3.5 text-blue-500" />
-                <p className="text-[11px] font-medium text-blue-600">Expected Collection</p>
+                <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Expected Collection</p>
               </div>
-              <p className="text-xl font-bold text-blue-700">₱{TOTAL_DUE.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-blue-500 mt-0.5">{DAILY_DUE_ITEMS.length} loans due today</p>
+              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">₱{TOTAL_DUE.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-0.5">{DAILY_DUE_ITEMS.length} loans due today</p>
             </div>
-            <div className="rounded-lg border bg-green-50/50 border-green-100 p-3">
+            <div className="rounded-lg border bg-green-500/10 border-green-500/20 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <CircleCheck className="h-3.5 w-3.5 text-green-500" />
-                <p className="text-[11px] font-medium text-green-600">Actual Collection</p>
+                <p className="text-[11px] font-medium text-green-600 dark:text-green-400">Actual Collection</p>
               </div>
-              <p className="text-xl font-bold text-green-700">₱{TOTAL_COLLECTED.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-green-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "collected").length} paid in full</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-300">₱{TOTAL_COLLECTED.toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-green-500 dark:text-green-400 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "collected").length} paid in full</p>
             </div>
-            <div className="rounded-lg border bg-orange-50/50 border-orange-100 p-3">
+            <div className="rounded-lg border bg-orange-500/10 border-orange-500/20 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="h-3.5 w-3.5 text-orange-500" />
-                <p className="text-[11px] font-medium text-orange-600">Remaining</p>
+                <p className="text-[11px] font-medium text-orange-600 dark:text-orange-400">Remaining</p>
               </div>
-              <p className="text-xl font-bold text-orange-700">₱{(TOTAL_DUE - TOTAL_COLLECTED).toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-orange-500 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
+              <p className="text-xl font-bold text-orange-700 dark:text-orange-300">₱{(TOTAL_DUE - TOTAL_COLLECTED).toLocaleString("en-PH")}</p>
+              <p className="text-[11px] text-orange-500 dark:text-orange-400 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
             </div>
           </div>
 
@@ -358,7 +358,7 @@ export default function DashboardPage() {
               <span className="text-muted-foreground">Collection Progress</span>
               <span className="font-medium">₱{TOTAL_COLLECTED.toLocaleString("en-PH")} / ₱{TOTAL_DUE.toLocaleString("en-PH")}</span>
             </div>
-            <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
                 style={{ width: `${COLLECTION_RATE}%` }}
@@ -372,12 +372,12 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent bg-purple-50/50">
-                  <TableHead className="pl-6 text-purple-900/70">Borrower</TableHead>
-                  <TableHead className="text-purple-900/70">Loan ID</TableHead>
-                  <TableHead className="text-right text-purple-900/70">Amount Due</TableHead>
-                  <TableHead className="text-right text-purple-900/70">Paid</TableHead>
-                  <TableHead className="pr-6 text-right text-purple-900/70">Status</TableHead>
+                <TableRow className="hover:bg-transparent bg-muted/50">
+                  <TableHead className="pl-6 text-muted-foreground">Borrower</TableHead>
+                  <TableHead className="text-muted-foreground">Loan ID</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Paid</TableHead>
+                  <TableHead className="pr-6 text-right text-muted-foreground">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -385,7 +385,7 @@ export default function DashboardPage() {
                   <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center text-xs font-semibold text-purple-700 shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
                           {getInitials(item.borrower)}
                         </div>
                         <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
@@ -401,10 +401,10 @@ export default function DashboardPage() {
                         variant="outline"
                         className={
                           item.status === "collected"
-                            ? "bg-green-50 text-green-700 border-green-200"
+                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
                             : item.status === "partial"
-                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                              : "bg-gray-50 text-gray-500 border-gray-200"
+                              ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
+                              : "bg-muted text-muted-foreground border-border"
                         }
                       >
                         {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
@@ -421,10 +421,10 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Main Chart Card — full width single column                 */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-purple-100 shadow-sm overflow-hidden">
+      <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="flex flex-col lg:flex-row">
           {/* Left column: value + area chart */}
-          <div className="flex flex-col justify-between p-6 lg:w-[35%] lg:border-r border-purple-100">
+          <div className="flex flex-col justify-between p-6 lg:w-[35%] lg:border-r border-border">
             <div>
               <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
               <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
@@ -502,9 +502,10 @@ export default function DashboardPage() {
                   <BarChart data={CANDLESTICK_DATA} margin={{ top: 0, right: 8, bottom: 4, left: 8 }}>
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: "currentColor" }}
                       tickLine={false}
                       axisLine={false}
+                      className="text-muted-foreground"
                     />
                     <YAxis hide />
                     <Bar dataKey="volume" isAnimationActive={false} radius={[2, 2, 0, 0]}>
@@ -534,7 +535,7 @@ export default function DashboardPage() {
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Recent Transactions Table                                   */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-purple-100 shadow-sm">
+      <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-3">
           <h3 className="text-base font-semibold">Recent Transactions</h3>
         </div>
@@ -542,11 +543,11 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent bg-purple-50/50">
-                  <TableHead className="pl-6 text-purple-900/70">Name</TableHead>
-                  <TableHead className="text-purple-900/70">Description</TableHead>
-                  <TableHead className="text-right text-purple-900/70">Amount</TableHead>
-                  <TableHead className="pr-6 text-right text-purple-900/70">Date</TableHead>
+                <TableRow className="hover:bg-transparent bg-muted/50">
+                  <TableHead className="pl-6 text-muted-foreground">Name</TableHead>
+                  <TableHead className="text-muted-foreground">Description</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Amount</TableHead>
+                  <TableHead className="pr-6 text-right text-muted-foreground">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
