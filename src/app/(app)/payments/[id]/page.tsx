@@ -102,7 +102,7 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
     next_due_date: (p.next_due_date as string) || "—",
-    collected_by: p.collected_by || "—",
+    collected_by: (p.collected_by as string) || "—",
     remarks: p.remarks || "",
     status: p.status,
   };

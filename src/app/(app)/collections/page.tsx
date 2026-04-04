@@ -1,9 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { toast } from "sonner";
-import { collectionService } from "@/services";
-import type { Collection } from "@/types";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -200,18 +197,6 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
 
 // ── Main Page ──
 
-function mapCollectionToEntry(c: Collection): CollectionEntry {
-  return {
-    id: c.id,
-    borrower_name: c.borrower_name,
-    loan_account: `LA-${c.loan_id}`,
-    due_date: c.due_date,
-    amount_due: c.amount_due,
-    days_overdue: c.days_overdue > 0 ? c.days_overdue : undefined,
-    status: c.status,
-  };
-}
-
 export default function CollectionsPage() {
   const [collections, setCollections] =
     useState<CollectionEntry[]>(INITIAL_COLLECTIONS);
@@ -219,30 +204,6 @@ export default function CollectionsPage() {
   const [confirmEntry, setConfirmEntry] = useState<CollectionEntry | null>(
     null
   );
-
-  const fetchCollections = useCallback(async () => {
-    try {
-      const [dueToday, upcoming, overdue] = await Promise.all([
-        collectionService.dueToday(),
-        collectionService.upcoming(),
-        collectionService.overdue(),
-      ]);
-      const all = [
-        ...(Array.isArray(dueToday) ? dueToday : []),
-        ...(Array.isArray(upcoming) ? upcoming : []),
-        ...(Array.isArray(overdue) ? overdue : []),
-      ];
-      if (all.length > 0) {
-        setCollections(all.map(mapCollectionToEntry));
-      }
-    } catch {
-      // Keep mock data on API failure
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCollections();
-  }, [fetchCollections]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -278,13 +239,7 @@ export default function CollectionsPage() {
   }, [collections, activeTab]);
 
   // Mark collected
-  async function handleMarkCollected(entry: CollectionEntry) {
-    try {
-      await collectionService.markCollected(entry.id);
-      toast.success(`Collection marked for ${entry.borrower_name}`);
-    } catch {
-      // Optimistic update even if API fails
-    }
+  function handleMarkCollected(entry: CollectionEntry) {
     setCollections((prev) =>
       prev.map((c) =>
         c.id === entry.id ? { ...c, status: "collected" as const } : c

@@ -1,10 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { paymentService } from "@/services";
-import type { Payment } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -597,31 +594,6 @@ function PaymentCard({
 
 // ── Main Page ──
 
-function mapPaymentToMock(p: Payment): MockPayment {
-  const pm = p as Payment & Record<string, unknown>;
-  return {
-    id: p.id,
-    receipt_number: (pm.receipt_number as string) || `RCP-${p.id}`,
-    borrower_name: (pm.borrower_name as string) || "—",
-    borrower_id: p.borrower_id,
-    loan_account: (pm.loan_account_number as string) || `LN-${p.loan_id}`,
-    loan_id: p.loan_id,
-    date: p.paid_at || p.created_at,
-    amount: p.amount,
-    penalty_amount: p.penalty_amount || 0,
-    method: p.method,
-    status: p.status === "pending" ? "completed" : p.status as PaymentStatus,
-    collected_by: p.collected_by || "—",
-    balance_before: (pm.previous_balance as number) || 0,
-    balance_after: (pm.new_balance as number) || 0,
-    reference_number: p.reference_number,
-    remarks: p.remarks,
-    void_reason: (pm.void_reason as string) || undefined,
-    voided_by: (pm.voided_by as string) || undefined,
-    voided_at: (pm.voided_at as string) || undefined,
-  };
-}
-
 export default function PaymentHistoryPage() {
   const [payments, setPayments] = useState<MockPayment[]>(INITIAL_PAYMENTS);
   const [search, setSearch] = useState("");
@@ -630,22 +602,6 @@ export default function PaymentHistoryPage() {
   const [statusTab, setStatusTab] = useState<string>("all");
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
-
-  const fetchPayments = useCallback(async () => {
-    try {
-      const response = await paymentService.list({ per_page: 100 });
-      const items = (response as unknown as { data: Payment[] }).data || response;
-      if (Array.isArray(items) && items.length > 0) {
-        setPayments(items.map(mapPaymentToMock));
-      }
-    } catch {
-      // Keep mock data on API failure
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
 
   // Filter logic
   const filtered = useMemo(() => {
@@ -692,13 +648,7 @@ export default function PaymentHistoryPage() {
     setVoidDialogOpen(true);
   };
 
-  const handleVoid = async (id: number, reason: string) => {
-    try {
-      await paymentService.void(id, reason);
-      toast.success("Payment voided successfully");
-    } catch {
-      // Optimistic update even if API fails
-    }
+  const handleVoid = (id: number, reason: string) => {
     setPayments((prev) =>
       prev.map((p) =>
         p.id === id
