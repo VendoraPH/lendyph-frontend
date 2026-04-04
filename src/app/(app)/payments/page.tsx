@@ -245,16 +245,16 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     id: l.id,
     loan_account_number: l.loan_account_number || `LN-${l.id}`,
     application_number: l.application_number || `LA-${l.id}`,
-    borrower_name: l.borrower_name || "—",
-    borrower_id: l.borrower_id,
-    loan_product_name: l.loan_product_name || "—",
+    borrower_name: l.borrower?.full_name ?? l.borrower?.name ?? l.borrower_name ?? "—",
+    borrower_id: l.borrower?.id ?? l.borrower_id ?? 0,
+    loan_product_name: l.loan_product?.name ?? l.loan_product_name ?? "—",
     principal_amount: l.principal_amount,
     interest_rate: l.interest_rate,
-    interest_type: l.interest_type === "upon_maturity" ? "fixed" : l.interest_type,
-    term_months: l.term_months,
-    payment_frequency: l.payment_frequency,
-    outstanding_balance: l.outstanding_balance,
-    total_payable: l.total_payable,
+    interest_type: ((l.interest_method ?? l.interest_type) === "upon_maturity" ? "fixed" : (l.interest_method ?? l.interest_type ?? "fixed")) as ActiveLoan["interest_type"],
+    term_months: l.term ?? l.term_months ?? 0,
+    payment_frequency: (l.frequency ?? l.payment_frequency ?? "monthly") as ActiveLoan["payment_frequency"],
+    outstanding_balance: l.outstanding_balance ?? 0,
+    total_payable: l.total_payable ?? 0,
     status: l.status,
     current_due: (l.current_due as number) || 0,
     next_due_date: l.next_due_date || "",
@@ -322,7 +322,7 @@ export default function PaymentsPage() {
   const allocation = useMemo(() => {
     if (!selectedLoan || !amountPaid || amountPaid <= 0) return null;
     const interestPortion =
-      selectedLoan.outstanding_balance * (selectedLoan.interest_rate / 100);
+      (selectedLoan.outstanding_balance ?? 0) * (selectedLoan.interest_rate / 100);
     return computeAllocation(
       amountPaid,
       selectedLoan.current_due,
@@ -346,7 +346,7 @@ export default function PaymentsPage() {
     if (!selectedLoan || !allocation) return null;
     return Math.max(
       0,
-      selectedLoan.outstanding_balance - allocation.principalApplied
+      (selectedLoan.outstanding_balance ?? 0) - allocation.principalApplied
     );
   }, [selectedLoan, allocation]);
 

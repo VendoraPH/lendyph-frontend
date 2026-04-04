@@ -8,8 +8,8 @@ import {
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { Payment, Loan } from "@/types";
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+function formatCurrency(amount: number | string | undefined | null): string {
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(parseFloat(String(amount ?? 0)) || 0);
 }
 
 function formatDate(dateStr: string): string {
@@ -37,8 +37,8 @@ interface PaymentsTabProps {
 
 export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
   const completedPayments = payments.filter((p) => p.status === "completed");
-  const totalPaid = completedPayments.reduce((sum, p) => sum + p.amount, 0);
-  const totalOutstanding = loans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+  const totalPaid = completedPayments.reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
+  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
 
   const ongoingLoans = loans.filter((l) => l.status === "ongoing");
   const nextDueDates = ongoingLoans.map((l) => l.next_due_date).filter(Boolean).sort();
@@ -46,7 +46,7 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
 
   const today = new Date().toISOString().split("T")[0]!;
   const overdueLoans = ongoingLoans.filter((l) => l.next_due_date && l.next_due_date < today);
-  const overdueAmount = overdueLoans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+  const overdueAmount = overdueLoans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
 
   const sortedPayments = [...payments].sort((a, b) => {
     const dateA = a.paid_at ?? a.created_at;
@@ -54,7 +54,10 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
     return dateB.localeCompare(dateA);
   });
 
-  const loanPurposeMap = new Map(loans.map((l) => [l.id, l.purpose ?? `Loan #${l.id}`]));
+  const loanLabelMap = new Map(loans.map((l) => [
+    l.id,
+    l.loan_account_number ?? l.application_number ?? (l.loan_product?.name ?? l.loan_product_name ?? `Loan ${l.id}`),
+  ]));
 
   return (
     <div className="space-y-4">
@@ -129,7 +132,7 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
                   <TableRow key={payment.id}>
                     <TableCell>{formatDate(payment.paid_at ?? payment.created_at)}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {loanPurposeMap.get(payment.loan_id) ?? `Loan #${payment.loan_id}`}
+                      {loanLabelMap.get(payment.loan_id) ?? payment.loan_id}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {formatCurrency(payment.amount)}

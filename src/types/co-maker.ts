@@ -11,12 +11,22 @@ export type CoMakerRelationship =
 
 export interface CoMaker {
   id: number;
-  co_maker_code: string;
-  borrower_id: number;
-  loan_id: number;
-  full_name: string;
-  relationship: CoMakerRelationship;
-  phone: string;
+  co_maker_code?: string;
+  borrower_id?: number;
+  loan_id?: number;
+  // API returns individual name fields
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  suffix?: string;
+  full_name?: string;
+  name?: string;
+  // API returns relationship_to_borrower
+  relationship_to_borrower?: string;
+  relationship?: CoMakerRelationship;
+  // API returns contact_number
+  contact_number?: string;
+  phone?: string;
   address?: string;
   occupation?: string;
   employer?: string;
@@ -25,5 +35,6 @@ export interface CoMaker {
   valid_id_number?: string;
   valid_id_photo?: string;
   photo?: string;
-  created_at: string;
+  status?: string;
+  created_at?: string;
 }

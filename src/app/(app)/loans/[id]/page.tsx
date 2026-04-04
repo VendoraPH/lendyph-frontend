@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
-import { loanService, loanDocumentService, loanAdjustmentService, repaymentService } from "@/services";
+import { loanService, loanAdjustmentService, repaymentService } from "@/services";
+import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,16 +69,17 @@ import { cn } from "@/lib/utils";
 import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
+  PAYMENT_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
 
 // ── Currency & Date Formatters ──
 
-const formatCurrency = (amount: number) =>
+const formatCurrency = (amount: number | string | undefined | null) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-  }).format(amount);
+  }).format(parseFloat(String(amount ?? 0)) || 0);
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-PH", {
@@ -404,7 +406,7 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   if (loan.approved_at) {
     events.push({
       icon: <UserCheck className="h-4 w-4 text-blue-600" />,
-      label: `Approved by ${loan.approved_by}`,
+      label: `Approved by ${loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "—"}`,
       date: loan.approved_at,
       detail: loan.approval_remarks ?? undefined,
     });
@@ -413,7 +415,7 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   if (loan.rejected_at) {
     events.push({
       icon: <Ban className="h-4 w-4 text-red-600" />,
-      label: `Rejected by ${loan.rejected_by}`,
+      label: `Rejected by ${loan.rejected_by ?? "—"}`,
       date: loan.rejected_at,
       detail: loan.rejection_remarks ?? undefined,
     });
@@ -422,7 +424,7 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   if (loan.released_at) {
     events.push({
       icon: <Unlock className="h-4 w-4 text-cyan-600" />,
-      label: `Released by ${loan.released_by}`,
+      label: `Released by ${loan.released_by_user?.full_name ?? loan.released_by_user?.name ?? loan.released_by ?? "—"}`,
       date: loan.released_at,
     });
   }
@@ -481,6 +483,12 @@ export default function LoanDetailPage({
   const [adjDescription, setAdjDescription] = useState("");
   const [adjRemarks, setAdjRemarks] = useState("");
   const [adjNewValues, setAdjNewValues] = useState("");
+  // User-friendly adjustment fields
+  const [adjNewBalance, setAdjNewBalance] = useState("");
+  const [adjNewInterestRate, setAdjNewInterestRate] = useState("");
+  const [adjNewTerm, setAdjNewTerm] = useState("");
+  const [adjNewFrequency, setAdjNewFrequency] = useState<string | null>(null);
+  const [adjPenaltyAmount, setAdjPenaltyAmount] = useState("");
 
   // Loan Documents state
   const [docLoading, setDocLoading] = useState<string | null>(null);
@@ -506,8 +514,31 @@ export default function LoanDetailPage({
   // Fetch schedule for released+ loans
   const fetchSchedule = useCallback(async (id: number) => {
     try {
-      const schedule = await loanService.schedule(id);
-      setApiSchedule(Array.isArray(schedule) ? schedule : []);
+      const res = await loanService.schedule(id);
+      // API may return { schedule: [...], summary: {...} } or a plain array
+      const rows = Array.isArray(res) ? res : (res as unknown as { schedule: unknown[] })?.schedule;
+      if (Array.isArray(rows) && rows.length > 0) {
+        // Map ApiScheduleRow field names to LoanSchedule field names
+        const first = rows[0] as Record<string, unknown>;
+        const isApiFormat = "principal_due" in first;
+        setApiSchedule(
+          isApiFormat
+            ? (rows as Record<string, unknown>[]).map((r) => ({
+                id: Number(r.id) || 0,
+                loan_id: Number(r.loan_id) || id,
+                due_date: String(r.due_date ?? ""),
+                principal: parseFloat(String(r.principal_due ?? 0)),
+                interest: parseFloat(String(r.interest_due ?? 0)),
+                amount_due: parseFloat(String(r.total_due ?? 0)),
+                amount_paid: parseFloat(String(r.principal_paid ?? 0)) + parseFloat(String(r.interest_paid ?? 0)),
+                balance: parseFloat(String(r.remaining_balance ?? 0)),
+                status: (r.status as LoanSchedule["status"]) ?? "pending",
+              }) as LoanSchedule)
+            : rows as unknown as LoanSchedule[]
+        );
+      } else {
+        setApiSchedule([]);
+      }
     } catch {
       setApiSchedule(null); // fallback to client-side generation
     }
@@ -566,15 +597,18 @@ export default function LoanDetailPage({
   // Amortization schedule preview for release dialog
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
+    const termVal = loan.term ?? loan.term_months ?? 0;
+    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
+    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
     return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
-      loan.term_months,
-      loan.payment_frequency,
-      loan.interest_type,
+      termVal,
+      freqVal,
+      methodVal,
       releaseDate,
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, releaseDate]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, releaseDate]);
 
   const scheduleTotals = useMemo(() => {
     return releaseSchedule.reduce(
@@ -590,12 +624,14 @@ export default function LoanDetailPage({
   // Maturity date computed from release date + term
   const computedMaturityDate = useMemo(() => {
     if (!loan) return null;
-    return addMonths(releaseDate, loan.term_months);
-  }, [releaseDate, loan?.term_months]);
+    return addMonths(releaseDate, loan.term ?? loan.term_months ?? 0);
+  }, [releaseDate, loan?.term, loan?.term_months]);
 
   // Post-release: prefer API schedule, fallback to client-side generation
   const storedSchedule = useMemo(() => {
-    if (!loan || !loan.release_date) return [];
+    if (!loan) return [];
+    const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
+    if (!relDate) return [];
     const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
     if (!isReleased) return [];
     // Use API schedule if available, map to display format
@@ -603,22 +639,25 @@ export default function LoanDetailPage({
       return apiSchedule.map((row, idx) => ({
         period: idx + 1,
         dueDate: new Date(row.due_date),
-        principal: row.principal,
-        interest: row.interest,
-        totalPayment: row.amount_due,
-        balance: row.balance,
+        principal: parseFloat(String(row.principal)) || 0,
+        interest: parseFloat(String(row.interest)) || 0,
+        totalPayment: parseFloat(String(row.amount_due)) || 0,
+        balance: parseFloat(String(row.balance)) || 0,
       }));
     }
     // Fallback to client-side generation
+    const termVal = loan.term ?? loan.term_months ?? 0;
+    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
+    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
     return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
-      loan.term_months,
-      loan.payment_frequency,
-      loan.interest_type,
-      new Date(loan.release_date),
+      termVal,
+      freqVal,
+      methodVal,
+      new Date(relDate),
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term_months, loan?.payment_frequency, loan?.interest_type, loan?.release_date, loan?.status, apiSchedule]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -632,6 +671,22 @@ export default function LoanDetailPage({
   }, [storedSchedule]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+
+  // Resolve actual API field names with fallbacks to legacy flat fields
+  const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
+  const loanCoMakerName = loan?.co_makers?.[0]?.full_name ?? loan?.co_makers?.[0]?.name ?? loan?.co_maker_name ?? "";
+  const loanProductName = loan?.loan_product?.name ?? loan?.loan_product_name ?? "";
+  const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
+  const loanTerm = loan?.term ?? loan?.term_months ?? 0;
+  const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
+  const loanProcessingFee = loan?.deductions?.processing_fee ?? loan?.processing_fee ?? 0;
+  const loanServiceFee = loan?.deductions?.service_fee ?? loan?.service_fee ?? 0;
+  const loanOtherDeductions = (loan?.total_deductions ?? 0) - loanProcessingFee - loanServiceFee;
+  const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
+  const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
+  const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
+  const loanRejectedBy = loan?.created_by_user?.full_name ?? loan?.rejected_by; // TODO: actual rejected_by_user
+  const loanTotalPayable = loan?.total_payable ?? (storedSchedule.length > 0 ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0) : 0);
 
   if (loading) {
     return (
@@ -784,18 +839,28 @@ export default function LoanDetailPage({
   // ── Loan Adjustment Handlers ──
 
   const handleCreateAdjustment = async () => {
-    let parsedValues: Record<string, unknown>;
-    try {
-      parsedValues = JSON.parse(adjNewValues || "{}");
-    } catch {
-      toast.error("New values must be valid JSON");
-      return;
+    // Build new_values from user-friendly fields based on type
+    const newValues: Record<string, unknown> = {};
+    if (adjType === "balance_adjustment") {
+      if (!adjNewBalance) { toast.error("Please enter the new balance amount"); return; }
+      newValues.outstanding_balance = parseFloat(adjNewBalance);
+    } else if (adjType === "restructure") {
+      if (adjNewInterestRate) newValues.interest_rate = parseFloat(adjNewInterestRate);
+      if (adjNewTerm) newValues.term = parseInt(adjNewTerm);
+      if (adjNewFrequency) newValues.frequency = adjNewFrequency;
+      if (Object.keys(newValues).length === 0) { toast.error("Please fill in at least one field to restructure"); return; }
+    } else if (adjType === "penalty_waiver") {
+      if (!adjPenaltyAmount) { toast.error("Please enter the penalty amount to waive"); return; }
+      newValues.penalty_waived = parseFloat(adjPenaltyAmount);
+    } else if (adjType === "term_extension") {
+      if (!adjNewTerm) { toast.error("Please enter the additional months"); return; }
+      newValues.additional_months = parseInt(adjNewTerm);
     }
     try {
       setActionLoading(true);
       await loanAdjustmentService.create(loan.id, {
         adjustment_type: adjType,
-        new_values: parsedValues,
+        new_values: newValues,
         description: adjDescription || undefined,
         remarks: adjRemarks || undefined,
       });
@@ -804,6 +869,11 @@ export default function LoanDetailPage({
       setAdjDescription("");
       setAdjRemarks("");
       setAdjNewValues("");
+      setAdjNewBalance("");
+      setAdjNewInterestRate("");
+      setAdjNewTerm("");
+      setAdjNewFrequency(null);
+      setAdjPenaltyAmount("");
       fetchAdjustments(loan.id);
     } catch {
       toast.error("Failed to create adjustment");
@@ -840,27 +910,95 @@ export default function LoanDetailPage({
 
   // ── Loan Document Handlers ──
 
-  const handleDownloadDocument = async (type: "disclosure" | "promissory-note") => {
+  const handleDownloadDocument = (type: "disclosure" | "promissory-note") => {
     try {
       setDocLoading(type);
-      const data = type === "disclosure"
-        ? await loanDocumentService.disclosure(loan.id)
-        : await loanDocumentService.promissoryNote(loan.id);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      // Access actual API fields (differ from TS types)
+      const raw = loan as unknown as Record<string, unknown>;
+      const borrowerObj = raw.borrower as Record<string, unknown> | undefined;
+      const borrowerName = (borrowerObj?.full_name ?? borrowerObj?.name ?? "") as string;
+      const coMakersArr = raw.co_makers as Record<string, unknown>[] | undefined;
+      const coMakerName = coMakersArr?.[0] ? ((coMakersArr[0].full_name ?? coMakersArr[0].name ?? "") as string) : undefined;
+      const principal = parseFloat(String(raw.principal_amount ?? 0));
+      const rate = parseFloat(String(raw.interest_rate ?? 0));
+      const interestMethod = String(raw.interest_method ?? "");
+      const term = Number(raw.term ?? 0);
+      const frequency = String(raw.frequency ?? "");
+      const netProceeds = parseFloat(String(raw.net_proceeds ?? 0));
+      const totalDeductionsVal = parseFloat(String(raw.total_deductions ?? 0));
+      const deductions = raw.deductions as Record<string, unknown> | undefined;
+      const processingFee = parseFloat(String(deductions?.processing_fee ?? 0));
+      const serviceFee = parseFloat(String(deductions?.service_fee ?? 0));
+      const otherDeductions = totalDeductionsVal - processingFee - serviceFee;
+      const appNumber = String(raw.application_number ?? raw.loan_account_number ?? "");
+      const startDate = String(raw.start_date ?? "");
+      const maturityDate = String(raw.maturity_date ?? "");
+      const releasedAt = String(raw.released_at ?? raw.start_date ?? "");
+
+      // Build schedule from apiSchedule or embedded amortization_schedules
+      const scheduleSource = apiSchedule && apiSchedule.length > 0
+        ? apiSchedule
+        : (raw.amortization_schedules as Record<string, unknown>[] | undefined) ?? [];
+      const schedule = (scheduleSource as Record<string, unknown>[]).map((s, i) => ({
+        period: i + 1,
+        due_date: String(s.due_date ?? ""),
+        principal: parseFloat(String(s.principal ?? s.principal_due ?? 0)),
+        interest: parseFloat(String(s.interest ?? s.interest_due ?? 0)),
+        amount_due: parseFloat(String(s.amount_due ?? s.total_due ?? 0)),
+        balance: parseFloat(String(s.balance ?? s.remaining_balance ?? 0)),
+      }));
+
+      const totalPayable = schedule.length > 0
+        ? schedule.reduce((sum, s) => sum + s.amount_due, 0)
+        : principal + (principal * rate / 100 * term);
+
+      let html: string;
+      if (type === "disclosure") {
+        html = generateDisclosureHTML({
+          loan_id: loan.id,
+          application_number: appNumber || undefined,
+          borrower_name: borrowerName,
+          principal_amount: principal,
+          interest_rate: rate,
+          interest_type: interestMethod,
+          term_months: term,
+          payment_frequency: frequency,
+          processing_fee: processingFee,
+          service_fee: serviceFee,
+          other_deductions: otherDeductions > 0 ? otherDeductions : 0,
+          net_proceeds: netProceeds || principal - totalDeductionsVal,
+          total_payable: totalPayable,
+          amortization_schedule: schedule,
+        });
+      } else {
+        html = generatePromissoryNoteHTML({
+          loan_id: loan.id,
+          application_number: appNumber || undefined,
+          borrower_name: borrowerName,
+          co_maker_name: coMakerName,
+          principal_amount: principal,
+          interest_rate: rate,
+          interest_type: interestMethod,
+          term_months: term,
+          payment_frequency: frequency,
+          total_payable: totalPayable,
+          maturity_date: maturityDate || undefined,
+          release_date: releasedAt || startDate || undefined,
+        });
+      }
+      const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       toast.success(`${type === "disclosure" ? "Disclosure Statement" : "Promissory Note"} opened`);
-    } catch {
-      toast.error(`Failed to load ${type === "disclosure" ? "disclosure statement" : "promissory note"}`);
+    } catch (err) {
+      console.error("Document generation error:", err);
+      toast.error(`Failed to generate ${type === "disclosure" ? "disclosure statement" : "promissory note"}`);
     } finally {
       setDocLoading(null);
     }
   };
 
-  const totalDeductions =
-    (loan.processing_fee ?? 0) +
-    (loan.service_fee ?? 0) +
-    (loan.other_deductions ?? 0);
+  const totalDeductions = loan.total_deductions ?? (loanProcessingFee + loanServiceFee + (loanOtherDeductions > 0 ? loanOtherDeductions : 0));
 
   return (
     <div className="space-y-6">
@@ -905,7 +1043,7 @@ export default function LoanDetailPage({
                 </Badge>
               )}
             </div>
-            <p className="text-lg text-foreground">{loan.borrower_name}</p>
+            <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
         </div>
       </div>
@@ -1000,7 +1138,7 @@ export default function LoanDetailPage({
               </div>
               <p className="text-sm text-red-600">
                 Rejected by{" "}
-                <span className="font-medium">{loan.rejected_by}</span> on{" "}
+                <span className="font-medium">{loan.rejected_by ?? "—"}</span> on{" "}
                 {loan.rejected_at ? formatDateTime(loan.rejected_at) : "N/A"}
               </p>
               {loan.rejection_remarks && (
@@ -1036,13 +1174,15 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Loan Product</p>
                 <p className="text-sm font-medium">
-                  {loan.loan_product_name ?? "N/A"}
+                  {loanProductName || "N/A"}
                 </p>
               </div>
-              <div className="col-span-2">
-                <p className="text-xs text-muted-foreground">Purpose</p>
-                <p className="text-sm font-medium">{loan.purpose ?? "N/A"}</p>
-              </div>
+              {loan.purpose && (
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">Purpose</p>
+                  <p className="text-sm font-medium">{loan.purpose}</p>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -1070,7 +1210,7 @@ export default function LoanDetailPage({
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
                 <p className="text-sm font-medium capitalize">
-                  {loan.interest_type}
+                  {loanInterestType || "N/A"}
                 </p>
               </div>
               <div>
@@ -1079,7 +1219,7 @@ export default function LoanDetailPage({
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
                 <p className="text-sm font-medium">
-                  {loan.term_months} months
+                  {loanTerm} months
                 </p>
               </div>
               <div>
@@ -1087,8 +1227,7 @@ export default function LoanDetailPage({
                   Payment Frequency
                 </p>
                 <p className="text-sm font-medium">
-                  {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency] ??
-                    loan.payment_frequency}
+                  {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
                 </p>
               </div>
             </div>
@@ -1099,7 +1238,7 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Total Payable</p>
                 <p className="text-sm font-semibold">
-                  {formatCurrency(loan.total_payable)}
+                  {formatCurrency(loanTotalPayable)}
                 </p>
               </div>
               <div>
@@ -1129,9 +1268,7 @@ export default function LoanDetailPage({
                   Processing Fee
                 </span>
                 <span className="text-sm font-medium">
-                  {loan.processing_fee != null
-                    ? formatCurrency(loan.processing_fee)
-                    : "N/A"}
+                  {formatCurrency(loanProcessingFee)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -1139,9 +1276,7 @@ export default function LoanDetailPage({
                   Service Fee
                 </span>
                 <span className="text-sm font-medium">
-                  {loan.service_fee != null
-                    ? formatCurrency(loan.service_fee)
-                    : "N/A"}
+                  {formatCurrency(loanServiceFee)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -1149,9 +1284,7 @@ export default function LoanDetailPage({
                   Other Deductions
                 </span>
                 <span className="text-sm font-medium">
-                  {loan.other_deductions != null
-                    ? formatCurrency(loan.other_deductions)
-                    : "N/A"}
+                  {formatCurrency(loanOtherDeductions > 0 ? loanOtherDeductions : 0)}
                 </span>
               </div>
               <Separator />
@@ -1177,13 +1310,13 @@ export default function LoanDetailPage({
             <div>
               <p className="text-xs text-muted-foreground">Borrower</p>
               <p className="text-sm font-medium">
-                {loan.borrower_name ?? "N/A"}
+                {loanBorrowerName || "N/A"}
               </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Co-Maker</p>
               <p className="text-sm font-medium">
-                {loan.co_maker_name ?? "None"}
+                {loanCoMakerName || "None"}
               </p>
             </div>
           </CardContent>
@@ -1232,7 +1365,7 @@ export default function LoanDetailPage({
               )}
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">{formatCurrency(loan.outstanding_balance)}</p>
+                <p className="text-sm font-semibold">{formatCurrency(loan.outstanding_balance ?? 0)}</p>
               </div>
             </div>
           </CardContent>
@@ -1535,7 +1668,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to approve{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loan.borrower_name}</span>.
+              <span className="font-medium">{loanBorrowerName}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">
@@ -1573,7 +1706,7 @@ export default function LoanDetailPage({
             <DialogDescription>
               You are about to reject{" "}
               <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loan.borrower_name}</span>. Please
+              <span className="font-medium">{loanBorrowerName}</span>. Please
               provide a reason.
             </DialogDescription>
           </DialogHeader>
@@ -1630,11 +1763,11 @@ export default function LoanDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Borrower</p>
-                  <p className="text-sm font-medium">{loan.borrower_name}</p>
+                  <p className="text-sm font-medium">{loanBorrowerName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Loan Product</p>
-                  <p className="text-sm font-medium">{loan.loan_product_name ?? "N/A"}</p>
+                  <p className="text-sm font-medium">{loanProductName || "N/A"}</p>
                 </div>
               </div>
 
@@ -1654,13 +1787,13 @@ export default function LoanDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
-                    {loan.interest_rate}% / <span className="capitalize">{loan.interest_type}</span>
+                    {loan.interest_rate}% / <span className="capitalize">{loanInterestType || "N/A"}</span>
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Term / Frequency</p>
                   <p className="text-sm font-medium">
-                    {loan.term_months} months / {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency]}
+                    {loanTerm} months / {PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency}
                   </p>
                 </div>
               </div>
@@ -1888,17 +2021,87 @@ export default function LoanDetailPage({
                 onChange={(e) => setAdjDescription(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="adj-new-values">New Values (JSON) <span className="text-red-500">*</span></Label>
-              <Textarea
-                id="adj-new-values"
-                placeholder='e.g. {"interest_rate": 2.5, "term_months": 12}'
-                value={adjNewValues}
-                onChange={(e) => setAdjNewValues(e.target.value)}
-                className="font-mono text-sm"
-                rows={3}
-              />
-            </div>
+            {/* Dynamic fields based on adjustment type */}
+            {adjType === "balance_adjustment" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="adj-new-balance">New Outstanding Balance <span className="text-red-500">*</span></Label>
+                <Input
+                  id="adj-new-balance"
+                  type="number"
+                  placeholder="0.00"
+                  step="0.01"
+                  value={adjNewBalance}
+                  onChange={(e) => setAdjNewBalance(e.target.value)}
+                />
+              </div>
+            )}
+            {adjType === "restructure" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="adj-new-rate">New Interest Rate (%)</Label>
+                    <Input
+                      id="adj-new-rate"
+                      type="number"
+                      placeholder={String(loan.interest_rate ?? "")}
+                      step="0.1"
+                      value={adjNewInterestRate}
+                      onChange={(e) => setAdjNewInterestRate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="adj-new-term">New Term (months)</Label>
+                    <Input
+                      id="adj-new-term"
+                      type="number"
+                      placeholder={String(loanTerm ?? "")}
+                      value={adjNewTerm}
+                      onChange={(e) => setAdjNewTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>New Payment Frequency</Label>
+                  <Select value={adjNewFrequency ?? null} onValueChange={(v) => setAdjNewFrequency(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Keep current frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            {adjType === "penalty_waiver" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="adj-penalty">Penalty Amount to Waive <span className="text-red-500">*</span></Label>
+                <Input
+                  id="adj-penalty"
+                  type="number"
+                  placeholder="0.00"
+                  step="0.01"
+                  value={adjPenaltyAmount}
+                  onChange={(e) => setAdjPenaltyAmount(e.target.value)}
+                />
+              </div>
+            )}
+            {adjType === "term_extension" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="adj-extend-term">Additional Months <span className="text-red-500">*</span></Label>
+                <Input
+                  id="adj-extend-term"
+                  type="number"
+                  placeholder="e.g. 3"
+                  value={adjNewTerm}
+                  onChange={(e) => setAdjNewTerm(e.target.value)}
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="adj-remarks">Remarks</Label>
               <Textarea
@@ -1916,7 +2119,7 @@ export default function LoanDetailPage({
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleCreateAdjustment}
-              disabled={actionLoading || !adjNewValues.trim()}
+              disabled={actionLoading}
             >
               <Plus className="mr-2 h-4 w-4" />
               Submit Adjustment

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle } from "lucide-react";
 import type { CoMaker, Loan } from "@/types";
+import type { CreateCoMakerData } from "@/services/co-maker.service";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
 
@@ -24,7 +25,7 @@ interface CoMakersTabProps {
   coMakers: CoMaker[];
   loans: Loan[];
   borrowerId: number;
-  onAdd: (coMaker: CoMaker) => void;
+  onAdd: (data: CreateCoMakerData) => void;
   onEdit: (updated: CoMaker) => void;
   onDelete: (id: number) => void;
 }
@@ -71,7 +72,7 @@ export function CoMakersTab({
       {/* Co-maker cards */}
       <div className="grid gap-4 md:grid-cols-2">
         {coMakers.map((cm) => {
-          const loan = loanMap.get(cm.loan_id);
+          const loan = cm.loan_id ? loanMap.get(cm.loan_id) : undefined;
           const idLabel =
             VALID_ID_OPTIONS.find((o) => o.value === cm.valid_id_type)?.label ??
             cm.valid_id_type;
@@ -81,9 +82,9 @@ export function CoMakersTab({
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-base">{cm.full_name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{cm.relationship}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{cm.co_maker_code}</p>
+                    <CardTitle className="text-base">{cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || "—")}</CardTitle>
+                    <p className="text-sm text-muted-foreground capitalize">{cm.relationship_to_borrower ?? cm.relationship ?? "—"}</p>
+                    {cm.co_maker_code && <p className="text-xs text-muted-foreground font-mono">{cm.co_maker_code}</p>}
                   </div>
                   <div className="flex items-center gap-1">
                     {loan && (
@@ -112,7 +113,7 @@ export function CoMakersTab({
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <Phone className="h-4 w-4 text-muted-foreground" />
-                  {cm.phone}
+                  {cm.contact_number ?? cm.phone ?? "—"}
                 </div>
                 {cm.address && (
                   <div className="flex items-start gap-2 text-sm">
