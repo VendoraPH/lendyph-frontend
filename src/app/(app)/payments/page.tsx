@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { loanService, repaymentService } from "@/services";
+import type { Loan } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -235,10 +238,37 @@ function detectPaymentType(
 // Page
 // ---------------------------------------------------------------------------
 
+/** Map API Loan to local ActiveLoan shape */
+function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
+  const l = loan as Loan & Record<string, unknown>;
+  return {
+    id: l.id,
+    loan_account_number: l.loan_account_number || `LN-${l.id}`,
+    application_number: l.application_number || `LA-${l.id}`,
+    borrower_name: l.borrower_name || "—",
+    borrower_id: l.borrower_id,
+    loan_product_name: l.loan_product_name || "—",
+    principal_amount: l.principal_amount,
+    interest_rate: l.interest_rate,
+    interest_type: l.interest_type === "upon_maturity" ? "fixed" : l.interest_type,
+    term_months: l.term_months,
+    payment_frequency: l.payment_frequency,
+    outstanding_balance: l.outstanding_balance,
+    total_payable: l.total_payable,
+    status: l.status,
+    current_due: (l.current_due as number) || 0,
+    next_due_date: l.next_due_date || "",
+    overdue_amount: (l.overdue_amount as number) || 0,
+    penalty_amount: (l.penalty_amount as number) || 0,
+  };
+}
+
 export default function PaymentsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<ActiveLoan | null>(null);
+  const [lastReceiptId, setLastReceiptId] = useState<number | null>(null);
 
   // Form state
   const [paymentDate, setPaymentDate] = useState(
@@ -251,17 +281,42 @@ export default function PaymentsPage() {
   const [collectedBy, setCollectedBy] = useState("Juan Cashier");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // API-loaded loans + mock fallback
+  const [apiLoans, setApiLoans] = useState<ActiveLoan[]>([]);
+  const [usingMock, setUsingMock] = useState(false);
+
+  const fetchLoans = useCallback(async () => {
+    try {
+      const response = await loanService.list({ status: "ongoing", per_page: 100 });
+      const loans = response.data;
+      if (Array.isArray(loans) && loans.length > 0) {
+        setApiLoans(loans.map(mapLoanToActiveLoan));
+        setUsingMock(false);
+      } else {
+        setApiLoans(MOCK_ACTIVE_LOANS);
+        setUsingMock(true);
+      }
+    } catch {
+      setApiLoans(MOCK_ACTIVE_LOANS);
+      setUsingMock(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
+
   // Search filtering
   const filteredLoans = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return MOCK_ACTIVE_LOANS.filter(
+    return apiLoans.filter(
       (loan) =>
         loan.loan_account_number.toLowerCase().includes(q) ||
         loan.application_number.toLowerCase().includes(q) ||
         loan.borrower_name.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, apiLoans]);
 
   // Allocation preview
   const allocation = useMemo(() => {
@@ -332,6 +387,7 @@ export default function PaymentsPage() {
     setPaymentMethod("cash");
     setCollectedBy("Juan Cashier");
     setPaymentDate(new Date().toISOString().split("T")[0]);
+    setLastReceiptId(null);
   }
 
   function resetForm() {
@@ -349,15 +405,33 @@ export default function PaymentsPage() {
     if (!selectedLoan || !amountPaid || amountPaid <= 0) return;
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const repayment = await repaymentService.create(selectedLoan.id, {
+        payment_date: paymentDate,
+        amount_paid: amountPaid,
+        remarks: remarks || undefined,
+      });
 
-    toast.success("Payment posted successfully", {
-      description: `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
-    });
+      const receiptId = repayment?.id;
+      if (receiptId) setLastReceiptId(receiptId);
 
-    resetForm();
-    setIsSubmitting(false);
+      toast.success("Payment posted successfully", {
+        description: `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
+        action: receiptId
+          ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
+          : undefined,
+      });
+
+      // Refresh loan data
+      if (!usingMock) fetchLoans();
+      resetForm();
+    } catch {
+      toast.error("Failed to post payment", {
+        description: "Please try again or check your connection.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const needsReference = paymentMethod !== "cash";
@@ -734,7 +808,18 @@ export default function PaymentsPage() {
           )}
 
           {/* Submit Button */}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {lastReceiptId && !selectedLoan && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => router.push(`/payments/${lastReceiptId}`)}
+                className="gap-2"
+              >
+                <Receipt className="size-4" />
+                View Last Receipt
+              </Button>
+            )}
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2 px-6"
               size="lg"
