@@ -102,7 +102,7 @@ export default function BorrowerDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
@@ -110,7 +110,7 @@ export default function BorrowerDetailPage() {
 
   if (!borrower) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <p className="text-muted-foreground">Borrower not found.</p>
       </div>
     );
