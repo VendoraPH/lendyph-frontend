@@ -62,6 +62,7 @@ export default function LoginPage() {
       }
 
       setUser(user);
+      toast.success(`Welcome back, ${user.first_name || user.username}!`);
       router.push("/dashboard");
     } catch (error) {
       if (error instanceof AxiosError) {
@@ -74,18 +75,35 @@ export default function LoginPage() {
             password: data.errors.password?.[0],
           });
         } else if (status === 401) {
-          toast.error("Invalid credentials. Please try again.");
+          toast.error(
+            "The username or password you entered is incorrect. Please double-check and try again."
+          );
         } else if (status === 419) {
-          toast.error("Session expired. Please refresh the page and try again.");
+          toast.error(
+            "Your session has expired. Please refresh the page and sign in again."
+          );
+        } else if (status === 429) {
+          toast.error(
+            "Too many sign-in attempts. Please wait a moment before trying again."
+          );
         } else if (status === 502 || status === 504) {
-          toast.error("Server is temporarily unavailable. Please try again in a moment.");
+          toast.error(
+            "Our servers are currently undergoing maintenance. Please try again in a few minutes."
+          );
+        } else if (status === 403) {
+          toast.error(
+            "Your account has been deactivated. Please contact your administrator for assistance."
+          );
         } else {
           toast.error(
-            data?.message || "Something went wrong. Please try again later."
+            data?.message ||
+              "Something unexpected happened. Please try again or contact support if the issue persists."
           );
         }
       } else {
-        toast.error("Unable to connect to server. The API may be down or unreachable.");
+        toast.error(
+          "Unable to reach the server. Please check your internet connection and try again."
+        );
       }
     } finally {
       setIsLoading(false);
