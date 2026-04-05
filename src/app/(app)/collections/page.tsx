@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { RouteGuard } from "@/components/common";
+import { RouteGuard, PermissionButton } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -412,13 +412,15 @@ export default function CollectionsPage() {
                     <TableCell className="text-right">
                       {(entry.status === "due_today" ||
                         entry.status === "overdue") && (
-                        <Button
+                        <PermissionButton
+                          permission="collections:mark_collected"
+                          tooltip="Your role doesn't have permission to mark collections"
                           size="sm"
                           className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                           onClick={() => setConfirmEntry(entry)}
                         >
                           Mark Collected
-                        </Button>
+                        </PermissionButton>
                       )}
                       {entry.status === "collected" && (
                         <span className="text-sm text-green-600 font-medium flex items-center justify-end gap-1">
@@ -479,13 +481,15 @@ export default function CollectionsPage() {
                 )}
                 {(entry.status === "due_today" ||
                   entry.status === "overdue") && (
-                  <Button
+                  <PermissionButton
+                    permission="collections:mark_collected"
+                    tooltip="Your role doesn't have permission to mark collections"
                     size="sm"
                     className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                     onClick={() => setConfirmEntry(entry)}
                   >
                     Mark Collected
-                  </Button>
+                  </PermissionButton>
                 )}
                 {entry.status === "collected" && (
                   <p className="text-sm text-green-600 font-medium flex items-center gap-1">

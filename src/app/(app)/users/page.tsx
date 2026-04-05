@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { RouteGuard } from "@/components/common";
+import { RouteGuard, PermissionButton } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -285,13 +285,15 @@ function AddUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button
+      <PermissionButton
+        permission="users:create"
+        tooltip="Your role doesn't have permission to create users"
         onClick={() => setOpen(true)}
         className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
       >
         <UserPlus className="mr-2 h-4 w-4" />
         Add User
-      </Button>
+      </PermissionButton>
       <DialogContent size="lg">
         <DialogHeader className="shrink-0">
           <DialogTitle>Add New User</DialogTitle>

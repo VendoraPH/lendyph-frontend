@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { RouteGuard } from "@/components/common";
+import { RouteGuard, PermissionButton } from "@/components/common";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loanService, repaymentService } from "@/services";
@@ -822,7 +822,9 @@ export default function PaymentsPage() {
                 View Last Receipt
               </Button>
             )}
-            <Button
+            <PermissionButton
+              permission="payments:create"
+              tooltip="Your role doesn't have permission to record payments"
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2 px-6"
               size="lg"
               disabled={
@@ -842,7 +844,7 @@ export default function PaymentsPage() {
                   <ArrowRight className="size-4" />
                 </>
               )}
-            </Button>
+            </PermissionButton>
           </div>
         </>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { RouteGuard } from "@/components/common";
+import { RouteGuard, PermissionGate } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -177,13 +177,15 @@ export default function BorrowersPage() {
             Search, filter, and manage borrower profiles
           </p>
         </div>
-        <Link
-          href="/borrowers/new"
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors"
-        >
-          <UserPlus className="h-4 w-4" />
-          Add Borrower
-        </Link>
+        <PermissionGate permission="borrowers:create">
+          <Link
+            href="/borrowers/new"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Borrower
+          </Link>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}
