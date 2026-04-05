@@ -187,13 +187,12 @@ export default function NewLoanApplicationPage() {
   const [purpose, setPurpose] = useState("");
 
   // ── Loan Product & Terms State ──
-  const [productId, setProductId] = useState<number | null>(null);
+  const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
   const [termMonths, setTermMonths] = useState<string>("");
-  const [paymentFrequency, setPaymentFrequency] =
-    useState<PaymentFrequency | null>(null);
+  const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
-  const [interestType, setInterestType] = useState<InterestType | null>(null);
+  const [interestType, setInterestType] = useState<string | null>(null);
 
   // ── Combobox Open State ──
   const [borrowerOpen, setBorrowerOpen] = useState(false);
@@ -223,7 +222,7 @@ export default function NewLoanApplicationPage() {
         ]);
         const borrowerData = Array.isArray(borrowersRes) ? borrowersRes : (borrowersRes as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
-        setProducts(Array.isArray(productsRes) ? productsRes : []);
+        setProducts(Array.isArray(productsRes) ? productsRes : (productsRes as unknown as { data: LoanProduct[] }).data ?? []);
       } catch {
         toast.error("Failed to load form data");
       } finally {
@@ -260,7 +259,7 @@ export default function NewLoanApplicationPage() {
     [coMakerId, coMakers]
   );
   const selectedProduct = useMemo(
-    () => products.find((p) => p.id === productId) ?? null,
+    () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
     [productId, products]
   );
 
@@ -329,9 +328,9 @@ export default function NewLoanApplicationPage() {
     return computeAmortization(
       principal,
       rate,
-      interestType,
+      interestType as InterestType,
       term,
-      paymentFrequency,
+      paymentFrequency as PaymentFrequency,
       releaseDate
     );
   }, [
@@ -357,13 +356,13 @@ export default function NewLoanApplicationPage() {
 
   // ── Product Selection Handler ──
   const handleProductChange = useCallback(
-    (id: number | null) => {
-      setProductId(id);
-      const product = products.find((p) => p.id === id);
+    (value: string | null) => {
+      setProductId(value);
+      const product = products.find((p) => p.id === Number(value));
       if (product) {
-        setInterestRate(String(product.interest_rate));
-        setInterestType(product.interest_type);
-        setPaymentFrequency(product.payment_frequency);
+        setInterestRate(String(product.interest_rate ?? ""));
+        setInterestType(product.interest_type ?? null);
+        setPaymentFrequency(product.payment_frequency ?? null);
         setProcessingFeeOverride(null);
         setServiceFeeOverride(null);
       }
@@ -397,10 +396,11 @@ export default function NewLoanApplicationPage() {
       const payload = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerId ? [coMakerId] : [],
-        loan_product_id: productId,
+        loan_product_id: Number(productId),
         principal_amount: principal,
         interest_rate: rate,
         start_date: formatDateISO(releaseDate),
+        ...(purpose.trim() && { purpose: purpose.trim() }),
       };
       const loan = await loanService.create(payload);
       toast.success("Loan Application Created", {
@@ -603,15 +603,16 @@ export default function NewLoanApplicationPage() {
               Loan Product <span className="text-destructive">*</span>
             </Label>
             <Select
-              value={productId}
+              value={productId ?? null}
               onValueChange={(value) => handleProductChange(value)}
+              items={products.map((p) => ({ value: String(p.id), label: p.name }))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a loan product" />
               </SelectTrigger>
               <SelectContent>
                 {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <SelectItem key={p.id} value={String(p.id)}>
                     {p.name}
                     {p.description && (
                       <span className="text-muted-foreground">
@@ -676,10 +677,8 @@ export default function NewLoanApplicationPage() {
             <div className="space-y-2">
               <Label>Payment Frequency</Label>
               <Select
-                value={paymentFrequency}
-                onValueChange={(value) =>
-                  setPaymentFrequency(value as PaymentFrequency)
-                }
+                value={paymentFrequency ?? null}
+                onValueChange={(value) => setPaymentFrequency(value ?? null)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select frequency" />
@@ -710,10 +709,8 @@ export default function NewLoanApplicationPage() {
             <div className="space-y-2">
               <Label>Interest Type</Label>
               <Select
-                value={interestType}
-                onValueChange={(value) =>
-                  setInterestType(value as InterestType)
-                }
+                value={interestType ?? null}
+                onValueChange={(value) => setInterestType(value ?? null)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select type" />

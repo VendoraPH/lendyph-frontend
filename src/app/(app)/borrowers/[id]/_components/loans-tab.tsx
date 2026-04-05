@@ -159,10 +159,10 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                       <TableCell className="text-right tabular-nums">{formatCurrency(loan.principal_amount)}</TableCell>
                       <TableCell>{loan.interest_rate}%</TableCell>
                       <TableCell>
-                        {loan.term_months}mo · {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency] ?? loan.payment_frequency}
+                        {loan.term ?? loan.term_months ?? 0}mo · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium text-brand-orange">
-                        {loan.outstanding_balance > 0 ? formatCurrency(loan.outstanding_balance) : "Paid"}
+                        {(loan.outstanding_balance ?? 0) > 0 ? formatCurrency(loan.outstanding_balance ?? 0) : "Paid"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {loan.released_at ? formatDate(loan.released_at) : "—"}

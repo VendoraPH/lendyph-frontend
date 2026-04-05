@@ -24,9 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { UserPlus, Upload, AlertTriangle } from "lucide-react";
 import { RELATIONSHIP_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { CoMaker, CoMakerRelationship, Loan, ValidIdType } from "@/types";
+import type { CreateCoMakerData } from "@/services/co-maker.service";
 
 interface CoMakerFormData {
-  full_name: string;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  suffix: string;
   relationship: CoMakerRelationship | "";
   phone: string;
   address: string;
@@ -42,7 +46,10 @@ interface CoMakerFormData {
 
 function emptyForm(): CoMakerFormData {
   return {
-    full_name: "",
+    first_name: "",
+    middle_name: "",
+    last_name: "",
+    suffix: "",
     relationship: "",
     phone: "",
     address: "",
@@ -58,10 +65,16 @@ function emptyForm(): CoMakerFormData {
 }
 
 function coMakerToForm(cm: CoMaker): CoMakerFormData {
+  // Parse full_name back into parts if individual fields aren't available
+  const raw = cm as unknown as Record<string, unknown>;
+  const parts = (cm.full_name ?? "").split(" ");
   return {
-    full_name: cm.full_name,
-    relationship: cm.relationship,
-    phone: cm.phone,
+    first_name: (raw.first_name as string) ?? parts[0] ?? "",
+    middle_name: (raw.middle_name as string) ?? (parts.length > 2 ? parts.slice(1, -1).join(" ") : ""),
+    last_name: (raw.last_name as string) ?? (parts.length > 1 ? parts[parts.length - 1]! : ""),
+    suffix: (raw.suffix as string) ?? "",
+    relationship: ((raw.relationship_to_borrower as string) ?? cm.relationship ?? "") as CoMakerRelationship | "",
+    phone: (raw.contact_number as string) ?? cm.phone ?? "",
     address: cm.address ?? "",
     occupation: cm.occupation ?? "",
     employer: cm.employer ?? "",
@@ -70,7 +83,7 @@ function coMakerToForm(cm: CoMaker): CoMakerFormData {
     valid_id_number: cm.valid_id_number ?? "",
     valid_id_photo: cm.valid_id_photo,
     photo: cm.photo,
-    loan_id: cm.loan_id,
+    loan_id: cm.loan_id ?? "",
   };
 }
 
@@ -87,7 +100,7 @@ interface AddCoMakerDialogProps {
   borrowerId: number;
   coMakerCount: number;
   existingCoMakers: CoMaker[];
-  onAdd: (coMaker: CoMaker) => void;
+  onAdd: (data: CreateCoMakerData) => void;
 }
 
 export function AddCoMakerDialog({
@@ -116,27 +129,21 @@ export function AddCoMakerDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.relationship || !form.phone || !form.loan_id) return;
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.relationship || !form.phone.trim()) return;
 
-    const newCoMaker: CoMaker = {
-      id: Date.now(),
-      co_maker_code: generateCoMakerCode(coMakerCount),
-      borrower_id: borrowerId,
-      loan_id: form.loan_id as number,
-      full_name: form.full_name,
-      relationship: form.relationship as CoMakerRelationship,
-      phone: form.phone,
-      address: form.address || undefined,
-      occupation: form.occupation || undefined,
-      employer: form.employer || undefined,
-      monthly_income: form.monthly_income ? Number(form.monthly_income) : undefined,
-      valid_id_type: (form.valid_id_type || undefined) as ValidIdType | undefined,
-      valid_id_number: form.valid_id_number || undefined,
-      valid_id_photo: form.valid_id_photo,
-      photo: form.photo,
-      created_at: new Date().toISOString().split("T")[0]!,
+    const payload: CreateCoMakerData = {
+      first_name: form.first_name,
+      last_name: form.last_name,
+      ...(form.middle_name && { middle_name: form.middle_name }),
+      ...(form.suffix && { suffix: form.suffix }),
+      relationship_to_borrower: form.relationship,
+      contact_number: form.phone,
+      ...(form.address && { address: form.address }),
+      ...(form.occupation && { occupation: form.occupation }),
+      ...(form.employer && { employer: form.employer }),
+      ...(form.monthly_income && { monthly_income: Number(form.monthly_income) }),
     };
-    onAdd(newCoMaker);
+    onAdd(payload);
     resetForm();
     setOpen(false);
   };
@@ -209,11 +216,11 @@ export function EditCoMakerDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.relationship || !form.phone || !form.loan_id) return;
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.relationship || !form.phone.trim()) return;
 
     onSave({
       ...coMaker,
-      full_name: form.full_name,
+      full_name: [form.first_name, form.middle_name, form.last_name, form.suffix].filter(Boolean).join(" "),
       relationship: form.relationship as CoMakerRelationship,
       phone: form.phone,
       address: form.address || undefined,
@@ -317,17 +324,47 @@ function CoMakerFormFields({
       </div>
 
       {/* Personal Info */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="cm_full_name">Full Name *</Label>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="space-y-2 col-span-2 sm:col-span-1">
+          <Label htmlFor="cm_first_name">First Name *</Label>
           <Input
-            id="cm_full_name"
-            placeholder="Juan Dela Cruz"
-            value={form.full_name}
-            onChange={(e) => update("full_name", e.target.value)}
+            id="cm_first_name"
+            placeholder="Juan"
+            value={form.first_name}
+            onChange={(e) => update("first_name", e.target.value)}
             required
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="cm_middle_name">Middle Name</Label>
+          <Input
+            id="cm_middle_name"
+            placeholder="Santos"
+            value={form.middle_name}
+            onChange={(e) => update("middle_name", e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cm_last_name">Last Name *</Label>
+          <Input
+            id="cm_last_name"
+            placeholder="Dela Cruz"
+            value={form.last_name}
+            onChange={(e) => update("last_name", e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cm_suffix">Suffix</Label>
+          <Input
+            id="cm_suffix"
+            placeholder="Jr., Sr., III"
+            value={form.suffix}
+            onChange={(e) => update("suffix", e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Relationship to Borrower *</Label>
           <Select
