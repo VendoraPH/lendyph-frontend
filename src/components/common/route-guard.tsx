@@ -1,32 +1,24 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { usePermission } from "@/hooks";
+import { AccessDenied } from "./access-denied";
 import type { Permission } from "@/types";
 
 interface RouteGuardProps {
   permission: Permission;
+  pageName?: string;
   children: React.ReactNode;
-  fallbackUrl?: string;
 }
 
 export function RouteGuard({
   permission,
+  pageName,
   children,
-  fallbackUrl = "/dashboard",
 }: RouteGuardProps) {
   const { can } = usePermission();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!can(permission)) {
-      router.replace(fallbackUrl);
-    }
-  }, [can, permission, router, fallbackUrl]);
 
   if (!can(permission)) {
-    return null;
+    return <AccessDenied pageName={pageName} />;
   }
 
   return <>{children}</>;
