@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,6 +165,7 @@ export default function BorrowersPage() {
   };
 
   return (
+    <RouteGuard permission="borrowers:view" pageName="Borrowers">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -342,5 +344,6 @@ export default function BorrowersPage() {
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }

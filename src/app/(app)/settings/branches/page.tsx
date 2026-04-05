@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,7 @@ export default function BranchesPage() {
   }
 
   return (
+    <RouteGuard permission="settings:view" pageName="Branch Settings">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -405,5 +407,6 @@ export default function BranchesPage() {
         onSave={fetchBranches}
       />
     </div>
+    </RouteGuard>
   );
 }

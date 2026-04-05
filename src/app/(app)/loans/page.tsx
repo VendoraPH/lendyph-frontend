@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { RouteGuard } from "@/components/common";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -144,6 +145,7 @@ export default function LoansPage() {
   }, [loans, activeTab, search]);
 
   return (
+    <RouteGuard permission="loans:view" pageName="Loans">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -351,5 +353,6 @@ export default function LoansPage() {
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }

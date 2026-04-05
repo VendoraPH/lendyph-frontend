@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -351,6 +352,7 @@ export default function AuditTrailPage() {
   };
 
   return (
+    <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -571,5 +573,6 @@ export default function AuditTrailPage() {
         />
       )}
     </div>
+    </RouteGuard>
   );
 }

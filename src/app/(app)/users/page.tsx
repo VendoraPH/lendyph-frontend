@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -900,6 +901,7 @@ export default function UsersPage() {
   }
 
   return (
+    <RouteGuard permission="users:view" pageName="User Management">
     <div className="space-y-6">
       <Card>
         <CardContent className="py-5">
@@ -1027,5 +1029,6 @@ export default function UsersPage() {
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }

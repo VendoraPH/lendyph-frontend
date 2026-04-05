@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -249,6 +250,7 @@ export default function CollectionsPage() {
   }
 
   return (
+    <RouteGuard permission="collections:view" pageName="Collections">
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -550,5 +552,6 @@ export default function CollectionsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </RouteGuard>
   );
 }

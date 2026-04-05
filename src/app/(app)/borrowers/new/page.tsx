@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -171,6 +172,7 @@ export default function NewBorrowerPage() {
   }
 
   return (
+    <RouteGuard permission="borrowers:create" pageName="Add Borrower">
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
@@ -495,5 +497,6 @@ export default function NewBorrowerPage() {
         </div>
       </form>
     </div>
+    </RouteGuard>
   );
 }

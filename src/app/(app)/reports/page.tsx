@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RouteGuard } from "@/components/common";
 import { toast } from "sonner";
 import { reportService } from "@/services";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -252,6 +253,7 @@ export default function ReportsPage() {
       : null;
 
   return (
+    <RouteGuard permission="reports:view" pageName="Reports">
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -376,5 +378,6 @@ export default function ReportsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </RouteGuard>
   );
 }

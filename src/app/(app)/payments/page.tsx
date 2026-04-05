@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { RouteGuard } from "@/components/common";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loanService, repaymentService } from "@/services";
@@ -437,6 +438,7 @@ export default function PaymentsPage() {
   const needsReference = paymentMethod !== "cash";
 
   return (
+    <RouteGuard permission="payments:view" pageName="Payments">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -845,6 +847,7 @@ export default function PaymentsPage() {
         </>
       )}
     </div>
+    </RouteGuard>
   );
 }
 
