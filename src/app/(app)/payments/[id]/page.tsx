@@ -267,7 +267,10 @@ export default function PaymentReceiptPage({
     );
   }
 
-  const status = STATUS_STYLES[receipt.status];
+  const status = STATUS_STYLES[receipt.status] ?? {
+    label: receipt.status,
+    className: "bg-muted text-muted-foreground border-border",
+  };
 
   return (
     <div className="space-y-6">
