@@ -31,12 +31,18 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 import {
   UserPlus,
   Search,
@@ -47,6 +53,8 @@ import {
   UserX,
   Users,
   AlertTriangle,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -164,26 +172,59 @@ function BranchSelector({
   onChange,
   branches,
 }: {
-  value: number | "";
+  value: number | null;
   onChange: (branchId: number) => void;
   branches: ApiBranch[];
 }) {
+  const [open, setOpen] = useState(false);
+  const selected = branches.find((b) => b.id === value);
+
   return (
-    <Select
-      value={value === "" ? undefined : value}
-      onValueChange={(val) => onChange(val as number)}
-    >
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="Select a branch" />
-      </SelectTrigger>
-      <SelectContent>
-        {branches.map((branch) => (
-          <SelectItem key={branch.id} value={branch.id}>
-            {branch.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+        }
+      >
+        <span className={cn("truncate", !selected && "text-muted-foreground")}>
+          {selected ? selected.name : "Select a branch"}
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+      </PopoverTrigger>
+      <PopoverContent className="w-(--anchor-width) p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search branch..." />
+          <CommandList>
+            <CommandEmpty>No branch found.</CommandEmpty>
+            <CommandGroup>
+              {branches.map((branch) => (
+                <CommandItem
+                  key={branch.id}
+                  value={branch.name}
+                  onSelect={() => {
+                    onChange(branch.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 size-4",
+                      value === branch.id ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {branch.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -209,7 +250,7 @@ function AddUserDialog({
     password: "",
     password_confirmation: "",
     role: "",
-    branch_id: "" as number | "",
+    branch_id: null as number | null,
   });
 
   const update = (field: string, value: string | number) =>
@@ -225,7 +266,7 @@ function AddUserDialog({
       password: "",
       password_confirmation: "",
       role: "",
-      branch_id: "",
+      branch_id: null,
     });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -461,7 +502,7 @@ function EditUserDialog({
     email: user.email,
     mobile_number: user.mobile_number ?? "",
     role: user.roles?.[0] ?? "",
-    branch_id: user.branch?.id ?? ("" as number | ""),
+    branch_id: user.branch?.id ?? null as number | null,
   });
 
   const update = (field: string, value: string | number) =>
@@ -896,8 +937,8 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Spinner />
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+        <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
   }

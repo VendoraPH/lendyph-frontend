@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment } from "@/types";
-import { borrowerService, loanService, coMakerService } from "@/services";
+import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
+import { EditBorrowerDialog } from "../_components/borrower-actions";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -25,6 +26,7 @@ export default function BorrowerDetailPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
 
   const fetchCoMakers = useCallback(async () => {
     try {
@@ -55,8 +57,23 @@ export default function BorrowerDetailPage() {
         setLoans([]);
       }
 
-      // Payments: fetched per-loan via repayments endpoint (no borrower-level payments API)
-      setPayments([]);
+      // Fetch repayments for all borrower loans
+      const loanList = Array.isArray(loansRes)
+        ? loansRes
+        : (loansRes && typeof loansRes === "object" && "data" in loansRes)
+          ? (loansRes as { data: Loan[] }).data ?? []
+          : [];
+      try {
+        const repaymentResults = await Promise.all(
+          loanList.map((l: Loan) => repaymentService.list(l.id).catch(() => []))
+        );
+        const allPayments = repaymentResults.flatMap((res) =>
+          Array.isArray(res) ? res : (res as unknown as { data: Payment[] })?.data ?? []
+        );
+        setPayments(allPayments);
+      } catch {
+        setPayments([]);
+      }
 
       await fetchCoMakers();
     } catch {
@@ -70,9 +87,9 @@ export default function BorrowerDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleAddCoMaker = async (newCoMaker: CreateCoMakerData | CoMaker) => {
+  const handleAddCoMaker = async (data: CreateCoMakerData) => {
     try {
-      await coMakerService.create(borrowerId, newCoMaker as CreateCoMakerData);
+      await coMakerService.create(borrowerId, data);
       toast.success("Co-maker added successfully");
       await fetchCoMakers();
     } catch {
@@ -100,9 +117,37 @@ export default function BorrowerDetailPage() {
     }
   };
 
+  const handleEditBorrower = async (updated: Borrower) => {
+    try {
+      // Build payload with only the fields the API accepts
+      const payload: Record<string, unknown> = {
+        first_name: updated.first_name,
+        last_name: updated.last_name,
+        middle_name: updated.middle_name ?? null,
+        suffix: updated.suffix ?? null,
+        birthdate: updated.birthdate ?? null,
+        gender: updated.gender ?? null,
+        civil_status: updated.civil_status ?? null,
+        contact_number: updated.contact_number ?? updated.phone ?? null,
+        email: updated.email ?? null,
+        address: updated.address ?? null,
+        employer_or_business: updated.employer_or_business ?? null,
+        monthly_income: updated.monthly_income ? Number(updated.monthly_income) : null,
+      };
+      await borrowerService.update(borrowerId, payload as Partial<Borrower>);
+      toast.success("Borrower updated successfully");
+      // Refresh data
+      const refreshed = await borrowerService.detail(borrowerId);
+      setBorrower(refreshed);
+      setEditOpen(false);
+    } catch {
+      toast.error("Failed to update borrower");
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
@@ -110,7 +155,7 @@ export default function BorrowerDetailPage() {
 
   if (!borrower) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
         <p className="text-muted-foreground">Borrower not found.</p>
       </div>
     );
@@ -120,7 +165,15 @@ export default function BorrowerDetailPage() {
     <div className="space-y-6">
       <BorrowerHeader
         borrower={borrower}
-        onEdit={() => {}}
+        onEdit={() => setEditOpen(true)}
+        onPhotoUpdate={fetchData}
+      />
+
+      <EditBorrowerDialog
+        borrower={borrower}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSave={handleEditBorrower}
       />
 
       <Tabs defaultValue="overview">

@@ -241,8 +241,8 @@ export default function PaymentReceiptPage({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         <p className="text-sm text-muted-foreground">Loading receipt...</p>
       </div>
     );
@@ -250,7 +250,7 @@ export default function PaymentReceiptPage({
 
   if (notFound || !receipt) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
+      <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center gap-4">
         <Receipt className="h-12 w-12 text-muted-foreground" />
         <p className="text-lg font-semibold">Receipt not found</p>
         <p className="text-sm text-muted-foreground">
@@ -267,7 +267,10 @@ export default function PaymentReceiptPage({
     );
   }
 
-  const status = STATUS_STYLES[receipt.status];
+  const status = STATUS_STYLES[receipt.status] ?? {
+    label: receipt.status,
+    className: "bg-muted text-muted-foreground border-border",
+  };
 
   return (
     <div className="space-y-6">

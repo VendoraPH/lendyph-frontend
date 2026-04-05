@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { ShieldX } from "lucide-react";
 
 import { usePermission } from "@/hooks";
@@ -71,7 +70,7 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
         <div className="flex gap-3">
           <Button
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            render={<Link href="/dashboard" />}
+            onClick={() => router.push("/dashboard")}
           >
             Go to Dashboard
           </Button>

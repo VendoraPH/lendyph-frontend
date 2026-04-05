@@ -1,3 +1,5 @@
+import type { ApiScheduleRow } from "@/lib/amortization";
+
 export type LoanStatus =
   | "draft"
   | "for_review"
@@ -16,41 +18,63 @@ export interface Loan {
   id: number;
   application_number?: string;
   loan_account_number?: string;
-  borrower_id: number;
+  // Nested relations from API
+  borrower?: { id: number; full_name?: string; name?: string; address?: string; borrower_code?: string };
+  loan_product?: { id: number; name?: string; description?: string };
+  branch?: { id: number; name?: string };
+  co_makers?: { id: number; full_name?: string; name?: string; address?: string; relationship?: string }[];
+  approved_by_user?: { id: number; full_name?: string; name?: string };
+  released_by_user?: { id: number; full_name?: string; name?: string };
+  created_by_user?: { id: number; full_name?: string; name?: string };
+  // Flat fields matching API
+  interest_rate: number;
+  interest_method?: string;
+  term?: number;
+  frequency?: string;
+  principal_amount: number;
+  start_date?: string;
+  maturity_date?: string;
+  deductions?: Record<string, number>;
+  total_deductions?: number;
+  net_proceeds?: number;
+  penalty_rate?: number;
+  grace_period_days?: number;
+  status: LoanStatus;
+  is_editable?: boolean;
+  is_releasable?: boolean;
+  // Approval workflow fields
+  approval_remarks?: string;
+  approved_at?: string;
+  released_at?: string;
+  rejection_remarks?: string;
+  rejected_at?: string;
+  amortization_schedules?: ApiScheduleRow[];
+  created_at: string;
+  updated_at: string;
+
+  // Legacy aliases — kept for backward compat with components that use old field names
+  borrower_id?: number;
   borrower_name?: string;
   co_maker_id?: number;
   co_maker_name?: string;
   loan_product_id?: number;
   loan_product_name?: string;
-  principal_amount: number;
-  interest_rate: number;
-  interest_type: InterestType;
-  term_months: number;
-  payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
+  interest_type?: InterestType;
+  term_months?: number;
+  payment_frequency?: string;
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
-  net_proceeds?: number;
-  total_payable: number;
-  outstanding_balance: number;
-  status: LoanStatus;
+  total_payable?: number;
+  outstanding_balance?: number;
   purpose?: string;
   collateral?: string;
   co_maker?: string;
-  // Approval workflow fields
-  approval_remarks?: string;
   approved_by?: string;
-  approved_at?: string;
-  rejection_remarks?: string;
   rejected_by?: string;
-  rejected_at?: string;
   released_by?: string;
-  released_at?: string;
   release_date?: string;
-  maturity_date?: string;
   next_due_date?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface LoanSchedule {

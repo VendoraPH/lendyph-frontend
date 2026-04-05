@@ -32,7 +32,7 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
   const ongoingLoans = loans.filter((l) => l.status === "ongoing").length;
   const completedLoans = loans.filter((l) => l.status === "completed").length;
   const defaultedLoans = loans.filter((l) => l.status === "defaulted").length;
-  const totalOutstanding = loans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
   const totalPrincipal = loans.reduce((sum, l) => sum + l.principal_amount, 0);
 
   const totalCoMakers = coMakers.length;

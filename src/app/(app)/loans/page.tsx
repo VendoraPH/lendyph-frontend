@@ -312,18 +312,18 @@ export default function LoansPage() {
                         {loan.application_number}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {loan.borrower_name}
+                        {loan.borrower?.full_name ?? loan.borrower?.name ?? loan.borrower_name ?? "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {loan.loan_product_name}
+                        {loan.loan_product?.name ?? loan.loan_product_name ?? "—"}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(loan.principal_amount)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {loan.term_months}mo /{" "}
-                        {PAYMENT_FREQUENCY_LABELS[loan.payment_frequency] ??
-                          loan.payment_frequency}
+                        {loan.term ?? loan.term_months ?? 0}mo /{" "}
+                        {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ??
+                          loan.frequency ?? loan.payment_frequency) || "—"}
                       </TableCell>
                       <TableCell>
                         <Badge
