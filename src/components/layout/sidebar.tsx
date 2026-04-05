@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
+import { usePermission } from "@/hooks";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -191,6 +192,7 @@ function SidebarContent({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const { can } = usePermission();
 
   return (
     <TooltipProvider>
@@ -245,7 +247,7 @@ function SidebarContent({
               Navigation
             </span>
           )}
-          {SIDEBAR_NAV.map((item) => (
+          {SIDEBAR_NAV.filter((item) => can(item.permission)).map((item) => (
             <NavLink
               key={item.href}
               item={item}
