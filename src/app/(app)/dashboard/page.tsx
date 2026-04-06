@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { RouteGuard } from "@/components/common";
 import {
   AreaChart,
   Area,
@@ -283,6 +284,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
+    <RouteGuard permission="dashboard:view" pageName="Dashboard">
     <div className="space-y-6">
       {/* ----------------------------------------------------------------- */}
       {/* Row 1: KPI Cards                                                  */}
@@ -588,5 +590,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }

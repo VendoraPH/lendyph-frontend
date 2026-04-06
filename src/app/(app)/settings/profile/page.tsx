@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RouteGuard } from "@/components/common";
 import { toast } from "sonner";
 import { Camera, KeyRound, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -342,6 +343,7 @@ function ChangePasswordCard() {
 
 export default function ProfileSettingsPage() {
   return (
+    <RouteGuard permission="settings:view" pageName="Profile Settings">
     <div className="space-y-6 min-w-0">
       {/* Header */}
       <div>
@@ -358,5 +360,6 @@ export default function ProfileSettingsPage() {
       {/* Change password form */}
       <ChangePasswordCard />
     </div>
+    </RouteGuard>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { RouteGuard, PermissionGate } from "@/components/common";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -144,6 +145,7 @@ export default function LoansPage() {
   }, [loans, activeTab, search]);
 
   return (
+    <RouteGuard permission="loans:view" pageName="Loans">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -153,12 +155,14 @@ export default function LoansPage() {
             Manage loan applications and track approval workflow
           </p>
         </div>
-        <Link href="/loans/new">
-          <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
-            <Plus className="mr-2 h-4 w-4" />
-            New Application
-          </Button>
-        </Link>
+        <PermissionGate permission="loans:create">
+          <Link href="/loans/new">
+            <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
+              <Plus className="mr-2 h-4 w-4" />
+              New Application
+            </Button>
+          </Link>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}
@@ -351,5 +355,6 @@ export default function LoansPage() {
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }
