@@ -215,20 +215,33 @@ export default function NewLoanApplicationPage() {
   // ── Fetch borrowers and products on mount ──
   useEffect(() => {
     async function fetchData() {
-      try {
-        setLoadingData(true);
-        const [borrowersRes, productsRes] = await Promise.all([
-          borrowerService.list({ per_page: 200 }),
-          loanProductService.list(),
-        ]);
-        const borrowerData = Array.isArray(borrowersRes) ? borrowersRes : (borrowersRes as { data: Borrower[] }).data ?? [];
+      setLoadingData(true);
+
+      const [borrowersResult, productsResult] = await Promise.allSettled([
+        borrowerService.list({ per_page: 200 }),
+        loanProductService.list(),
+      ]);
+
+      if (borrowersResult.status === "fulfilled") {
+        const borrowerData = Array.isArray(borrowersResult.value)
+          ? borrowersResult.value
+          : (borrowersResult.value as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
-        setProducts(Array.isArray(productsRes) ? productsRes : (productsRes as unknown as { data: LoanProduct[] }).data ?? []);
-      } catch {
-        toast.error("Failed to load form data");
-      } finally {
-        setLoadingData(false);
+      } else {
+        toast.error("Failed to load borrowers");
       }
+
+      if (productsResult.status === "fulfilled") {
+        setProducts(
+          Array.isArray(productsResult.value)
+            ? productsResult.value
+            : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? []
+        );
+      } else {
+        toast.error("Failed to load loan products");
+      }
+
+      setLoadingData(false);
     }
     fetchData();
   }, []);
