@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
-import { loanService, loanAdjustmentService, repaymentService } from "@/services";
+import { loanService, loanAdjustmentService, repaymentService, coMakerService } from "@/services";
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
@@ -500,6 +500,22 @@ export default function LoanDetailPage({
       try {
         setLoading(true);
         const data = await loanService.detail(loanId);
+        // Fetch co-makers from borrower endpoint when loan doesn't embed them
+        const borrowerId = data.borrower?.id ?? data.borrower_id;
+        if (borrowerId && (!data.co_makers || data.co_makers.length === 0)) {
+          try {
+            const cms = await coMakerService.list(borrowerId);
+            const cmList = Array.isArray(cms) ? cms : (cms as unknown as { data: typeof cms }).data ?? [];
+            if (cmList.length > 0) {
+              data.co_makers = cmList.map((cm) => ({
+                id: cm.id,
+                full_name: cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || undefined),
+                address: cm.address,
+                relationship: cm.relationship_to_borrower ?? cm.relationship,
+              }));
+            }
+          } catch { /* co-makers fetch is non-critical */ }
+        }
         if (!cancelled) setLoan(data);
       } catch {
         if (!cancelled) toast.error("Failed to load loan details");
@@ -674,7 +690,11 @@ export default function LoanDetailPage({
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
-  const loanCoMakerName = loan?.co_makers?.[0]?.full_name ?? loan?.co_makers?.[0]?.name ?? loan?.co_maker_name ?? "";
+  const loanCoMakerName = (() => {
+    const cm = loan?.co_makers?.[0];
+    if (!cm) return loan?.co_maker_name ?? "";
+    return cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || "");
+  })();
   const loanProductName = loan?.loan_product?.name ?? loan?.loan_product_name ?? "";
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
@@ -918,7 +938,7 @@ export default function LoanDetailPage({
       const borrowerObj = raw.borrower as Record<string, unknown> | undefined;
       const borrowerName = (borrowerObj?.full_name ?? borrowerObj?.name ?? "") as string;
       const coMakersArr = raw.co_makers as Record<string, unknown>[] | undefined;
-      const coMakerName = coMakersArr?.[0] ? ((coMakersArr[0].full_name ?? coMakersArr[0].name ?? "") as string) : undefined;
+      const coMakerName = coMakersArr?.[0] ? ((coMakersArr[0].full_name ?? coMakersArr[0].name ?? ([coMakersArr[0].first_name, coMakersArr[0].middle_name, coMakersArr[0].last_name, coMakersArr[0].suffix].filter(Boolean).join(" "))) as string || undefined) : undefined;
       const principal = parseFloat(String(raw.principal_amount ?? 0));
       const rate = parseFloat(String(raw.interest_rate ?? 0));
       const interestMethod = String(raw.interest_method ?? "");

@@ -22,7 +22,7 @@ export interface Loan {
   borrower?: { id: number; full_name?: string; name?: string; address?: string; borrower_code?: string };
   loan_product?: { id: number; name?: string; description?: string };
   branch?: { id: number; name?: string };
-  co_makers?: { id: number; full_name?: string; name?: string; address?: string; relationship?: string }[];
+  co_makers?: { id: number; full_name?: string; name?: string; first_name?: string; middle_name?: string; last_name?: string; suffix?: string; address?: string; relationship?: string }[];
   approved_by_user?: { id: number; full_name?: string; name?: string };
   released_by_user?: { id: number; full_name?: string; name?: string };
   created_by_user?: { id: number; full_name?: string; name?: string };
