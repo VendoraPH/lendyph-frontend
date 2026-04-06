@@ -38,31 +38,35 @@ export default function BorrowerDetailPage() {
   }, [borrowerId]);
 
   const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      const [borrowerRes, loansRes] = await Promise.all([
-        borrowerService.detail(borrowerId),
-        loanService.list({ borrower_id: borrowerId }),
-      ]);
+    const [borrowerResult, loansResult] = await Promise.allSettled([
+      borrowerService.detail(borrowerId),
+      loanService.list({ borrower_id: borrowerId }),
+    ]);
 
-      setBorrower(borrowerRes);
+    if (borrowerResult.status === "fulfilled") {
+      setBorrower(borrowerResult.value);
+    } else {
+      toast.error("Failed to load borrower details");
+    }
 
+    let loanList: Loan[] = [];
+    if (loansResult.status === "fulfilled") {
+      const loansRes = loansResult.value;
       // Loans may be paginated or a plain array
       if (Array.isArray(loansRes)) {
-        setLoans(loansRes);
+        loanList = loansRes;
       } else if (loansRes && typeof loansRes === "object" && "data" in loansRes) {
-        setLoans((loansRes as { data: Loan[] }).data ?? []);
-      } else {
-        setLoans([]);
+        loanList = (loansRes as { data: Loan[] }).data ?? [];
       }
+      setLoans(loanList);
+    } else {
+      toast.error("Failed to load loans");
+    }
 
-      // Fetch repayments for all borrower loans
-      const loanList = Array.isArray(loansRes)
-        ? loansRes
-        : (loansRes && typeof loansRes === "object" && "data" in loansRes)
-          ? (loansRes as { data: Loan[] }).data ?? []
-          : [];
+    // Fetch repayments for all borrower loans
+    if (loanList.length > 0) {
       try {
         const repaymentResults = await Promise.all(
           loanList.map((l: Loan) => repaymentService.list(l.id).catch(() => []))
@@ -74,13 +78,13 @@ export default function BorrowerDetailPage() {
       } catch {
         setPayments([]);
       }
-
-      await fetchCoMakers();
-    } catch {
-      toast.error("Failed to load borrower details");
-    } finally {
-      setLoading(false);
+    } else {
+      setPayments([]);
     }
+
+    await fetchCoMakers();
+
+    setLoading(false);
   }, [borrowerId, fetchCoMakers]);
 
   useEffect(() => {
