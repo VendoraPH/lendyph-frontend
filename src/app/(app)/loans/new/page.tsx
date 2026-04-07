@@ -64,7 +64,7 @@ const formatCurrency = (amount: number) =>
 
 // ── Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
+type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
 type InterestType = "straight" | "fixed" | "diminishing" | "upon_maturity";
 
 function getPeriodsFromMonths(
@@ -77,8 +77,10 @@ function getPeriodsFromMonths(
     case "weekly":
       return Math.round(termMonths * 4.33);
     case "bi_weekly":
-      return Math.round(termMonths * 2.17);
+    case "semi_monthly":
+      return Math.round(termMonths * 2);
     case "monthly":
+    default:
       return termMonths;
   }
 }
@@ -90,8 +92,10 @@ function getIntervalDays(frequency: PaymentFrequency): number {
     case "weekly":
       return 7;
     case "bi_weekly":
-      return 14;
+    case "semi_monthly":
+      return 15;
     case "monthly":
+    default:
       return 30;
   }
 }
@@ -419,9 +423,13 @@ export default function NewLoanApplicationPage() {
       setProductId(value);
       const product = products.find((p) => p.id === Number(value));
       if (product) {
+        const apiProduct = product as unknown as Record<string, unknown>;
         setInterestRate(String(product.interest_rate ?? ""));
-        setInterestType(product.interest_type ?? null);
-        setPaymentFrequency(product.payment_frequency ?? null);
+        // Map API field names: interest_method/interest_type, "fixed" -> "straight"
+        const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
+        setInterestType(rawType === "fixed" ? "straight" : rawType);
+        // Map API field names: frequency/payment_frequency
+        setPaymentFrequency(String(apiProduct.frequency ?? product.payment_frequency ?? "monthly"));
         setProcessingFeeOverride(null);
         setServiceFeeOverride(null);
       }
