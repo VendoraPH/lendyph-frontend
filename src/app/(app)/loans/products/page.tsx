@@ -898,16 +898,10 @@ export default function LoanProductsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-medium truncate">{product.name}</p>
-                    <Badge
-                      variant="outline"
-                      className={
-                        product.is_active
-                          ? statusBadge.active
-                          : statusBadge.inactive
-                      }
-                    >
-                      {product.is_active ? "Active" : "Inactive"}
-                    </Badge>
+                    <Switch
+                      checked={product.is_active}
+                      onCheckedChange={() => handleToggleStatus(product.id)}
+                    />
                   </div>
                   {product.description && (
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
@@ -1036,16 +1030,15 @@ export default function LoanProductsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          product.is_active
-                            ? statusBadge.active
-                            : statusBadge.inactive
-                        }
-                      >
-                        {product.is_active ? "Active" : "Inactive"}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={product.is_active}
+                          onCheckedChange={() => handleToggleStatus(product.id)}
+                        />
+                        <span className={cn("text-xs font-medium", product.is_active ? "text-green-600" : "text-muted-foreground")}>
+                          {product.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <ProductActionsCell
