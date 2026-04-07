@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -76,6 +90,8 @@ export default function NewBorrowerPage() {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [selectedBranchName, setSelectedBranchName] = useState("");
 
   useEffect(() => {
     async function fetchBranches() {
@@ -451,21 +467,54 @@ export default function NewBorrowerPage() {
                   Loading branches...
                 </div>
               ) : (
-                <Select
-                  value={form.branch_id ? String(form.branch_id) : null}
-                  onValueChange={(v) => update("branch_id", v ?? "")}
-                >
-                  <SelectTrigger className="w-full sm:w-1/2">
-                    <SelectValue placeholder="Select a branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={String(branch.id)}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={branchOpen} onOpenChange={setBranchOpen}>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        role="combobox"
+                        aria-expanded={branchOpen}
+                        className="flex h-8 w-full sm:w-1/2 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                      />
+                    }
+                  >
+                    <span className={cn("truncate", !form.branch_id && "text-muted-foreground")}>
+                      {form.branch_id && selectedBranchName
+                        ? selectedBranchName
+                        : "Select a branch"}
+                    </span>
+                    <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search branch..." />
+                      <CommandList>
+                        <CommandEmpty>No branch found.</CommandEmpty>
+                        <CommandGroup>
+                          {branches.map((branch) => (
+                            <CommandItem
+                              key={branch.id}
+                              value={branch.name}
+                              onSelect={() => {
+                                update("branch_id", String(branch.id));
+                                setSelectedBranchName(branch.name);
+                                setBranchOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 size-4",
+                                  form.branch_id === String(branch.id) ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {branch.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               )}
               {fieldError("branch_id")}
             </div>
