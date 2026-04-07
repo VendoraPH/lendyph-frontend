@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -51,6 +55,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import {
   INTEREST_TYPE_OPTIONS,
@@ -74,9 +80,35 @@ function getProductField(product: LoanProduct, field: string): string {
     case "interest_method": return String(p.interest_method ?? p.interest_type ?? "straight");
     case "frequency": return String(p.frequency ?? p.payment_frequency ?? "monthly");
     case "term": return String(p.term ?? p.min_term ?? "");
+    case "min_term": return String(p.min_term ?? p.term ?? "");
+    case "max_term": return String(p.max_term ?? p.term ?? "");
+    case "min_interest_rate": return String(p.min_interest_rate ?? p.interest_rate ?? "");
+    case "max_interest_rate": return String(p.max_interest_rate ?? p.interest_rate ?? "");
     case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
+    case "notarial_fee": return String(p.notarial_fee ?? "0");
     default: return String(p[field] ?? "");
   }
+}
+
+function getProductFrequencies(product: LoanProduct): string {
+  const p = product as unknown as Record<string, unknown>;
+  const freqs = p.frequencies ?? p.frequency ?? product.payment_frequency ?? "monthly";
+  const arr = Array.isArray(freqs) ? (freqs as string[]) : [String(freqs)];
+  return arr.map((f) => PAYMENT_FREQUENCY_LABELS[f] ?? f).join(", ");
+}
+
+function getInterestRateDisplay(product: LoanProduct): string {
+  const min = getProductField(product, "min_interest_rate");
+  const max = getProductField(product, "max_interest_rate");
+  if (min && max && min !== max) return `${min}% – ${max}%`;
+  return `${min || max}%`;
+}
+
+function getTermDisplay(product: LoanProduct): string {
+  const min = getProductField(product, "min_term");
+  const max = getProductField(product, "max_term");
+  if (min && max && min !== max) return `${min} – ${max} months`;
+  return `${min || max} months`;
 }
 
 const INTEREST_METHOD_LABELS: Record<string, string> = {
@@ -98,13 +130,17 @@ interface ProductForm {
   description: string;
   min_amount: string;
   max_amount: string;
-  term: string;
-  frequency: string;
-  interest_rate: string;
+  min_term: string;
+  max_term: string;
+  frequencies: string[];
+  min_interest_rate: string;
+  max_interest_rate: string;
   interest_method: string;
   processing_fee: string;
   service_fee: string;
+  notarial_fee: string;
   penalty_rate: string;
+  grace_period_enabled: boolean;
   grace_period_days: string;
 }
 
@@ -113,46 +149,69 @@ const EMPTY_FORM: ProductForm = {
   description: "",
   min_amount: "",
   max_amount: "",
-  term: "",
-  frequency: "monthly",
-  interest_rate: "",
+  min_term: "",
+  max_term: "",
+  frequencies: ["monthly"],
+  min_interest_rate: "",
+  max_interest_rate: "",
   interest_method: "straight",
   processing_fee: "",
   service_fee: "",
+  notarial_fee: "",
   penalty_rate: "",
+  grace_period_enabled: false,
   grace_period_days: "",
 };
 
 function productToForm(p: LoanProduct): ProductForm {
   // Map API response fields to form fields
   const apiProduct = p as unknown as Record<string, unknown>;
+  const gracePeriod = Number(apiProduct.grace_period_days ?? p.grace_period ?? 0);
+
+  // Parse frequencies - could be array or single value
+  const rawFreq = apiProduct.frequencies ?? apiProduct.frequency ?? p.payment_frequency ?? "monthly";
+  const frequencies = Array.isArray(rawFreq)
+    ? (rawFreq as string[])
+    : [String(rawFreq)];
+
+  // Parse interest rate range
+  const minRate = String(apiProduct.min_interest_rate ?? p.interest_rate ?? "");
+  const maxRate = String(apiProduct.max_interest_rate ?? p.interest_rate ?? "");
+
   return {
     name: p.name,
     description: p.description ?? "",
     min_amount: String(apiProduct.min_amount ?? p.min_amount ?? ""),
     max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
-    term: String(apiProduct.term ?? p.min_term ?? ""),
-    frequency: String(apiProduct.frequency ?? p.payment_frequency ?? "monthly"),
-    interest_rate: String(p.interest_rate),
+    min_term: String(apiProduct.min_term ?? p.min_term ?? ""),
+    max_term: String(apiProduct.max_term ?? p.max_term ?? ""),
+    frequencies,
+    min_interest_rate: minRate,
+    max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
     processing_fee: String(apiProduct.processing_fee ?? p.processing_fee ?? ""),
     service_fee: String(apiProduct.service_fee ?? p.service_fee ?? ""),
+    notarial_fee: String(apiProduct.notarial_fee ?? ""),
     penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
-    grace_period_days: String(apiProduct.grace_period_days ?? p.grace_period ?? ""),
+    grace_period_enabled: gracePeriod > 0,
+    grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
   };
 }
 
 function formToApiPayload(form: ProductForm) {
   return {
     name: form.name,
-    interest_rate: Number(form.interest_rate),
+    min_interest_rate: Number(form.min_interest_rate),
+    max_interest_rate: Number(form.max_interest_rate),
     interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
-    term: Number(form.term),
-    frequency: form.frequency as "daily" | "weekly" | "semi_monthly" | "monthly",
+    min_term: Number(form.min_term),
+    max_term: Number(form.max_term),
+    frequencies: form.frequencies,
     processing_fee: form.processing_fee ? Number(form.processing_fee) : undefined,
     service_fee: form.service_fee ? Number(form.service_fee) : undefined,
+    notarial_fee: form.notarial_fee ? Number(form.notarial_fee) : undefined,
     penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
-    grace_period_days: form.grace_period_days ? Number(form.grace_period_days) : undefined,
+    grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
     max_amount: form.max_amount ? Number(form.max_amount) : undefined,
   };
@@ -194,7 +253,7 @@ function ProductFormDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+        <form onSubmit={handleSubmit} className="space-y-6 max-h-[50vh] lg:max-h-none overflow-y-auto lg:overflow-y-visible overflow-x-hidden px-1">
           {/* Basic Info */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -256,34 +315,28 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="term">Term (months) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-term">Minimum Term (months) <span className="text-red-500">*</span></Label>
                 <Input
-                  id="term"
+                  id="min-term"
                   type="number"
                   min={1}
-                  placeholder="12"
-                  value={form.term}
-                  onChange={(e) => update("term", e.target.value)}
+                  placeholder="1"
+                  value={form.min_term}
+                  onChange={(e) => update("min_term", e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label>Payment Frequency *</Label>
-                <Select
-                  value={form.frequency}
-                  onValueChange={(v) => update("frequency", v as string)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select frequency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="max-term">Maximum Term (months) <span className="text-red-500">*</span></Label>
+                <Input
+                  id="max-term"
+                  type="number"
+                  min={1}
+                  placeholder="24"
+                  value={form.max_term}
+                  onChange={(e) => update("max_term", e.target.value)}
+                  required
+                />
               </div>
             </div>
           </div>
@@ -295,18 +348,33 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interest-rate">Interest Rate (%) *</Label>
+                <Label htmlFor="min-interest-rate">Min Interest Rate (%) <span className="text-red-500">*</span></Label>
                 <Input
-                  id="interest-rate"
+                  id="min-interest-rate"
                   type="number"
                   min={0}
                   step="0.01"
-                  placeholder="3"
-                  value={form.interest_rate}
-                  onChange={(e) => update("interest_rate", e.target.value)}
+                  placeholder="1"
+                  value={form.min_interest_rate}
+                  onChange={(e) => update("min_interest_rate", e.target.value)}
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="max-interest-rate">Max Interest Rate (%) <span className="text-red-500">*</span></Label>
+                <Input
+                  id="max-interest-rate"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="5"
+                  value={form.max_interest_rate}
+                  onChange={(e) => update("max_interest_rate", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Interest Method *</Label>
                 <Select
@@ -324,6 +392,67 @@ function ProductFormDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Frequency <span className="text-red-500">*</span></Label>
+                <Popover>
+                  <PopoverTrigger
+                    className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <span className="flex flex-wrap gap-1 min-h-[20px]">
+                      {form.frequencies.length > 0
+                        ? form.frequencies.map((f) => (
+                            <Badge key={f} variant="secondary" className="text-xs font-normal gap-1">
+                              {PAYMENT_FREQUENCY_LABELS[f] ?? f}
+                              <button
+                                type="button"
+                                className="hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (form.frequencies.length > 1) {
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      frequencies: prev.frequencies.filter((v) => v !== f),
+                                    }));
+                                  }
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))
+                        : <span className="text-muted-foreground">Select frequencies</span>}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-(--anchor-width) p-1">
+                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+                          form.frequencies.includes(opt.value) && "bg-accent"
+                        )}
+                        onClick={() => {
+                          setForm((prev) => {
+                            const has = prev.frequencies.includes(opt.value);
+                            const next = has
+                              ? prev.frequencies.filter((f) => f !== opt.value)
+                              : [...prev.frequencies, opt.value];
+                            return { ...prev, frequencies: next.length > 0 ? next : prev.frequencies };
+                          });
+                        }}
+                      >
+                        <Checkbox
+                          checked={form.frequencies.includes(opt.value)}
+                          className="pointer-events-none"
+                        />
+                        {opt.label}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
@@ -361,28 +490,63 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="penalty-rate">Penalty Rate (% per day)</Label>
+                <Label htmlFor="notarial-fee">Notarial Fee (%)</Label>
+                <Input
+                  id="notarial-fee"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="1"
+                  value={form.notarial_fee}
+                  onChange={(e) => update("notarial_fee", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="penalty-rate">Penalty Rate (% per month)</Label>
                 <Input
                   id="penalty-rate"
                   type="number"
                   min={0}
                   step="0.01"
-                  placeholder="0.5"
+                  placeholder="3"
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="grace-period">Grace Period (days)</Label>
-                <Input
-                  id="grace-period"
-                  type="number"
-                  min={0}
-                  placeholder="3"
-                  value={form.grace_period_days}
-                  onChange={(e) => update("grace_period_days", e.target.value)}
+            </div>
+
+            {/* Grace Period Toggle */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="grace-period-toggle" className="cursor-pointer">
+                  Grace Period
+                </Label>
+                <Switch
+                  id="grace-period-toggle"
+                  checked={form.grace_period_enabled}
+                  onCheckedChange={(checked) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      grace_period_enabled: checked,
+                      grace_period_days: checked ? prev.grace_period_days : "",
+                    }))
+                  }
                 />
               </div>
+              {form.grace_period_enabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="grace-period">Grace Period (days)</Label>
+                  <Input
+                    id="grace-period"
+                    type="number"
+                    min={1}
+                    placeholder="3"
+                    value={form.grace_period_days}
+                    onChange={(e) => update("grace_period_days", e.target.value)}
+                    required
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -758,7 +922,7 @@ export default function LoanProductsPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Interest</p>
                   <p className="font-medium">
-                    {product.interest_rate}%{" "}
+                    {getInterestRateDisplay(product)}{" "}
                     <span className="text-muted-foreground font-normal">
                       {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
                     </span>
@@ -766,7 +930,7 @@ export default function LoanProductsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Frequency</p>
-                  <p>{PAYMENT_FREQUENCY_LABELS[getProductField(product, "frequency")]}</p>
+                  <p className="text-xs">{getProductFrequencies(product)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Amount</p>
@@ -776,18 +940,20 @@ export default function LoanProductsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Term</p>
-                  <p>{getProductField(product, "term")} months</p>
+                  <p className="text-xs">{getTermDisplay(product)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Fees</p>
                   <p className="text-xs">
                     Processing {product.processing_fee}% · Service {product.service_fee}%
+                    {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${getProductField(product, "notarial_fee")}%`}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Penalty</p>
                   <p className="text-xs">
-                    {product.penalty_rate}%/day · {getProductField(product, "grace_period_days")}d grace
+                    {product.penalty_rate}%/mo
+                    {Number(getProductField(product, "grace_period_days")) > 0 && ` · ${getProductField(product, "grace_period_days")}d grace`}
                   </p>
                 </div>
               </div>
@@ -841,7 +1007,7 @@ export default function LoanProductsPage() {
                     <TableCell>
                       <div className="text-sm">
                         <span className="font-medium">
-                          {product.interest_rate}%
+                          {getInterestRateDisplay(product)}
                         </span>
                         <span className="text-muted-foreground ml-1">
                           {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
@@ -849,14 +1015,14 @@ export default function LoanProductsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {getProductField(product, "term")} months
+                      {getTermDisplay(product)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {formatCurrency(product.min_amount)} —{" "}
                       {formatCurrency(product.max_amount)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {PAYMENT_FREQUENCY_LABELS[getProductField(product, "frequency")]}
+                      {getProductFrequencies(product)}
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground whitespace-nowrap">
