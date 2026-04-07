@@ -71,7 +71,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-  }).format(amount);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
 
 // Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
 function getProductField(product: LoanProduct, field: string): string {
@@ -100,8 +102,10 @@ function getProductFrequencies(product: LoanProduct): string {
 function getInterestRateDisplay(product: LoanProduct): string {
   const min = getProductField(product, "min_interest_rate");
   const max = getProductField(product, "max_interest_rate");
-  if (min && max && min !== max) return `${min}% – ${max}%`;
-  return `${min || max}%`;
+  const minRound = min ? Math.round(Number(min)) : "";
+  const maxRound = max ? Math.round(Number(max)) : "";
+  if (minRound && maxRound && minRound !== maxRound) return `${minRound}% – ${maxRound}%`;
+  return `${minRound || maxRound}%`;
 }
 
 function getTermDisplay(product: LoanProduct): string {
@@ -292,7 +296,7 @@ function ProductFormDialog({
                   id="min-amount"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="5,000"
                   value={form.min_amount}
                   onChange={(e) => update("min_amount", e.target.value)}
@@ -305,7 +309,7 @@ function ProductFormDialog({
                   id="max-amount"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="50,000"
                   value={form.max_amount}
                   onChange={(e) => update("max_amount", e.target.value)}
@@ -353,7 +357,7 @@ function ProductFormDialog({
                   id="min-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="1"
                   value={form.min_interest_rate}
                   onChange={(e) => update("min_interest_rate", e.target.value)}
@@ -366,7 +370,7 @@ function ProductFormDialog({
                   id="max-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="5"
                   value={form.max_interest_rate}
                   onChange={(e) => update("max_interest_rate", e.target.value)}
@@ -469,7 +473,7 @@ function ProductFormDialog({
                   id="processing-fee"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="2"
                   value={form.processing_fee}
                   onChange={(e) => update("processing_fee", e.target.value)}
@@ -481,7 +485,7 @@ function ProductFormDialog({
                   id="service-fee"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="1"
                   value={form.service_fee}
                   onChange={(e) => update("service_fee", e.target.value)}
@@ -495,7 +499,7 @@ function ProductFormDialog({
                   id="notarial-fee"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="1"
                   value={form.notarial_fee}
                   onChange={(e) => update("notarial_fee", e.target.value)}
@@ -507,7 +511,7 @@ function ProductFormDialog({
                   id="penalty-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="1"
                   placeholder="3"
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
@@ -945,14 +949,14 @@ export default function LoanProductsPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Fees</p>
                   <p className="text-xs">
-                    Processing {product.processing_fee}% · Service {product.service_fee}%
-                    {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${getProductField(product, "notarial_fee")}%`}
+                    Processing {Math.round(product.processing_fee)}% · Service {Math.round(product.service_fee)}%
+                    {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${Math.round(Number(getProductField(product, "notarial_fee")))}%`}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Penalty</p>
                   <p className="text-xs">
-                    {product.penalty_rate}%/mo
+                    {Math.round(product.penalty_rate)}%/mo
                     {Number(getProductField(product, "grace_period_days")) > 0 && ` · ${getProductField(product, "grace_period_days")}d grace`}
                   </p>
                 </div>
@@ -1026,9 +1030,9 @@ export default function LoanProductsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground whitespace-nowrap">
-                        <span>Processing: {product.processing_fee}%</span>
+                        <span>Processing: {Math.round(product.processing_fee)}%</span>
                         <br />
-                        <span>Service: {product.service_fee}%</span>
+                        <span>Service: {Math.round(product.service_fee)}%</span>
                       </div>
                     </TableCell>
                     <TableCell>
