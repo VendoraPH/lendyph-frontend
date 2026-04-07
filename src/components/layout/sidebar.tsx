@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
@@ -57,12 +57,21 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const hasChildren = item.children && item.children.length > 0;
-  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+  const isExactMatch = pathname === item.href;
+  const isPrefixMatch = pathname.startsWith(item.href + "/");
+  // For items without children, active on exact or prefix match
+  // For items with children, only used to expand — dot shown on child only
+  const isActive = hasChildren ? false : (isExactMatch || isPrefixMatch);
   const isChildActive = hasChildren
-    ? item.children!.some((c) => pathname === c.href || pathname.startsWith(c.href + "/"))
+    ? item.children!.some((c) => pathname === c.href)
     : false;
-  const isOpen = isActive || isChildActive;
+  const isOpen = isExactMatch || isPrefixMatch || isChildActive;
   const [expanded, setExpanded] = useState(isOpen);
+
+  // Auto-expand when navigating to a child route
+  useEffect(() => {
+    if (isOpen) setExpanded(true);
+  }, [isOpen]);
   const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
   // ── Collapsed ──
@@ -157,7 +166,7 @@ function NavLink({
       <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", expanded ? "max-h-96 opacity-100 mt-1" : "max-h-0 opacity-0")}>
         <div className="ml-6 flex flex-col gap-0.5 border-l-2 border-brand-orange/15 pl-4">
           {item.children!.map((child) => {
-            const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
+            const childActive = pathname === child.href;
             return (
               <Link
                 key={child.href}
