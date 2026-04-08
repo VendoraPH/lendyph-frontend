@@ -53,13 +53,13 @@ export const SIDEBAR_NAV: NavItem[] = [
     ],
   },
   {
-    title: "Borrowers",
+    title: "Members",
     href: "/borrowers",
     icon: Users,
     permission: "borrowers:view",
     children: [
-      { title: "All Borrowers", href: "/borrowers" },
-      { title: "New Borrower", href: "/borrowers/new" },
+      { title: "All Members", href: "/borrowers" },
+      { title: "New Member", href: "/borrowers/new" },
     ],
   },
   {

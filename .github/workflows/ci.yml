@@ -6,6 +6,61 @@ on:
       - development
 
 jobs:
+  merge-check:
+    name: Merge Conflict Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if branch is up-to-date with development
+        id: behind-check
+        run: |
+          git fetch origin development
+          BEHIND=$(git rev-list --count HEAD..origin/development)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "::warning::Branch is $BEHIND commit(s) behind development"
+          fi
+
+      - name: Test merge with development
+        id: merge-test
+        run: |
+          git fetch origin development
+          if git merge --no-commit --no-ff origin/development 2>/dev/null; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            git merge --abort 2>/dev/null || true
+          else
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            # List conflicting files
+            CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ', ' | sed 's/,$//')
+            echo "files=$CONFLICTS" >> "$GITHUB_OUTPUT"
+            git merge --abort 2>/dev/null || true
+          fi
+
+      - name: Comment on PR if conflicts found
+        if: steps.merge-test.outputs.conflict == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = '${{ steps.merge-test.outputs.files }}';
+            const behind = '${{ steps.behind-check.outputs.behind }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ **Merge conflicts detected** — this branch is ${behind} commit(s) behind \`development\`.\n\n**Conflicting files:**\n${files.split(',').map(f => '- \`' + f.trim() + '\`').join('\n')}\n\nPlease rebase onto \`development\` before merging:\n\`\`\`bash\ngit fetch origin development\ngit rebase origin/development\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``
+            });
+
+      - name: Fail if conflicts exist
+        if: steps.merge-test.outputs.conflict == 'true'
+        run: |
+          echo "❌ This branch has merge conflicts with development."
+          echo "Rebase onto development before merging."
+          exit 1
+
   ci:
     name: TypeScript & Build Check
     runs-on: ubuntu-latest

@@ -1360,17 +1360,17 @@ export default function LoanDetailPage({
           </CardContent>
         </Card>
 
-        {/* Card 3: Borrower & Co-Maker */}
+        {/* Card 3: Member & Co-Maker */}
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <UserCheck className="h-4 w-4 text-muted-foreground" />
-              Borrower & Co-Maker
+              Member & Co-Maker
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-xs text-muted-foreground">Borrower</p>
+              <p className="text-xs text-muted-foreground">Member</p>
               <p className="text-sm font-medium">
                 {loanBorrowerName || "N/A"}
               </p>
@@ -1905,7 +1905,7 @@ export default function LoanDetailPage({
                   <p className="text-sm font-medium font-mono">{loan.application_number}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Borrower</p>
+                  <p className="text-xs text-muted-foreground">Member</p>
                   <p className="text-sm font-medium">{loanBorrowerName}</p>
                 </div>
                 <div>

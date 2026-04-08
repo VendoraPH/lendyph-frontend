@@ -165,16 +165,16 @@ export default function BorrowersPage() {
   };
 
   return (
-    <RouteGuard permission="borrowers:view" pageName="Borrowers">
+    <RouteGuard permission="borrowers:view" pageName="Members">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Borrower Management
+            Member Management
           </h1>
           <p className="text-sm text-muted-foreground">
-            Search, filter, and manage borrower profiles
+            Search, filter, and manage member profiles
           </p>
         </div>
         <PermissionGate permission="borrowers:create">
@@ -183,7 +183,7 @@ export default function BorrowersPage() {
             className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors"
           >
             <UserPlus className="h-4 w-4" />
-            Add Borrower
+            Add Member
           </Link>
         </PermissionGate>
       </div>
@@ -194,7 +194,7 @@ export default function BorrowersPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Borrowers</p>
+                <p className="text-xs font-medium text-muted-foreground">Total Members</p>
                 <p className="text-2xl font-bold">{borrowers.length}</p>
               </div>
               <div className="rounded-full bg-brand-blue/10 p-2.5">
@@ -273,10 +273,10 @@ export default function BorrowersPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">
-                No borrowers yet
+                No members yet
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Click &quot;Add Borrower&quot; to create the first profile.
+                Click &quot;Add Member&quot; to create the first profile.
               </p>
             </div>
           ) : (

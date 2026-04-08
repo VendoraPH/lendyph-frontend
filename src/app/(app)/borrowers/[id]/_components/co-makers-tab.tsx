@@ -63,7 +63,7 @@ export function CoMakersTab({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Users className="h-10 w-10 mb-3 opacity-30" />
-            <p className="text-sm">No co-makers on file for this borrower.</p>
+            <p className="text-sm">No co-makers on file for this member.</p>
             <p className="text-xs mt-1">Click &quot;Add Co-Maker&quot; above to register one.</p>
           </CardContent>
         </Card>

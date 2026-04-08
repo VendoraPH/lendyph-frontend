@@ -203,7 +203,7 @@ export function BorrowerFormTabs({
             />
           </div>
           <div>
-            <p className="text-sm font-medium">Borrower Photo</p>
+            <p className="text-sm font-medium">Member Photo</p>
             <p className="text-xs text-muted-foreground">
               Click to upload a photo
             </p>
@@ -590,13 +590,13 @@ export function AddBorrowerDialog({
     <Dialog>
       <DialogTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-brand-orange-foreground hover:bg-brand-orange-dark transition-colors">
         <UserPlus className="h-4 w-4" />
-        Add Borrower
+        Add Member
       </DialogTrigger>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Add New Borrower</DialogTitle>
+          <DialogTitle>Add New Member</DialogTitle>
           <DialogDescription>
-            Create a new borrower profile. Borrower code:{" "}
+            Create a new member profile. Member code:{" "}
             <span className="font-mono font-semibold text-brand-orange">
               {form.borrower_code}
             </span>
@@ -612,7 +612,7 @@ export function AddBorrowerDialog({
               type="submit"
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
-              Create Borrower
+              Create Member
             </Button>
           </div>
         </form>
@@ -668,7 +668,7 @@ export function EditBorrowerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Edit Borrower</DialogTitle>
+          <DialogTitle>Edit Member</DialogTitle>
           <DialogDescription>
             Update profile for {borrower.full_name} —{" "}
             <span className="font-mono text-brand-orange">
@@ -720,7 +720,7 @@ export function ToggleStatusDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-brand-orange" />
-            {isActive ? "Deactivate" : "Activate"} Borrower
+            {isActive ? "Deactivate" : "Activate"} Member
           </DialogTitle>
           <DialogDescription>
             {isActive
@@ -770,7 +770,7 @@ export function DeleteBorrowerDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <Trash2 className="h-5 w-5" />
-            Delete Borrower
+            Delete Member
           </DialogTitle>
           <DialogDescription>
             Are you sure you want to permanently delete {borrower.full_name} (

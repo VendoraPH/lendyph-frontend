@@ -288,7 +288,7 @@ export default function NewLoanApplicationPage() {
           : (borrowersResult.value as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
       } else {
-        toast.error("Failed to load borrowers");
+        toast.error("Failed to load members");
       }
 
       if (productsResult.status === "fulfilled") {
@@ -604,7 +604,7 @@ export default function NewLoanApplicationPage() {
                     {coMakerId
                       ? (availableCoMakers.find((b) => b.id === coMakerId)?.full_name ?? borrowers.find((b) => b.id === coMakerId)?.full_name ?? "Selected")
                       : !borrowerId
-                        ? "Select borrower first"
+                        ? "Select member first"
                         : "Search co-maker (optional)..."}
                   </span>
                   <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
