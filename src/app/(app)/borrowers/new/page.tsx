@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronsUpDown, FileText, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -36,9 +36,16 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
+import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { branchService, type ApiBranch } from "@/services/branch.service";
-import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS } from "@/constants";
+import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
+
+interface ValidIdEntry {
+  type: string;
+  file: File | null;
+  preview: string | null;
+}
 
 interface BorrowerFormData {
   first_name: string;
@@ -93,6 +100,14 @@ export default function NewBorrowerPage() {
   const [branchOpen, setBranchOpen] = useState(false);
   const [selectedBranchName, setSelectedBranchName] = useState("");
 
+  // Profile photo
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Valid IDs
+  const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+
   useEffect(() => {
     async function fetchBranches() {
       try {
@@ -105,6 +120,45 @@ export default function NewBorrowerPage() {
     }
     fetchBranches();
   }, []);
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProfilePhoto(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function removePhoto() {
+    setProfilePhoto(null);
+    setPhotoPreview(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  function addValidId() {
+    setValidIds((prev) => [...prev, { type: "", file: null, preview: null }]);
+  }
+
+  function updateValidId(index: number, field: keyof ValidIdEntry, value: unknown) {
+    setValidIds((prev) => prev.map((entry, i) => i === index ? { ...entry, [field]: value } : entry));
+  }
+
+  function handleValidIdFile(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setValidIds((prev) => prev.map((entry, i) =>
+        i === index ? { ...entry, file, preview: reader.result as string } : entry
+      ));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeValidId(index: number) {
+    setValidIds((prev) => prev.filter((_, i) => i !== index));
+  }
 
   function update<K extends keyof BorrowerFormData>(field: K, value: BorrowerFormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -162,7 +216,35 @@ export default function NewBorrowerPage() {
         if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
       }
 
-      await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
+      const created = await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
+      const borrowerId = (created as unknown as { id: number }).id;
+
+      // Upload profile photo if provided
+      if (profilePhoto && borrowerId) {
+        try {
+          const photoData = new FormData();
+          photoData.append("photo", profilePhoto);
+          await borrowerService.uploadPhoto(borrowerId, photoData);
+        } catch {
+          toast.error("Borrower created but photo upload failed");
+        }
+      }
+
+      // Upload valid IDs if provided
+      const idsWithFiles = validIds.filter((v) => v.type && v.file);
+      if (idsWithFiles.length > 0 && borrowerId) {
+        for (const entry of idsWithFiles) {
+          try {
+            const idData = new FormData();
+            idData.append("type", entry.type);
+            idData.append("file", entry.file!);
+            await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
+          } catch {
+            toast.error(`Failed to upload ${entry.type} ID`);
+          }
+        }
+      }
+
       toast.success("Borrower created successfully");
       router.push("/borrowers");
     } catch (err: unknown) {
@@ -206,6 +288,64 @@ export default function NewBorrowerPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Profile Photo */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Profile Photo</h2>
+            <div className="flex items-center gap-6">
+              <div className="relative">
+                {photoPreview ? (
+                  <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                    <img
+                      src={photoPreview}
+                      alt="Profile preview"
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors"
+                  >
+                    <Camera className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground">Upload</span>
+                  </button>
+                )}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <p>Upload a profile photo of the borrower.</p>
+                <p className="text-xs mt-1">JPG, PNG up to 5MB</p>
+                {photoPreview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    Change Photo
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Personal Information */}
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -418,6 +558,96 @@ export default function NewBorrowerPage() {
                 onChange={(e) => update("address", e.target.value)}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Valid IDs */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Valid IDs</h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addValidId}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add ID
+              </Button>
+            </div>
+
+            {validIds.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No valid IDs added. Click &quot;Add ID&quot; to attach identification documents.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {validIds.map((entry, index) => (
+                  <div key={index} className="flex flex-col sm:flex-row gap-3 p-3 rounded-lg border bg-muted/30">
+                    <div className="flex-1 space-y-2">
+                      <Label>ID Type</Label>
+                      <Select
+                        value={entry.type || null}
+                        onValueChange={(v) => updateValidId(index, "type", v ?? "")}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select ID type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VALID_ID_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <Label>Upload ID</Label>
+                      {entry.preview ? (
+                        <div className="relative h-20 rounded-lg overflow-hidden border">
+                          <img
+                            src={entry.preview}
+                            alt="ID preview"
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateValidId(index, "file", null)}
+                            className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">Choose file...</span>
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={(e) => handleValidIdFile(index, e)}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removeValidId(index)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
