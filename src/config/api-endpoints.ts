@@ -77,6 +77,13 @@ export const API_ENDPOINTS = {
     UPDATE: (id: number) => `/loan-products/${id}`,
     DELETE: (id: number) => `/loan-products/${id}`,
   },
+  FEES: {
+    LIST: "/fees",
+    CREATE: "/fees",
+    DETAIL: (id: number) => `/fees/${id}`,
+    UPDATE: (id: number) => `/fees/${id}`,
+    DELETE: (id: number) => `/fees/${id}`,
+  },
   REPORTS: {
     DUE_PAST_DUE: "/reports/due-past-due",
     LOAN_BALANCE_SUMMARY: "/reports/loan-balance-summary",

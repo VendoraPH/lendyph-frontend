@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import {
   Plus,
+  X,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -56,7 +57,7 @@ import {
   XCircle,
   AlertTriangle,
   ChevronDown,
-  X,
+  Clock,
 } from "lucide-react";
 import {
   INTEREST_TYPE_OPTIONS,
@@ -129,6 +130,30 @@ const statusBadge = {
 
 // ── Form Types ──
 
+interface CustomFeeEntry {
+  name: string;
+  type: "fixed" | "percentage";
+  value: string;
+  term_days_gt: string;
+  term_days_lt: string;
+  term_days_eq: string;
+  loan_amount_gt: string;
+  loan_amount_lt: string;
+  loan_amount_eq: string;
+}
+
+const EMPTY_FEE: CustomFeeEntry = {
+  name: "",
+  type: "fixed",
+  value: "",
+  term_days_gt: "",
+  term_days_lt: "",
+  term_days_eq: "",
+  loan_amount_gt: "",
+  loan_amount_lt: "",
+  loan_amount_eq: "",
+};
+
 interface ProductForm {
   name: string;
   description: string;
@@ -146,6 +171,7 @@ interface ProductForm {
   penalty_rate: string;
   grace_period_enabled: boolean;
   grace_period_days: string;
+  custom_fees: CustomFeeEntry[];
 }
 
 const EMPTY_FORM: ProductForm = {
@@ -165,6 +191,7 @@ const EMPTY_FORM: ProductForm = {
   penalty_rate: "",
   grace_period_enabled: false,
   grace_period_days: "",
+  custom_fees: [],
 };
 
 function productToForm(p: LoanProduct): ProductForm {
@@ -181,6 +208,8 @@ function productToForm(p: LoanProduct): ProductForm {
   // Parse interest rate range
   const minRate = String(apiProduct.min_interest_rate ?? p.interest_rate ?? "");
   const maxRate = String(apiProduct.max_interest_rate ?? p.interest_rate ?? "");
+
+  const rawFees = (apiProduct.custom_fees ?? []) as Array<Record<string, unknown>>;
 
   return {
     name: p.name,
@@ -199,10 +228,39 @@ function productToForm(p: LoanProduct): ProductForm {
     penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
+    custom_fees: rawFees.map((f) => ({
+      name: String(f.name ?? ""),
+      type: (f.type as "fixed" | "percentage") ?? "fixed",
+      value: String(f.value ?? ""),
+      term_days_gt: f.term_days_gt ? String(f.term_days_gt) : "",
+      term_days_lt: f.term_days_lt ? String(f.term_days_lt) : "",
+      term_days_eq: f.term_days_eq ? String(f.term_days_eq) : "",
+      loan_amount_gt: f.loan_amount_gt ? String(f.loan_amount_gt) : "",
+      loan_amount_lt: f.loan_amount_lt ? String(f.loan_amount_lt) : "",
+      loan_amount_eq: f.loan_amount_eq ? String(f.loan_amount_eq) : "",
+    })),
   };
 }
 
 function formToApiPayload(form: ProductForm) {
+  const custom_fees = form.custom_fees
+    .filter((f) => f.name.trim() && f.value.trim())
+    .map((f) => {
+      const conditions: Record<string, number> = {};
+      if (f.term_days_gt) conditions.term_days_gt = Number(f.term_days_gt);
+      if (f.term_days_lt) conditions.term_days_lt = Number(f.term_days_lt);
+      if (f.term_days_eq) conditions.term_days_eq = Number(f.term_days_eq);
+      if (f.loan_amount_gt) conditions.loan_amount_gt = Number(f.loan_amount_gt);
+      if (f.loan_amount_lt) conditions.loan_amount_lt = Number(f.loan_amount_lt);
+      if (f.loan_amount_eq) conditions.loan_amount_eq = Number(f.loan_amount_eq);
+      return {
+        name: f.name,
+        type: f.type,
+        value: Number(f.value),
+        ...(Object.keys(conditions).length > 0 ? { conditions } : {}),
+      };
+    });
+
   return {
     name: form.name,
     min_interest_rate: Number(form.min_interest_rate),
@@ -218,6 +276,7 @@ function formToApiPayload(form: ProductForm) {
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
     max_amount: form.max_amount ? Number(form.max_amount) : undefined,
+    ...(custom_fees.length > 0 ? { custom_fees } : {}),
   };
 }
 
@@ -239,9 +298,42 @@ function ProductFormDialog({
   description: string;
 }) {
   const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
+  const [expandedFee, setExpandedFee] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(initialData ?? EMPTY_FORM);
+      setExpandedFee(null);
+    }
+  }, [open, initialData]);
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const addFee = () => {
+    setForm((prev) => ({
+      ...prev,
+      custom_fees: [...prev.custom_fees, { ...EMPTY_FEE }],
+    }));
+    setExpandedFee(form.custom_fees.length);
+  };
+
+  const removeFee = (idx: number) => {
+    setForm((prev) => ({
+      ...prev,
+      custom_fees: prev.custom_fees.filter((_, i) => i !== idx),
+    }));
+    if (expandedFee === idx) setExpandedFee(null);
+  };
+
+  const updateFee = (idx: number, field: keyof CustomFeeEntry, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      custom_fees: prev.custom_fees.map((f, i) =>
+        i === idx ? { ...f, [field]: value } : f
+      ),
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +344,7 @@ function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -551,6 +643,196 @@ function ProductFormDialog({
                   />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Additional Fees */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Additional Fees
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addFee}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Fee
+              </Button>
+            </div>
+
+            {form.custom_fees.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No additional fees. Click &quot;Add Fee&quot; to add custom deductions.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {form.custom_fees.map((fee, idx) => (
+                  <div key={idx} className="rounded-lg border p-3 space-y-3">
+                    {/* Fee header row: name, type, value, remove */}
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-xs">Fee Name *</Label>
+                        <Input
+                          placeholder="e.g. Notarial Fee"
+                          value={fee.name}
+                          onChange={(e) => updateFee(idx, "name", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-36 space-y-2">
+                        <Label className="text-xs">Type *</Label>
+                        <Select
+                          value={fee.type}
+                          onValueChange={(v) => updateFee(idx, "type", v as string)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fixed">Fixed (PHP)</SelectItem>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="formula" disabled>
+                              Formula (Soon)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-28 space-y-2">
+                        <Label className="text-xs">
+                          {fee.type === "fixed" ? "Amount" : "Rate (%)"} *
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={fee.type === "fixed" ? "1" : "0.01"}
+                          placeholder={fee.type === "fixed" ? "500" : "2"}
+                          value={fee.value}
+                          onChange={(e) => updateFee(idx, "value", e.target.value)}
+                        />
+                      </div>
+                      <div className="pt-7">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFee(idx)}
+                          className="text-destructive hover:text-destructive h-8 w-8"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Expandable conditions */}
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setExpandedFee(expandedFee === idx ? null : idx)}
+                    >
+                      {expandedFee === idx ? "▾ Hide conditions" : "▸ Additional conditions (optional)"}
+                    </button>
+
+                    {expandedFee === idx && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* Term (Days) conditions */}
+                        <div className="rounded-md border p-2.5 space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Term (Days)
+                          </p>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Greater than</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.term_days_gt}
+                                onChange={(e) => updateFee(idx, "term_days_gt", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Less than</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.term_days_lt}
+                                onChange={(e) => updateFee(idx, "term_days_lt", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Equal to</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.term_days_eq}
+                                onChange={(e) => updateFee(idx, "term_days_eq", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Loan Amount conditions */}
+                        <div className="rounded-md border p-2.5 space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Loan Amount
+                          </p>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Greater than</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.loan_amount_gt}
+                                onChange={(e) => updateFee(idx, "loan_amount_gt", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Less than</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.loan_amount_lt}
+                                onChange={(e) => updateFee(idx, "loan_amount_lt", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Equal to</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="—"
+                                value={fee.loan_amount_eq}
+                                onChange={(e) => updateFee(idx, "loan_amount_eq", e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tiered Charges — Coming Soon */}
+            <div className="rounded-lg border p-3 opacity-50">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Tiered Charges</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Coming Soon</Badge>
+              </div>
             </div>
           </div>
 
