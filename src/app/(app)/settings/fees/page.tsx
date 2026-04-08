@@ -204,7 +204,7 @@ function FeeFormDialog({
       toast.error("Fee name is required");
       return;
     }
-    if (!form.value) {
+    if (form.value.trim() === "") {
       toast.error("Fee value is required");
       return;
     }
@@ -599,8 +599,14 @@ export default function FeeManagementPage() {
       toast.success("Fee updated");
       fetchData();
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err?.response?.data?.message || "Failed to update fee");
+      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
+      const apiErrors = err?.response?.data?.errors;
+      if (apiErrors) {
+        const firstError = Object.values(apiErrors)[0]?.[0];
+        toast.error(firstError || "Validation failed");
+      } else {
+        toast.error(err?.response?.data?.message || "Failed to update fee");
+      }
     }
   };
 
