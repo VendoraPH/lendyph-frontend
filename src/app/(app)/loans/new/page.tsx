@@ -5,7 +5,7 @@ import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { borrowerService, coMakerService, loanProductService, loanService } from "@/services";
 import type { Borrower, CoMaker } from "@/types";
@@ -177,7 +177,6 @@ export default function NewLoanApplicationPage() {
 
   // ── API Data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
-  const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -200,7 +199,7 @@ export default function NewLoanApplicationPage() {
   const [coMakerOpen, setCoMakerOpen] = useState(false);
 
   // ── Dates State ──
-  const [releaseDate, setReleaseDate] = useState<Date | undefined>(undefined);
+  const [releaseDate, setReleaseDate] = useState<Date | undefined>(new Date());
   const [releaseDateOpen, setReleaseDateOpen] = useState(false);
 
   // ── Deductions State ──
@@ -210,7 +209,7 @@ export default function NewLoanApplicationPage() {
   const [serviceFeeOverride, setServiceFeeOverride] = useState<string | null>(
     null
   );
-  const [otherDeductions, setOtherDeductions] = useState<string>("0");
+  const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
 
   // ── Fetch borrowers and products on mount ──
   useEffect(() => {
@@ -246,31 +245,16 @@ export default function NewLoanApplicationPage() {
     fetchData();
   }, []);
 
-  // ── Fetch co-makers when borrower changes ──
-  useEffect(() => {
-    if (!borrowerId) {
-      setCoMakers([]);
-      return;
-    }
-    async function fetchCoMakers() {
-      try {
-        const res = await coMakerService.list(borrowerId!);
-        setCoMakers(Array.isArray(res) ? res : []);
-      } catch {
-        setCoMakers([]);
-      }
-    }
-    fetchCoMakers();
-  }, [borrowerId]);
+  // Co-makers: all borrowers except the selected borrower
+  const availableCoMakers = useMemo(
+    () => borrowers.filter((b) => b.id !== borrowerId),
+    [borrowers, borrowerId]
+  );
 
   // ── Derived ──
   const selectedBorrower = useMemo(
     () => borrowers.find((b) => b.id === borrowerId) ?? null,
     [borrowerId, borrowers]
-  );
-  const selectedCoMaker = useMemo(
-    () => coMakers.find((cm) => cm.id === coMakerId) ?? null,
-    [coMakerId, coMakers]
   );
   const selectedProduct = useMemo(
     () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
@@ -315,7 +299,7 @@ export default function NewLoanApplicationPage() {
         ? principal * (selectedProduct.service_fee / 100)
         : 0;
 
-  const otherDed = parseFloat(otherDeductions) || 0;
+  const otherDed = otherDeductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
   const totalDeductions = processingFee + serviceFee + otherDed;
   const netProceeds = principal - totalDeductions;
 
@@ -538,19 +522,17 @@ export default function NewLoanApplicationPage() {
                       type="button"
                       role="combobox"
                       aria-expanded={coMakerOpen}
-                      disabled={!borrowerId || coMakers.length === 0}
+                      disabled={!borrowerId || availableCoMakers.length === 0}
                       className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                     />
                   }
                 >
-                  <span className={cn("truncate", !selectedCoMaker && "text-muted-foreground")}>
-                    {selectedCoMaker
-                      ? selectedCoMaker.full_name
+                  <span className={cn("truncate", !coMakerId && "text-muted-foreground")}>
+                    {coMakerId
+                      ? (availableCoMakers.find((b) => b.id === coMakerId)?.full_name ?? borrowers.find((b) => b.id === coMakerId)?.full_name ?? "Selected")
                       : !borrowerId
                         ? "Select borrower first"
-                        : coMakers.length === 0
-                          ? "No co-makers available"
-                          : "Search co-maker (optional)..."}
+                        : "Search co-maker (optional)..."}
                   </span>
                   <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
                 </PopoverTrigger>
@@ -558,15 +540,15 @@ export default function NewLoanApplicationPage() {
                   <Command>
                     <CommandInput placeholder="Type a name to search..." />
                     <CommandList>
-                      <CommandEmpty>No co-maker found.</CommandEmpty>
+                      <CommandEmpty>No members found.</CommandEmpty>
                       <CommandGroup>
-                        {coMakers.map((cm) => (
+                        {availableCoMakers.map((b) => (
                           <CommandItem
-                            key={cm.id}
-                            value={`${cm.full_name} ${cm.relationship}`}
+                            key={b.id}
+                            value={b.full_name ?? `${b.first_name} ${b.last_name}`}
                             onSelect={() => {
                               setCoMakerId(
-                                cm.id === coMakerId ? null : cm.id
+                                b.id === coMakerId ? null : b.id
                               );
                               setCoMakerOpen(false);
                             }}
@@ -574,15 +556,12 @@ export default function NewLoanApplicationPage() {
                             <Check
                               className={cn(
                                 "mr-2 size-4",
-                                coMakerId === cm.id
+                                coMakerId === b.id
                                   ? "opacity-100"
                                   : "opacity-0"
                               )}
                             />
-                            {cm.full_name}{" "}
-                            <span className="text-muted-foreground">
-                              ({cm.relationship})
-                            </span>
+                            {b.full_name ?? `${b.first_name} ${b.last_name}`}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -850,18 +829,65 @@ export default function NewLoanApplicationPage() {
               />
             </div>
 
-            {/* Other Deductions */}
-            <div className="space-y-2">
-              <Label>Other Deductions</Label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                step="0.01"
-                value={otherDeductions}
-                onChange={(e) => setOtherDeductions(e.target.value)}
-              />
-            </div>
           </div>
+
+            {/* Other Deductions */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Other Deductions</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Deduction
+                </Button>
+              </div>
+              {otherDeductions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No other deductions added.</p>
+              ) : (
+                <div className="space-y-2">
+                  {otherDeductions.map((ded, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Deduction name"
+                        value={ded.name}
+                        onChange={(e) =>
+                          setOtherDeductions((prev) =>
+                            prev.map((d, i) => (i === idx ? { ...d, name: e.target.value } : d))
+                          )
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Amount"
+                        min={0}
+                        step="1"
+                        value={ded.amount}
+                        onChange={(e) =>
+                          setOtherDeductions((prev) =>
+                            prev.map((d, i) => (i === idx ? { ...d, amount: e.target.value } : d))
+                          )
+                        }
+                        className="w-32"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-destructive hover:text-destructive shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
           <Separator />
 
