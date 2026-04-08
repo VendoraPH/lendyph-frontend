@@ -167,7 +167,6 @@ export default function AmortizationPage() {
     return {
       principal: schedule.rows.reduce((s, r) => s + r.principal, 0),
       interest: schedule.rows.reduce((s, r) => s + r.interest, 0),
-      penalty: schedule.rows.reduce((s, r) => s + r.penalty, 0),
       totalDue: schedule.rows.reduce((s, r) => s + r.totalDue, 0),
     };
   }, [schedule]);
@@ -244,10 +243,18 @@ export default function AmortizationPage() {
                 onValueChange={(val) =>
                   setFrequency(val as PaymentFrequency)
                 }
-                disabled={isUponMaturitySinglePayment}
+                disabled={isUponMaturity}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string | null) =>
+                      isUponMaturity
+                        ? "Upon Maturity"
+                        : value
+                          ? (PAYMENT_FREQUENCY_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                          : "Select frequency"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
@@ -257,14 +264,9 @@ export default function AmortizationPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {isUponMaturitySinglePayment && (
+              {isUponMaturity && (
                 <p className="text-xs text-muted-foreground">
                   Single payment at maturity
-                </p>
-              )}
-              {isUponMaturity && parsedTerm > 1 && (
-                <p className="text-xs text-muted-foreground">
-                  Interest-only payments + principal at maturity
                 </p>
               )}
             </div>
@@ -393,7 +395,6 @@ export default function AmortizationPage() {
                     </TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    <TableHead className="text-right">Penalty</TableHead>
                     <TableHead className="text-right">Total Due</TableHead>
                     <TableHead className="text-right">
                       Remaining Balance
@@ -420,9 +421,6 @@ export default function AmortizationPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           {formatPHP(row.interest)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatPHP(row.penalty)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {formatPHP(row.totalDue)}
@@ -452,9 +450,6 @@ export default function AmortizationPage() {
                     </TableCell>
                     <TableCell className="text-right font-semibold">
                       {formatPHP(totals.interest)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatPHP(totals.penalty)}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
                       {formatPHP(totals.totalDue)}

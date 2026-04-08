@@ -89,8 +89,19 @@ function getProductField(product: LoanProduct, field: string): string {
     case "max_interest_rate": return String(p.max_interest_rate ?? p.interest_rate ?? "");
     case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
     case "notarial_fee": return String(p.notarial_fee ?? "0");
+    case "min_processing_fee": return String(p.min_processing_fee ?? p.processing_fee ?? "0");
+    case "max_processing_fee": return String(p.max_processing_fee ?? p.processing_fee ?? "0");
+    case "min_service_fee": return String(p.min_service_fee ?? p.service_fee ?? "0");
+    case "max_service_fee": return String(p.max_service_fee ?? p.service_fee ?? "0");
     default: return String(p[field] ?? "");
   }
+}
+
+function getFeeRange(product: LoanProduct, feeKey: "processing_fee" | "service_fee"): string {
+  const min = Math.round(Number(getProductField(product, `min_${feeKey}`)));
+  const max = Math.round(Number(getProductField(product, `max_${feeKey}`)));
+  if (min === max) return `${min}%`;
+  return `${min}–${max}%`;
 }
 
 function getProductFrequencies(product: LoanProduct): string {
@@ -165,8 +176,10 @@ interface ProductForm {
   min_interest_rate: string;
   max_interest_rate: string;
   interest_method: string;
-  processing_fee: string;
-  service_fee: string;
+  min_processing_fee: string;
+  max_processing_fee: string;
+  min_service_fee: string;
+  max_service_fee: string;
   notarial_fee: string;
   penalty_rate: string;
   grace_period_enabled: boolean;
@@ -185,8 +198,10 @@ const EMPTY_FORM: ProductForm = {
   min_interest_rate: "",
   max_interest_rate: "",
   interest_method: "straight",
-  processing_fee: "",
-  service_fee: "",
+  min_processing_fee: "",
+  max_processing_fee: "",
+  min_service_fee: "",
+  max_service_fee: "",
   notarial_fee: "",
   penalty_rate: "",
   grace_period_enabled: false,
@@ -222,8 +237,10 @@ function productToForm(p: LoanProduct): ProductForm {
     min_interest_rate: minRate,
     max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
-    processing_fee: String(apiProduct.processing_fee ?? p.processing_fee ?? ""),
-    service_fee: String(apiProduct.service_fee ?? p.service_fee ?? ""),
+    min_processing_fee: String(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
+    max_processing_fee: String(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
+    min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
+    max_service_fee: String(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
     notarial_fee: String(apiProduct.notarial_fee ?? ""),
     penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
     grace_period_enabled: gracePeriod > 0,
@@ -269,8 +286,12 @@ function formToApiPayload(form: ProductForm) {
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
     frequencies: form.frequencies,
-    processing_fee: form.processing_fee ? Number(form.processing_fee) : undefined,
-    service_fee: form.service_fee ? Number(form.service_fee) : undefined,
+    processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
+    min_processing_fee: form.min_processing_fee ? Number(form.min_processing_fee) : undefined,
+    max_processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
+    service_fee: form.max_service_fee ? Number(form.max_service_fee) : undefined,
+    min_service_fee: form.min_service_fee ? Number(form.min_service_fee) : undefined,
+    max_service_fee: form.max_service_fee ? Number(form.max_service_fee) : undefined,
     notarial_fee: form.notarial_fee ? Number(form.notarial_fee) : undefined,
     penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
@@ -478,7 +499,13 @@ function ProductFormDialog({
                   onValueChange={(v) => update("interest_method", v as string)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select method" />
+                    <SelectValue placeholder="Select method">
+                      {(value: string | null) =>
+                        value
+                          ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                          : "Select method"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {INTEREST_TYPE_OPTIONS.map((opt) => (
@@ -574,28 +601,48 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="processing-fee">Processing Fee (%)</Label>
-                <Input
-                  id="processing-fee"
-                  type="number"
-                  min={0}
-                  step="1"
-                  placeholder="2"
-                  value={form.processing_fee}
-                  onChange={(e) => update("processing_fee", e.target.value)}
-                />
+                <Label>Processing Fee (%)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Min"
+                    value={form.min_processing_fee}
+                    onChange={(e) => update("min_processing_fee", e.target.value)}
+                  />
+                  <span className="text-muted-foreground text-sm shrink-0">–</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Max"
+                    value={form.max_processing_fee}
+                    onChange={(e) => update("max_processing_fee", e.target.value)}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="service-fee">Service Fee (%)</Label>
-                <Input
-                  id="service-fee"
-                  type="number"
-                  min={0}
-                  step="1"
-                  placeholder="1"
-                  value={form.service_fee}
-                  onChange={(e) => update("service_fee", e.target.value)}
-                />
+                <Label>Service Fee (%)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Min"
+                    value={form.min_service_fee}
+                    onChange={(e) => update("min_service_fee", e.target.value)}
+                  />
+                  <span className="text-muted-foreground text-sm shrink-0">–</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Max"
+                    value={form.max_service_fee}
+                    onChange={(e) => update("max_service_fee", e.target.value)}
+                  />
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1239,7 +1286,7 @@ export default function LoanProductsPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Fees</p>
                   <p className="text-xs">
-                    Processing {Math.round(product.processing_fee)}% · Service {Math.round(product.service_fee)}%
+                    Processing {getFeeRange(product, "processing_fee")} · Service {getFeeRange(product, "service_fee")}
                     {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${Math.round(Number(getProductField(product, "notarial_fee")))}%`}
                   </p>
                 </div>
@@ -1320,9 +1367,9 @@ export default function LoanProductsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground whitespace-nowrap">
-                        <span>Processing: {Math.round(product.processing_fee)}%</span>
+                        <span>Processing: {getFeeRange(product, "processing_fee")}</span>
                         <br />
-                        <span>Service: {Math.round(product.service_fee)}%</span>
+                        <span>Service: {getFeeRange(product, "service_fee")}</span>
                       </div>
                     </TableCell>
                     <TableCell>
