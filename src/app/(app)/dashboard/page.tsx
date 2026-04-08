@@ -8,6 +8,8 @@ import {
   Area,
   BarChart,
   Bar,
+  PieChart,
+  Pie,
   XAxis,
   YAxis,
   Tooltip,
@@ -106,7 +108,16 @@ const DAILY_DUE_ITEMS = [
 
 const TOTAL_DUE = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountDue, 0);
 const TOTAL_COLLECTED = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountPaid, 0);
+const TOTAL_PARTIAL = DAILY_DUE_ITEMS.filter((i) => i.status === "partial").reduce((sum, i) => sum + i.amountPaid, 0);
+const TOTAL_FULLY_COLLECTED = TOTAL_COLLECTED - TOTAL_PARTIAL;
+const TOTAL_REMAINING = TOTAL_DUE - TOTAL_COLLECTED;
 const COLLECTION_RATE = Math.round((TOTAL_COLLECTED / TOTAL_DUE) * 100);
+
+const COLLECTION_PIE_DATA = [
+  { name: "Collected", value: TOTAL_FULLY_COLLECTED, color: "#10b981" },
+  { name: "Partial", value: TOTAL_PARTIAL, color: "#f59e0b" },
+  { name: "Pending", value: TOTAL_REMAINING, color: "#94a3b8" },
+];
 
 const RECENT_TRANSACTIONS = [
   { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
@@ -333,46 +344,52 @@ export default function DashboardPage() {
             </Badge>
           </div>
 
-          {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-4 mb-5">
-            <div className="rounded-lg border bg-blue-500/10 border-blue-500/20 p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <CircleAlert className="h-3.5 w-3.5 text-blue-500" />
-                <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Expected Collection</p>
-              </div>
-              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">₱{TOTAL_DUE.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-0.5">{DAILY_DUE_ITEMS.length} loans due today</p>
-            </div>
-            <div className="rounded-lg border bg-green-500/10 border-green-500/20 p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <CircleCheck className="h-3.5 w-3.5 text-green-500" />
-                <p className="text-[11px] font-medium text-green-600 dark:text-green-400">Actual Collection</p>
-              </div>
-              <p className="text-xl font-bold text-green-700 dark:text-green-300">₱{TOTAL_COLLECTED.toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-green-500 dark:text-green-400 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "collected").length} paid in full</p>
-            </div>
-            <div className="rounded-lg border bg-orange-500/10 border-orange-500/20 p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="h-3.5 w-3.5 text-orange-500" />
-                <p className="text-[11px] font-medium text-orange-600 dark:text-orange-400">Remaining</p>
-              </div>
-              <p className="text-xl font-bold text-orange-700 dark:text-orange-300">₱{(TOTAL_DUE - TOTAL_COLLECTED).toLocaleString("en-PH")}</p>
-              <p className="text-[11px] text-orange-500 dark:text-orange-400 mt-0.5">{DAILY_DUE_ITEMS.filter((i) => i.status === "pending" || i.status === "partial").length} pending</p>
-            </div>
-          </div>
-
-          {/* Progress bar */}
+          {/* Pie chart */}
           <div className="mb-5">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-muted-foreground">Collection Progress</span>
-              <span className="font-medium">₱{TOTAL_COLLECTED.toLocaleString("en-PH")} / ₱{TOTAL_DUE.toLocaleString("en-PH")}</span>
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative" style={{ width: 200, height: 200 }}>
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={COLLECTION_PIE_DATA}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={3}
+                        dataKey="value"
+                        strokeWidth={0}
+                        isAnimationActive={false}
+                      >
+                        {COLLECTION_PIE_DATA.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => `₱${Number(value).toLocaleString("en-PH")}`}
+                        contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : null}
+                {/* Center label */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <p className="text-2xl font-bold">{COLLECTION_RATE}%</p>
+                  <p className="text-[11px] text-muted-foreground">Collected</p>
+                </div>
+              </div>
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-2">
+                {COLLECTION_PIE_DATA.map((entry) => (
+                  <div key={entry.name} className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                    <span className="text-[11px] text-muted-foreground">{entry.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
-                style={{ width: `${COLLECTION_RATE}%` }}
-              />
-            </div>
+
           </div>
         </div>
 
