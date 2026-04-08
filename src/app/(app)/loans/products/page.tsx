@@ -500,11 +500,13 @@ function ProductFormDialog({
                         ? form.frequencies.map((f) => (
                             <Badge key={f} variant="secondary" className="text-xs font-normal gap-1">
                               {PAYMENT_FREQUENCY_LABELS[f] ?? f}
-                              <button
-                                type="button"
-                                className="hover:text-destructive"
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                className="hover:text-destructive cursor-pointer"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
                                   if (form.frequencies.length > 1) {
                                     setForm((prev) => ({
                                       ...prev,
@@ -512,9 +514,21 @@ function ProductFormDialog({
                                     }));
                                   }
                                 }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    if (form.frequencies.length > 1) {
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        frequencies: prev.frequencies.filter((v) => v !== f),
+                                      }));
+                                    }
+                                  }
+                                }}
                               >
                                 <X className="h-3 w-3" />
-                              </button>
+                              </span>
                             </Badge>
                           ))
                         : <span className="text-muted-foreground">Select frequencies</span>}
