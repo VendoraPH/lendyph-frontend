@@ -109,6 +109,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "settings:view",
     children: [
       { title: "Profile", href: "/settings/profile" },
+      { title: "Fees", href: "/settings/fees" },
       { title: "Branches", href: "/settings/branches" },
     ],
   },
