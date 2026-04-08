@@ -4,10 +4,18 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
-import { loanService, loanAdjustmentService, repaymentService, coMakerService } from "@/services";
+import { loanService, loanAdjustmentService, repaymentService, coMakerService, userService } from "@/services";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import type { LoanSchedule } from "@/types/loan";
-import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
+import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +72,8 @@ import {
   Plus,
   DollarSign,
   Settings2,
+  ChevronsUpDown,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -223,13 +233,11 @@ const WORKFLOW_STEPS: { status: LoanStatus; label: string }[] = [
   { status: "for_review", label: "For Review" },
   { status: "approved", label: "Approved" },
   { status: "released", label: "Released" },
-  { status: "ongoing", label: "Ongoing" },
-  { status: "completed", label: "Completed" },
 ];
 
 function getStepIndex(status: LoanStatus): number {
   const idx = WORKFLOW_STEPS.findIndex((s) => s.status === status);
-  // For closed/defaulted/restructured, treat as completed-level
+  // For ongoing/completed/closed/defaulted/restructured, treat as released (last step)
   if (idx === -1) return WORKFLOW_STEPS.length - 1;
   return idx;
 }
@@ -493,6 +501,12 @@ export default function LoanDetailPage({
   // Loan Documents state
   const [docLoading, setDocLoading] = useState<string | null>(null);
 
+  // Account Officer state
+  const [users, setUsers] = useState<User[]>([]);
+  const [aoEditing, setAoEditing] = useState(false);
+  const [aoOpen, setAoOpen] = useState(false);
+  const [aoSaving, setAoSaving] = useState(false);
+
   // Fetch loan on mount
   useEffect(() => {
     let cancelled = false;
@@ -526,6 +540,34 @@ export default function LoanDetailPage({
     fetchLoan();
     return () => { cancelled = true; };
   }, [loanId]);
+
+  // Fetch users for AO tagging
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const res = await userService.list();
+        const list = Array.isArray(res) ? res : (res as unknown as { data: User[] }).data ?? [];
+        setUsers(list.filter((u) => u.status === "active"));
+      } catch { /* non-critical */ }
+    }
+    fetchUsers();
+  }, []);
+
+  // Save AO assignment
+  const handleSaveAO = useCallback(async (userId: number) => {
+    if (!loan) return;
+    setAoSaving(true);
+    try {
+      await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
+      setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
+      toast.success("Account Officer updated");
+      setAoEditing(false);
+    } catch {
+      toast.error("Failed to update Account Officer");
+    } finally {
+      setAoSaving(false);
+    }
+  }, [loan, users]);
 
   // Fetch schedule for released+ loans
   const fetchSchedule = useCallback(async (id: number) => {
@@ -1338,6 +1380,87 @@ export default function LoanDetailPage({
               <p className="text-sm font-medium">
                 {loanCoMakerName || "None"}
               </p>
+            </div>
+            <Separator />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
+                {!aoEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setAoEditing(true)}
+                    className="text-xs text-brand-orange hover:underline flex items-center gap-1"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    {(loan as unknown as Record<string, unknown>).account_officer_id ? "Change" : "Assign"}
+                  </button>
+                )}
+              </div>
+              {aoEditing ? (
+                <div className="space-y-2">
+                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
+                    <PopoverTrigger
+                      render={
+                        <button
+                          type="button"
+                          role="combobox"
+                          disabled={aoSaving}
+                          className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                      }
+                    >
+                      <span className="text-muted-foreground text-sm">Select account officer...</span>
+                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search officer..." />
+                        <CommandList>
+                          <CommandEmpty>No users found.</CommandEmpty>
+                          <CommandGroup>
+                            {users.map((user) => (
+                              <CommandItem
+                                key={user.id}
+                                value={user.full_name}
+                                onSelect={() => {
+                                  handleSaveAO(user.id);
+                                  setAoOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 size-4",
+                                    (loan as unknown as Record<string, unknown>).account_officer_id === user.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div>
+                                  <p className="text-sm">{user.full_name}</p>
+                                  <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAoEditing(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm font-medium">
+                  {(() => {
+                    const ao = (loan as unknown as Record<string, unknown>).account_officer as { id?: number; full_name?: string; name?: string } | undefined;
+                    return ao?.full_name ?? ao?.name ?? "Not assigned";
+                  })()}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

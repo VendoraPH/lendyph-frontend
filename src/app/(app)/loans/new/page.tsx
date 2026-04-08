@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { borrowerService, coMakerService, loanProductService, loanService } from "@/services";
-import type { Borrower, CoMaker } from "@/types";
+import { borrowerService, coMakerService, loanProductService, loanService, userService } from "@/services";
+import type { Borrower, CoMaker, User } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -187,9 +187,14 @@ export default function NewLoanApplicationPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  // ── Users (Account Officers) ──
+  const [users, setUsers] = useState<User[]>([]);
+
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerId, setCoMakerId] = useState<number | null>(null);
+  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
+  const [aoOpen, setAoOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
 
   // ── Loan Product & Terms State ──
@@ -222,9 +227,10 @@ export default function NewLoanApplicationPage() {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult] = await Promise.allSettled([
+      const [borrowersResult, productsResult, usersResult] = await Promise.allSettled([
         borrowerService.list({ per_page: 200 }),
         loanProductService.list(),
+        userService.list(),
       ]);
 
       if (borrowersResult.status === "fulfilled") {
@@ -244,6 +250,13 @@ export default function NewLoanApplicationPage() {
         );
       } else {
         toast.error("Failed to load loan products");
+      }
+
+      if (usersResult.status === "fulfilled") {
+        const userData = Array.isArray(usersResult.value)
+          ? usersResult.value
+          : (usersResult.value as unknown as { data: User[] }).data ?? [];
+        setUsers(userData.filter((u) => u.status === "active"));
       }
 
       setLoadingData(false);
@@ -419,6 +432,7 @@ export default function NewLoanApplicationPage() {
         principal_amount: principal,
         interest_rate: rate,
         start_date: formatDateISO(releaseDate),
+        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
       };
       const loan = await loanService.create(payload);
@@ -596,6 +610,61 @@ export default function NewLoanApplicationPage() {
                 </PopoverContent>
               </Popover>
             </div>
+          </div>
+
+          {/* Account Officer */}
+          <div className="space-y-2">
+            <Label>Account Officer (AO)</Label>
+            <Popover open={aoOpen} onOpenChange={setAoOpen}>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    role="combobox"
+                    aria-expanded={aoOpen}
+                    className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                  />
+                }
+              >
+                <span className={cn("truncate", !accountOfficerId && "text-muted-foreground")}>
+                  {accountOfficerId
+                    ? users.find((u) => u.id === accountOfficerId)?.full_name ?? "Select AO"
+                    : "Select account officer"}
+                </span>
+                <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+              </PopoverTrigger>
+              <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search officer..." />
+                  <CommandList>
+                    <CommandEmpty>No users found.</CommandEmpty>
+                    <CommandGroup>
+                      {users.map((user) => (
+                        <CommandItem
+                          key={user.id}
+                          value={user.full_name}
+                          onSelect={() => {
+                            setAccountOfficerId(user.id);
+                            setAoOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 size-4",
+                              accountOfficerId === user.id ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <div>
+                            <p className="text-sm">{user.full_name}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Purpose */}
