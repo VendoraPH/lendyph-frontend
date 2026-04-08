@@ -4,12 +4,15 @@ import type { LoanProduct } from "@/types";
 
 export interface CreateLoanProductData {
   name: string;
-  interest_rate: number;
+  min_interest_rate: number;
+  max_interest_rate: number;
   interest_method: "straight" | "diminishing" | "upon_maturity";
-  term: number;
-  frequency: "daily" | "weekly" | "semi_monthly" | "monthly";
+  min_term: number;
+  max_term: number;
+  frequencies: string[];
   processing_fee?: number;
   service_fee?: number;
+  notarial_fee?: number;
   penalty_rate?: number;
   grace_period_days?: number;
   min_amount?: number;
