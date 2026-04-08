@@ -64,8 +64,8 @@ const formatCurrency = (amount: number) =>
 
 // ── Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
-type InterestType = "fixed" | "diminishing" | "upon_maturity";
+type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
+type InterestType = "straight" | "fixed" | "diminishing" | "upon_maturity";
 
 function getPeriodsFromMonths(
   termMonths: number,
@@ -77,8 +77,10 @@ function getPeriodsFromMonths(
     case "weekly":
       return Math.round(termMonths * 4.33);
     case "bi_weekly":
-      return Math.round(termMonths * 2.17);
+    case "semi_monthly":
+      return Math.round(termMonths * 2);
     case "monthly":
+    default:
       return termMonths;
   }
 }
@@ -90,8 +92,10 @@ function getIntervalDays(frequency: PaymentFrequency): number {
     case "weekly":
       return 7;
     case "bi_weekly":
-      return 14;
+    case "semi_monthly":
+      return 15;
     case "monthly":
+    default:
       return 30;
   }
 }
@@ -138,38 +142,81 @@ function computeAmortization(
 ): AmortizationRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
-  // Round principal per period to whole number per computation spec
-  const principalPerPeriod = Math.round(principal / totalPeriods);
+  const r = interestRate / 100;
   const rows: AmortizationRow[] = [];
-
   let remainingBalance = principal;
 
-  for (let i = 1; i <= totalPeriods; i++) {
-    const dueDate =
-      frequency === "monthly"
+  // Straight/Fixed: equal principal each period, constant interest on original principal
+  if (interestType === "straight" || interestType === "fixed") {
+    const principalPerPeriod = Math.round(principal / totalPeriods);
+    const interestPerPeriod = Math.round(principal * r * 100) / 100;
+
+    for (let i = 1; i <= totalPeriods; i++) {
+      const dueDate = frequency === "monthly"
         ? addMonths(releaseDate, i)
         : addDays(releaseDate, i * intervalDays);
+      const isLast = i === totalPeriods;
+      const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
 
-    const isLast = i === totalPeriods;
-    // Last period gets remaining balance to ensure total equals loan amount
-    const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
-
-    let interest: number;
-    if (interestType === "fixed") {
-      interest = principal * (interestRate / 100);
-    } else {
-      interest = remainingBalance * (interestRate / 100);
+      rows.push({
+        period: i,
+        dueDate,
+        principal: periodPrincipal,
+        interest: interestPerPeriod,
+        totalPayment: periodPrincipal + interestPerPeriod,
+      });
+      remainingBalance -= periodPrincipal;
     }
+  }
 
-    rows.push({
-      period: i,
-      dueDate,
-      principal: periodPrincipal,
-      interest,
-      totalPayment: periodPrincipal + interest,
-    });
+  // Diminishing: equal total payment (PMT), decreasing interest, increasing principal
+  else if (interestType === "diminishing") {
+    const pmt = r > 0
+      ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
+      : principal / totalPeriods;
 
-    remainingBalance -= periodPrincipal;
+    for (let i = 1; i <= totalPeriods; i++) {
+      const dueDate = frequency === "monthly"
+        ? addMonths(releaseDate, i)
+        : addDays(releaseDate, i * intervalDays);
+      const isLast = i === totalPeriods;
+      const interest = Math.round(remainingBalance * r * 100) / 100;
+      const periodPrincipal = isLast
+        ? remainingBalance
+        : Math.round((pmt - interest) * 100) / 100;
+
+      rows.push({
+        period: i,
+        dueDate,
+        principal: periodPrincipal,
+        interest,
+        totalPayment: isLast
+          ? Math.round((periodPrincipal + interest) * 100) / 100
+          : Math.round(pmt * 100) / 100,
+      });
+      remainingBalance -= periodPrincipal;
+    }
+  }
+
+  // Upon Maturity: interest-only payments, full principal at the end
+  else if (interestType === "upon_maturity") {
+    const interestPerPeriod = Math.round(principal * r * 100) / 100;
+
+    for (let i = 1; i <= totalPeriods; i++) {
+      const dueDate = frequency === "monthly"
+        ? addMonths(releaseDate, i)
+        : addDays(releaseDate, i * intervalDays);
+      const isLast = i === totalPeriods;
+      const periodPrincipal = isLast ? principal : 0;
+
+      rows.push({
+        period: i,
+        dueDate,
+        principal: periodPrincipal,
+        interest: interestPerPeriod,
+        totalPayment: periodPrincipal + interestPerPeriod,
+      });
+    }
   }
 
   return rows;
@@ -376,9 +423,13 @@ export default function NewLoanApplicationPage() {
       setProductId(value);
       const product = products.find((p) => p.id === Number(value));
       if (product) {
+        const apiProduct = product as unknown as Record<string, unknown>;
         setInterestRate(String(product.interest_rate ?? ""));
-        setInterestType(product.interest_type ?? null);
-        setPaymentFrequency(product.payment_frequency ?? null);
+        // Map API field names: interest_method/interest_type, "fixed" -> "straight"
+        const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
+        setInterestType(rawType === "fixed" ? "straight" : rawType);
+        // Map API field names: frequency/payment_frequency
+        setPaymentFrequency(String(apiProduct.frequency ?? product.payment_frequency ?? "monthly"));
         setProcessingFeeOverride(null);
         setServiceFeeOverride(null);
       }
