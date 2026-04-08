@@ -33,6 +33,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "users:delete",
       "audit_logs:view",
       "audit_logs:export",
+      "share_capital:view",
+      "share_capital:create",
+      "share_capital:update",
     ],
   },
   loan_officer: {
@@ -52,6 +55,8 @@ export const ROLES: Record<Role, RoleConfig> = {
       "payments:view",
       "collections:view",
       "reports:view",
+      "share_capital:view",
+      "share_capital:create",
     ],
   },
   cashier: {
