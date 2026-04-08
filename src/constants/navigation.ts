@@ -12,6 +12,7 @@ import {
   History,
   FilePlus,
   Package,
+  Landmark,
 } from "lucide-react";
 
 export interface NavSubItem {
@@ -39,6 +40,17 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/users",
     icon: UserCog,
     permission: "users:view",
+  },
+  {
+    title: "Share Capital",
+    href: "/share-capital",
+    icon: Landmark,
+    permission: "share_capital:view",
+    children: [
+      { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
+      { title: "Pledge Entry", href: "/share-capital/pledges" },
+      { title: "Auto-Credit", href: "/share-capital/auto-credit" },
+    ],
   },
   {
     title: "Borrowers",

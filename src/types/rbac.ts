@@ -14,7 +14,8 @@ export type Module =
   | "reports"
   | "settings"
   | "users"
-  | "audit_logs";
+  | "audit_logs"
+  | "share_capital";
 
 export type Action =
   | "view"
