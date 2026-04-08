@@ -13,3 +13,4 @@ export { loanDocumentService } from "./loan-document.service";
 export { loanAdjustmentService } from "./loan-adjustment.service";
 export { repaymentService } from "./repayment.service";
 export { systemService } from "./system.service";
+export { feeService } from "./fee.service";
