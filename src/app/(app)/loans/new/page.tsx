@@ -58,9 +58,12 @@ import {
 // ── Currency Formatter ──
 
 const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(
-    amount
-  );
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
 
 // ── Helpers ──
 
@@ -149,7 +152,7 @@ function computeAmortization(
   // Straight/Fixed: equal principal each period, constant interest on original principal
   if (interestType === "straight" || interestType === "fixed") {
     const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r * 100) / 100;
+    const interestPerPeriod = Math.round(principal * r);
 
     for (let i = 1; i <= totalPeriods; i++) {
       const dueDate = frequency === "monthly"
@@ -180,10 +183,10 @@ function computeAmortization(
         ? addMonths(releaseDate, i)
         : addDays(releaseDate, i * intervalDays);
       const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * r * 100) / 100;
+      const interest = Math.round(remainingBalance * r);
       const periodPrincipal = isLast
         ? remainingBalance
-        : Math.round((pmt - interest) * 100) / 100;
+        : Math.round(pmt - interest);
 
       rows.push({
         period: i,
@@ -191,8 +194,8 @@ function computeAmortization(
         principal: periodPrincipal,
         interest,
         totalPayment: isLast
-          ? Math.round((periodPrincipal + interest) * 100) / 100
-          : Math.round(pmt * 100) / 100,
+          ? periodPrincipal + interest
+          : Math.round(pmt),
       });
       remainingBalance -= periodPrincipal;
     }
@@ -200,7 +203,7 @@ function computeAmortization(
 
   // Upon Maturity: interest-only payments, full principal at the end
   else if (interestType === "upon_maturity") {
-    const interestPerPeriod = Math.round(principal * r * 100) / 100;
+    const interestPerPeriod = Math.round(principal * r);
 
     for (let i = 1; i <= totalPeriods; i++) {
       const dueDate = frequency === "monthly"
@@ -349,22 +352,22 @@ export default function NewLoanApplicationPage() {
     return null;
   }, [selectedProduct, termMonths, term]);
 
-  // Fees
+  // Fees (rounded to whole numbers)
   const processingFee =
     processingFeeOverride !== null
-      ? parseFloat(processingFeeOverride) || 0
+      ? Math.round(parseFloat(processingFeeOverride) || 0)
       : selectedProduct
-        ? principal * (selectedProduct.processing_fee / 100)
+        ? Math.round(principal * (selectedProduct.processing_fee / 100))
         : 0;
 
   const serviceFee =
     serviceFeeOverride !== null
-      ? parseFloat(serviceFeeOverride) || 0
+      ? Math.round(parseFloat(serviceFeeOverride) || 0)
       : selectedProduct
-        ? principal * (selectedProduct.service_fee / 100)
+        ? Math.round(principal * (selectedProduct.service_fee / 100))
         : 0;
 
-  const otherDed = otherDeductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  const otherDed = otherDeductions.reduce((sum, d) => sum + Math.round(parseFloat(d.amount) || 0), 0);
   const totalDeductions = processingFee + serviceFee + otherDed;
   const netProceeds = principal - totalDeductions;
 
@@ -517,14 +520,14 @@ export default function NewLoanApplicationPage() {
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Borrower & Co-Maker</CardTitle>
+          <CardTitle>Member & Co-Maker</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Borrower */}
             <div className="space-y-2">
               <Label>
-                Borrower <span className="text-destructive">*</span>
+                Member <span className="text-destructive">*</span>
               </Label>
               <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
                 <PopoverTrigger
@@ -540,7 +543,7 @@ export default function NewLoanApplicationPage() {
                   <span className={cn("truncate", !selectedBorrower && "text-muted-foreground")}>
                     {selectedBorrower
                       ? selectedBorrower.full_name
-                      : "Search borrower..."}
+                      : "Search member..."}
                   </span>
                   <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
                 </PopoverTrigger>
@@ -548,7 +551,7 @@ export default function NewLoanApplicationPage() {
                   <Command>
                     <CommandInput placeholder="Type a name to search..." />
                     <CommandList>
-                      <CommandEmpty>No borrower found.</CommandEmpty>
+                      <CommandEmpty>No member found.</CommandEmpty>
                       <CommandGroup>
                         {borrowers.map((b) => (
                           <CommandItem
@@ -761,7 +764,7 @@ export default function NewLoanApplicationPage() {
               </Label>
               <Input
                 type="number"
-                placeholder="0.00"
+                placeholder="0"
                 value={principalAmount}
                 onChange={(e) => setPrincipalAmount(e.target.value)}
                 min={selectedProduct?.min_amount}
@@ -913,18 +916,18 @@ export default function NewLoanApplicationPage() {
                 {selectedProduct && (
                   <span className="text-muted-foreground font-normal">
                     {" "}
-                    ({selectedProduct.processing_fee}%)
+                    ({Math.round(selectedProduct.processing_fee)}%)
                   </span>
                 )}
               </Label>
               <Input
                 type="number"
-                placeholder="0.00"
-                step="0.01"
+                placeholder="0"
+                step="1"
                 value={
                   processingFeeOverride !== null
                     ? processingFeeOverride
-                    : processingFee.toFixed(2)
+                    : Math.round(processingFee)
                 }
                 onChange={(e) => setProcessingFeeOverride(e.target.value)}
               />
@@ -937,18 +940,18 @@ export default function NewLoanApplicationPage() {
                 {selectedProduct && (
                   <span className="text-muted-foreground font-normal">
                     {" "}
-                    ({selectedProduct.service_fee}%)
+                    ({Math.round(selectedProduct.service_fee)}%)
                   </span>
                 )}
               </Label>
               <Input
                 type="number"
-                placeholder="0.00"
-                step="0.01"
+                placeholder="0"
+                step="1"
                 value={
                   serviceFeeOverride !== null
                     ? serviceFeeOverride
-                    : serviceFee.toFixed(2)
+                    : Math.round(serviceFee)
                 }
                 onChange={(e) => setServiceFeeOverride(e.target.value)}
               />
