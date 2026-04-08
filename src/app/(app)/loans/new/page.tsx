@@ -138,7 +138,8 @@ function computeAmortization(
 ): AmortizationRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
-  const principalPerPeriod = principal / totalPeriods;
+  // Round principal per period to whole number per computation spec
+  const principalPerPeriod = Math.round(principal / totalPeriods);
   const rows: AmortizationRow[] = [];
 
   let remainingBalance = principal;
@@ -148,6 +149,10 @@ function computeAmortization(
       frequency === "monthly"
         ? addMonths(releaseDate, i)
         : addDays(releaseDate, i * intervalDays);
+
+    const isLast = i === totalPeriods;
+    // Last period gets remaining balance to ensure total equals loan amount
+    const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
 
     let interest: number;
     if (interestType === "fixed") {
@@ -159,12 +164,12 @@ function computeAmortization(
     rows.push({
       period: i,
       dueDate,
-      principal: principalPerPeriod,
+      principal: periodPrincipal,
       interest,
-      totalPayment: principalPerPeriod + interest,
+      totalPayment: periodPrincipal + interest,
     });
 
-    remainingBalance -= principalPerPeriod;
+    remainingBalance -= periodPrincipal;
   }
 
   return rows;

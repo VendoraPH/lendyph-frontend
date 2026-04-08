@@ -87,6 +87,11 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Round to whole number (0 decimals) — used for principal amortization per the computation spec. */
+function roundWhole(value: number): number {
+  return Math.round(value);
+}
+
 /**
  * Get number of payment periods based on term and frequency.
  * Uses accurate multipliers: weekly ≈ 4.33/month, bi-weekly ≈ 2.17/month.
@@ -137,7 +142,8 @@ export function getDueDate(
 function generateFixed(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
   const periods = getPeriodsCount(termMonths, frequency);
-  const principalPerPeriod = round(principal / periods);
+  // Principal per period rounded to whole number per computation spec
+  const principalPerPeriod = roundWhole(principal / periods);
   const interestPerPeriod = round(principal * (monthlyRate / 100));
   const rows: AmortizationRow[] = [];
   let remaining = principal;
@@ -145,6 +151,7 @@ function generateFixed(input: AmortizationInput): AmortizationRow[] {
   for (let i = 1; i <= periods; i++) {
     const beginningBalance = round(remaining);
     const isLast = i === periods;
+    // Last period gets the remaining balance to ensure total equals exactly the loan amount
     const periodPrincipal = isLast ? round(remaining) : principalPerPeriod;
     const periodInterest = interestPerPeriod;
     remaining -= periodPrincipal;
