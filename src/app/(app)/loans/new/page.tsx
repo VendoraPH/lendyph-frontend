@@ -285,7 +285,7 @@ export default function NewLoanApplicationPage() {
           : (borrowersResult.value as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
       } else {
-        toast.error("Failed to load borrowers");
+        toast.error("Failed to load members");
       }
 
       if (productsResult.status === "fulfilled") {
@@ -517,14 +517,14 @@ export default function NewLoanApplicationPage() {
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Borrower & Co-Maker</CardTitle>
+          <CardTitle>Member & Co-Maker</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Borrower */}
             <div className="space-y-2">
               <Label>
-                Borrower <span className="text-destructive">*</span>
+                Member <span className="text-destructive">*</span>
               </Label>
               <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
                 <PopoverTrigger
@@ -540,7 +540,7 @@ export default function NewLoanApplicationPage() {
                   <span className={cn("truncate", !selectedBorrower && "text-muted-foreground")}>
                     {selectedBorrower
                       ? selectedBorrower.full_name
-                      : "Search borrower..."}
+                      : "Search member..."}
                   </span>
                   <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
                 </PopoverTrigger>
@@ -548,7 +548,7 @@ export default function NewLoanApplicationPage() {
                   <Command>
                     <CommandInput placeholder="Type a name to search..." />
                     <CommandList>
-                      <CommandEmpty>No borrower found.</CommandEmpty>
+                      <CommandEmpty>No member found.</CommandEmpty>
                       <CommandGroup>
                         {borrowers.map((b) => (
                           <CommandItem
@@ -601,7 +601,7 @@ export default function NewLoanApplicationPage() {
                     {coMakerId
                       ? (availableCoMakers.find((b) => b.id === coMakerId)?.full_name ?? borrowers.find((b) => b.id === coMakerId)?.full_name ?? "Selected")
                       : !borrowerId
-                        ? "Select borrower first"
+                        ? "Select member first"
                         : "Search co-maker (optional)..."}
                   </span>
                   <ChevronsUpDown className="size-4 shrink-0 opacity-50" />

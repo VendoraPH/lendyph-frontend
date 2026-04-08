@@ -252,7 +252,7 @@ export function BorrowerTable({
                   className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
                   onClick={() => handleSort("full_name")}
                 >
-                  Borrower
+                  Member
                   <SortIcon direction={getSortDirection("full_name")} />
                 </button>
               </TableHead>

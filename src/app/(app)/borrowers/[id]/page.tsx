@@ -139,7 +139,7 @@ export default function BorrowerDetailPage() {
         monthly_income: updated.monthly_income ? Number(updated.monthly_income) : null,
       };
       await borrowerService.update(borrowerId, payload as Partial<Borrower>);
-      toast.success("Borrower updated successfully");
+      toast.success("Member updated successfully");
       // Refresh data
       const refreshed = await borrowerService.detail(borrowerId);
       setBorrower(refreshed);

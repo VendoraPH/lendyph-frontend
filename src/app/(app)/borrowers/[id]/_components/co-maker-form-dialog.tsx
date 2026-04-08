@@ -366,7 +366,7 @@ function CoMakerFormFields({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Relationship to Borrower *</Label>
+          <Label>Relationship to Member *</Label>
           <Select
             value={form.relationship || null}
             onValueChange={(v) => update("relationship", v ?? "")}

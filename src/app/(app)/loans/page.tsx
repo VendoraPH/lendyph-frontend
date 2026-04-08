@@ -293,7 +293,7 @@ export default function LoansPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Application #</TableHead>
-                    <TableHead>Borrower</TableHead>
+                    <TableHead>Member</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Term</TableHead>

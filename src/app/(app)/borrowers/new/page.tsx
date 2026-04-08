@@ -226,7 +226,7 @@ export default function NewBorrowerPage() {
           photoData.append("photo", profilePhoto);
           await borrowerService.uploadPhoto(borrowerId, photoData);
         } catch {
-          toast.error("Borrower created but photo upload failed");
+          toast.error("Member created but photo upload failed");
         }
       }
 
@@ -245,7 +245,7 @@ export default function NewBorrowerPage() {
         }
       }
 
-      toast.success("Borrower created successfully");
+      toast.success("Member created successfully");
       router.push("/borrowers");
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
@@ -255,7 +255,7 @@ export default function NewBorrowerPage() {
       } else if (apiError?.response?.data?.message) {
         toast.error(apiError.response.data.message);
       } else {
-        toast.error("Failed to create borrower");
+        toast.error("Failed to create member");
       }
     } finally {
       setSubmitting(false);
@@ -270,7 +270,7 @@ export default function NewBorrowerPage() {
   }
 
   return (
-    <RouteGuard permission="borrowers:create" pageName="Add Borrower">
+    <RouteGuard permission="borrowers:create" pageName="Add Member">
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
@@ -279,11 +279,11 @@ export default function NewBorrowerPage() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Borrowers
+          Back to Members
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Add New Borrower</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Add New Member</h1>
         <p className="text-sm text-muted-foreground">
-          Create a new borrower profile
+          Create a new member profile
         </p>
       </div>
 
@@ -328,7 +328,7 @@ export default function NewBorrowerPage() {
                 />
               </div>
               <div className="text-sm text-muted-foreground">
-                <p>Upload a profile photo of the borrower.</p>
+                <p>Upload a profile photo of the member.</p>
                 <p className="text-xs mt-1">JPG, PNG up to 5MB</p>
                 {photoPreview && (
                   <Button
@@ -770,7 +770,7 @@ export default function NewBorrowerPage() {
                 Creating...
               </>
             ) : (
-              "Create Borrower"
+              "Create Member"
             )}
           </Button>
         </div>
