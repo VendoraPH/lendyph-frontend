@@ -18,8 +18,18 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /var/www/lendyph-staging
-            git pull origin development
+            echo "=== Fetching latest ==="
+            git fetch origin development
+            echo "=== Resetting to match remote ==="
+            git reset --hard origin/development
+            echo "=== Current commit ==="
+            git log --oneline -1
+            echo "=== Installing dependencies ==="
             npm install
+            echo "=== Clearing Next.js cache ==="
+            rm -rf .next
+            echo "=== Building ==="
             npm run build
+            echo "=== Restarting PM2 ==="
             pm2 restart lendyph-staging
-            echo "Staging deployed at $(date)"
+            echo "=== Staging deployed at $(date) ==="
