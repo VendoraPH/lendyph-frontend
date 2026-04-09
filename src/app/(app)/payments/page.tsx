@@ -55,6 +55,10 @@ interface ActiveLoan {
   next_due_date: string;
   overdue_amount: number;
   penalty_amount: number;
+  // Share Capital Build-Up amount per period (from the loan product).
+  // When present, a portion of each payment is credited to the borrower's
+  // share capital ledger.
+  scb_amount?: number;
 }
 
 const MOCK_ACTIVE_LOANS: ActiveLoan[] = [
@@ -261,6 +265,7 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     next_due_date: l.next_due_date || "",
     overdue_amount: (l.overdue_amount as number) || 0,
     penalty_amount: (l.penalty_amount as number) || 0,
+    scb_amount: l.scb_amount ?? undefined,
   };
 }
 
@@ -422,6 +427,16 @@ export default function PaymentsPage() {
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
           : undefined,
       });
+
+      // If the loan has Share Capital Build-Up, credit the SCB portion to
+      // the borrower's share capital ledger. This is a client-side mock for
+      // now — backend will wire this into the real share-capital service
+      // once the repayment allocation endpoint is available.
+      if (selectedLoan.scb_amount && selectedLoan.scb_amount > 0) {
+        toast.info("Share Capital credited", {
+          description: `${formatCurrency(selectedLoan.scb_amount)} credited to ${selectedLoan.borrower_name}'s share capital from this payment.`,
+        });
+      }
 
       // Refresh loan data
       if (!usingMock) fetchLoans();

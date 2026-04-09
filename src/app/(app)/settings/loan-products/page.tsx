@@ -183,6 +183,9 @@ interface ProductForm {
   penalty_rate: string;
   grace_period_enabled: boolean;
   grace_period_days: string;
+  scb_required: boolean;
+  min_scb: string;
+  max_scb: string;
   custom_fees: CustomFeeEntry[];
 }
 
@@ -205,6 +208,9 @@ const EMPTY_FORM: ProductForm = {
   penalty_rate: "",
   grace_period_enabled: false,
   grace_period_days: "",
+  scb_required: false,
+  min_scb: "",
+  max_scb: "",
   custom_fees: [],
 };
 
@@ -244,6 +250,9 @@ function productToForm(p: LoanProduct): ProductForm {
     penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
+    scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
+    min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
+    max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
     custom_fees: rawFees.map((f) => ({
       name: String(f.name ?? ""),
       type: (f.type as "fixed" | "percentage") ?? "fixed",
@@ -296,6 +305,9 @@ function formToApiPayload(form: ProductForm) {
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
     max_amount: form.max_amount ? Number(form.max_amount) : undefined,
+    scb_required: form.scb_required,
+    min_scb: form.scb_required && form.min_scb ? Number(form.min_scb) : undefined,
+    max_scb: form.scb_required && form.max_scb ? Number(form.max_scb) : undefined,
     ...(custom_fees.length > 0 ? { custom_fees } : {}),
   };
 }
@@ -701,6 +713,80 @@ function ProductFormDialog({
                     onChange={(e) => update("grace_period_days", e.target.value)}
                     required
                   />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Share Capital Build-Up */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Share Capital Build-Up
+            </h3>
+            <div className="rounded-lg border p-4 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="scb-required" className="cursor-pointer text-sm font-medium">
+                    Make Share Capital Build-Up Required
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, every loan using this product will include an
+                    SCB amount added to each amortization period. When the
+                    borrower pays, the SCB portion is credited to their share
+                    capital.
+                  </p>
+                </div>
+                <Switch
+                  id="scb-required"
+                  checked={form.scb_required}
+                  onCheckedChange={(checked) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      scb_required: checked,
+                      min_scb: checked ? prev.min_scb : "",
+                      max_scb: checked ? prev.max_scb : "",
+                    }))
+                  }
+                />
+              </div>
+              {form.scb_required && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                  <div className="space-y-2">
+                    <Label htmlFor="min-scb">
+                      Minimum SCB (PHP){" "}
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="min-scb"
+                      type="number"
+                      min={0}
+                      step="1"
+                      placeholder="100"
+                      value={form.min_scb}
+                      onChange={(e) => update("min_scb", e.target.value)}
+                      required={form.scb_required}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="max-scb">
+                      Maximum SCB (PHP){" "}
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="max-scb"
+                      type="number"
+                      min={0}
+                      step="1"
+                      placeholder="1000"
+                      value={form.max_scb}
+                      onChange={(e) => update("max_scb", e.target.value)}
+                      required={form.scb_required}
+                    />
+                  </div>
+                  <p className="col-span-2 text-xs text-muted-foreground">
+                    When creating a loan with this product, the loan officer
+                    picks an SCB amount within this range.
+                  </p>
                 </div>
               )}
             </div>
