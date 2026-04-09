@@ -419,7 +419,9 @@ export default function NewLoanApplicationPage() {
     return addMonths(releaseDate, term);
   }, [releaseDate, term]);
 
-  // Amortization
+  // Amortization preview — shown as soon as the core loan terms are valid.
+  // SCB errors do NOT block the preview (we want the user to see the SCB
+  // column with their current value); SCB errors only block submission.
   const canShowAmortization =
     principal > 0 &&
     term > 0 &&
@@ -428,8 +430,7 @@ export default function NewLoanApplicationPage() {
     interestType !== null &&
     releaseDate !== undefined &&
     !principalError &&
-    !termError &&
-    !scbError;
+    !termError;
 
   const amortizationSchedule = useMemo(() => {
     if (!canShowAmortization || !releaseDate || !paymentFrequency || !interestType)
@@ -1281,7 +1282,7 @@ export default function NewLoanApplicationPage() {
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    {amortizationTotals.shareCapitalBuildUp > 0 && (
+                    {selectedProduct?.scb_required && (
                       <TableHead className="text-right">Share Capital Build-Up</TableHead>
                     )}
                     <TableHead className="text-right">Total Payment</TableHead>
@@ -1300,7 +1301,7 @@ export default function NewLoanApplicationPage() {
                       <TableCell className="text-right">
                         {formatCurrency(row.interest)}
                       </TableCell>
-                      {amortizationTotals.shareCapitalBuildUp > 0 && (
+                      {selectedProduct?.scb_required && (
                         <TableCell className="text-right text-brand-orange">
                           {formatCurrency(row.shareCapitalBuildUp)}
                         </TableCell>
@@ -1322,7 +1323,7 @@ export default function NewLoanApplicationPage() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.interest)}
                     </TableCell>
-                    {amortizationTotals.shareCapitalBuildUp > 0 && (
+                    {selectedProduct?.scb_required && (
                       <TableCell className="text-right font-semibold text-brand-orange">
                         {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
                       </TableCell>
