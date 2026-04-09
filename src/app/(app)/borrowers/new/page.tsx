@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Camera, Check, ChevronsUpDown, FileText, Plus, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronsUpDown, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -105,6 +111,13 @@ export default function NewBorrowerPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Camera capture
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
   // Valid IDs
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
 
@@ -135,6 +148,84 @@ export default function NewBorrowerPage() {
     setPhotoPreview(null);
     if (photoInputRef.current) photoInputRef.current.value = "";
   }
+
+  const startCamera = useCallback(async (facing: "user" | "environment") => {
+    // Stop any existing stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch {
+      toast.error("Unable to access camera. Check browser permissions.");
+      setCameraOpen(false);
+    }
+  }, []);
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  }
+
+  function openCamera() {
+    setCameraOpen(true);
+    // Camera starts via useEffect when dialog opens
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Crop to center square
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
+      setProfilePhoto(file);
+      setPhotoPreview(canvas.toDataURL("image/jpeg", 0.9));
+      setCameraOpen(false);
+      stopCamera();
+    }, "image/jpeg", 0.9);
+  }
+
+  function handleCameraDialogChange(open: boolean) {
+    setCameraOpen(open);
+    if (!open) stopCamera();
+  }
+
+  function toggleFacingMode() {
+    const next = facingMode === "user" ? "environment" : "user";
+    setFacingMode(next);
+    startCamera(next);
+  }
+
+  // Start camera when dialog opens
+  useEffect(() => {
+    if (cameraOpen) {
+      startCamera(facingMode);
+    }
+    return () => { if (!cameraOpen) stopCamera(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraOpen]);
 
   function addValidId() {
     setValidIds((prev) => [...prev, { type: "", file: null, preview: null }]);
@@ -310,14 +401,9 @@ export default function NewBorrowerPage() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors"
-                  >
-                    <Camera className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground">Upload</span>
-                  </button>
+                  <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                    <Camera className="h-6 w-6 text-muted-foreground/50" />
+                  </div>
                 )}
                 <input
                   ref={photoInputRef}
@@ -327,24 +413,84 @@ export default function NewBorrowerPage() {
                   className="hidden"
                 />
               </div>
-              <div className="text-sm text-muted-foreground">
-                <p>Upload a profile photo of the member.</p>
-                <p className="text-xs mt-1">JPG, PNG up to 5MB</p>
-                {photoPreview && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Upload a profile photo of the member.</p>
+                <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                <div className="flex items-center gap-2 pt-1">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mt-2"
+                    className="gap-1.5"
+                    onClick={openCamera}
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Camera
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
                     onClick={() => photoInputRef.current?.click()}
                   >
-                    Change Photo
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    Gallery
                   </Button>
-                )}
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Camera Capture Dialog */}
+        <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Take Photo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 rounded-full"
+                  onClick={toggleFacingMode}
+                  title="Switch camera"
+                >
+                  <SwitchCamera className="h-4 w-4" />
+                </Button>
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
+                  title="Capture"
+                >
+                  <div className="h-10 w-10 rounded-full bg-brand-orange" />
+                </button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCameraDialogChange(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Personal Information */}
         <Card>

@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
   TableCell,
-  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -22,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Zap, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 
 const formatCurrency = (amount: number) =>
@@ -34,32 +33,40 @@ const formatCurrency = (amount: number) =>
   }).format(Math.round(amount));
 
 // Mock data — replace with API integration
-const MOCK_PREVIEW = [
-  { id: 1, borrower: "Rosario D. Santos", pledgeAmount: 500, currentBalance: 3000 },
-  { id: 2, borrower: "Roberto Garcia", pledgeAmount: 1000, currentBalance: 7000 },
-  { id: 3, borrower: "Eduardo Mendoza", pledgeAmount: 500, currentBalance: 2000 },
-  { id: 5, borrower: "Ana Santos", pledgeAmount: 1000, currentBalance: 4000 },
+const MOCK_MEMBERS = [
+  { id: 1, borrower: "Rosario D. Santos", pledgeAmount: 500, autoCredit: true },
+  { id: 2, borrower: "Roberto Garcia", pledgeAmount: 1000, autoCredit: true },
+  { id: 3, borrower: "Eduardo Mendoza", pledgeAmount: 500, autoCredit: true },
+  { id: 4, borrower: "Maria L. Reyes", pledgeAmount: 500, autoCredit: false },
+  { id: 5, borrower: "Ana Santos", pledgeAmount: 1000, autoCredit: true },
+  { id: 6, borrower: "Carmen Torres", pledgeAmount: 500, autoCredit: false },
+  { id: 7, borrower: "Jose P. Dela Cruz", pledgeAmount: 0, autoCredit: true },
+  { id: 8, borrower: "Lorna M. Bautista", pledgeAmount: 0, autoCredit: false },
 ];
 
 export default function AutoCreditPage() {
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false);
+  const [showNoPledge, setShowNoPledge] = useState(false);
 
-  const totalToCredit = MOCK_PREVIEW.reduce((sum, p) => sum + p.pledgeAmount, 0);
+  const activeMembers = MOCK_MEMBERS.filter((m) => m.autoCredit && m.pledgeAmount > 0);
+  const disabledMembers = MOCK_MEMBERS.filter((m) => !m.autoCredit);
+  const noPledgeMembers = MOCK_MEMBERS.filter((m) => m.pledgeAmount === 0);
+  const totalPledge = activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
 
   function handleInitiate() {
-    setPreviewOpen(true);
+    setConfirmOpen(true);
   }
 
   function handleConfirm() {
     setProcessing(true);
-    // Simulate API call
     setTimeout(() => {
       setProcessing(false);
-      setPreviewOpen(false);
+      setConfirmOpen(false);
       setLastRun(new Date().toLocaleString("en-PH"));
-      toast.success(`Auto-credit completed: ${formatCurrency(totalToCredit)} credited to ${MOCK_PREVIEW.length} members`);
+      toast.success(`Auto-credit completed: ${formatCurrency(totalPledge)} credited to ${activeMembers.length} members`);
     }, 2000);
   }
 
@@ -84,7 +91,7 @@ export default function AutoCreditPage() {
                 <h2 className="text-lg font-semibold">Auto-Credit Share Capital</h2>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
                   This will credit all active pledge amounts to their respective
-                  members&apos; share capital accounts. A preview will be shown before processing.
+                  members&apos; share capital accounts.
                 </p>
               </div>
               <Button
@@ -110,7 +117,7 @@ export default function AutoCreditPage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Active Members</span>
-                <span className="text-2xl font-bold">{MOCK_PREVIEW.length}</span>
+                <span className="text-2xl font-bold">{activeMembers.length}</span>
               </div>
             </CardContent>
           </Card>
@@ -118,7 +125,7 @@ export default function AutoCreditPage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Total to Credit</span>
-                <span className="text-2xl font-bold text-green-600">{formatCurrency(totalToCredit)}</span>
+                <span className="text-2xl font-bold text-green-600">{formatCurrency(totalPledge)}</span>
               </div>
             </CardContent>
           </Card>
@@ -134,59 +141,75 @@ export default function AutoCreditPage() {
           </Card>
         </div>
 
-        {/* Confirmation Dialog with Preview */}
-        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent size="lg">
+        {/* Warnings: Disabled & No Pledge */}
+        {(disabledMembers.length > 0 || noPledgeMembers.length > 0) && (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+            {disabledMembers.length > 0 && (
+              <Card className="border-amber-500/30">
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Auto-Credit Disabled</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {disabledMembers.length} member{disabledMembers.length > 1 ? "s" : ""} will not be credited
+                      </p>
+                      <button
+                        className="text-xs text-brand-orange hover:underline mt-1"
+                        onClick={() => setShowDisabled(true)}
+                      >
+                        View accounts →
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {noPledgeMembers.length > 0 && (
+              <Card className="border-red-500/30">
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">No Pledge Amount</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {noPledgeMembers.length} member{noPledgeMembers.length > 1 ? "s" : ""} with no pledge amount set
+                      </p>
+                      <button
+                        className="text-xs text-brand-orange hover:underline mt-1"
+                        onClick={() => setShowNoPledge(true)}
+                      >
+                        View accounts →
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* Confirm Dialog — Total Pledge Amount (large font) */}
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-brand-orange" />
-                Auto-Credit Preview
+                Confirm Auto-Credit
               </DialogTitle>
               <DialogDescription>
-                Review the pledges below before processing. Please verify actual pledge
-                collections against these amounts before continuing.
+                The following total amount will be credited to {activeMembers.length} active members.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[50vh] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Member/Borrower</TableHead>
-                    <TableHead className="text-right">Current Balance</TableHead>
-                    <TableHead className="text-right">Pledge Amount</TableHead>
-                    <TableHead className="text-right">New Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {MOCK_PREVIEW.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium text-sm">{entry.borrower}</TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        {formatCurrency(entry.currentBalance)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium text-green-600">
-                        +{formatCurrency(entry.pledgeAmount)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        {formatCurrency(entry.currentBalance + entry.pledgeAmount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell className="font-semibold">Total</TableCell>
-                    <TableCell />
-                    <TableCell className="text-right font-semibold text-green-600">
-                      +{formatCurrency(totalToCredit)}
-                    </TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableFooter>
-              </Table>
+            <div className="flex flex-col items-center py-6">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Total Pledge Amount</p>
+              <p className="text-5xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                {activeMembers.length} member{activeMembers.length > 1 ? "s" : ""}
+              </p>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setPreviewOpen(false)} disabled={processing}>
+              <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={processing}>
                 Cancel
               </Button>
               <Button
@@ -206,6 +229,85 @@ export default function AutoCreditPage() {
                   </>
                 )}
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Disabled Auto-Credit Accounts Dialog */}
+        <Dialog open={showDisabled} onOpenChange={setShowDisabled}>
+          <DialogContent size="md">
+            <DialogHeader>
+              <DialogTitle>Auto-Credit Disabled Accounts</DialogTitle>
+              <DialogDescription>
+                These members have auto-credit turned off and will not be included.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[50vh] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Member</TableHead>
+                    <TableHead className="text-right">Pledge Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {disabledMembers.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium text-sm">{m.borrower}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {m.pledgeAmount > 0 ? formatCurrency(m.pledgeAmount) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
+                          Disabled
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* No Pledge Amount Accounts Dialog */}
+        <Dialog open={showNoPledge} onOpenChange={setShowNoPledge}>
+          <DialogContent size="md">
+            <DialogHeader>
+              <DialogTitle>Accounts with No Pledge Amount</DialogTitle>
+              <DialogDescription>
+                These members have no pledge amount configured.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[50vh] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Auto-Credit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {noPledgeMembers.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium text-sm">{m.borrower}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            m.autoCredit
+                              ? "bg-green-500/10 text-green-700 border-green-500/30 text-xs"
+                              : "bg-red-500/10 text-red-700 border-red-500/30 text-xs"
+                          }
+                        >
+                          {m.autoCredit ? "Active" : "Disabled"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </DialogContent>
         </Dialog>
