@@ -586,12 +586,12 @@ export default function UserRolesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="User Roles">
+    <RouteGuard permission="settings:view" pageName="Role and Permissions">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">User Roles</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
             <p className="text-sm text-muted-foreground">
               Define roles and configure their access rights across every system module
             </p>

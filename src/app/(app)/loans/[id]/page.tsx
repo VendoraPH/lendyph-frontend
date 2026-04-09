@@ -652,6 +652,16 @@ export default function LoanDetailPage({
   const [rejectionRemarks, setRejectionRemarks] = useState("");
   const [releaseDate, setReleaseDate] = useState<Date>(new Date());
 
+  // Add-second-co-maker state (used inside Release Dialog)
+  const [addCoMakerOpen, setAddCoMakerOpen] = useState(false);
+  const [addingCoMaker, setAddingCoMaker] = useState(false);
+  const [newCoMaker, setNewCoMaker] = useState({
+    first_name: "",
+    last_name: "",
+    contact_number: "",
+    relationship_to_borrower: "",
+  });
+
   // Amortization schedule preview for release dialog
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
@@ -838,6 +848,58 @@ export default function LoanDetailPage({
       toast.error("Failed to release loan");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleAddSecondCoMaker = async () => {
+    if (!loan) return;
+    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
+    if (!borrowerId) {
+      toast.error("Borrower not found");
+      return;
+    }
+    if (!newCoMaker.first_name.trim() || !newCoMaker.last_name.trim()) {
+      toast.error("First name and last name are required");
+      return;
+    }
+    try {
+      setAddingCoMaker(true);
+      const created = await coMakerService.create(borrowerId, {
+        first_name: newCoMaker.first_name.trim(),
+        last_name: newCoMaker.last_name.trim(),
+        contact_number: newCoMaker.contact_number.trim() || undefined,
+        relationship_to_borrower:
+          newCoMaker.relationship_to_borrower.trim() || undefined,
+      });
+      // Append to loan.co_makers so the Release Dialog reflects the new co-maker
+      setLoan((prev) => {
+        if (!prev) return prev;
+        const fullName =
+          created.full_name ??
+          [created.first_name, created.middle_name, created.last_name, created.suffix]
+            .filter(Boolean)
+            .join(" ");
+        const appended = {
+          id: created.id,
+          full_name: fullName,
+          address: created.address,
+          relationship:
+            created.relationship_to_borrower ?? created.relationship,
+        };
+        return { ...prev, co_makers: [...(prev.co_makers ?? []), appended] };
+      });
+      toast.success("Co-maker added");
+      setAddCoMakerOpen(false);
+      setNewCoMaker({
+        first_name: "",
+        last_name: "",
+        contact_number: "",
+        relationship_to_borrower: "",
+      });
+    } catch {
+      toast.error("Failed to add co-maker");
+    } finally {
+      setAddingCoMaker(false);
     }
   };
 
@@ -1887,7 +1949,7 @@ export default function LoanDetailPage({
 
       {/* Release Dialog */}
       <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Release Loan</DialogTitle>
             <DialogDescription>
@@ -1940,6 +2002,176 @@ export default function LoanDetailPage({
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* Co-Makers Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>
+                  Co-Maker
+                  {(loan.co_makers?.length ?? 0) !== 1 ? "s" : ""}
+                  {(loan.co_makers?.length ?? 0) > 0 && (
+                    <span className="ml-1 text-xs text-muted-foreground font-normal">
+                      ({loan.co_makers!.length})
+                    </span>
+                  )}
+                </Label>
+                {!addCoMakerOpen && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => setAddCoMakerOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Co-Maker
+                  </Button>
+                )}
+              </div>
+              <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+                {(loan.co_makers?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">
+                    No co-maker on file
+                  </p>
+                ) : (
+                  loan.co_makers!.map((cm, idx) => {
+                    const name =
+                      cm.full_name ??
+                      cm.name ??
+                      [cm.first_name, cm.middle_name, cm.last_name, cm.suffix]
+                        .filter(Boolean)
+                        .join(" ");
+                    return (
+                      <div
+                        key={cm.id ?? idx}
+                        className="flex items-start justify-between gap-3 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{name || "—"}</p>
+                          {cm.relationship && (
+                            <p className="text-xs text-muted-foreground">
+                              {cm.relationship}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          Co-Maker {idx + 1}
+                        </Badge>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {addCoMakerOpen && (
+                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Add Co-Maker</p>
+                    <button
+                      type="button"
+                      onClick={() => setAddCoMakerOpen(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Close"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="new-cm-first" className="text-xs">
+                        First Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="new-cm-first"
+                        className="h-9"
+                        value={newCoMaker.first_name}
+                        onChange={(e) =>
+                          setNewCoMaker((prev) => ({
+                            ...prev,
+                            first_name: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="new-cm-last" className="text-xs">
+                        Last Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="new-cm-last"
+                        className="h-9"
+                        value={newCoMaker.last_name}
+                        onChange={(e) =>
+                          setNewCoMaker((prev) => ({
+                            ...prev,
+                            last_name: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="new-cm-contact" className="text-xs">
+                        Contact Number
+                      </Label>
+                      <Input
+                        id="new-cm-contact"
+                        type="tel"
+                        className="h-9"
+                        placeholder="09171234567"
+                        value={newCoMaker.contact_number}
+                        onChange={(e) =>
+                          setNewCoMaker((prev) => ({
+                            ...prev,
+                            contact_number: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="new-cm-rel" className="text-xs">
+                        Relationship to Member
+                      </Label>
+                      <Input
+                        id="new-cm-rel"
+                        className="h-9"
+                        placeholder="e.g. Sibling, Spouse"
+                        value={newCoMaker.relationship_to_borrower}
+                        onChange={(e) =>
+                          setNewCoMaker((prev) => ({
+                            ...prev,
+                            relationship_to_borrower: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setAddCoMakerOpen(false)}
+                      disabled={addingCoMaker}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={handleAddSecondCoMaker}
+                      disabled={
+                        addingCoMaker ||
+                        !newCoMaker.first_name.trim() ||
+                        !newCoMaker.last_name.trim()
+                      }
+                    >
+                      {addingCoMaker ? "Adding..." : "Add Co-Maker"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Release Date Picker */}
