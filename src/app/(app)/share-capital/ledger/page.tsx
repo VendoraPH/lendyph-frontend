@@ -158,7 +158,7 @@ function computeRunningBalance(entries: LedgerEntry[], openingBalance: number) {
 
 // ── Sort ──
 
-type MasterSortField = "name" | "totalCredits" | "totalDebits" | "balance";
+type MasterSortField = "name" | "balance";
 type DetailSortField = "date" | "description" | "debit" | "credit" | "runningBalance";
 type SortDir = "asc" | "desc";
 
@@ -206,8 +206,6 @@ export default function SubsidiaryLedgerPage() {
         let cmp = 0;
         switch (masterSort) {
           case "name": cmp = a.name.localeCompare(b.name); break;
-          case "totalCredits": cmp = a.totalCredits - b.totalCredits; break;
-          case "totalDebits": cmp = a.totalDebits - b.totalDebits; break;
           case "balance": cmp = a.balance - b.balance; break;
         }
         return masterSortDir === "asc" ? cmp : -cmp;
@@ -437,24 +435,6 @@ export default function SubsidiaryLedgerPage() {
                         </TableHead>
                         <TableHead
                           className="text-right cursor-pointer select-none hover:text-foreground"
-                          onClick={() => toggleMasterSort("totalCredits")}
-                        >
-                          <span className="flex items-center justify-end text-xs">
-                            Total Credits
-                            <SortIcon active={masterSort === "totalCredits"} dir={masterSortDir} />
-                          </span>
-                        </TableHead>
-                        <TableHead
-                          className="text-right cursor-pointer select-none hover:text-foreground"
-                          onClick={() => toggleMasterSort("totalDebits")}
-                        >
-                          <span className="flex items-center justify-end text-xs">
-                            Total Debits
-                            <SortIcon active={masterSort === "totalDebits"} dir={masterSortDir} />
-                          </span>
-                        </TableHead>
-                        <TableHead
-                          className="text-right cursor-pointer select-none hover:text-foreground"
                           onClick={() => toggleMasterSort("balance")}
                         >
                           <span className="flex items-center justify-end text-xs">
@@ -462,7 +442,6 @@ export default function SubsidiaryLedgerPage() {
                             <SortIcon active={masterSort === "balance"} dir={masterSortDir} />
                           </span>
                         </TableHead>
-                        <TableHead className="text-center text-xs">Entries</TableHead>
                         <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
@@ -477,17 +456,8 @@ export default function SubsidiaryLedgerPage() {
                             {member.memberId}
                           </TableCell>
                           <TableCell className="font-medium text-sm">{member.name}</TableCell>
-                          <TableCell className="text-right text-sm text-green-600 tabular-nums">
-                            {formatCurrency(member.totalCredits)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                            {member.totalDebits > 0 ? formatCurrency(member.totalDebits) : ""}
-                          </TableCell>
                           <TableCell className="text-right text-sm font-semibold tabular-nums">
                             {formatCurrency(member.balance)}
-                          </TableCell>
-                          <TableCell className="text-center text-sm text-muted-foreground">
-                            {member.entryCount}
                           </TableCell>
                           <TableCell>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -496,7 +466,7 @@ export default function SubsidiaryLedgerPage() {
                       ))}
                       {paginatedMembers.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                             No members found.
                           </TableCell>
                         </TableRow>
@@ -509,16 +479,10 @@ export default function SubsidiaryLedgerPage() {
                           <TableCell colSpan={2} className="text-sm">
                             Total ({filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""})
                           </TableCell>
-                          <TableCell className="text-right text-sm text-green-600 tabular-nums">
-                            {formatCurrency(filteredMembers.reduce((s, m) => s + m.totalCredits, 0))}
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                            {formatCurrency(filteredMembers.reduce((s, m) => s + m.totalDebits, 0))}
-                          </TableCell>
                           <TableCell className="text-right text-sm tabular-nums">
                             {formatCurrency(filteredMembers.reduce((s, m) => s + m.balance, 0))}
                           </TableCell>
-                          <TableCell colSpan={2} />
+                          <TableCell />
                         </TableRow>
                       </TableFooter>
                     )}
