@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { loanService, loanAdjustmentService, repaymentService, coMakerService, userService } from "@/services";
+import { useAuthStore } from "@/store/auth-store";
 import {
   Command,
   CommandEmpty,
@@ -235,6 +236,148 @@ const WORKFLOW_STEPS: { status: LoanStatus; label: string }[] = [
   { status: "released", label: "Released" },
 ];
 
+// ── Multi-Step Approval Chain ──
+// Implements the LOAN RELEASE FLOWCHART exactly:
+//   START → Borrower applies → Loan Processor processes draft
+//        → Manager → BOD1 → BOD2 → ... → BOD7 → Cashier releases → END
+// On any "Approved? = No" the loan is sent back to Loan Processor for revision
+// (the chain does NOT support terminal rejection — that's what "Void Loan" is for).
+// This is local/mock state for now — a future PR will make this configurable via
+// /settings/approval-workflow and wire it to real backend endpoints.
+
+type ChainStepKind = "submit" | "approve" | "release";
+
+interface ChainStepDefinition {
+  name: string;
+  role: string; // Role slug required to act on this step (admin bypasses)
+  kind: ChainStepKind;
+}
+
+const DEFAULT_APPROVAL_CHAIN: ChainStepDefinition[] = [
+  { name: "Loan Processor", role: "loan_processor", kind: "submit" },
+  { name: "Manager", role: "manager", kind: "approve" },
+  { name: "BOD1", role: "bod1", kind: "approve" },
+  { name: "BOD2", role: "bod2", kind: "approve" },
+  { name: "BOD3", role: "bod3", kind: "approve" },
+  { name: "BOD4", role: "bod4", kind: "approve" },
+  { name: "BOD5", role: "bod5", kind: "approve" },
+  { name: "BOD6", role: "bod6", kind: "approve" },
+  { name: "BOD7", role: "bod7", kind: "approve" },
+  { name: "Cashier", role: "cashier", kind: "release" },
+];
+
+type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
+
+interface ApprovalStep {
+  index: number;
+  name: string;
+  role: string;
+  kind: ChainStepKind;
+  status: ApprovalStepStatus;
+  remarks?: string;
+  acted_at?: string; // ISO
+  acted_by?: string;
+}
+
+// A snapshot of a previous revision round, created whenever an approver sends
+// the loan back to the Loan Processor.
+interface RevisionRound {
+  round: number;
+  steps: ApprovalStep[];
+  sent_back_by: string;
+  sent_back_at: string;
+  sent_back_remarks: string;
+}
+
+interface ApprovalState {
+  current_steps: ApprovalStep[];
+  rounds: RevisionRound[];
+}
+
+function buildFreshSteps(pendingIndex: number = 0): ApprovalStep[] {
+  return DEFAULT_APPROVAL_CHAIN.map((step, i) => ({
+    index: i,
+    name: step.name,
+    role: step.role,
+    kind: step.kind,
+    status: i === pendingIndex ? "pending" : "waiting",
+  }));
+}
+
+function canUserActOnStep(step: ApprovalStep, userRoles: string[] | undefined): boolean {
+  if (!userRoles || userRoles.length === 0) return false;
+  // Admins can act on any step (useful for testing and for super-users)
+  if (userRoles.includes("admin")) return true;
+  return userRoles.includes(step.role);
+}
+
+function approvalStorageKey(loanId: number | string): string {
+  return `loan-approval-${loanId}`;
+}
+
+function loadApprovalState(loanId: number | string): ApprovalState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(approvalStorageKey(loanId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ApprovalState | ApprovalStep[];
+    // Back-compat: earlier version stored a bare array
+    if (Array.isArray(parsed)) {
+      return { current_steps: parsed, rounds: [] };
+    }
+    if (!parsed.current_steps || !Array.isArray(parsed.current_steps)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveApprovalState(loanId: number | string, state: ApprovalState) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(approvalStorageKey(loanId), JSON.stringify(state));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+// Derive where the loan should be in the chain based on its server status.
+// Used to seed a fresh state when localStorage has nothing for this loan.
+function deriveStepsFromLoanStatus(status: string): ApprovalStep[] {
+  const steps = buildFreshSteps();
+  if (status === "draft") {
+    // Loan Processor (step 0) is pending
+    return steps;
+  }
+  if (status === "for_review") {
+    // Loan Processor already submitted; Manager (step 1) is pending
+    steps[0] = { ...steps[0], status: "approved" };
+    steps[1] = { ...steps[1], status: "pending" };
+    return steps;
+  }
+  if (status === "approved") {
+    // All 8 approvers done; Cashier (step 9) is pending
+    for (let i = 0; i <= 8; i++) {
+      steps[i] = { ...steps[i], status: "approved" };
+    }
+    steps[9] = { ...steps[9], status: "pending" };
+    return steps;
+  }
+  if (
+    status === "released" ||
+    status === "ongoing" ||
+    status === "completed" ||
+    status === "closed" ||
+    status === "defaulted" ||
+    status === "restructured"
+  ) {
+    // Full chain done
+    return steps.map((s) => ({ ...s, status: "approved" }));
+  }
+  // draft-like fallback
+  return steps;
+}
+
 function getStepIndex(status: LoanStatus): number {
   const idx = WORKFLOW_STEPS.findIndex((s) => s.status === status);
   // For ongoing/completed/closed/defaulted/restructured, treat as released (last step)
@@ -255,7 +398,7 @@ function StatusStepper({ loan }: { loan: Loan }) {
         {WORKFLOW_STEPS.map((step, idx) => {
           const isCompleted = !isRejected && idx < currentIndex;
           const isCurrent = !isRejected && idx === currentIndex;
-          const isRejectedStep = isRejected && idx === 1; // rejected at "For Review"
+          const isSentBack = isRejected && idx === 1; // rejected at "For Review"
           const isPast = isRejected && idx === 0;
 
           return (
@@ -269,14 +412,14 @@ function StatusStepper({ loan }: { loan: Loan }) {
                       ? "border-green-500 bg-green-500 text-white"
                       : isCurrent
                         ? "border-brand-orange bg-brand-orange text-white"
-                        : isRejectedStep
+                        : isSentBack
                           ? "border-red-500 bg-red-500 text-white"
                           : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
                   )}
                 >
                   {isCompleted || isPast ? (
                     <Check className="h-4 w-4" />
-                  ) : isRejectedStep ? (
+                  ) : isSentBack ? (
                     <X className="h-4 w-4" />
                   ) : isCurrent ? (
                     <Circle className="h-3 w-3 fill-current" />
@@ -292,12 +435,12 @@ function StatusStepper({ loan }: { loan: Loan }) {
                       ? "text-green-600"
                       : isCurrent
                         ? "text-brand-orange"
-                        : isRejectedStep
+                        : isSentBack
                           ? "text-red-600"
                           : "text-gray-400"
                   )}
                 >
-                  {isRejectedStep ? "Rejected" : step.label}
+                  {isSentBack ? "Rejected" : step.label}
                 </span>
               </div>
               {/* Connecting line */}
@@ -323,7 +466,7 @@ function StatusStepper({ loan }: { loan: Loan }) {
         {WORKFLOW_STEPS.map((step, idx) => {
           const isCompleted = !isRejected && idx < currentIndex;
           const isCurrent = !isRejected && idx === currentIndex;
-          const isRejectedStep = isRejected && idx === 1;
+          const isSentBack = isRejected && idx === 1;
           const isPast = isRejected && idx === 0;
 
           return (
@@ -337,14 +480,14 @@ function StatusStepper({ loan }: { loan: Loan }) {
                       ? "border-green-500 bg-green-500 text-white"
                       : isCurrent
                         ? "border-brand-orange bg-brand-orange text-white"
-                        : isRejectedStep
+                        : isSentBack
                           ? "border-red-500 bg-red-500 text-white"
                           : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
                   )}
                 >
                   {isCompleted || isPast ? (
                     <Check className="h-3.5 w-3.5" />
-                  ) : isRejectedStep ? (
+                  ) : isSentBack ? (
                     <X className="h-3.5 w-3.5" />
                   ) : isCurrent ? (
                     <Circle className="h-2.5 w-2.5 fill-current" />
@@ -374,12 +517,12 @@ function StatusStepper({ loan }: { loan: Loan }) {
                     ? "text-green-600"
                     : isCurrent
                       ? "text-brand-orange"
-                      : isRejectedStep
+                      : isSentBack
                         ? "text-red-600"
                         : "text-gray-400"
                 )}
               >
-                {isRejectedStep ? "Rejected" : step.label}
+                {isSentBack ? "Rejected" : step.label}
               </span>
             </div>
           );
@@ -662,6 +805,20 @@ export default function LoanDetailPage({
     relationship_to_borrower: "",
   });
 
+  // Multi-step approval workflow (local state, persisted to localStorage)
+  const [approvalSteps, setApprovalSteps] = useState<ApprovalStep[]>([]);
+  const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
+  const [stepRemarks, setStepRemarks] = useState("");
+  const [stepActionLoading, setStepActionLoading] = useState(false);
+
+  // Current logged-in user (used to gate approval actions by role)
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserDisplayName =
+    currentUser?.full_name ||
+    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") ||
+    currentUser?.username ||
+    "Unknown User";
+
   // Amortization schedule preview for release dialog
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
@@ -737,6 +894,25 @@ export default function LoanDetailPage({
       { principal: 0, interest: 0, totalPayment: 0 },
     );
   }, [storedSchedule]);
+
+  // Seed/load multi-step approval state whenever the loan changes.
+  // The chain is visible for every status except "rejected" (voided drafts).
+  useEffect(() => {
+    if (!loan) return;
+    if (loan.status === "rejected") {
+      setApprovalSteps([]);
+      setApprovalRounds([]);
+      return;
+    }
+    const stored = loadApprovalState(loan.id);
+    if (stored) {
+      setApprovalSteps(stored.current_steps);
+      setApprovalRounds(stored.rounds);
+    } else {
+      setApprovalSteps(deriveStepsFromLoanStatus(loan.status));
+      setApprovalRounds([]);
+    }
+  }, [loan?.id, loan?.status]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
@@ -844,11 +1020,203 @@ export default function LoanDetailPage({
       setReleaseOpen(false);
       // Fetch the server-generated schedule
       fetchSchedule(loan.id);
+      // Mark the Cashier step approved in the local approval chain
+      if (approvalSteps.length > 0) {
+        const actedAt = new Date().toISOString();
+        const updatedSteps = approvalSteps.map((s) =>
+          s.kind === "release" && s.status === "pending"
+            ? {
+                ...s,
+                status: "approved" as ApprovalStepStatus,
+                acted_at: actedAt,
+                acted_by: currentUserDisplayName,
+              }
+            : s
+        );
+        persistApprovalState(updatedSteps, approvalRounds);
+      }
     } catch {
       toast.error("Failed to release loan");
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // ── Multi-step approval handlers ──
+
+  const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
+  const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  const allStepsApproved =
+    approvalSteps.length > 0 && approvalSteps.every((s) => s.status === "approved");
+  const canActOnCurrentStep = currentStep
+    ? canUserActOnStep(currentStep, currentUser?.roles)
+    : false;
+
+  const persistApprovalState = (steps: ApprovalStep[], rounds: RevisionRound[]) => {
+    if (!loan) return;
+    setApprovalSteps(steps);
+    setApprovalRounds(rounds);
+    saveApprovalState(loan.id, { current_steps: steps, rounds });
+  };
+
+  // Step 0 (Loan Processor): Submit the draft for review.
+  // Moves loan status draft → for_review via the existing loanService.submit(),
+  // marks Loan Processor step approved and Manager step pending.
+  const handleStepSubmit = async () => {
+    if (!loan || !currentStep || currentStep.kind !== "submit") return;
+    if (!canActOnCurrentStep) {
+      toast.error(`Only a user with the ${currentStep.role} role can submit the draft`);
+      return;
+    }
+    try {
+      setStepActionLoading(true);
+      const updatedLoan = await loanService.submit(loan.id);
+      setLoan(updatedLoan);
+      const actedAt = new Date().toISOString();
+      const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
+        if (i === 0) {
+          return {
+            ...s,
+            status: "approved",
+            remarks: stepRemarks.trim() || undefined,
+            acted_at: actedAt,
+            acted_by: currentUserDisplayName,
+          };
+        }
+        if (i === 1) {
+          return { ...s, status: "pending" };
+        }
+        return s;
+      });
+      persistApprovalState(updatedSteps, approvalRounds);
+      setStepRemarks("");
+      toast.success("Submitted for review. Forwarded to Manager.");
+    } catch {
+      toast.error("Failed to submit for review");
+    } finally {
+      setStepActionLoading(false);
+    }
+  };
+
+  // Steps 1-8 (Manager + BOD1..BOD7): Approve & Forward.
+  // Marks the current step approved and the next step pending. On the last
+  // approver step, calls the real loanService.approve() to move the loan's
+  // server status from for_review → approved (so Cashier step becomes actionable).
+  const handleStepApprove = async () => {
+    if (!loan || !currentStep || currentStep.kind !== "approve") return;
+    if (!canActOnCurrentStep) {
+      toast.error(`Only a user with the ${currentStep.role} role can approve this step`);
+      return;
+    }
+    try {
+      setStepActionLoading(true);
+      const actedAt = new Date().toISOString();
+      const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
+        if (i === currentStep.index) {
+          return {
+            ...s,
+            status: "approved",
+            remarks: stepRemarks.trim() || undefined,
+            acted_at: actedAt,
+            acted_by: currentUserDisplayName,
+          };
+        }
+        if (i === currentStep.index + 1) {
+          return { ...s, status: "pending" };
+        }
+        return s;
+      });
+      setStepRemarks("");
+
+      // Was this the last approver (step 8, BOD7)? If so, flip server status.
+      const nextStep = updatedSteps[currentStep.index + 1];
+      const isLastApprover = nextStep?.kind === "release";
+      if (isLastApprover) {
+        const updatedLoan = await loanService.approve(loan.id, {
+          approval_remarks: stepRemarks.trim() || undefined,
+        });
+        setLoan(updatedLoan);
+      }
+      persistApprovalState(updatedSteps, approvalRounds);
+      toast.success(
+        `Approved by ${currentStep.name}. Forwarded to ${nextStep?.name ?? "next step"}.`
+      );
+    } catch {
+      toast.error("Failed to record approval");
+    } finally {
+      setStepActionLoading(false);
+    }
+  };
+
+  // Steps 1-8: Send Back for Revision.
+  // This is the flowchart's "Approved? = No" branch. Instead of killing the
+  // loan, it snapshots the current round, resets the chain, and puts the loan
+  // back on the Loan Processor's desk. Note: there is no backend call because
+  // no "send-back" endpoint exists yet — the loan server status stays at
+  // for_review while the local chain is reset. Loan Processor can then submit
+  // again to restart the chain.
+  const handleStepSendBack = async () => {
+    if (!loan || !currentStep || currentStep.kind !== "approve") return;
+    if (!canActOnCurrentStep) {
+      toast.error(
+        `Only a user with the ${currentStep.role} role can send back this loan`
+      );
+      return;
+    }
+    if (!stepRemarks.trim()) {
+      toast.error("Please enter a reason before sending back for revision");
+      return;
+    }
+    try {
+      setStepActionLoading(true);
+      const actedAt = new Date().toISOString();
+
+      // Snapshot the current progress as a completed revision round
+      const roundSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
+        if (i === currentStep.index) {
+          return {
+            ...s,
+            status: "sent_back",
+            remarks: stepRemarks.trim(),
+            acted_at: actedAt,
+            acted_by: currentUserDisplayName,
+          };
+        }
+        return s;
+      });
+      const nextRound: RevisionRound = {
+        round: approvalRounds.length + 1,
+        steps: roundSteps,
+        sent_back_by: currentUserDisplayName,
+        sent_back_at: actedAt,
+        sent_back_remarks: stepRemarks.trim(),
+      };
+
+      // Reset the chain — Loan Processor is pending again
+      const freshSteps = buildFreshSteps(0);
+      persistApprovalState(freshSteps, [...approvalRounds, nextRound]);
+      setStepRemarks("");
+      toast.success(
+        `${currentStep.name} sent the loan back to the Loan Processor for revision.`
+      );
+    } catch {
+      toast.error("Failed to send back for revision");
+    } finally {
+      setStepActionLoading(false);
+    }
+  };
+
+  // Step 9 (Cashier): Release the loan.
+  // Opens the existing Release Loan dialog (co-maker addition, release date,
+  // amortization preview, etc.). The existing handleRelease() handler takes
+  // care of the real API call and marks the step approved on success.
+  const handleStepRelease = () => {
+    if (!loan || !currentStep || currentStep.kind !== "release") return;
+    if (!canActOnCurrentStep) {
+      toast.error(`Only a user with the ${currentStep.role} role can release this loan`);
+      return;
+    }
+    setReleaseOpen(true);
   };
 
   const handleAddSecondCoMaker = async () => {
@@ -1184,18 +1552,12 @@ export default function LoanDetailPage({
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
+      {/* Void Loan action — only available on drafts. The "Submit for Review"
+          action has moved to the Approval Chain card (Loan Processor step). */}
       {loan.status === "draft" && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                onClick={() => setSubmitOpen(true)}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Submit for Review
-              </Button>
               <Button
                 variant="destructive"
                 className="w-full sm:w-auto"
@@ -1210,45 +1572,393 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {loan.status === "for_review" && (
+      {loan.status !== "rejected" && approvalSteps.length > 0 && (
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
-                onClick={() => setApproveOpen(true)}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
-              <Button
-                variant="destructive"
-                className="w-full sm:w-auto"
-                onClick={() => setRejectOpen(true)}
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Reject
-              </Button>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              Loan Approval Process
+              <Badge variant="outline" className="ml-auto text-xs font-normal">
+                {allStepsApproved
+                  ? "Complete"
+                  : currentStep
+                    ? `Step ${currentStep.index + 1} of ${approvalSteps.length}`
+                    : `${approvalSteps.length} steps`}
+              </Badge>
+            </CardTitle>
+            {approvalRounds.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Revision {approvalRounds.length + 1} — previously sent back{" "}
+                {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Horizontal progress tracker — all 10 steps at a glance */}
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                {approvalSteps.map((step, i) => {
+                  const isCurrent = step.status === "pending";
+                  const isDone = step.status === "approved";
+                  const isSentBack = step.status === "sent_back";
+                  const isLast = i === approvalSteps.length - 1;
+                  return (
+                    <div
+                      key={`mini-${step.index}`}
+                      className="flex items-center shrink-0"
+                    >
+                      <div className="flex flex-col items-center gap-1 min-w-[68px]">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
+                            isCurrent &&
+                              "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
+                            isDone && "bg-green-600",
+                            isSentBack && "bg-red-500",
+                            !isCurrent && !isDone && !isSentBack && "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {isDone ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : isSentBack ? (
+                            <XCircle className="h-3.5 w-3.5" />
+                          ) : isCurrent ? (
+                            <Clock className="h-3.5 w-3.5" />
+                          ) : (
+                            <span>{i + 1}</span>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "text-[10px] text-center leading-tight font-medium",
+                            isCurrent && "text-brand-orange",
+                            isDone && "text-green-700",
+                            isSentBack && "text-red-700",
+                            !isCurrent && !isDone && !isSentBack && "text-muted-foreground"
+                          )}
+                        >
+                          {step.name}
+                        </span>
+                      </div>
+                      {!isLast && (
+                        <div
+                          className={cn(
+                            "h-0.5 w-4 mx-0.5 shrink-0 transition-colors",
+                            isDone ? "bg-green-600" : "bg-muted"
+                          )}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Previous revision rounds (collapsed summary) */}
+            {approvalRounds.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Previous Revisions
+                </p>
+                {approvalRounds.map((round) => (
+                  <div
+                    key={round.round}
+                    className="rounded-lg border border-dashed bg-muted/30 p-3"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                        Round {round.round}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Sent back by {round.sent_back_by} ·{" "}
+                        {formatDateTime(round.sent_back_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                      &ldquo;{round.sent_back_remarks}&rdquo;
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {round.steps
+                        .filter((s) => s.status === "approved" || s.status === "sent_back")
+                        .map((s) => (
+                          <Badge
+                            key={s.index}
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] h-4 px-1.5",
+                              s.status === "approved"
+                                ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                : "bg-red-500/10 text-red-700 border-red-500/30"
+                            )}
+                          >
+                            {s.status === "approved" ? "✓" : "✗"} {s.name}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Vertical detailed timeline with phase headers and connectors */}
+            <div className="relative">
+              {approvalSteps.map((step, i) => {
+                const isCurrent = step.status === "pending";
+                const isDone = step.status === "approved";
+                const isSentBack = step.status === "sent_back";
+                const isWaiting = step.status === "waiting";
+                const isLast = i === approvalSteps.length - 1;
+
+                // Phase headers — shown before the first step of each phase
+                const phaseHeader =
+                  step.kind === "submit"
+                    ? "Draft Preparation"
+                    : step.kind === "approve" && i === 1
+                      ? "Approval Chain"
+                      : step.kind === "release"
+                        ? "Release"
+                        : null;
+
+                return (
+                  <div key={step.index}>
+                    {phaseHeader && (
+                      <div className={cn("flex items-center gap-2", i === 0 ? "mb-2" : "mt-4 mb-2")}>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                          {phaseHeader}
+                        </p>
+                        <div className="flex-1 h-px bg-border" />
+                      </div>
+                    )}
+                  <div
+                    className={cn(
+                      "rounded-lg border transition-colors relative",
+                      isCurrent && "border-brand-orange/50 bg-brand-orange/5 ring-2 ring-brand-orange/20",
+                      isDone && "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10",
+                      isSentBack && "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10",
+                      isWaiting && "border-border bg-muted/30 opacity-70",
+                      !isLast && "mb-2"
+                    )}
+                  >
+                    {/* Vertical connector line to next step */}
+                    {!isLast && (
+                      <div
+                        className={cn(
+                          "absolute left-[27px] -bottom-2 w-0.5 h-2 transition-colors",
+                          isDone ? "bg-green-600" : "bg-border"
+                        )}
+                      />
+                    )}
+                    <div className="flex items-start gap-3 p-3">
+                      <div
+                        className={cn(
+                          "h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-semibold",
+                          isCurrent && "bg-brand-orange",
+                          isDone && "bg-green-600",
+                          isSentBack && "bg-red-600",
+                          isWaiting && "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {isDone ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : isSentBack ? (
+                          <XCircle className="h-4 w-4" />
+                        ) : isCurrent ? (
+                          <Clock className="h-4 w-4" />
+                        ) : (
+                          <span>{i + 1}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold">{step.name}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 h-4",
+                              isDone && "bg-green-500/10 text-green-700 border-green-500/30",
+                              isSentBack && "bg-red-500/10 text-red-700 border-red-500/30",
+                              isCurrent && "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
+                              isWaiting && "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {isDone
+                              ? "Approved"
+                              : isSentBack
+                                ? "Sent back"
+                                : isCurrent
+                                  ? "Pending your action"
+                                  : "Waiting"}
+                          </Badge>
+                        </div>
+                        {step.acted_at && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {step.acted_by ?? "—"} · {formatDateTime(step.acted_at)}
+                          </p>
+                        )}
+                        {step.remarks && (
+                          <p className="text-xs italic text-muted-foreground mt-1 pl-2 border-l-2 border-muted-foreground/30">
+                            &ldquo;{step.remarks}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Inline action panel — only for the currently-pending step */}
+                    {isCurrent && canActOnCurrentStep && (
+                      <div className="border-t border-brand-orange/30 bg-background/60 p-3 space-y-3">
+                        <div>
+                          <p className="text-xs font-medium">
+                            You are acting as{" "}
+                            <span className="text-brand-orange">{step.name}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Signed in as {currentUserDisplayName}
+                            {step.kind === "submit" &&
+                              " — submit the draft to forward it to the Manager for approval."}
+                            {step.kind === "approve" &&
+                              (step.index < approvalSteps.length - 2
+                                ? ` — on approve, the loan will be forwarded to ${
+                                    approvalSteps[step.index + 1].name
+                                  }. Send back for revision to return it to the Loan Processor.`
+                                : " — this is the final approver. Approve to forward to the Cashier for release.")}
+                            {step.kind === "release" &&
+                              " — open the release dialog to complete the loan release."}
+                          </p>
+                        </div>
+
+                        {/* Remarks textarea — shown for submit/approve steps.
+                            Release step uses the full release dialog instead. */}
+                        {step.kind !== "release" && (
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor={`step-remarks-${step.index}`}
+                              className="text-xs"
+                            >
+                              {step.kind === "submit"
+                                ? "Processing notes (optional)"
+                                : "Remarks"}{" "}
+                              <span className="text-muted-foreground font-normal">
+                                {step.kind === "approve"
+                                  ? "(required for send-back)"
+                                  : ""}
+                              </span>
+                            </Label>
+                            <Textarea
+                              id={`step-remarks-${step.index}`}
+                              placeholder={
+                                step.kind === "submit"
+                                  ? "Any notes for the approvers..."
+                                  : `${step.name}: enter your remarks...`
+                              }
+                              value={stepRemarks}
+                              onChange={(e) => setStepRemarks(e.target.value)}
+                              className="min-h-[80px] text-sm bg-background"
+                            />
+                          </div>
+                        )}
+
+                        {/* Action buttons vary by step kind */}
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                          {step.kind === "submit" && (
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepSubmit}
+                              disabled={stepActionLoading}
+                            >
+                              <Send className="mr-2 h-4 w-4" />
+                              Submit for Review
+                            </Button>
+                          )}
+                          {step.kind === "approve" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
+                                onClick={handleStepSendBack}
+                                disabled={stepActionLoading || !stepRemarks.trim()}
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Send Back for Revision
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
+                                onClick={handleStepApprove}
+                                disabled={stepActionLoading}
+                              >
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                Approve &amp; Forward
+                              </Button>
+                            </>
+                          )}
+                          {step.kind === "release" && (
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepRelease}
+                              disabled={stepActionLoading}
+                            >
+                              <Unlock className="mr-2 h-4 w-4" />
+                              Release Loan
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* "Not your turn" message — current step, but current user lacks the required role */}
+                    {isCurrent && !canActOnCurrentStep && (
+                      <div className="border-t border-brand-orange/30 bg-muted/40 p-3">
+                        <div className="flex items-start gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="text-xs">
+                            <p className="font-medium">
+                              Waiting for {step.name}{" "}
+                              {step.kind === "submit"
+                                ? "to submit the draft"
+                                : step.kind === "release"
+                                  ? "to release the loan"
+                                  : "to approve"}
+                            </p>
+                            <p className="text-muted-foreground mt-0.5">
+                              Only users with the{" "}
+                              <span className="font-mono bg-muted px-1 py-0.5 rounded">
+                                {step.role}
+                              </span>{" "}
+                              role can act on this step. You are signed in as{" "}
+                              {currentUserDisplayName}
+                              {currentUser?.roles && currentUser.roles.length > 0
+                                ? ` (${currentUser.roles.join(", ")})`
+                                : " (no role assigned)"}
+                              .
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {allStepsApproved && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
+                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  All approvers have signed off. The loan will transition to
+                  Approved.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {loan.status === "approved" && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                onClick={() => setReleaseOpen(true)}
-              >
-                <Unlock className="mr-2 h-4 w-4" />
-                Release Loan
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* The "Release Loan" action has moved to the Approval Chain card
+          (Cashier step). Kept here as a no-op placeholder block to document
+          the migration — can be deleted once the chain is backend-wired. */}
 
       {loan.status === "rejected" && (
         <Card>

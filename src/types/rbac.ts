@@ -1,9 +1,18 @@
 export type Role =
   | "admin"
   | "loan_officer"
+  | "loan_processor"
   | "cashier"
   | "collector"
-  | "viewer";
+  | "viewer"
+  | "manager"
+  | "bod1"
+  | "bod2"
+  | "bod3"
+  | "bod4"
+  | "bod5"
+  | "bod6"
+  | "bod7";
 
 export type Module =
   | "dashboard"
