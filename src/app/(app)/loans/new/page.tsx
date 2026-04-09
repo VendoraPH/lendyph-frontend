@@ -241,7 +241,8 @@ export default function NewLoanApplicationPage() {
 
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
-  const [coMakerId, setCoMakerId] = useState<number | null>(null);
+  const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
+  const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
   const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
   const [aoOpen, setAoOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
@@ -256,7 +257,6 @@ export default function NewLoanApplicationPage() {
 
   // ── Combobox Open State ──
   const [borrowerOpen, setBorrowerOpen] = useState(false);
-  const [coMakerOpen, setCoMakerOpen] = useState(false);
 
   // ── Dates State ──
   const [releaseDate, setReleaseDate] = useState<Date | undefined>(new Date());
@@ -314,10 +314,15 @@ export default function NewLoanApplicationPage() {
     fetchData();
   }, []);
 
-  // Co-makers: all borrowers except the selected borrower
-  const availableCoMakers = useMemo(
-    () => borrowers.filter((b) => b.id !== borrowerId),
-    [borrowers, borrowerId]
+  // Co-makers: all borrowers except the selected borrower and already-picked co-makers
+  const availableCoMakersFor = useCallback(
+    (currentIndex: number) => {
+      const pickedElsewhere = new Set(
+        coMakerIds.filter((id, i) => id !== null && i !== currentIndex) as number[]
+      );
+      return borrowers.filter((b) => b.id !== borrowerId && !pickedElsewhere.has(b.id));
+    },
+    [borrowers, borrowerId, coMakerIds]
   );
 
   // ── Derived ──
@@ -446,8 +451,24 @@ export default function NewLoanApplicationPage() {
   // ── Borrower Selection Handler ──
   const handleBorrowerChange = useCallback((id: number | null) => {
     setBorrowerId(id);
-    setCoMakerId(null);
+    setCoMakerIds([null]);
   }, []);
+
+  // ── Co-Maker Slot Handlers ──
+  function addCoMakerSlot() {
+    setCoMakerIds((prev) => [...prev, null]);
+  }
+
+  function removeCoMakerSlot(index: number) {
+    setCoMakerIds((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length === 0 ? [null] : next;
+    });
+  }
+
+  function setCoMakerAt(index: number, id: number | null) {
+    setCoMakerIds((prev) => prev.map((v, i) => (i === index ? id : v)));
+  }
 
   // ── Submit ──
   const canSubmit =
@@ -468,7 +489,7 @@ export default function NewLoanApplicationPage() {
       setSubmitting(true);
       const payload = {
         borrower_id: borrowerId,
-        co_maker_ids: coMakerId ? [coMakerId] : [],
+        co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
         loan_product_id: Number(productId),
         principal_amount: principal,
         interest_rate: rate,
@@ -529,9 +550,11 @@ export default function NewLoanApplicationPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Borrower */}
             <div className="space-y-2">
-              <Label>
-                Member <span className="text-destructive">*</span>
-              </Label>
+              <div className="flex h-6 items-center">
+                <Label>
+                  Member <span className="text-destructive">*</span>
+                </Label>
+              </div>
               <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
                 <PopoverTrigger
                   render={
@@ -588,63 +611,97 @@ export default function NewLoanApplicationPage() {
               </Popover>
             </div>
 
-            {/* Co-Maker */}
+            {/* Co-Makers */}
             <div className="space-y-2">
-              <Label>Co-Maker</Label>
-              <Popover open={coMakerOpen} onOpenChange={setCoMakerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      role="combobox"
-                      aria-expanded={coMakerOpen}
-                      disabled={!borrowerId || availableCoMakers.length === 0}
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                    />
-                  }
+              <div className="flex h-6 items-center justify-between">
+                <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-xs text-brand-orange hover:text-brand-orange hover:bg-brand-orange/10"
+                  onClick={addCoMakerSlot}
                 >
-                  <span className={cn("truncate", !coMakerId && "text-muted-foreground")}>
-                    {coMakerId
-                      ? (availableCoMakers.find((b) => b.id === coMakerId)?.full_name ?? borrowers.find((b) => b.id === coMakerId)?.full_name ?? "Selected")
-                      : !borrowerId
-                        ? "Select member first"
-                        : "Search co-maker (optional)..."}
-                  </span>
-                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                </PopoverTrigger>
-                <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Type a name to search..." />
-                    <CommandList>
-                      <CommandEmpty>No members found.</CommandEmpty>
-                      <CommandGroup>
-                        {availableCoMakers.map((b) => (
-                          <CommandItem
-                            key={b.id}
-                            value={b.full_name ?? `${b.first_name} ${b.last_name}`}
-                            onSelect={() => {
-                              setCoMakerId(
-                                b.id === coMakerId ? null : b.id
-                              );
-                              setCoMakerOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 size-4",
-                                coMakerId === b.id
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
+                  <Plus className="h-3 w-3" />
+                  Add Co-Maker
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {coMakerIds.map((selectedId, index) => {
+                  const options = availableCoMakersFor(index);
+                  const selected = selectedId ? borrowers.find((b) => b.id === selectedId) : null;
+                  const isOpen = openCoMakerIndex === index;
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <Popover
+                        open={isOpen}
+                        onOpenChange={(o) => setOpenCoMakerIndex(o ? index : null)}
+                      >
+                        <PopoverTrigger
+                          render={
+                            <button
+                              type="button"
+                              role="combobox"
+                              aria-expanded={isOpen}
+                              disabled={options.length === 0}
+                              className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                             />
-                            {b.full_name ?? `${b.first_name} ${b.last_name}`}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                          }
+                        >
+                          <span className={cn("truncate", !selectedId && "text-muted-foreground")}>
+                            {selected
+                              ? (selected.full_name ?? `${selected.first_name} ${selected.last_name}`)
+                              : options.length === 0
+                                ? "No members available"
+                                : "Search co-maker (optional)..."}
+                          </span>
+                          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-(--anchor-width) p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Type a name to search..." />
+                            <CommandList>
+                              <CommandEmpty>No members found.</CommandEmpty>
+                              <CommandGroup>
+                                {options.map((b) => (
+                                  <CommandItem
+                                    key={b.id}
+                                    value={b.full_name ?? `${b.first_name} ${b.last_name}`}
+                                    onSelect={() => {
+                                      setCoMakerAt(index, b.id === selectedId ? null : b.id);
+                                      setOpenCoMakerIndex(null);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 size-4",
+                                        selectedId === b.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {b.full_name ?? `${b.first_name} ${b.last_name}`}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      {coMakerIds.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeCoMakerSlot(index)}
+                          title="Remove co-maker"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -1197,6 +1254,7 @@ export default function NewLoanApplicationPage() {
           {submitting ? "Submitting..." : "Submit Loan Application"}
         </Button>
       </div>
+
     </div>
     </RouteGuard>
   );
