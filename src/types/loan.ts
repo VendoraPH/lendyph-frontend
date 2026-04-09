@@ -104,6 +104,12 @@ export interface LoanProduct {
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee: number;
   service_fee: number;
+  // Optional fee range (percentages). When present, the new loan application
+  // constrains the user-editable fee percent to [min, max] per fee type.
+  min_processing_fee?: number;
+  max_processing_fee?: number;
+  min_service_fee?: number;
+  max_service_fee?: number;
   penalty_rate: number;
   grace_period: number;
   // Share Capital Build-Up (SCB) — optional required contribution added to
