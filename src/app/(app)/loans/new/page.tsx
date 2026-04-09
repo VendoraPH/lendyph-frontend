@@ -132,6 +132,7 @@ interface AmortizationRow {
   dueDate: Date;
   principal: number;
   interest: number;
+  shareCapitalBuildUp: number;
   totalPayment: number;
 }
 
@@ -141,13 +142,15 @@ function computeAmortization(
   interestType: InterestType,
   termMonths: number,
   frequency: PaymentFrequency,
-  releaseDate: Date
+  releaseDate: Date,
+  scbAmount: number = 0,
 ): AmortizationRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
   const r = interestRate / 100;
   const rows: AmortizationRow[] = [];
   let remainingBalance = principal;
+  const scb = Math.round(scbAmount);
 
   // Straight/Fixed: equal principal each period, constant interest on original principal
   if (interestType === "straight" || interestType === "fixed") {
@@ -166,7 +169,8 @@ function computeAmortization(
         dueDate,
         principal: periodPrincipal,
         interest: interestPerPeriod,
-        totalPayment: periodPrincipal + interestPerPeriod,
+        shareCapitalBuildUp: scb,
+        totalPayment: periodPrincipal + interestPerPeriod + scb,
       });
       remainingBalance -= periodPrincipal;
     }
@@ -187,15 +191,15 @@ function computeAmortization(
       const periodPrincipal = isLast
         ? remainingBalance
         : Math.round(pmt - interest);
+      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
 
       rows.push({
         period: i,
         dueDate,
         principal: periodPrincipal,
         interest,
-        totalPayment: isLast
-          ? periodPrincipal + interest
-          : Math.round(pmt),
+        shareCapitalBuildUp: scb,
+        totalPayment: baseTotal + scb,
       });
       remainingBalance -= periodPrincipal;
     }
@@ -217,7 +221,8 @@ function computeAmortization(
         dueDate,
         principal: periodPrincipal,
         interest: interestPerPeriod,
-        totalPayment: periodPrincipal + interestPerPeriod,
+        shareCapitalBuildUp: scb,
+        totalPayment: periodPrincipal + interestPerPeriod + scb,
       });
     }
   }
@@ -253,6 +258,9 @@ export default function NewLoanApplicationPage() {
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [interestType, setInterestType] = useState<string | null>(null);
+  // Share Capital Build-Up amount (only required when the selected
+  // product has scb_required === true; must fall within product min/max)
+  const [scbAmount, setScbAmount] = useState<string>("");
 
   // ── Combobox Open State ──
   const [borrowerOpen, setBorrowerOpen] = useState(false);
@@ -333,6 +341,7 @@ export default function NewLoanApplicationPage() {
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termMonths) || 0;
   const rate = parseFloat(interestRate) || 0;
+  const scb = parseFloat(scbAmount) || 0;
 
   // Validation messages
   const principalError = useMemo(() => {
@@ -352,6 +361,17 @@ export default function NewLoanApplicationPage() {
       return `Maximum term is ${selectedProduct.max_term} months`;
     return null;
   }, [selectedProduct, termMonths, term]);
+
+  // SCB validation — only when the product requires it
+  const scbError = useMemo(() => {
+    if (!selectedProduct?.scb_required) return null;
+    if (!scbAmount) return "Share Capital Build-Up amount is required";
+    const min = selectedProduct.min_scb ?? 0;
+    const max = selectedProduct.max_scb ?? 0;
+    if (scb < min) return `Minimum SCB is ${formatCurrency(min)}`;
+    if (max > 0 && scb > max) return `Maximum SCB is ${formatCurrency(max)}`;
+    return null;
+  }, [selectedProduct, scbAmount, scb]);
 
   // Fees — computed from editable rate, range inputs override
   const processingFeePercent = parseFloat(processingFeeRate) || (selectedProduct?.processing_fee ?? 0);
@@ -385,7 +405,8 @@ export default function NewLoanApplicationPage() {
     interestType !== null &&
     releaseDate !== undefined &&
     !principalError &&
-    !termError;
+    !termError &&
+    !scbError;
 
   const amortizationSchedule = useMemo(() => {
     if (!canShowAmortization || !releaseDate || !paymentFrequency || !interestType)
@@ -396,7 +417,8 @@ export default function NewLoanApplicationPage() {
       interestType as InterestType,
       term,
       paymentFrequency as PaymentFrequency,
-      releaseDate
+      releaseDate,
+      scb,
     );
   }, [
     canShowAmortization,
@@ -406,6 +428,7 @@ export default function NewLoanApplicationPage() {
     term,
     paymentFrequency,
     releaseDate,
+    scb,
   ]);
 
   const amortizationTotals = useMemo(() => {
@@ -413,9 +436,10 @@ export default function NewLoanApplicationPage() {
       (acc, row) => ({
         principal: acc.principal + row.principal,
         interest: acc.interest + row.interest,
+        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
         totalPayment: acc.totalPayment + row.totalPayment,
       }),
-      { principal: 0, interest: 0, totalPayment: 0 }
+      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 }
     );
   }, [amortizationSchedule]);
 
@@ -438,6 +462,13 @@ export default function NewLoanApplicationPage() {
         setServiceFeeMax("");
         setProcessingFeeRate(String(apiProduct.processing_fee ?? product.processing_fee ?? ""));
         setServiceFeeRate(String(apiProduct.service_fee ?? product.service_fee ?? ""));
+        // Seed SCB amount when the product requires it: default to the product's
+        // minimum. The loan officer can adjust up to the product's maximum.
+        if (product.scb_required) {
+          setScbAmount(String(product.min_scb ?? ""));
+        } else {
+          setScbAmount("");
+        }
       }
     },
     [products]
@@ -460,7 +491,8 @@ export default function NewLoanApplicationPage() {
     paymentFrequency !== null &&
     interestType !== null &&
     rate > 0 &&
-    releaseDate !== undefined;
+    releaseDate !== undefined &&
+    !scbError;
 
   const handleSubmit = async () => {
     if (!canSubmit || !releaseDate) return;
@@ -473,6 +505,7 @@ export default function NewLoanApplicationPage() {
         principal_amount: principal,
         interest_rate: rate,
         start_date: formatDateISO(releaseDate),
+        ...(selectedProduct?.scb_required && scb > 0 && { scb_amount: scb }),
         ...(accountOfficerId && { account_officer_id: accountOfficerId }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
       };
@@ -808,9 +841,7 @@ export default function NewLoanApplicationPage() {
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select frequency">
                     {(value: string | null) =>
-                      value
-                        ? (value === "upon_maturity" ? "Upon Maturity" : (PAYMENT_FREQUENCY_LABELS[value] ?? value))
-                        : "Select frequency"
+                      value ? (PAYMENT_FREQUENCY_LABELS[value] ?? value) : "Select frequency"
                     }
                   </SelectValue>
                 </SelectTrigger>
@@ -820,7 +851,6 @@ export default function NewLoanApplicationPage() {
                       {opt.label}
                     </SelectItem>
                   ))}
-                  <SelectItem value="upon_maturity">Upon Maturity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -863,6 +893,51 @@ export default function NewLoanApplicationPage() {
               </Select>
             </div>
           </div>
+
+          {/* Share Capital Build-Up — only when the selected product requires it */}
+          {selectedProduct?.scb_required && (
+            <div className="mt-4 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="scb-amount" className="text-sm font-medium">
+                  Share Capital Build-Up{" "}
+                  <span className="text-destructive">*</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  This product requires a Share Capital Build-Up amount per
+                  period. It will be credited to the member&rsquo;s share
+                  capital each time they pay.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Input
+                    id="scb-amount"
+                    type="number"
+                    min={selectedProduct.min_scb ?? 0}
+                    max={selectedProduct.max_scb ?? undefined}
+                    step="1"
+                    placeholder={
+                      selectedProduct.min_scb != null
+                        ? String(selectedProduct.min_scb)
+                        : "0"
+                    }
+                    value={scbAmount}
+                    onChange={(e) => setScbAmount(e.target.value)}
+                  />
+                  {scbError && (
+                    <p className="text-xs text-destructive">{scbError}</p>
+                  )}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  Allowed range:{" "}
+                  <span className="ml-1 font-medium text-foreground">
+                    {formatCurrency(selectedProduct.min_scb ?? 0)} –{" "}
+                    {formatCurrency(selectedProduct.max_scb ?? 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1130,6 +1205,9 @@ export default function NewLoanApplicationPage() {
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
+                    {amortizationTotals.shareCapitalBuildUp > 0 && (
+                      <TableHead className="text-right">Share Capital Build-Up</TableHead>
+                    )}
                     <TableHead className="text-right">Total Payment</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1146,6 +1224,11 @@ export default function NewLoanApplicationPage() {
                       <TableCell className="text-right">
                         {formatCurrency(row.interest)}
                       </TableCell>
+                      {amortizationTotals.shareCapitalBuildUp > 0 && (
+                        <TableCell className="text-right text-brand-orange">
+                          {formatCurrency(row.shareCapitalBuildUp)}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right font-medium">
                         {formatCurrency(row.totalPayment)}
                       </TableCell>
@@ -1163,6 +1246,11 @@ export default function NewLoanApplicationPage() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.interest)}
                     </TableCell>
+                    {amortizationTotals.shareCapitalBuildUp > 0 && (
+                      <TableCell className="text-right font-semibold text-brand-orange">
+                        {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-bold">
                       {formatCurrency(amortizationTotals.totalPayment)}
                     </TableCell>
