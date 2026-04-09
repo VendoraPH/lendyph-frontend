@@ -70,7 +70,6 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "All Loans", href: "/loans" },
       { title: "New Application", href: "/loans/new" },
-      { title: "Loan Products", href: "/loans/products" },
       { title: "Amortization", href: "/loans/amortization" },
     ],
   },
@@ -104,6 +103,8 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "Profile", href: "/settings/profile" },
       { title: "Branches", href: "/settings/branches" },
+      { title: "Loan Products", href: "/settings/loan-products" },
+      { title: "User Roles", href: "/settings/user-roles" },
     ],
   },
 ];

@@ -854,7 +854,7 @@ export default function NewLoanApplicationPage() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {INTEREST_TYPE_OPTIONS.filter((opt) => opt.value !== "upon_maturity").map((opt) => (
+                  {INTEREST_TYPE_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
