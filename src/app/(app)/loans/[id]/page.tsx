@@ -4,7 +4,15 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
-import { loanService, loanAdjustmentService, repaymentService, coMakerService, userService } from "@/services";
+import {
+  loanService,
+  loanAdjustmentService,
+  repaymentService,
+  coMakerService,
+  userService,
+  approvalWorkflowService,
+  type ApprovalChainStep,
+} from "@/services";
 import { useAuthStore } from "@/store/auth-store";
 import {
   Command,
@@ -237,34 +245,17 @@ const WORKFLOW_STEPS: { status: LoanStatus; label: string }[] = [
 ];
 
 // ── Multi-Step Approval Chain ──
-// Implements the LOAN RELEASE FLOWCHART exactly:
-//   START → Borrower applies → Loan Processor processes draft
-//        → Manager → BOD1 → BOD2 → ... → BOD7 → Cashier releases → END
-// On any "Approved? = No" the loan is sent back to Loan Processor for revision
-// (the chain does NOT support terminal rejection — that's what "Void Loan" is for).
-// This is local/mock state for now — a future PR will make this configurable via
-// /settings/approval-workflow and wire it to real backend endpoints.
+// Implements the LOAN RELEASE FLOWCHART. The chain is loaded from
+// approvalWorkflowService so admins can reconfigure it via
+// /settings/approval-workflow. Each loan snapshots the chain at seed time,
+// so changes to the config only affect NEW loans (in-flight loans keep
+// whatever chain they started with).
+//
+// On any "Approved? = No" the loan is sent back to Loan Processor for
+// revision (the chain does NOT support terminal rejection — "Void Loan"
+// is the escape hatch for drafts).
 
 type ChainStepKind = "submit" | "approve" | "release";
-
-interface ChainStepDefinition {
-  name: string;
-  role: string; // Role slug required to act on this step (admin bypasses)
-  kind: ChainStepKind;
-}
-
-const DEFAULT_APPROVAL_CHAIN: ChainStepDefinition[] = [
-  { name: "Loan Processor", role: "loan_processor", kind: "submit" },
-  { name: "Manager", role: "manager", kind: "approve" },
-  { name: "BOD1", role: "bod1", kind: "approve" },
-  { name: "BOD2", role: "bod2", kind: "approve" },
-  { name: "BOD3", role: "bod3", kind: "approve" },
-  { name: "BOD4", role: "bod4", kind: "approve" },
-  { name: "BOD5", role: "bod5", kind: "approve" },
-  { name: "BOD6", role: "bod6", kind: "approve" },
-  { name: "BOD7", role: "bod7", kind: "approve" },
-  { name: "Cashier", role: "cashier", kind: "release" },
-];
 
 type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
 
@@ -294,8 +285,11 @@ interface ApprovalState {
   rounds: RevisionRound[];
 }
 
-function buildFreshSteps(pendingIndex: number = 0): ApprovalStep[] {
-  return DEFAULT_APPROVAL_CHAIN.map((step, i) => ({
+function buildFreshSteps(
+  chain: ApprovalChainStep[],
+  pendingIndex: number = 0
+): ApprovalStep[] {
+  return chain.map((step, i) => ({
     index: i,
     name: step.name,
     role: step.role,
@@ -343,24 +337,43 @@ function saveApprovalState(loanId: number | string, state: ApprovalState) {
 
 // Derive where the loan should be in the chain based on its server status.
 // Used to seed a fresh state when localStorage has nothing for this loan.
-function deriveStepsFromLoanStatus(status: string): ApprovalStep[] {
-  const steps = buildFreshSteps();
+// The chain is whatever the admin has configured via the settings page.
+function deriveStepsFromLoanStatus(
+  chain: ApprovalChainStep[],
+  status: string
+): ApprovalStep[] {
+  const steps = buildFreshSteps(chain);
+  if (steps.length === 0) return steps;
+
+  const firstApproveIdx = steps.findIndex((s) => s.kind === "approve");
+  const lastApproveIdx = (() => {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i].kind === "approve") return i;
+    }
+    return -1;
+  })();
+  const releaseIdx = steps.findIndex((s) => s.kind === "release");
+
   if (status === "draft") {
-    // Loan Processor (step 0) is pending
+    // Loan Processor (submit step, index 0) is pending
     return steps;
   }
   if (status === "for_review") {
-    // Loan Processor already submitted; Manager (step 1) is pending
+    // Submit done; first approve step is pending
     steps[0] = { ...steps[0], status: "approved" };
-    steps[1] = { ...steps[1], status: "pending" };
+    if (firstApproveIdx >= 0) {
+      steps[firstApproveIdx] = { ...steps[firstApproveIdx], status: "pending" };
+    }
     return steps;
   }
   if (status === "approved") {
-    // All 8 approvers done; Cashier (step 9) is pending
-    for (let i = 0; i <= 8; i++) {
+    // All approve steps done; release step is pending
+    for (let i = 0; i <= lastApproveIdx; i++) {
       steps[i] = { ...steps[i], status: "approved" };
     }
-    steps[9] = { ...steps[9], status: "pending" };
+    if (releaseIdx >= 0) {
+      steps[releaseIdx] = { ...steps[releaseIdx], status: "pending" };
+    }
     return steps;
   }
   if (
@@ -810,6 +823,24 @@ export default function LoanDetailPage({
   const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+  // Chain configuration fetched from the approval-workflow service
+  const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
+
+  // Load the admin-configured chain once on mount
+  useEffect(() => {
+    let cancelled = false;
+    approvalWorkflowService
+      .list()
+      .then((chain) => {
+        if (!cancelled) setChainConfig(chain);
+      })
+      .catch(() => {
+        if (!cancelled) setChainConfig(approvalWorkflowService.getDefault());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Current logged-in user (used to gate approval actions by role)
   const currentUser = useAuthStore((s) => s.user);
@@ -895,10 +926,10 @@ export default function LoanDetailPage({
     );
   }, [storedSchedule]);
 
-  // Seed/load multi-step approval state whenever the loan changes.
+  // Seed/load multi-step approval state whenever the loan or chain config changes.
   // The chain is visible for every status except "rejected" (voided drafts).
   useEffect(() => {
-    if (!loan) return;
+    if (!loan || !chainConfig) return;
     if (loan.status === "rejected") {
       setApprovalSteps([]);
       setApprovalRounds([]);
@@ -909,10 +940,10 @@ export default function LoanDetailPage({
       setApprovalSteps(stored.current_steps);
       setApprovalRounds(stored.rounds);
     } else {
-      setApprovalSteps(deriveStepsFromLoanStatus(loan.status));
+      setApprovalSteps(deriveStepsFromLoanStatus(chainConfig, loan.status));
       setApprovalRounds([]);
     }
-  }, [loan?.id, loan?.status]);
+  }, [loan?.id, loan?.status, chainConfig]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
@@ -1192,8 +1223,10 @@ export default function LoanDetailPage({
         sent_back_remarks: stepRemarks.trim(),
       };
 
-      // Reset the chain — Loan Processor is pending again
-      const freshSteps = buildFreshSteps(0);
+      // Reset the chain — Loan Processor is pending again.
+      // Use the current chain config (fall back to the default if unavailable).
+      const chain = chainConfig ?? approvalWorkflowService.getDefault();
+      const freshSteps = buildFreshSteps(chain, 0);
       persistApprovalState(freshSteps, [...approvalRounds, nextRound]);
       setStepRemarks("");
       toast.success(
