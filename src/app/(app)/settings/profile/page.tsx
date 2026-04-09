@@ -23,17 +23,35 @@ import type { Role } from "@/types/rbac";
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrator",
   loan_officer: "Loan Officer",
+  loan_processor: "Loan Processor",
   cashier: "Cashier",
   collector: "Collector",
   viewer: "Viewer",
+  manager: "Manager",
+  bod1: "BOD1",
+  bod2: "BOD2",
+  bod3: "BOD3",
+  bod4: "BOD4",
+  bod5: "BOD5",
+  bod6: "BOD6",
+  bod7: "BOD7",
 };
 
 const ROLE_BADGE_CLASS: Record<Role, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   loan_officer: "bg-blue-100 text-blue-700 border-blue-200",
+  loan_processor: "bg-teal-100 text-teal-700 border-teal-200",
   cashier: "bg-green-100 text-green-700 border-green-200",
   collector: "bg-purple-100 text-purple-700 border-purple-200",
   viewer: "bg-muted text-muted-foreground border-border",
+  manager: "bg-indigo-100 text-indigo-700 border-indigo-200",
+  bod1: "bg-sky-100 text-sky-700 border-sky-200",
+  bod2: "bg-sky-100 text-sky-700 border-sky-200",
+  bod3: "bg-sky-100 text-sky-700 border-sky-200",
+  bod4: "bg-sky-100 text-sky-700 border-sky-200",
+  bod5: "bg-sky-100 text-sky-700 border-sky-200",
+  bod6: "bg-sky-100 text-sky-700 border-sky-200",
+  bod7: "bg-sky-100 text-sky-700 border-sky-200",
 };
 
 function getInitials(name: string): string {

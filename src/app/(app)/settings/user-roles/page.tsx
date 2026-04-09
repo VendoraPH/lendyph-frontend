@@ -197,9 +197,18 @@ interface RoleItem {
 const ROLE_BADGE: Record<string, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   loan_officer: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  loan_processor: "bg-teal-500/10 text-teal-700 border-teal-500/30",
   cashier: "bg-green-500/10 text-green-700 border-green-500/30",
   collector: "bg-purple-500/10 text-purple-700 border-purple-500/30",
   viewer: "bg-slate-500/10 text-slate-700 border-slate-500/30",
+  manager: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30",
+  bod1: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod2: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod3: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod4: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod5: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod6: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
 
 function stripCollections(perms: Permission[]): Permission[] {
