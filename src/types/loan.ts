@@ -39,6 +39,8 @@ export interface Loan {
   net_proceeds?: number;
   penalty_rate?: number;
   grace_period_days?: number;
+  // Share Capital Build-Up amount chosen for this loan (within product's range)
+  scb_amount?: number;
   status: LoanStatus;
   is_editable?: boolean;
   is_releasable?: boolean;
@@ -104,6 +106,12 @@ export interface LoanProduct {
   service_fee: number;
   penalty_rate: number;
   grace_period: number;
+  // Share Capital Build-Up (SCB) — optional required contribution added to
+  // every amortization period. When the borrower pays, the SCB portion is
+  // credited to their share capital ledger.
+  scb_required?: boolean;
+  min_scb?: number;
+  max_scb?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -12,6 +12,7 @@ export interface AmortizationInput {
   frequency: PaymentFrequency;
   interestMethod: InterestMethod;
   startDate: Date;
+  scbAmount?: number; // Share Capital Build-Up per period (added to each row's totalDue)
 }
 
 export interface AmortizationRow {
@@ -21,6 +22,7 @@ export interface AmortizationRow {
   principal: number;
   interest: number;
   penalty: number;
+  shareCapitalBuildUp: number; // SCB added to this period's total due
   totalDue: number;
   endingBalance: number;
 }
@@ -28,6 +30,7 @@ export interface AmortizationRow {
 export interface ScheduleSummary {
   totalPrincipal: number;
   totalInterest: number;
+  totalScb: number;
   totalPayable: number;
   numberOfPayments: number;
   perPeriodPayment: number | null; // null when varies (diminishing)
@@ -141,6 +144,7 @@ export function getDueDate(
 
 function generateFixed(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
+  const scbPerPeriod = round(input.scbAmount ?? 0);
   const periods = getPeriodsCount(termMonths, frequency);
   // Principal per period rounded to whole number per computation spec
   const principalPerPeriod = roundWhole(principal / periods);
@@ -164,7 +168,8 @@ function generateFixed(input: AmortizationInput): AmortizationRow[] {
       principal: periodPrincipal,
       interest: periodInterest,
       penalty: 0,
-      totalDue: round(periodPrincipal + periodInterest),
+      shareCapitalBuildUp: scbPerPeriod,
+      totalDue: round(periodPrincipal + periodInterest + scbPerPeriod),
       endingBalance,
     });
   }
@@ -174,6 +179,7 @@ function generateFixed(input: AmortizationInput): AmortizationRow[] {
 
 function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
+  const scbPerPeriod = round(input.scbAmount ?? 0);
   const periods = getPeriodsCount(termMonths, frequency);
   const r = monthlyRate / 100;
 
@@ -190,6 +196,7 @@ function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
     const periodPrincipal = isLast ? round(remaining) : round(pmt - periodInterest);
     remaining -= periodPrincipal;
     const endingBalance = isLast ? 0 : round(remaining);
+    const baseTotal = isLast ? round(periodPrincipal + periodInterest) : pmt;
 
     rows.push({
       period: i,
@@ -198,7 +205,8 @@ function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
       principal: periodPrincipal,
       interest: periodInterest,
       penalty: 0,
-      totalDue: isLast ? round(periodPrincipal + periodInterest) : pmt,
+      shareCapitalBuildUp: scbPerPeriod,
+      totalDue: round(baseTotal + scbPerPeriod),
       endingBalance,
     });
   }
@@ -208,6 +216,7 @@ function generateDiminishing(input: AmortizationInput): AmortizationRow[] {
 
 function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
+  const scbPerPeriod = round(input.scbAmount ?? 0);
 
   if (termMonths <= 1) {
     // Single lump sum at maturity
@@ -219,7 +228,8 @@ function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
       principal,
       interest: totalInterest,
       penalty: 0,
-      totalDue: round(principal + totalInterest),
+      shareCapitalBuildUp: scbPerPeriod,
+      totalDue: round(principal + totalInterest + scbPerPeriod),
       endingBalance: 0,
     }];
   }
@@ -231,6 +241,7 @@ function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
 
   for (let i = 1; i <= periods; i++) {
     const isLast = i === periods;
+    const baseTotal = isLast ? round(principal + interestPerPeriod) : interestPerPeriod;
     rows.push({
       period: i,
       dueDate: getDueDate(startDate, i, frequency),
@@ -238,7 +249,8 @@ function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
       principal: isLast ? principal : 0,
       interest: interestPerPeriod,
       penalty: 0,
-      totalDue: isLast ? round(principal + interestPerPeriod) : interestPerPeriod,
+      shareCapitalBuildUp: scbPerPeriod,
+      totalDue: round(baseTotal + scbPerPeriod),
       endingBalance: isLast ? 0 : principal,
     });
   }
@@ -270,7 +282,8 @@ export function generateSchedule(input: AmortizationInput): GeneratedSchedule {
 
   const totalPrincipal = round(rows.reduce((s, r) => s + r.principal, 0));
   const totalInterest = round(rows.reduce((s, r) => s + r.interest, 0));
-  const totalPayable = round(totalPrincipal + totalInterest);
+  const totalScb = round(rows.reduce((s, r) => s + r.shareCapitalBuildUp, 0));
+  const totalPayable = round(totalPrincipal + totalInterest + totalScb);
   const numberOfPayments = rows.length;
   const firstPayment = rows[0]?.totalDue ?? 0;
   const lastPayment = rows[rows.length - 1]?.totalDue ?? 0;
@@ -294,6 +307,7 @@ export function generateSchedule(input: AmortizationInput): GeneratedSchedule {
     summary: {
       totalPrincipal,
       totalInterest,
+      totalScb,
       totalPayable,
       numberOfPayments,
       perPeriodPayment,

@@ -126,6 +126,7 @@ interface AmortizationRow {
   dueDate: Date;
   principal: number;
   interest: number;
+  shareCapitalBuildUp: number;
   totalPayment: number;
   balance: number;
 }
@@ -175,6 +176,7 @@ function generateSchedule(
   frequency: PaymentFrequency,
   interestType: InterestType,
   startDate: Date,
+  scbAmount: number = 0,
 ): AmortizationRow[] {
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
@@ -203,7 +205,8 @@ function generateSchedule(
       dueDate,
       principal: principalPerPeriod,
       interest,
-      totalPayment: principalPerPeriod + interest,
+      shareCapitalBuildUp: scbAmount,
+      totalPayment: principalPerPeriod + interest + scbAmount,
       balance: Math.max(0, remainingBalance),
     });
   }
@@ -675,17 +678,19 @@ export default function LoanDetailPage({
       freqVal,
       methodVal,
       releaseDate,
+      loan.scb_amount ?? 0,
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, releaseDate]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
 
   const scheduleTotals = useMemo(() => {
     return releaseSchedule.reduce(
       (acc, row) => ({
         principal: acc.principal + row.principal,
         interest: acc.interest + row.interest,
+        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
         totalPayment: acc.totalPayment + row.totalPayment,
       }),
-      { principal: 0, interest: 0, totalPayment: 0 },
+      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
     );
   }, [releaseSchedule]);
 
@@ -703,13 +708,15 @@ export default function LoanDetailPage({
     const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
     if (!isReleased) return [];
     // Use API schedule if available, map to display format
+    const scb = loan.scb_amount ?? 0;
     if (apiSchedule && apiSchedule.length > 0) {
       return apiSchedule.map((row, idx) => ({
         period: idx + 1,
         dueDate: new Date(row.due_date),
         principal: parseFloat(String(row.principal)) || 0,
         interest: parseFloat(String(row.interest)) || 0,
-        totalPayment: parseFloat(String(row.amount_due)) || 0,
+        shareCapitalBuildUp: scb,
+        totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
         balance: parseFloat(String(row.balance)) || 0,
       }));
     }
@@ -724,17 +731,19 @@ export default function LoanDetailPage({
       freqVal,
       methodVal,
       new Date(relDate),
+      scb,
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
       (acc, row) => ({
         principal: acc.principal + row.principal,
         interest: acc.interest + row.interest,
+        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
         totalPayment: acc.totalPayment + row.totalPayment,
       }),
-      { principal: 0, interest: 0, totalPayment: 0 },
+      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
     );
   }, [storedSchedule]);
 
@@ -1595,6 +1604,9 @@ export default function LoanDetailPage({
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
+                    {storedScheduleTotals.shareCapitalBuildUp > 0 && (
+                      <TableHead className="text-right">Share Capital Build-Up</TableHead>
+                    )}
                     <TableHead className="text-right">Total Payment</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
                   </TableRow>
@@ -1606,6 +1618,11 @@ export default function LoanDetailPage({
                       <TableCell>{formatDateObj(row.dueDate)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                      {storedScheduleTotals.shareCapitalBuildUp > 0 && (
+                        <TableCell className="text-right text-brand-orange">
+                          {formatCurrency(row.shareCapitalBuildUp)}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
                     </TableRow>
@@ -1616,6 +1633,11 @@ export default function LoanDetailPage({
                     <TableCell colSpan={2} className="font-semibold">Total</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                    {storedScheduleTotals.shareCapitalBuildUp > 0 && (
+                      <TableCell className="text-right font-semibold text-brand-orange">
+                        {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
                     <TableCell />
                   </TableRow>
@@ -2230,6 +2252,9 @@ export default function LoanDetailPage({
                         <TableHead className="sticky top-0 bg-background">Due Date</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Principal</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Interest</TableHead>
+                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                          <TableHead className="text-right sticky top-0 bg-background">SCB</TableHead>
+                        )}
                         <TableHead className="text-right sticky top-0 bg-background">Total</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Balance</TableHead>
                       </TableRow>
@@ -2241,6 +2266,11 @@ export default function LoanDetailPage({
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(row.principal)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(row.interest)}</TableCell>
+                          {scheduleTotals.shareCapitalBuildUp > 0 && (
+                            <TableCell className="text-right text-xs text-brand-orange">
+                              {formatCurrency(row.shareCapitalBuildUp)}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right text-xs font-medium">{formatCurrency(row.totalPayment)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(row.balance)}</TableCell>
                         </TableRow>
@@ -2251,6 +2281,11 @@ export default function LoanDetailPage({
                         <TableCell colSpan={2} className="font-semibold text-xs">Total</TableCell>
                         <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.principal)}</TableCell>
                         <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.interest)}</TableCell>
+                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                          <TableCell className="text-right font-semibold text-xs text-brand-orange">
+                            {formatCurrency(scheduleTotals.shareCapitalBuildUp)}
+                          </TableCell>
+                        )}
                         <TableCell className="text-right font-bold text-xs">{formatCurrency(scheduleTotals.totalPayment)}</TableCell>
                         <TableCell />
                       </TableRow>
