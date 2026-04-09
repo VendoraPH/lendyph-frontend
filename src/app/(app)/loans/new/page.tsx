@@ -263,12 +263,13 @@ export default function NewLoanApplicationPage() {
   const [releaseDateOpen, setReleaseDateOpen] = useState(false);
 
   // ── Deductions State ──
-  const [processingFeeOverride, setProcessingFeeOverride] = useState<
-    string | null
-  >(null);
-  const [serviceFeeOverride, setServiceFeeOverride] = useState<string | null>(
-    null
-  );
+  const [processingFeeMin, setProcessingFeeMin] = useState<string>("");
+  const [processingFeeMax, setProcessingFeeMax] = useState<string>("");
+  const [serviceFeeMin, setServiceFeeMin] = useState<string>("");
+  const [serviceFeeMax, setServiceFeeMax] = useState<string>("");
+  const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
+  const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
+  const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
 
   // ── Fetch borrowers and products on mount ──
@@ -352,20 +353,18 @@ export default function NewLoanApplicationPage() {
     return null;
   }, [selectedProduct, termMonths, term]);
 
-  // Fees (rounded to whole numbers)
-  const processingFee =
-    processingFeeOverride !== null
-      ? Math.round(parseFloat(processingFeeOverride) || 0)
-      : selectedProduct
-        ? Math.round(principal * (selectedProduct.processing_fee / 100))
-        : 0;
+  // Fees — computed from editable rate, range inputs override
+  const processingFeePercent = parseFloat(processingFeeRate) || (selectedProduct?.processing_fee ?? 0);
+  const serviceFeePercent = parseFloat(serviceFeeRate) || (selectedProduct?.service_fee ?? 0);
+  const defaultProcessingFee = Math.round(principal * (processingFeePercent / 100));
+  const defaultServiceFee = Math.round(principal * (serviceFeePercent / 100));
 
-  const serviceFee =
-    serviceFeeOverride !== null
-      ? Math.round(parseFloat(serviceFeeOverride) || 0)
-      : selectedProduct
-        ? Math.round(principal * (selectedProduct.service_fee / 100))
-        : 0;
+  const processingFee = processingFeeMax
+    ? Math.round(parseFloat(processingFeeMax) || 0)
+    : defaultProcessingFee;
+  const serviceFee = serviceFeeMax
+    ? Math.round(parseFloat(serviceFeeMax) || 0)
+    : defaultServiceFee;
 
   const otherDed = otherDeductions.reduce((sum, d) => sum + Math.round(parseFloat(d.amount) || 0), 0);
   const totalDeductions = processingFee + serviceFee + otherDed;
@@ -433,8 +432,12 @@ export default function NewLoanApplicationPage() {
         setInterestType(rawType === "fixed" ? "straight" : rawType);
         // Map API field names: frequency/payment_frequency
         setPaymentFrequency(String(apiProduct.frequency ?? product.payment_frequency ?? "monthly"));
-        setProcessingFeeOverride(null);
-        setServiceFeeOverride(null);
+        setProcessingFeeMin("");
+        setProcessingFeeMax("");
+        setServiceFeeMin("");
+        setServiceFeeMax("");
+        setProcessingFeeRate(String(apiProduct.processing_fee ?? product.processing_fee ?? ""));
+        setServiceFeeRate(String(apiProduct.service_fee ?? product.service_fee ?? ""));
       }
     },
     [products]
@@ -760,7 +763,7 @@ export default function NewLoanApplicationPage() {
             {/* Principal Amount */}
             <div className="space-y-2">
               <Label>
-                Principal Amount <span className="text-destructive">*</span>
+                Loan Amount <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
@@ -803,7 +806,13 @@ export default function NewLoanApplicationPage() {
                 onValueChange={(value) => setPaymentFrequency(value ?? null)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select frequency" />
+                  <SelectValue placeholder="Select frequency">
+                    {(value: string | null) =>
+                      value
+                        ? (value === "upon_maturity" ? "Upon Maturity" : (PAYMENT_FREQUENCY_LABELS[value] ?? value))
+                        : "Select frequency"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
@@ -811,6 +820,7 @@ export default function NewLoanApplicationPage() {
                       {opt.label}
                     </SelectItem>
                   ))}
+                  <SelectItem value="upon_maturity">Upon Maturity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -835,10 +845,16 @@ export default function NewLoanApplicationPage() {
                 onValueChange={(value) => setInterestType(value ?? null)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type" />
+                  <SelectValue placeholder="Select type">
+                    {(value: string | null) =>
+                      value
+                        ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                        : "Select type"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {INTEREST_TYPE_OPTIONS.map((opt) => (
+                  {INTEREST_TYPE_OPTIONS.filter((opt) => opt.value !== "upon_maturity").map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
@@ -911,50 +927,110 @@ export default function NewLoanApplicationPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {/* Processing Fee */}
             <div className="space-y-2">
-              <Label>
+              <Label className="flex items-center gap-0.5">
                 Processing Fee
-                {selectedProduct && (
-                  <span className="text-muted-foreground font-normal">
-                    {" "}
-                    ({Math.round(selectedProduct.processing_fee)}%)
+                <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
+                {editingFeeRate === "processing" ? (
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    autoFocus
+                    className="w-8 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    value={processingFeeRate}
+                    onChange={(e) => {
+                      setProcessingFeeRate(e.target.value.slice(0, 3));
+                      setProcessingFeeMin("");
+                      setProcessingFeeMax("");
+                    }}
+                    onBlur={() => setEditingFeeRate(null)}
+                    onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
+                  />
+                ) : (
+                  <span
+                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
+                    onDoubleClick={() => setEditingFeeRate("processing")}
+                    title="Double-click to edit"
+                  >
+                    {processingFeeRate || "0"}
                   </span>
                 )}
+                <span className="text-muted-foreground font-normal text-xs">%)</span>
               </Label>
-              <Input
-                type="number"
-                placeholder="0"
-                step="1"
-                value={
-                  processingFeeOverride !== null
-                    ? processingFeeOverride
-                    : Math.round(processingFee)
-                }
-                onChange={(e) => setProcessingFeeOverride(e.target.value)}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  placeholder={String(defaultProcessingFee || "0")}
+                  step="1"
+                  min={0}
+                  value={processingFeeMin}
+                  onChange={(e) => setProcessingFeeMin(e.target.value)}
+                />
+                <span className="text-muted-foreground text-sm shrink-0">–</span>
+                <Input
+                  type="number"
+                  placeholder={String(defaultProcessingFee || "0")}
+                  step="1"
+                  min={0}
+                  value={processingFeeMax}
+                  onChange={(e) => setProcessingFeeMax(e.target.value)}
+                />
+              </div>
             </div>
 
             {/* Service Fee */}
             <div className="space-y-2">
-              <Label>
+              <Label className="flex items-center gap-0.5">
                 Service Fee
-                {selectedProduct && (
-                  <span className="text-muted-foreground font-normal">
-                    {" "}
-                    ({Math.round(selectedProduct.service_fee)}%)
+                <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
+                {editingFeeRate === "service" ? (
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    autoFocus
+                    className="w-8 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    value={serviceFeeRate}
+                    onChange={(e) => {
+                      setServiceFeeRate(e.target.value.slice(0, 3));
+                      setServiceFeeMin("");
+                      setServiceFeeMax("");
+                    }}
+                    onBlur={() => setEditingFeeRate(null)}
+                    onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
+                  />
+                ) : (
+                  <span
+                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
+                    onDoubleClick={() => setEditingFeeRate("service")}
+                    title="Double-click to edit"
+                  >
+                    {serviceFeeRate || "0"}
                   </span>
                 )}
+                <span className="text-muted-foreground font-normal text-xs">%)</span>
               </Label>
-              <Input
-                type="number"
-                placeholder="0"
-                step="1"
-                value={
-                  serviceFeeOverride !== null
-                    ? serviceFeeOverride
-                    : Math.round(serviceFee)
-                }
-                onChange={(e) => setServiceFeeOverride(e.target.value)}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  placeholder={String(defaultServiceFee || "0")}
+                  step="1"
+                  min={0}
+                  value={serviceFeeMin}
+                  onChange={(e) => setServiceFeeMin(e.target.value)}
+                />
+                <span className="text-muted-foreground text-sm shrink-0">–</span>
+                <Input
+                  type="number"
+                  placeholder={String(defaultServiceFee || "0")}
+                  step="1"
+                  min={0}
+                  value={serviceFeeMax}
+                  onChange={(e) => setServiceFeeMax(e.target.value)}
+                />
+              </div>
             </div>
 
           </div>

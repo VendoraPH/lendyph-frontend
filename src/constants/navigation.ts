@@ -5,7 +5,7 @@ import {
   Users,
   FileText,
   CreditCard,
-  ClipboardList,
+
   BarChart3,
   Settings,
   UserCog,
@@ -83,12 +83,6 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "New Payment", href: "/payments" },
       { title: "Payment History", href: "/payments/history" },
     ],
-  },
-  {
-    title: "Collections",
-    href: "/collections",
-    icon: ClipboardList,
-    permission: "collections:view",
   },
   {
     title: "Reports",
