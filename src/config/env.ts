@@ -39,7 +39,7 @@ export const env = {
       "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
       "lendy_refresh_token"
     ),
-    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 60),
+    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 30),
   },
   storage: {
     url: getEnvVar("NEXT_PUBLIC_STORAGE_URL", "http://localhost:8000/storage"),

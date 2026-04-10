@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store";
 import { tokenManager } from "@/lib/axios-client";
+import { authService } from "@/services";
 import { env } from "@/config/env";
 import {
   Dialog,
@@ -26,6 +27,12 @@ const ACTIVITY_EVENTS = [
 
 const WARNING_BEFORE_MS = 60 * 1000; // Show warning 1 minute before timeout
 
+// Proactively refresh the access token every N minutes while the user is
+// active, so the backend token never expires mid-session and triggers a
+// jarring 401 redirect. Set to 5 minutes — well within most backend token
+// lifetimes (typically 15–60 min).
+const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated, clearAuth } = useAuthStore();
@@ -35,6 +42,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track last activity timestamp so we can decide whether to refresh
+  const lastActivityRef = useRef<number>(Date.now());
 
   const timeoutMs = env.auth.sessionTimeout * 60 * 1000; // Convert minutes to ms
 
@@ -48,20 +58,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (countdownRef.current) clearInterval(countdownRef.current);
   }, []);
 
-  const performLogout = useCallback(() => {
-    clearTimers();
-    setShowWarning(false);
-    tokenManager.clearTokens();
-    clearAuth();
-    toast.info("Session expired due to inactivity");
-    router.replace("/login");
-  }, [clearTimers, clearAuth, router]);
+  const performLogout = useCallback(
+    (reason: "inactivity" | "token_expired" = "inactivity") => {
+      clearTimers();
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+      setShowWarning(false);
+      tokenManager.clearTokens();
+      clearAuth();
+      toast.info(
+        reason === "inactivity"
+          ? "Session expired due to inactivity"
+          : "Your session has expired. Please log in again."
+      );
+      router.replace("/login");
+    },
+    [clearTimers, clearAuth, router]
+  );
 
   const resetTimer = useCallback(() => {
     if (!isAuthenticated || isRememberMe) return;
 
     clearTimers();
     setShowWarning(false);
+    // Record activity
+    lastActivityRef.current = Date.now();
 
     // Set warning timer (fires 1 min before timeout)
     warningRef.current = setTimeout(() => {
@@ -72,7 +92,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       countdownRef.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
-            performLogout();
+            performLogout("inactivity");
             return 0;
           }
           return prev - 1;
@@ -82,24 +102,54 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     // Set absolute timeout as safety net
     timeoutRef.current = setTimeout(() => {
-      performLogout();
+      performLogout("inactivity");
     }, timeoutMs);
   }, [isAuthenticated, isRememberMe, timeoutMs, performLogout, clearTimers]);
 
   const handleStaySignedIn = () => {
     setShowWarning(false);
     resetTimer();
+    // Immediately refresh the token when user clicks "Stay Signed In"
+    // so the backend token is extended too
+    refreshTokenSilently();
   };
 
   const handleLogoutNow = () => {
-    performLogout();
+    performLogout("inactivity");
   };
+
+  // Silently refresh the access token. Called periodically while the user
+  // is active so the backend token never expires during an active session.
+  const refreshTokenSilently = useCallback(async () => {
+    try {
+      const refreshToken = tokenManager.getRefreshToken();
+      if (!refreshToken) return;
+      const result = await authService.refresh();
+      const data = result as unknown as {
+        token?: string;
+        data?: { token?: string; refreshToken?: string };
+      };
+      const newToken = data.token ?? data.data?.token;
+      if (newToken) {
+        tokenManager.setAccessToken(newToken);
+      }
+      const newRefresh = data.data?.refreshToken;
+      if (newRefresh) {
+        tokenManager.setRefreshToken(newRefresh);
+      }
+    } catch {
+      // Refresh failed silently — the 401 interceptor will handle the
+      // actual logout if the token is truly expired. Don't disrupt the
+      // user here.
+    }
+  }, []);
 
   // Listen for user activity
   useEffect(() => {
     if (!isAuthenticated || isRememberMe) return;
 
     const handleActivity = () => {
+      lastActivityRef.current = Date.now();
       if (!showWarning) {
         resetTimer();
       }
@@ -109,18 +159,52 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       document.addEventListener(event, handleActivity, { passive: true });
     });
 
-    // Start initial timer on next tick to avoid setState-in-effect lint warning
+    // Start initial timer on next tick
     const id = setTimeout(() => resetTimer(), 0);
-    const cleanup = () => clearTimeout(id);
 
     return () => {
-      cleanup();
+      clearTimeout(id);
       ACTIVITY_EVENTS.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
       clearTimers();
     };
   }, [isAuthenticated, isRememberMe, showWarning, resetTimer, clearTimers]);
+
+  // Proactive token refresh while active — prevents 401 from firing
+  // during normal use. Refresh runs every 5 minutes, but only if the
+  // user was active within the last refresh interval (don't refresh
+  // tokens for idle users — let the inactivity timer handle those).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    refreshIntervalRef.current = setInterval(() => {
+      const msSinceActivity = Date.now() - lastActivityRef.current;
+      // Only refresh if user was active in the last interval
+      if (msSinceActivity < TOKEN_REFRESH_INTERVAL_MS) {
+        refreshTokenSilently();
+      }
+    }, TOKEN_REFRESH_INTERVAL_MS);
+
+    return () => {
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    };
+  }, [isAuthenticated, refreshTokenSilently]);
+
+  // Listen for forced logout from the 401 interceptor. When the axios
+  // client's token refresh fails, it dispatches "auth:session-expired"
+  // instead of hard-redirecting. We handle it here so the user sees a
+  // proper toast and the auth state is cleaned up gracefully.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      performLogout("token_expired");
+    };
+
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => {
+      window.removeEventListener("auth:session-expired", handleSessionExpired);
+    };
+  }, [performLogout]);
 
   if (!isAuthenticated) return <>{children}</>;
 
