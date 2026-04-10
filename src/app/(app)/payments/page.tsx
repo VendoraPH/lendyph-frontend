@@ -176,7 +176,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-  }).format(amount);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-PH", {

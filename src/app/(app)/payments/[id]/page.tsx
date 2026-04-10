@@ -44,9 +44,11 @@ interface ReceiptData {
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
 }
 
 function formatDate(dateStr: string): string {

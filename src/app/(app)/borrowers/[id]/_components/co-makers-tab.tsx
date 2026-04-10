@@ -18,7 +18,7 @@ import { VALID_ID_OPTIONS } from "@/constants";
 import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
 }
 
 interface CoMakersTabProps {
