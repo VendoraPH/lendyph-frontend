@@ -1312,7 +1312,7 @@ export default function NewLoanApplicationPage() {
                       <TableCell className="text-right">
                         {formatCurrency(row.interest)}
                       </TableCell>
-                      <TableCell className="text-right text-brand-orange">
+                      <TableCell className="text-right">
                         {formatCurrency(row.shareCapitalBuildUp)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -1332,7 +1332,7 @@ export default function NewLoanApplicationPage() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.interest)}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-brand-orange">
+                    <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
                     </TableCell>
                     <TableCell className="text-right font-bold">
