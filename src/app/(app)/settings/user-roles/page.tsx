@@ -30,7 +30,6 @@ import {
   Search,
   Plus,
   Pencil,
-  Trash2,
   LayoutDashboard,
   Users,
   FileText,
@@ -79,7 +78,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View and search member profiles",
       "Create new members",
       "Update member details and status",
-      "Delete / archive member records",
+      "Deactivate / archive member records",
     ],
   },
   loans: {
@@ -91,7 +90,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Create new loan applications",
       "Update loan details and amortization",
       "Approve, reject, or release loans",
-      "Delete draft loans",
+      "Void draft loans",
     ],
   },
   payments: {
@@ -133,7 +132,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View users across branches",
       "Create new users",
       "Update user roles, branches, and credentials",
-      "Delete / deactivate users",
+      "Deactivate users",
     ],
   },
   settings: {
@@ -173,7 +172,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   view: { label: "View", colorClass: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
   create: { label: "Create", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   update: { label: "Update", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
-  delete: { label: "Delete", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  delete: { label: "Deactivate", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   approve: { label: "Approve", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
   reject: { label: "Reject", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
@@ -192,6 +191,7 @@ interface RoleItem {
   description: string;
   permissions: Permission[];
   isSystem: boolean;
+  isActive: boolean;
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -224,6 +224,7 @@ function initialRoles(): RoleItem[] {
       description: ROLES[k].description,
       permissions: stripCollections([...ROLES[k].permissions]),
       isSystem: true,
+      isActive: true,
     }));
 }
 
@@ -325,6 +326,7 @@ function RoleFormDialog({
       description: description.trim(),
       permissions: Array.from(permissions),
       isSystem: role?.isSystem ?? false,
+      isActive: role?.isActive ?? true,
     });
     onOpenChange(false);
     toast.success(isEdit ? "Role updated" : "Role created");
@@ -494,26 +496,40 @@ function RoleFormDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Delete Dialog
+// Deactivate / Activate Dialog
 // ---------------------------------------------------------------------------
 
-interface DeleteDialogProps {
+interface ToggleStatusDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   role: RoleItem | null;
   onConfirm: () => void;
 }
 
-function DeleteDialog({ open, onOpenChange, role, onConfirm }: DeleteDialogProps) {
+function ToggleStatusDialog({ open, onOpenChange, role, onConfirm }: ToggleStatusDialogProps) {
+  const isDeactivating = role?.isActive ?? true;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete Role</DialogTitle>
+          <DialogTitle>
+            {isDeactivating ? "Deactivate Role" : "Activate Role"}
+          </DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete{" "}
-            <span className="font-semibold text-foreground">{role?.label}</span>? This
-            cannot be undone.
+            {isDeactivating ? (
+              <>
+                Are you sure you want to deactivate{" "}
+                <span className="font-semibold text-foreground">{role?.label}</span>?
+                Users with this role will lose access to its permissions.
+                You can reactivate it later.
+              </>
+            ) : (
+              <>
+                Reactivate{" "}
+                <span className="font-semibold text-foreground">{role?.label}</span>?
+                Users with this role will regain access to its permissions.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-3 pt-2">
@@ -521,13 +537,14 @@ function DeleteDialog({ open, onOpenChange, role, onConfirm }: DeleteDialogProps
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant={isDeactivating ? "destructive" : "default"}
+            className={!isDeactivating ? "bg-green-600 text-white hover:bg-green-700" : undefined}
             onClick={() => {
               onConfirm();
               onOpenChange(false);
             }}
           >
-            Delete Role
+            {isDeactivating ? "Deactivate" : "Activate"}
           </Button>
         </div>
       </DialogContent>
@@ -544,8 +561,8 @@ export default function UserRolesPage() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [formRole, setFormRole] = useState<RoleItem | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteRole, setDeleteRole] = useState<RoleItem | null>(null);
+  const [toggleStatusOpen, setToggleStatusOpen] = useState(false);
+  const [toggleStatusRole, setToggleStatusRole] = useState<RoleItem | null>(null);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return roles;
@@ -571,9 +588,9 @@ export default function UserRolesPage() {
     setFormOpen(true);
   }
 
-  function openDelete(role: RoleItem) {
-    setDeleteRole(role);
-    setDeleteOpen(true);
+  function openToggleStatus(role: RoleItem) {
+    setToggleStatusRole(role);
+    setToggleStatusOpen(true);
   }
 
   function handleSave(updated: RoleItem) {
@@ -581,17 +598,26 @@ export default function UserRolesPage() {
       const idx = prev.findIndex((r) => r.key === updated.key);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = updated;
+        next[idx] = { ...updated, isActive: prev[idx].isActive };
         return next;
       }
-      return [...prev, updated];
+      return [...prev, { ...updated, isActive: true }];
     });
   }
 
-  function handleDelete() {
-    if (!deleteRole) return;
-    setRoles((prev) => prev.filter((r) => r.key !== deleteRole.key));
-    toast.success(`Role "${deleteRole.label}" deleted`);
+  function handleToggleStatus() {
+    if (!toggleStatusRole) return;
+    const newActive = !toggleStatusRole.isActive;
+    setRoles((prev) =>
+      prev.map((r) =>
+        r.key === toggleStatusRole.key ? { ...r, isActive: newActive } : r
+      )
+    );
+    toast.success(
+      newActive
+        ? `Role "${toggleStatusRole.label}" activated`
+        : `Role "${toggleStatusRole.label}" deactivated`
+    );
   }
 
   return (
@@ -673,6 +699,7 @@ export default function UserRolesPage() {
                     <TableHead>Modules</TableHead>
                     <TableHead>Permissions</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -683,7 +710,10 @@ export default function UserRolesPage() {
                     return (
                       <TableRow
                         key={r.key}
-                        className="cursor-pointer hover:bg-muted/50"
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/50",
+                          !r.isActive && "opacity-50"
+                        )}
                         onClick={() => openEdit(r)}
                       >
                         <TableCell>
@@ -733,6 +763,19 @@ export default function UserRolesPage() {
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              r.isActive
+                                ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                : "bg-red-500/10 text-red-700 border-red-500/30"
+                            )}
+                          >
+                            {r.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Button
@@ -751,19 +794,17 @@ export default function UserRolesPage() {
                               variant="outline"
                               size="sm"
                               className={cn(
-                                "h-7 gap-1 text-xs",
-                                !r.isSystem &&
-                                  "text-destructive border-destructive/30 hover:bg-destructive/5"
+                                "h-7 text-xs",
+                                r.isActive
+                                  ? "text-destructive border-destructive/30 hover:bg-destructive/5"
+                                  : "text-green-600 border-green-500/30 hover:bg-green-500/5"
                               )}
-                              disabled={r.isSystem}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                openDelete(r);
+                                openToggleStatus(r);
                               }}
-                              title={r.isSystem ? "System roles cannot be deleted" : "Delete role"}
                             >
-                              <Trash2 className="h-3 w-3" />
-                              Delete
+                              {r.isActive ? "Deactivate" : "Activate"}
                             </Button>
                           </div>
                         </TableCell>
@@ -772,7 +813,7 @@ export default function UserRolesPage() {
                   })}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         No roles match your search.
                       </TableCell>
                     </TableRow>
@@ -819,11 +860,11 @@ export default function UserRolesPage() {
           existingKeys={roles.map((r) => r.key)}
           onSave={handleSave}
         />
-        <DeleteDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          role={deleteRole}
-          onConfirm={handleDelete}
+        <ToggleStatusDialog
+          open={toggleStatusOpen}
+          onOpenChange={setToggleStatusOpen}
+          role={toggleStatusRole}
+          onConfirm={handleToggleStatus}
         />
       </div>
     </RouteGuard>
