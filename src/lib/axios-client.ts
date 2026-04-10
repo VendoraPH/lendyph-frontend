@@ -113,8 +113,12 @@ axiosClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         tokenManager.clearTokens();
+        // Instead of a hard redirect (window.location.href = "/login"),
+        // dispatch a custom event so the SessionProvider can handle the
+        // logout gracefully — showing a toast and cleaning up auth state
+        // without jarring the user mid-action.
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          window.dispatchEvent(new CustomEvent("auth:session-expired"));
         }
         return Promise.reject(refreshError);
       } finally {
