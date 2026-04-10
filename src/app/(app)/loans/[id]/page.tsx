@@ -82,6 +82,8 @@ import {
   DollarSign,
   Settings2,
   ChevronsUpDown,
+  ChevronDown,
+  ChevronUp,
   Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -312,6 +314,25 @@ function approvalStorageKey(loanId: number | string): string {
   return `loan-approval-${loanId}`;
 }
 
+// Back-compat migration: older stored approval states were saved before
+// the `kind` field existed on ApprovalStep. Without a kind, the action
+// panel's conditional buttons (`kind === "approve"`) silently render
+// nothing. Infer the kind from the step name so old loans still work.
+function migrateStep(step: ApprovalStep): ApprovalStep {
+  if (step.kind) return step;
+  const name = (step.name ?? "").toLowerCase();
+  const inferred: ChainStepKind = name.includes("loan processor") || name.includes("processor")
+    ? "submit"
+    : name.includes("cashier") || name.includes("release")
+      ? "release"
+      : "approve";
+  return { ...step, kind: inferred };
+}
+
+function migrateSteps(steps: ApprovalStep[]): ApprovalStep[] {
+  return steps.map(migrateStep);
+}
+
 function loadApprovalState(loanId: number | string): ApprovalState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -320,10 +341,16 @@ function loadApprovalState(loanId: number | string): ApprovalState | null {
     const parsed = JSON.parse(raw) as ApprovalState | ApprovalStep[];
     // Back-compat: earlier version stored a bare array
     if (Array.isArray(parsed)) {
-      return { current_steps: parsed, rounds: [] };
+      return { current_steps: migrateSteps(parsed), rounds: [] };
     }
     if (!parsed.current_steps || !Array.isArray(parsed.current_steps)) return null;
-    return parsed;
+    return {
+      current_steps: migrateSteps(parsed.current_steps),
+      rounds: (parsed.rounds ?? []).map((r) => ({
+        ...r,
+        steps: migrateSteps(r.steps),
+      })),
+    };
   } catch {
     return null;
   }
@@ -826,6 +853,10 @@ export default function LoanDetailPage({
   const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+  // The high-level "Approval Workflow" (4-status stepper) is hidden by
+  // default — it's a summary that most users don't need while viewing a
+  // loan. Toggle in the header expands it.
+  const [approvalWorkflowExpanded, setApprovalWorkflowExpanded] = useState(false);
   // Chain configuration fetched from the approval-workflow service
   const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
 
@@ -1582,16 +1613,35 @@ export default function LoanDetailPage({
         </div>
       </div>
 
-      {/* Status Stepper */}
+      {/* Approval Workflow (high-level 4-status summary).
+          Hidden behind a toggle so the page stays compact; expand to view. */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            Approval Workflow
-          </CardTitle>
+          <button
+            type="button"
+            onClick={() => setApprovalWorkflowExpanded((prev) => !prev)}
+            className="w-full text-left focus:outline-none"
+            aria-expanded={approvalWorkflowExpanded}
+          >
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              Approval Workflow
+              <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+                {approvalWorkflowExpanded ? "Hide" : "Show"}
+                {approvalWorkflowExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
+            </CardTitle>
+          </button>
         </CardHeader>
-        <CardContent>
-          <StatusStepper loan={loan} />
-        </CardContent>
+        {approvalWorkflowExpanded && (
+          <CardContent>
+            <StatusStepper loan={loan} />
+          </CardContent>
+        )}
       </Card>
 
       {/* Void Loan action — only available on drafts. The "Submit for Review"
@@ -1629,14 +1679,16 @@ export default function LoanDetailPage({
               </Badge>
             </CardTitle>
             {approvalRounds.length > 0 && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-1">
                 Revision {approvalRounds.length + 1} — previously sent back{" "}
                 {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
               </p>
             )}
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Horizontal progress tracker — all 10 steps at a glance */}
+            {/* Horizontal progress tracker — all 10 steps at a glance.
+                Circles are clickable: click any step to view/act on it below.
+                The currently-selected step is marked with an orange ring. */}
             <div className="rounded-lg border bg-muted/20 p-3">
               <div className="flex items-center gap-1 overflow-x-auto pb-1">
                 {approvalSteps.map((step, i) => {
@@ -1653,8 +1705,7 @@ export default function LoanDetailPage({
                         <div
                           className={cn(
                             "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
-                            isCurrent &&
-                              "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
+                            isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
                             isDone && "bg-green-600",
                             isSentBack && "bg-red-500",
                             !isCurrent && !isDone && !isSentBack && "bg-muted text-muted-foreground"
@@ -1741,256 +1792,189 @@ export default function LoanDetailPage({
                 ))}
               </div>
             )}
-            {/* Vertical detailed timeline with phase headers and connectors */}
-            <div className="relative">
-              {approvalSteps.map((step, i) => {
-                const isCurrent = step.status === "pending";
-                const isDone = step.status === "approved";
-                const isSentBack = step.status === "sent_back";
-                const isWaiting = step.status === "waiting";
-                const isLast = i === approvalSteps.length - 1;
-
-                // Phase headers — shown before the first step of each phase
-                const phaseHeader =
-                  step.kind === "submit"
-                    ? "Draft Preparation"
-                    : step.kind === "approve" && i === 1
-                      ? "Approval Chain"
-                      : step.kind === "release"
+            {/* Current step action panel — matches the original screenshot
+                design. Phase header (DRAFT / APPROVAL CHAIN / RELEASE) above,
+                then the orange-bordered step card with inline "You are acting
+                as X" section, remarks textarea, and action buttons. */}
+            {currentStep && canActOnCurrentStep && (
+              <div>
+                {/* Phase header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {currentStep.kind === "submit"
+                      ? "Draft Preparation"
+                      : currentStep.kind === "release"
                         ? "Release"
-                        : null;
+                        : "Approval Chain"}
+                  </p>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
 
-                return (
-                  <div key={step.index}>
-                    {phaseHeader && (
-                      <div className={cn("flex items-center gap-2", i === 0 ? "mb-2" : "mt-4 mb-2")}>
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                          {phaseHeader}
-                        </p>
-                        <div className="flex-1 h-px bg-border" />
-                      </div>
-                    )}
-                  <div
-                    className={cn(
-                      "rounded-lg border transition-colors relative",
-                      isCurrent && "border-brand-orange/50 bg-brand-orange/5 ring-2 ring-brand-orange/20",
-                      isDone && "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10",
-                      isSentBack && "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10",
-                      isWaiting && "border-border bg-muted/30 opacity-70",
-                      !isLast && "mb-2"
-                    )}
-                  >
-                    {/* Vertical connector line to next step */}
-                    {!isLast && (
-                      <div
-                        className={cn(
-                          "absolute left-[27px] -bottom-2 w-0.5 h-2 transition-colors",
-                          isDone ? "bg-green-600" : "bg-border"
-                        )}
-                      />
-                    )}
-                    <div className="flex items-start gap-3 p-3">
-                      <div
-                        className={cn(
-                          "h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-semibold",
-                          isCurrent && "bg-brand-orange",
-                          isDone && "bg-green-600",
-                          isSentBack && "bg-red-600",
-                          isWaiting && "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {isDone ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : isSentBack ? (
-                          <XCircle className="h-4 w-4" />
-                        ) : isCurrent ? (
-                          <Clock className="h-4 w-4" />
-                        ) : (
-                          <span>{i + 1}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold">{step.name}</p>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] px-1.5 py-0 h-4",
-                              isDone && "bg-green-500/10 text-green-700 border-green-500/30",
-                              isSentBack && "bg-red-500/10 text-red-700 border-red-500/30",
-                              isCurrent && "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
-                              isWaiting && "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {isDone
-                              ? "Approved"
-                              : isSentBack
-                                ? "Sent back"
-                                : isCurrent
-                                  ? "Pending your action"
-                                  : "Waiting"}
-                          </Badge>
-                        </div>
-                        {step.acted_at && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {step.acted_by ?? "—"} · {formatDateTime(step.acted_at)}
-                          </p>
-                        )}
-                        {step.remarks && (
-                          <p className="text-xs italic text-muted-foreground mt-1 pl-2 border-l-2 border-muted-foreground/30">
-                            &ldquo;{step.remarks}&rdquo;
-                          </p>
-                        )}
+                {/* Step card with orange border */}
+                <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 overflow-hidden">
+                  {/* Header row */}
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="h-9 w-9 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0">
+                      {currentStep.kind === "submit" ? (
+                        <Send className="h-4 w-4" />
+                      ) : currentStep.kind === "release" ? (
+                        <Unlock className="h-4 w-4" />
+                      ) : (
+                        <Clock className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold">{currentStep.name}</p>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-4 bg-brand-orange/10 text-brand-orange border-brand-orange/30"
+                        >
+                          Pending your action
+                        </Badge>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Inline action panel — only for the currently-pending step */}
-                    {isCurrent && canActOnCurrentStep && (
-                      <div className="border-t border-brand-orange/30 bg-background/60 p-3 space-y-3">
-                        <div>
-                          <p className="text-xs font-medium">
-                            You are acting as{" "}
-                            <span className="text-brand-orange">{step.name}</span>
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Signed in as {currentUserDisplayName}
-                            {step.kind === "submit" &&
-                              " — submit the draft to forward it to the Manager for approval."}
-                            {step.kind === "approve" &&
-                              (step.index < approvalSteps.length - 2
-                                ? ` — on approve, the loan will be forwarded to ${
-                                    approvalSteps[step.index + 1].name
-                                  }. Send back for revision to return it to the Loan Processor.`
-                                : " — this is the final approver. Approve to forward to the Cashier for release.")}
-                            {step.kind === "release" &&
-                              " — open the release dialog to complete the loan release."}
-                          </p>
-                        </div>
+                  {/* Divider */}
+                  <div className="h-px bg-brand-orange/20" />
 
-                        {/* Remarks textarea — shown for submit/approve steps.
-                            Release step uses the full release dialog instead. */}
-                        {step.kind !== "release" && (
-                          <div className="space-y-1.5">
-                            <Label
-                              htmlFor={`step-remarks-${step.index}`}
-                              className="text-xs"
-                            >
-                              {step.kind === "submit"
-                                ? "Processing notes (optional)"
-                                : "Remarks"}{" "}
-                              <span className="text-muted-foreground font-normal">
-                                {step.kind === "approve"
-                                  ? "(required for send-back)"
-                                  : ""}
-                              </span>
-                            </Label>
-                            <Textarea
-                              id={`step-remarks-${step.index}`}
-                              placeholder={
-                                step.kind === "submit"
-                                  ? "Any notes for the approvers..."
-                                  : `${step.name}: enter your remarks...`
-                              }
-                              value={stepRemarks}
-                              onChange={(e) => setStepRemarks(e.target.value)}
-                              className="min-h-[80px] text-sm bg-background"
-                            />
-                          </div>
-                        )}
+                  {/* Action body */}
+                  <div className="p-4 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold">
+                        You are acting as{" "}
+                        <span className="text-brand-orange">{currentStep.name}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Signed in as {currentUserDisplayName}
+                        {currentStep.kind === "submit" &&
+                          " — submit the draft to forward it to the Manager for approval."}
+                        {currentStep.kind === "approve" &&
+                          (currentStep.index < approvalSteps.length - 2
+                            ? ` — on approve, the loan will be forwarded to ${
+                                approvalSteps[currentStep.index + 1].name
+                              }. Send back for revision to return it to the Loan Processor.`
+                            : " — this is the final approver. Approve to forward to the Cashier for release.")}
+                        {currentStep.kind === "release" &&
+                          " — open the release dialog to complete the loan release."}
+                      </p>
+                    </div>
 
-                        {/* Action buttons vary by step kind */}
-                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                          {step.kind === "submit" && (
-                            <Button
-                              size="sm"
-                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                              onClick={handleStepSubmit}
-                              disabled={stepActionLoading}
-                            >
-                              <Send className="mr-2 h-4 w-4" />
-                              Submit for Review
-                            </Button>
-                          )}
-                          {step.kind === "approve" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
-                                onClick={handleStepSendBack}
-                                disabled={stepActionLoading || !stepRemarks.trim()}
-                              >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Send Back for Revision
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
-                                onClick={handleStepApprove}
-                                disabled={stepActionLoading}
-                              >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Approve &amp; Forward
-                              </Button>
-                            </>
-                          )}
-                          {step.kind === "release" && (
-                            <Button
-                              size="sm"
-                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                              onClick={handleStepRelease}
-                              disabled={stepActionLoading}
-                            >
-                              <Unlock className="mr-2 h-4 w-4" />
-                              Release Loan
-                            </Button>
-                          )}
-                        </div>
+                    {currentStep.kind !== "release" && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="current-step-remarks" className="text-xs">
+                          {currentStep.kind === "submit"
+                            ? "Processing notes (optional)"
+                            : "Remarks"}{" "}
+                          <span className="text-muted-foreground font-normal">
+                            {currentStep.kind === "approve"
+                              ? "(required for send-back)"
+                              : ""}
+                          </span>
+                        </Label>
+                        <Textarea
+                          id="current-step-remarks"
+                          placeholder={
+                            currentStep.kind === "submit"
+                              ? "Any notes for the approvers..."
+                              : `${currentStep.name}: enter your remarks...`
+                          }
+                          value={stepRemarks}
+                          onChange={(e) => setStepRemarks(e.target.value)}
+                          className="min-h-[80px] text-sm bg-background"
+                        />
                       </div>
                     )}
 
-                    {/* "Not your turn" message — current step, but current user lacks the required role */}
-                    {isCurrent && !canActOnCurrentStep && (
-                      <div className="border-t border-brand-orange/30 bg-muted/40 p-3">
-                        <div className="flex items-start gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                          <div className="text-xs">
-                            <p className="font-medium">
-                              Waiting for {step.name}{" "}
-                              {step.kind === "submit"
-                                ? "to submit the draft"
-                                : step.kind === "release"
-                                  ? "to release the loan"
-                                  : "to approve"}
-                            </p>
-                            <p className="text-muted-foreground mt-0.5">
-                              Only users with the{" "}
-                              <span className="font-mono bg-muted px-1 py-0.5 rounded">
-                                {step.role}
-                              </span>{" "}
-                              role can act on this step. You are signed in as{" "}
-                              {currentUserDisplayName}
-                              {currentUser?.roles && currentUser.roles.length > 0
-                                ? ` (${currentUser.roles.join(", ")})`
-                                : " (no role assigned)"}
-                              .
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                      {currentStep.kind === "submit" && (
+                        <Button
+                          size="sm"
+                          className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                          onClick={handleStepSubmit}
+                          disabled={stepActionLoading}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Submit for Review
+                        </Button>
+                      )}
+                      {currentStep.kind === "approve" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
+                            onClick={handleStepSendBack}
+                            disabled={stepActionLoading || !stepRemarks.trim()}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Send Back for Revision
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
+                            onClick={handleStepApprove}
+                            disabled={stepActionLoading}
+                          >
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Approve &amp; Forward
+                          </Button>
+                        </>
+                      )}
+                      {currentStep.kind === "release" && (
+                        <Button
+                          size="sm"
+                          className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                          onClick={handleStepRelease}
+                          disabled={stepActionLoading}
+                        >
+                          <Unlock className="mr-2 h-4 w-4" />
+                          Release Loan
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* "Not your turn" message — current step exists but current user lacks the required role */}
+            {currentStep && !canActOnCurrentStep && (
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <div className="flex items-start gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">
+                      Waiting for {currentStep.name}{" "}
+                      {currentStep.kind === "submit"
+                        ? "to submit the draft"
+                        : currentStep.kind === "release"
+                          ? "to release the loan"
+                          : "to approve"}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5">
+                      Only users with the{" "}
+                      <span className="font-mono bg-muted px-1 py-0.5 rounded">
+                        {currentStep.role}
+                      </span>{" "}
+                      role can act on this step. You are signed in as{" "}
+                      {currentUserDisplayName}
+                      {currentUser?.roles && currentUser.roles.length > 0
+                        ? ` (${currentUser.roles.join(", ")})`
+                        : " (no role assigned)"}
+                      .
+                    </p>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              </div>
+            )}
 
             {allStepsApproved && (
               <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-green-700 dark:text-green-400">
-                  All approvers have signed off. The loan will transition to
-                  Approved.
+                  All approvers have signed off. The loan is ready for release.
                 </p>
               </div>
             )}
