@@ -72,7 +72,6 @@ import {
   Send,
   Unlock,
   Lock,
-  Circle,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -241,15 +240,6 @@ const statusColors: Record<string, string> = {
   restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
   closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
 };
-
-// ── Workflow Steps ──
-
-const WORKFLOW_STEPS: { status: LoanStatus; label: string }[] = [
-  { status: "draft", label: "Draft" },
-  { status: "for_review", label: "For Review" },
-  { status: "approved", label: "Approved" },
-  { status: "released", label: "Released" },
-];
 
 // ── Multi-Step Approval Chain ──
 // Implements the LOAN RELEASE FLOWCHART. The chain is loaded from
@@ -423,157 +413,176 @@ function deriveStepsFromLoanStatus(
   return steps;
 }
 
-function getStepIndex(status: LoanStatus): number {
-  const idx = WORKFLOW_STEPS.findIndex((s) => s.status === status);
-  // For ongoing/completed/closed/defaulted/restructured, treat as released (last step)
-  if (idx === -1) return WORKFLOW_STEPS.length - 1;
-  return idx;
-}
+// ── Borrower's Active Loans Component ──
 
-// ── Status Stepper Component ──
+const VISIBLE_LOAN_COUNT = 3;
 
-function StatusStepper({ loan }: { loan: Loan }) {
-  const isRejected = loan.status === "rejected";
-  const currentIndex = isRejected ? 1 : getStepIndex(loan.status);
+function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
+  const hasMore = loans.length > VISIBLE_LOAN_COUNT;
+
+  const completedSteps = approvalSteps.filter(
+    (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
+  );
+  const showRemarks = approvalSteps.length > 0 && loanStatus !== "rejected";
 
   return (
-    <div className="w-full">
-      {/* Horizontal stepper for md+ */}
-      <div className="hidden md:flex items-center justify-between">
-        {WORKFLOW_STEPS.map((step, idx) => {
-          const isCompleted = !isRejected && idx < currentIndex;
-          const isCurrent = !isRejected && idx === currentIndex;
-          const isSentBack = isRejected && idx === 1; // rejected at "For Review"
-          const isPast = isRejected && idx === 0;
-
-          return (
-            <div key={step.status} className="flex items-center flex-1 last:flex-none">
-              <div className="flex flex-col items-center gap-1.5">
-                {/* Circle */}
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          Borrower&rsquo;s Active Loans
+          <Badge variant="outline" className="ml-auto text-xs font-normal">
+            {loading ? "Loading..." : `${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
+        ) : loans.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            No other active loans for this borrower.
+          </p>
+        ) : (
+          <>
+            {visibleLoans.map((bl) => {
+              const releaseDate = bl.released_at ?? bl.start_date ?? bl.release_date;
+              return (
                 <div
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all",
-                    isCompleted || isPast
-                      ? "border-green-500 bg-green-500 text-white"
-                      : isCurrent
-                        ? "border-brand-orange bg-brand-orange text-white"
-                        : isSentBack
-                          ? "border-red-500 bg-red-500 text-white"
-                          : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
-                  )}
+                  key={bl.id}
+                  className="rounded-lg border p-3 space-y-2"
                 >
-                  {isCompleted || isPast ? (
-                    <Check className="h-4 w-4" />
-                  ) : isSentBack ? (
-                    <X className="h-4 w-4" />
-                  ) : isCurrent ? (
-                    <Circle className="h-3 w-3 fill-current" />
-                  ) : (
-                    <Circle className="h-3 w-3" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">
+                      {bl.loan_product?.name ?? bl.loan_product_name ?? "—"}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4",
+                        bl.status === "released" || bl.status === "ongoing"
+                          ? "bg-green-500/10 text-green-700 border-green-500/30"
+                          : bl.status === "approved"
+                            ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                            : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                      )}
+                    >
+                      {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Loan Amount</p>
+                      <p className="text-xs font-medium tabular-nums">
+                        {formatCurrency(bl.principal_amount)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Outstanding Balance</p>
+                      <p className="text-xs font-medium tabular-nums">
+                        {bl.outstanding_balance != null
+                          ? formatCurrency(bl.outstanding_balance)
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  {releaseDate && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Released: {formatDate(releaseDate)}
+                    </p>
                   )}
                 </div>
-                {/* Label */}
-                <span
-                  className={cn(
-                    "text-xs font-medium whitespace-nowrap",
-                    isCompleted || isPast
-                      ? "text-green-600"
-                      : isCurrent
-                        ? "text-brand-orange"
-                        : isSentBack
-                          ? "text-red-600"
-                          : "text-gray-400"
-                  )}
-                >
-                  {isSentBack ? "Rejected" : step.label}
-                </span>
-              </div>
-              {/* Connecting line */}
-              {idx < WORKFLOW_STEPS.length - 1 && (
-                <div
-                  className={cn(
-                    "h-0.5 flex-1 mx-2 mt-[-1.25rem]",
-                    !isRejected && idx < currentIndex
-                      ? "bg-green-500"
-                      : isRejected && idx === 0
-                        ? "bg-red-500"
-                        : "bg-gray-200"
-                  )}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Vertical stepper for mobile */}
-      <div className="flex flex-col gap-0 md:hidden">
-        {WORKFLOW_STEPS.map((step, idx) => {
-          const isCompleted = !isRejected && idx < currentIndex;
-          const isCurrent = !isRejected && idx === currentIndex;
-          const isSentBack = isRejected && idx === 1;
-          const isPast = isRejected && idx === 0;
-
-          return (
-            <div key={step.status} className="flex items-start gap-3">
-              <div className="flex flex-col items-center">
-                {/* Circle */}
-                <div
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all",
-                    isCompleted || isPast
-                      ? "border-green-500 bg-green-500 text-white"
-                      : isCurrent
-                        ? "border-brand-orange bg-brand-orange text-white"
-                        : isSentBack
-                          ? "border-red-500 bg-red-500 text-white"
-                          : "border-gray-300 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500"
-                  )}
-                >
-                  {isCompleted || isPast ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : isSentBack ? (
-                    <X className="h-3.5 w-3.5" />
-                  ) : isCurrent ? (
-                    <Circle className="h-2.5 w-2.5 fill-current" />
-                  ) : (
-                    <Circle className="h-2.5 w-2.5" />
-                  )}
-                </div>
-                {/* Connecting line */}
-                {idx < WORKFLOW_STEPS.length - 1 && (
-                  <div
-                    className={cn(
-                      "w-0.5 h-6",
-                      !isRejected && idx < currentIndex
-                        ? "bg-green-500"
-                        : isRejected && idx === 0
-                          ? "bg-red-500"
-                          : "bg-gray-200"
-                    )}
-                  />
-                )}
-              </div>
-              {/* Label */}
-              <span
-                className={cn(
-                  "text-sm font-medium pt-1",
-                  isCompleted || isPast
-                    ? "text-green-600"
-                    : isCurrent
-                      ? "text-brand-orange"
-                      : isSentBack
-                        ? "text-red-600"
-                        : "text-gray-400"
-                )}
+              );
+            })}
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => setExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
               >
-                {isSentBack ? "Rejected" : step.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+                {expanded ? (
+                  <>
+                    Show less <ChevronUp className="h-3.5 w-3.5" />
+                  </>
+                ) : (
+                  <>
+                    Show {loans.length - VISIBLE_LOAN_COUNT} more <ChevronDown className="h-3.5 w-3.5" />
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Previous Approval Remarks */}
+        {showRemarks && (
+          <>
+            <Separator />
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Previous Approval Remarks</p>
+            {completedSteps.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                No approval actions recorded yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {completedSteps.map((step) => (
+                  <div
+                    key={step.index}
+                    className={cn(
+                      "rounded-lg border p-3",
+                      step.status === "approved"
+                        ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
+                        : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div
+                        className={cn(
+                          "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
+                          step.status === "approved" ? "bg-green-600" : "bg-red-500"
+                        )}
+                      >
+                        {step.status === "approved" ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5" />
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold">{step.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0 h-4",
+                          step.status === "approved"
+                            ? "bg-green-500/10 text-green-700 border-green-500/30"
+                            : "bg-red-500/10 text-red-700 border-red-500/30"
+                        )}
+                      >
+                        {step.status === "approved" ? "Approved" : "Sent back"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
+                    </p>
+                    {step.remarks ? (
+                      <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
+                        &ldquo;{step.remarks}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/60 mt-1 italic">
+                        No remarks provided
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -855,10 +864,6 @@ export default function LoanDetailPage({
   const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
-  // The high-level "Approval Workflow" (4-status stepper) is hidden by
-  // default — it's a summary that most users don't need while viewing a
-  // loan. Toggle in the header expands it.
-  const [approvalWorkflowExpanded, setApprovalWorkflowExpanded] = useState(false);
 
   // Borrower's other active loans — shown during approval so officers can
   // see the borrower's existing obligations before approving.
@@ -1655,56 +1660,6 @@ export default function LoanDetailPage({
         </div>
       </div>
 
-      {/* Approval Workflow (high-level 4-status summary).
-          Hidden behind a toggle so the page stays compact; expand to view. */}
-      <Card>
-        <CardHeader>
-          <button
-            type="button"
-            onClick={() => setApprovalWorkflowExpanded((prev) => !prev)}
-            className="w-full text-left focus:outline-none"
-            aria-expanded={approvalWorkflowExpanded}
-          >
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-              Approval Workflow
-              <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
-                {approvalWorkflowExpanded ? "Hide" : "Show"}
-                {approvalWorkflowExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </span>
-            </CardTitle>
-          </button>
-        </CardHeader>
-        {approvalWorkflowExpanded && (
-          <CardContent>
-            <StatusStepper loan={loan} />
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Void Loan action — only available on drafts. The "Submit for Review"
-          action has moved to the Approval Chain card (Loan Processor step). */}
-      {loan.status === "draft" && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                variant="destructive"
-                className="w-full sm:w-auto"
-                disabled={actionLoading}
-                onClick={handleVoidLoan}
-              >
-                <Ban className="mr-2 h-4 w-4" />
-                Void Loan
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {loan.status !== "rejected" && approvalSteps.length > 0 && (
         <Card>
@@ -1931,15 +1886,27 @@ export default function LoanDetailPage({
 
                     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                       {currentStep.kind === "submit" && (
-                        <Button
-                          size="sm"
-                          className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                          onClick={handleStepSubmit}
-                          disabled={stepActionLoading}
-                        >
-                          <Send className="mr-2 h-4 w-4" />
-                          Submit for Review
-                        </Button>
+                        <>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            disabled={actionLoading}
+                            onClick={handleVoidLoan}
+                          >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Void Loan
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                            onClick={handleStepSubmit}
+                            disabled={stepActionLoading}
+                          >
+                            <Send className="mr-2 h-4 w-4" />
+                            Submit for Review
+                          </Button>
+                        </>
                       )}
                       {currentStep.kind === "approve" && (
                         <>
@@ -2053,161 +2020,6 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Approval context: borrower's active loans + previous approval remarks.
-          Shown during the approval process so officers have the full picture. */}
-      {approvalSteps.length > 0 && loan.status !== "rejected" && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Borrower's Active Loans */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Borrower&rsquo;s Active Loans
-                <Badge variant="outline" className="ml-auto text-xs font-normal">
-                  {borrowerLoansLoading ? "Loading..." : `${borrowerLoans.length} loan${borrowerLoans.length !== 1 ? "s" : ""}`}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {borrowerLoansLoading ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
-              ) : borrowerLoans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No other active loans for this borrower.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Loan #</TableHead>
-                        <TableHead className="text-xs">Product</TableHead>
-                        <TableHead className="text-right text-xs">Principal</TableHead>
-                        <TableHead className="text-right text-xs">Outstanding</TableHead>
-                        <TableHead className="text-xs">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {borrowerLoans.map((bl) => (
-                        <TableRow key={bl.id}>
-                          <TableCell className="text-xs font-mono">
-                            {bl.loan_account_number || bl.application_number || `#${bl.id}`}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {bl.loan_product?.name ?? bl.loan_product_name ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-right text-xs tabular-nums">
-                            {formatCurrency(bl.principal_amount)}
-                          </TableCell>
-                          <TableCell className="text-right text-xs tabular-nums">
-                            {bl.outstanding_balance != null
-                              ? formatCurrency(bl.outstanding_balance)
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] px-1.5 py-0 h-4",
-                                bl.status === "released" || bl.status === "ongoing"
-                                  ? "bg-green-500/10 text-green-700 border-green-500/30"
-                                  : bl.status === "approved"
-                                    ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                                    : "bg-amber-500/10 text-amber-700 border-amber-500/30"
-                              )}
-                            >
-                              {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Previous Approval Remarks */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                Previous Approval Remarks
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const completedSteps = approvalSteps.filter(
-                  (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
-                );
-                if (completedSteps.length === 0) {
-                  return (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      No approval actions recorded yet.
-                    </p>
-                  );
-                }
-                return (
-                  <div className="space-y-3">
-                    {completedSteps.map((step) => (
-                      <div
-                        key={step.index}
-                        className={cn(
-                          "rounded-lg border p-3",
-                          step.status === "approved"
-                            ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
-                            : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <div
-                            className={cn(
-                              "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
-                              step.status === "approved" ? "bg-green-600" : "bg-red-500"
-                            )}
-                          >
-                            {step.status === "approved" ? (
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            ) : (
-                              <XCircle className="h-3.5 w-3.5" />
-                            )}
-                          </div>
-                          <span className="text-xs font-semibold">{step.name}</span>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] px-1.5 py-0 h-4",
-                              step.status === "approved"
-                                ? "bg-green-500/10 text-green-700 border-green-500/30"
-                                : "bg-red-500/10 text-red-700 border-red-500/30"
-                            )}
-                          >
-                            {step.status === "approved" ? "Approved" : "Sent back"}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
-                        </p>
-                        {step.remarks ? (
-                          <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
-                            &ldquo;{step.remarks}&rdquo;
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground/60 mt-1 italic">
-                            No remarks provided
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Loan Details Cards */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Card 1: Loan Information */}
@@ -2307,19 +2119,12 @@ export default function LoanDetailPage({
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Card 2: Deductions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Deductions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <Separator />
+
+            {/* Deductions */}
             <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
                   Processing Fee
@@ -2354,6 +2159,14 @@ export default function LoanDetailPage({
             </div>
           </CardContent>
         </Card>
+
+        {/* Card 2: Borrower's Active Loans */}
+        <BorrowerActiveLoans
+          loans={borrowerLoans}
+          loading={borrowerLoansLoading}
+          approvalSteps={approvalSteps}
+          loanStatus={loan.status}
+        />
 
         {/* Card 3: Member & Co-Maker */}
         <Card>
