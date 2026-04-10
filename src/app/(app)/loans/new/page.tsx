@@ -1295,9 +1295,7 @@ export default function NewLoanApplicationPage() {
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    {scb > 0 && (
-                      <TableHead className="text-right">Share Capital Build-Up</TableHead>
-                    )}
+                                        <TableHead className="text-right">Share Capital Build-Up</TableHead>
                     <TableHead className="text-right">Total Payment</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1314,11 +1312,9 @@ export default function NewLoanApplicationPage() {
                       <TableCell className="text-right">
                         {formatCurrency(row.interest)}
                       </TableCell>
-                      {scb > 0 && (
-                        <TableCell className="text-right text-brand-orange">
-                          {formatCurrency(row.shareCapitalBuildUp)}
-                        </TableCell>
-                      )}
+                      <TableCell className="text-right text-brand-orange">
+                        {formatCurrency(row.shareCapitalBuildUp)}
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(row.totalPayment)}
                       </TableCell>
@@ -1336,11 +1332,9 @@ export default function NewLoanApplicationPage() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.interest)}
                     </TableCell>
-                    {scb > 0 && (
-                      <TableCell className="text-right font-semibold text-brand-orange">
-                        {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
-                      </TableCell>
-                    )}
+                    <TableCell className="text-right font-semibold text-brand-orange">
+                      {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
+                    </TableCell>
                     <TableCell className="text-right font-bold">
                       {formatCurrency(amortizationTotals.totalPayment)}
                     </TableCell>
