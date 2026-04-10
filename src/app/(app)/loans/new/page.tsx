@@ -365,13 +365,19 @@ export default function NewLoanApplicationPage() {
     return null;
   }, [selectedProduct, termMonths, term]);
 
-  // SCB validation — only when the product requires it
+  // SCB validation — required when the product says so; range-checked when
+  // the product defines min/max. Otherwise optional (any value >= 0 is fine).
   const scbError = useMemo(() => {
-    if (!selectedProduct?.scb_required) return null;
-    if (!scbAmount) return "Share Capital Build-Up amount is required";
-    const min = selectedProduct.min_scb ?? 0;
-    const max = selectedProduct.max_scb ?? 0;
-    if (scb < min) return `Minimum SCB is ${formatCurrency(min)}`;
+    if (!scbAmount || scb === 0) {
+      // Empty/zero SCB is only an error when the product requires it
+      return selectedProduct?.scb_required
+        ? "Share Capital Build-Up amount is required"
+        : null;
+    }
+    if (scb < 0) return "SCB cannot be negative";
+    const min = selectedProduct?.min_scb ?? 0;
+    const max = selectedProduct?.max_scb ?? 0;
+    if (min > 0 && scb < min) return `Minimum SCB is ${formatCurrency(min)}`;
     if (max > 0 && scb > max) return `Maximum SCB is ${formatCurrency(max)}`;
     return null;
   }, [selectedProduct, scbAmount, scb]);
@@ -557,7 +563,7 @@ export default function NewLoanApplicationPage() {
         principal_amount: principal,
         interest_rate: rate,
         start_date: formatDateISO(releaseDate),
-        ...(selectedProduct?.scb_required && scb > 0 && { scb_amount: scb }),
+        ...(scb > 0 && { scb_amount: scb }),
         ...(accountOfficerId && { account_officer_id: accountOfficerId }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
       };
@@ -989,17 +995,26 @@ export default function NewLoanApplicationPage() {
             </div>
           </div>
 
-          {/* Share Capital Build-Up — only when the selected product requires it */}
-          {selectedProduct?.scb_required && (
+          {/* Share Capital Build-Up — always visible when a product is
+              selected. Required when product has scb_required; optional
+              otherwise. This ensures the tester / user can always enter an
+              SCB amount regardless of backend product config. */}
+          {selectedProduct && (
             <div className="mt-4 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
               <div className="space-y-0.5">
                 <Label htmlFor="scb-amount" className="text-sm font-medium">
                   Share Capital Build-Up{" "}
-                  <span className="text-destructive">*</span>
+                  {selectedProduct.scb_required ? (
+                    <span className="text-destructive">*</span>
+                  ) : (
+                    <span className="text-muted-foreground font-normal">(optional)</span>
+                  )}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  This product requires a Share Capital Build-Up amount per
-                  period. It will be credited to the member&rsquo;s share
+                  {selectedProduct.scb_required
+                    ? "This product requires a Share Capital Build-Up amount per period."
+                    : "Enter an amount to add Share Capital Build-Up to each amortization period."}{" "}
+                  The SCB portion will be credited to the member&rsquo;s share
                   capital each time they pay.
                 </p>
               </div>
@@ -1011,11 +1026,7 @@ export default function NewLoanApplicationPage() {
                     min={selectedProduct.min_scb ?? 0}
                     max={selectedProduct.max_scb ?? undefined}
                     step="1"
-                    placeholder={
-                      selectedProduct.min_scb != null
-                        ? String(selectedProduct.min_scb)
-                        : "0"
-                    }
+                    placeholder="0"
                     value={scbAmount}
                     onChange={(e) => setScbAmount(e.target.value)}
                   />
@@ -1023,13 +1034,15 @@ export default function NewLoanApplicationPage() {
                     <p className="text-xs text-destructive">{scbError}</p>
                   )}
                 </div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  Allowed range:{" "}
-                  <span className="ml-1 font-medium text-foreground">
-                    {formatCurrency(selectedProduct.min_scb ?? 0)} –{" "}
-                    {formatCurrency(selectedProduct.max_scb ?? 0)}
-                  </span>
-                </div>
+                {selectedProduct.scb_required && (selectedProduct.min_scb ?? 0) > 0 && (
+                  <div className="flex items-center text-xs text-muted-foreground">
+                    Allowed range:{" "}
+                    <span className="ml-1 font-medium text-foreground">
+                      {formatCurrency(selectedProduct.min_scb ?? 0)} –{" "}
+                      {formatCurrency(selectedProduct.max_scb ?? 0)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1282,9 +1295,7 @@ export default function NewLoanApplicationPage() {
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    {selectedProduct?.scb_required && (
-                      <TableHead className="text-right">Share Capital Build-Up</TableHead>
-                    )}
+                                        <TableHead className="text-right">Share Capital Build-Up</TableHead>
                     <TableHead className="text-right">Total Payment</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1301,11 +1312,9 @@ export default function NewLoanApplicationPage() {
                       <TableCell className="text-right">
                         {formatCurrency(row.interest)}
                       </TableCell>
-                      {selectedProduct?.scb_required && (
-                        <TableCell className="text-right text-brand-orange">
-                          {formatCurrency(row.shareCapitalBuildUp)}
-                        </TableCell>
-                      )}
+                      <TableCell className="text-right">
+                        {formatCurrency(row.shareCapitalBuildUp)}
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(row.totalPayment)}
                       </TableCell>
@@ -1323,11 +1332,9 @@ export default function NewLoanApplicationPage() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(amortizationTotals.interest)}
                     </TableCell>
-                    {selectedProduct?.scb_required && (
-                      <TableCell className="text-right font-semibold text-brand-orange">
-                        {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
-                      </TableCell>
-                    )}
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
+                    </TableCell>
                     <TableCell className="text-right font-bold">
                       {formatCurrency(amortizationTotals.totalPayment)}
                     </TableCell>
