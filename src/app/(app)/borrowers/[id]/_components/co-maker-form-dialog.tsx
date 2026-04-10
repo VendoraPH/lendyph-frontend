@@ -275,7 +275,7 @@ export function EditCoMakerDialog({
 // ── Shared Form Fields ──
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
 }
 
 function CoMakerFormFields({

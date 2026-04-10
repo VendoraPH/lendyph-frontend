@@ -100,7 +100,9 @@ const formatCurrency = (amount: number | string | undefined | null) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-  }).format(parseFloat(String(amount ?? 0)) || 0);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-PH", {
@@ -857,6 +859,11 @@ export default function LoanDetailPage({
   // default — it's a summary that most users don't need while viewing a
   // loan. Toggle in the header expands it.
   const [approvalWorkflowExpanded, setApprovalWorkflowExpanded] = useState(false);
+
+  // Borrower's other active loans — shown during approval so officers can
+  // see the borrower's existing obligations before approving.
+  const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
+  const [borrowerLoansLoading, setBorrowerLoansLoading] = useState(false);
   // Chain configuration fetched from the approval-workflow service
   const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
 
@@ -984,6 +991,41 @@ export default function LoanDetailPage({
       setApprovalRounds([]);
     }
   }, [loan?.id, loan?.status, chainConfig]);
+
+  // Fetch borrower's other active loans when viewing a loan under approval.
+  // This lets approvers see the borrower's existing obligations.
+  useEffect(() => {
+    if (!loan) return;
+    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
+    if (!borrowerId) return;
+    let cancelled = false;
+    setBorrowerLoansLoading(true);
+    loanService
+      .list({ borrower_id: borrowerId, per_page: 50 })
+      .then((result) => {
+        if (cancelled) return;
+        const items = Array.isArray(result)
+          ? result
+          : (result as { data?: Loan[] }).data ?? [];
+        // Exclude the current loan and only show active ones
+        setBorrowerLoans(
+          items.filter(
+            (l) =>
+              l.id !== loan.id &&
+              ["released", "ongoing", "for_review", "approved"].includes(l.status)
+          )
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBorrowerLoans([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBorrowerLoansLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loan?.id, loan?.borrower?.id, loan?.borrower_id]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
@@ -2009,6 +2051,161 @@ export default function LoanDetailPage({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Approval context: borrower's active loans + previous approval remarks.
+          Shown during the approval process so officers have the full picture. */}
+      {approvalSteps.length > 0 && loan.status !== "rejected" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Borrower's Active Loans */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                Borrower&rsquo;s Active Loans
+                <Badge variant="outline" className="ml-auto text-xs font-normal">
+                  {borrowerLoansLoading ? "Loading..." : `${borrowerLoans.length} loan${borrowerLoans.length !== 1 ? "s" : ""}`}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {borrowerLoansLoading ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
+              ) : borrowerLoans.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No other active loans for this borrower.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Loan #</TableHead>
+                        <TableHead className="text-xs">Product</TableHead>
+                        <TableHead className="text-right text-xs">Principal</TableHead>
+                        <TableHead className="text-right text-xs">Outstanding</TableHead>
+                        <TableHead className="text-xs">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {borrowerLoans.map((bl) => (
+                        <TableRow key={bl.id}>
+                          <TableCell className="text-xs font-mono">
+                            {bl.loan_account_number || bl.application_number || `#${bl.id}`}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {bl.loan_product?.name ?? bl.loan_product_name ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">
+                            {formatCurrency(bl.principal_amount)}
+                          </TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">
+                            {bl.outstanding_balance != null
+                              ? formatCurrency(bl.outstanding_balance)
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 h-4",
+                                bl.status === "released" || bl.status === "ongoing"
+                                  ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                  : bl.status === "approved"
+                                    ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                                    : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                              )}
+                            >
+                              {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Previous Approval Remarks */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                Previous Approval Remarks
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const completedSteps = approvalSteps.filter(
+                  (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
+                );
+                if (completedSteps.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No approval actions recorded yet.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="space-y-3">
+                    {completedSteps.map((step) => (
+                      <div
+                        key={step.index}
+                        className={cn(
+                          "rounded-lg border p-3",
+                          step.status === "approved"
+                            ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
+                            : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div
+                            className={cn(
+                              "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
+                              step.status === "approved" ? "bg-green-600" : "bg-red-500"
+                            )}
+                          >
+                            {step.status === "approved" ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5" />
+                            )}
+                          </div>
+                          <span className="text-xs font-semibold">{step.name}</span>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 h-4",
+                              step.status === "approved"
+                                ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                : "bg-red-500/10 text-red-700 border-red-500/30"
+                            )}
+                          >
+                            {step.status === "approved" ? "Approved" : "Sent back"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
+                        </p>
+                        {step.remarks ? (
+                          <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
+                            &ldquo;{step.remarks}&rdquo;
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/60 mt-1 italic">
+                            No remarks provided
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Loan Details Cards */}
