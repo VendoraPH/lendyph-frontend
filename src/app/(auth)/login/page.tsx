@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { useAuth } from "@/hooks";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
@@ -123,7 +124,14 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lendy.PH</h1>
+            <Image
+              src="/Logo/Lendy_logo.png"
+              alt="Lendy.PH"
+              width={180}
+              height={48}
+              priority
+              className="brightness-0 invert"
+            />
             <p className="mt-1 text-sm text-white/70">
               Lending Management Platform
             </p>
@@ -168,9 +176,15 @@ export default function LoginPage() {
       <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
-          <div className="text-center lg:hidden">
-            <h1 className="text-3xl font-bold text-brand-orange">Lendy.PH</h1>
-            <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col items-center lg:hidden">
+            <Image
+              src="/Logo/Lendy_logo.png"
+              alt="Lendy.PH"
+              width={180}
+              height={48}
+              priority
+            />
+            <p className="text-sm text-muted-foreground mt-1">
               Lending Management Platform
             </p>
           </div>
