@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { shareCapitalService, borrowerService } from "@/services";
+import type { Pledge, Borrower } from "@/types";
 import {
   Search,
   Settings2,
@@ -52,21 +54,25 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(amount));
 
-// Mock data — replace with API integration
-const INITIAL_PLEDGES = [
-  { id: 1, borrower: "Rosario D. Santos", amount: 500, schedule: "15/30" as const, autoCredit: true },
-  { id: 2, borrower: "Roberto Garcia", amount: 1000, schedule: "15/30" as const, autoCredit: true },
-  { id: 3, borrower: "Eduardo Mendoza", amount: 500, schedule: "30" as const, autoCredit: true },
-  { id: 4, borrower: "Maria L. Reyes", amount: 500, schedule: "15/30" as const, autoCredit: false },
-  { id: 5, borrower: "Ana Santos", amount: 1000, schedule: "15" as const, autoCredit: true },
-  { id: 6, borrower: "Carmen Torres", amount: 500, schedule: "30" as const, autoCredit: false },
-  { id: 7, borrower: "Jose P. Dela Cruz", amount: 750, schedule: "15" as const, autoCredit: true },
-  { id: 8, borrower: "Lorna M. Bautista", amount: 300, schedule: "30" as const, autoCredit: false },
-  { id: 9, borrower: "Miguel A. Ramos", amount: 1500, schedule: "15/30" as const, autoCredit: true },
-  { id: 10, borrower: "Patricia V. Cruz", amount: 600, schedule: "15" as const, autoCredit: true },
-  { id: 11, borrower: "Fernando S. Lopez", amount: 800, schedule: "30" as const, autoCredit: false },
-  { id: 12, borrower: "Gloria T. Navarro", amount: 400, schedule: "15/30" as const, autoCredit: true },
-];
+interface LocalPledge {
+  id: number;
+  borrowerId: number;
+  borrower: string;
+  amount: number;
+  schedule: string;
+  autoCredit: boolean;
+}
+
+function toLocalPledge(p: Pledge): LocalPledge {
+  return {
+    id: p.id,
+    borrowerId: p.borrower_id,
+    borrower: p.borrower?.full_name ?? p.borrower?.name ?? p.borrower_name ?? `Borrower #${p.borrower_id}`,
+    amount: p.amount,
+    schedule: p.schedule,
+    autoCredit: p.auto_credit,
+  };
+}
 
 const SCHEDULE_OPTIONS = [
   { value: "15", label: "Every 15th" },
@@ -87,8 +93,62 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 export default function PledgeEntryPage() {
-  const [pledges, setPledges] = useState(INITIAL_PLEDGES);
+  const [pledges, setPledges] = useState<LocalPledge[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  const fetchPledges = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      // Try pledges API first
+      let items: LocalPledge[] = [];
+      try {
+        const res = await shareCapitalService.pledgeList({ per_page: 9999 });
+        const raw = res as unknown;
+        console.log("[Pledges] raw API response:", raw);
+        const pledgeArr = Array.isArray(raw)
+          ? (raw as Pledge[])
+          : Array.isArray((raw as Record<string, unknown>)?.data)
+            ? ((raw as Record<string, unknown>).data as Pledge[])
+            : [];
+        console.log("[Pledges] parsed array:", pledgeArr);
+        items = pledgeArr.map(toLocalPledge);
+        console.log("[Pledges] local items:", items);
+      } catch (err) {
+        console.error("[Pledges] API error:", err);
+      }
+
+      // If no pledges returned, show all borrowers so they can be configured
+      if (items.length === 0) {
+        const borrowerRes = await borrowerService.list({ per_page: 9999 });
+        const raw = borrowerRes as unknown;
+        const borrowers = Array.isArray(raw)
+          ? (raw as Borrower[])
+          : Array.isArray((raw as Record<string, unknown>)?.data)
+            ? ((raw as Record<string, unknown>).data as Borrower[])
+            : [];
+        items = borrowers.map((b) => ({
+          id: b.id,
+          borrowerId: b.id,
+          borrower: b.full_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim(),
+          amount: 0,
+          schedule: "",
+          autoCredit: false,
+        }));
+      }
+
+      setPledges(items);
+    } catch {
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPledges();
+  }, [fetchPledges]);
 
   // Sorting
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -187,17 +247,21 @@ export default function PledgeEntryPage() {
     setPage(1);
   }
 
-  function handleToggleAutoCredit(id: number) {
-    setPledges((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, autoCredit: !p.autoCredit } : p))
-    );
+  async function handleToggleAutoCredit(id: number) {
     const pledge = pledges.find((p) => p.id === id);
-    if (pledge) {
+    if (!pledge) return;
+    try {
+      await shareCapitalService.pledgeToggleAutoCredit(id);
+      setPledges((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, autoCredit: !p.autoCredit } : p))
+      );
       toast.success(
         pledge.autoCredit
           ? `Auto-credit deactivated for ${pledge.borrower}`
           : `Auto-credit activated for ${pledge.borrower}`
       );
+    } catch {
+      toast.error("Failed to toggle auto-credit");
     }
   }
 
@@ -206,17 +270,23 @@ export default function PledgeEntryPage() {
     setEditAmount(String(pledge.amount));
   }
 
-  function saveAmountEdit(id: number) {
+  async function saveAmountEdit(id: number) {
     const newAmount = Math.round(parseFloat(editAmount) || 0);
     if (newAmount <= 0) {
       toast.error("Pledge amount must be greater than 0");
       return;
     }
-    setPledges((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, amount: newAmount } : p))
-    );
-    setEditingAmountId(null);
-    toast.success("Pledge amount updated");
+    try {
+      const current = pledges.find((p) => p.id === id);
+      await shareCapitalService.pledgeUpdate(id, { amount: newAmount, schedule: current?.schedule });
+      setPledges((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, amount: newAmount } : p))
+      );
+      setEditingAmountId(null);
+      toast.success("Pledge amount updated");
+    } catch {
+      toast.error("Failed to update pledge amount");
+    }
   }
 
   function cancelAmountEdit() {
@@ -229,12 +299,18 @@ export default function PledgeEntryPage() {
     setEditSchedule(pledge.schedule);
   }
 
-  function saveScheduleEdit(id: number, newSchedule: string) {
-    setPledges((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, schedule: newSchedule as "15" | "30" | "15/30" } : p))
-    );
-    setEditingScheduleId(null);
-    toast.success("Schedule updated");
+  async function saveScheduleEdit(id: number, newSchedule: string) {
+    try {
+      const current = pledges.find((p) => p.id === id);
+      await shareCapitalService.pledgeUpdate(id, { amount: current?.amount, schedule: newSchedule });
+      setPledges((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, schedule: newSchedule } : p))
+      );
+      setEditingScheduleId(null);
+      toast.success("Schedule updated");
+    } catch {
+      toast.error("Failed to update schedule");
+    }
   }
 
   function startManualEntry(id: number) {
@@ -243,21 +319,25 @@ export default function PledgeEntryPage() {
     setManualTransaction("credit");
   }
 
-  function handleManualEntry(id: number) {
+  async function handleManualEntry(id: number) {
     const amount = Math.round(parseFloat(manualAmount) || 0);
     if (amount <= 0) {
       toast.error("Amount must be greater than 0");
       return;
     }
     const pledge = pledges.find((p) => p.id === id);
-    if (pledge) {
+    if (!pledge) return;
+    try {
+      await shareCapitalService.pledgeCreateEntry(id, { amount, type: manualTransaction });
       toast.success(
         `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}`
       );
+      setManualEntryId(null);
+      setManualAmount("");
+      setManualTransaction("credit");
+    } catch {
+      toast.error("Failed to create manual entry");
     }
-    setManualEntryId(null);
-    setManualAmount("");
-    setManualTransaction("credit");
   }
 
   // Selection helpers
@@ -309,7 +389,7 @@ export default function PledgeEntryPage() {
     }));
   }
 
-  function handleBulkSubmit() {
+  async function handleBulkSubmit() {
     const entries = Object.entries(bulkEntries).filter(
       ([id]) => selectedIds.has(Number(id))
     );
@@ -318,16 +398,20 @@ export default function PledgeEntryPage() {
       toast.error("Enter an amount for at least one member");
       return;
     }
-    for (const [id, entry] of valid) {
-      const pledge = pledges.find((p) => p.id === Number(id));
-      if (pledge) {
-        toast.success(
-          `${entry.transaction === "credit" ? "Credit" : "Debit"} of ${formatCurrency(Math.round(parseFloat(entry.amount)))} for ${pledge.borrower}`
-        );
-      }
+    try {
+      await shareCapitalService.pledgeBulkEntries({
+        entries: valid.map(([id, entry]) => ({
+          pledge_id: Number(id),
+          amount: Math.round(parseFloat(entry.amount)),
+          type: entry.transaction,
+        })),
+      });
+      toast.success(`${valid.length} entries created successfully`);
+      setSelectedIds(new Set());
+      setBulkEntries({});
+    } catch {
+      toast.error("Failed to create bulk entries");
     }
-    setSelectedIds(new Set());
-    setBulkEntries({});
   }
 
   return (
@@ -583,7 +667,7 @@ export default function PledgeEntryPage() {
                               onClick={() => startScheduleEdit(pledge)}
                             >
                               <Settings2 className="h-3 w-3 mr-1" />
-                              {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label}
+                              {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
                             </Badge>
                           )}
                         </TableCell>
@@ -602,7 +686,9 @@ export default function PledgeEntryPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-xs text-brand-orange hover:text-brand-orange"
+                            className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
+                            disabled={pledge.autoCredit}
+                            title={pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
                             onClick={() =>
                               manualEntryId === pledge.id
                                 ? setManualEntryId(null)
@@ -694,7 +780,8 @@ export default function PledgeEntryPage() {
                   {paginated.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        No pledges found.
+                        <p>No pledges found.</p>
+                        <p className="text-xs mt-1">Pledges are created when borrowers are added to the system.</p>
                       </TableCell>
                     </TableRow>
                   )}

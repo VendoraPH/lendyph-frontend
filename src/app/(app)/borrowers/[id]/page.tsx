@@ -16,6 +16,7 @@ import { PaymentsTab } from "./_components/payments-tab";
 import { CoMakersTab } from "./_components/co-makers-tab";
 import { DocumentsTab } from "./_components/documents-tab";
 import { LedgerTab } from "./_components/ledger-tab";
+import { ShareCapitalTab } from "./_components/share-capital-tab";
 
 export default function BorrowerDetailPage() {
   const params = useParams();
@@ -188,6 +189,7 @@ export default function BorrowerDetailPage() {
           <TabsTrigger value="co-makers">Co-Makers ({coMakers.length})</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
+          <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="pt-4">
@@ -219,6 +221,10 @@ export default function BorrowerDetailPage() {
 
         <TabsContent value="ledger" className="pt-4">
           <LedgerTab borrowerId={borrower.id} />
+        </TabsContent>
+
+        <TabsContent value="share-capital" className="pt-4">
+          <ShareCapitalTab borrowerId={borrower.id} />
         </TabsContent>
       </Tabs>
     </div>

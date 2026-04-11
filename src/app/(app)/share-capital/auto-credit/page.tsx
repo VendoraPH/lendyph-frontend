@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { shareCapitalService } from "@/services";
+import type { AutoCreditMember } from "@/types";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -32,42 +34,79 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(amount));
 
-// Mock data — replace with API integration
-const MOCK_MEMBERS = [
-  { id: 1, borrower: "Rosario D. Santos", pledgeAmount: 500, autoCredit: true },
-  { id: 2, borrower: "Roberto Garcia", pledgeAmount: 1000, autoCredit: true },
-  { id: 3, borrower: "Eduardo Mendoza", pledgeAmount: 500, autoCredit: true },
-  { id: 4, borrower: "Maria L. Reyes", pledgeAmount: 500, autoCredit: false },
-  { id: 5, borrower: "Ana Santos", pledgeAmount: 1000, autoCredit: true },
-  { id: 6, borrower: "Carmen Torres", pledgeAmount: 500, autoCredit: false },
-  { id: 7, borrower: "Jose P. Dela Cruz", pledgeAmount: 0, autoCredit: true },
-  { id: 8, borrower: "Lorna M. Bautista", pledgeAmount: 0, autoCredit: false },
-];
+interface LocalMember {
+  id: number;
+  borrower: string;
+  pledgeAmount: number;
+  autoCredit: boolean;
+}
+
+function toLocalMember(m: AutoCreditMember): LocalMember {
+  return {
+    id: m.id,
+    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Borrower #${m.borrower_id}`,
+    pledgeAmount: m.pledge_amount,
+    autoCredit: m.auto_credit,
+  };
+}
 
 export default function AutoCreditPage() {
+  const [members, setMembers] = useState<LocalMember[]>([]);
+  const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
   const [showNoPledge, setShowNoPledge] = useState(false);
 
-  const activeMembers = MOCK_MEMBERS.filter((m) => m.autoCredit && m.pledgeAmount > 0);
-  const disabledMembers = MOCK_MEMBERS.filter((m) => !m.autoCredit);
-  const noPledgeMembers = MOCK_MEMBERS.filter((m) => m.pledgeAmount === 0);
+  const fetchStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const status = await shareCapitalService.autoCreditStatus();
+      const all = [
+        ...(status.active_members ?? []),
+        ...(status.disabled_members ?? []),
+        ...(status.no_pledge_members ?? []),
+      ].map(toLocalMember);
+      setMembers(all);
+      if (status.last_run_at) {
+        setLastRun(new Date(status.last_run_at).toLocaleString("en-PH"));
+      }
+    } catch {
+      toast.error("Failed to load auto-credit status");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
+
+  const activeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount > 0);
+  const disabledMembers = members.filter((m) => !m.autoCredit);
+  const noPledgeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount === 0);
   const totalPledge = activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
 
   function handleInitiate() {
     setConfirmOpen(true);
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     setProcessing(true);
-    setTimeout(() => {
-      setProcessing(false);
+    try {
+      const result = await shareCapitalService.autoCreditProcess();
       setConfirmOpen(false);
-      setLastRun(new Date().toLocaleString("en-PH"));
-      toast.success(`Auto-credit completed: ${formatCurrency(totalPledge)} credited to ${activeMembers.length} members`);
-    }, 2000);
+      setLastRun(new Date(result.processed_at ?? new Date()).toLocaleString("en-PH"));
+      toast.success(
+        `Auto-credit completed: ${formatCurrency(result.total_amount ?? totalPledge)} credited to ${result.processed_count ?? activeMembers.length} members`
+      );
+      fetchStatus();
+    } catch {
+      toast.error("Failed to process auto-credit");
+    } finally {
+      setProcessing(false);
+    }
   }
 
   return (

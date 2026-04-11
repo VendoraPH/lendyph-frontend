@@ -47,11 +47,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     initAuth();
   }, [initAuth]);
 
-  if (loading) {
-    return null;
-  }
-
-  if (!isAuthenticated) {
+  if (loading || !isAuthenticated) {
     return null;
   }
 

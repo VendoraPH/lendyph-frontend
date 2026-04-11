@@ -95,17 +95,20 @@ axiosClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = tokenManager.getRefreshToken();
+        const currentToken = tokenManager.getAccessToken();
         const { data } = await axios.post(
           `${typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL}/auth/refresh`,
-          { refresh_token: refreshToken }
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              "Content-Type": "application/json",
+            },
+          }
         );
 
-        const newToken = data.data.token;
+        const newToken = data.token;
         tokenManager.setAccessToken(newToken);
-        if (data.data.refreshToken) {
-          tokenManager.setRefreshToken(data.data.refreshToken);
-        }
 
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;

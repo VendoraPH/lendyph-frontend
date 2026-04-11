@@ -132,6 +132,21 @@ export const API_ENDPOINTS = {
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,
   },
+  SHARE_CAPITAL: {
+    LEDGER_LIST: "/share-capital/ledger",
+    LEDGER_CREATE: "/share-capital/ledger",
+  },
+  PLEDGES: {
+    LIST: "/pledges",
+    UPDATE: (id: number) => `/pledges/${id}`,
+    TOGGLE_AUTO_CREDIT: (id: number) => `/pledges/${id}/auto-credit`,
+    CREATE_ENTRY: (id: number) => `/pledges/${id}/entries`,
+    BULK_ENTRIES: "/pledges/bulk-entries",
+  },
+  AUTO_CREDIT: {
+    STATUS: "/auto-credit/status",
+    PROCESS: "/auto-credit/process",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },
