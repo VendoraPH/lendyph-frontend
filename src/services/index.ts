@@ -14,5 +14,6 @@ export { loanAdjustmentService } from "./loan-adjustment.service";
 export { repaymentService } from "./repayment.service";
 export { systemService } from "./system.service";
 export { feeService } from "./fee.service";
+export { dashboardService } from "./dashboard.service";
 export { approvalWorkflowService } from "./approval-workflow.service";
 export type { ApprovalChainStep, ChainStepKind } from "./approval-workflow.service";

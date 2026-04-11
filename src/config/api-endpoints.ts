@@ -68,6 +68,7 @@ export const API_ENDPOINTS = {
   },
   REPAYMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/repayments`,
+    LIST_ALL: "/repayments",
     CREATE: (loanId: number) => `/loans/${loanId}/repayments`,
     DETAIL: (id: number) => `/repayments/${id}`,
     VOID: (id: number) => `/repayments/${id}/void`,
@@ -93,6 +94,20 @@ export const API_ENDPOINTS = {
     REPAYMENTS: "/reports/repayments",
     STATEMENT_OF_ACCOUNT: (loanId: number) => `/reports/statement-of-account/${loanId}`,
     SUBSIDIARY_LEDGER: (borrowerId: number) => `/reports/subsidiary-ledger/${borrowerId}`,
+    DAILY_COLLECTION: "/reports/daily-collection",
+    INCOME: "/reports/income",
+    AGING: "/reports/aging",
+    BORROWERS: "/reports/borrowers",
+    DISBURSEMENTS: "/reports/disbursements",
+    EXPORT_RELEASES: "/reports/releases/export",
+    EXPORT_REPAYMENTS: "/reports/repayments/export",
+    EXPORT_DUE_PAST_DUE: "/reports/due-past-due/export",
+  },
+  DASHBOARD: {
+    STATS: "/dashboard/stats",
+    COLLECTIONS_TREND: "/dashboard/collections-trend",
+    DAILY_DUES: "/dashboard/daily-dues",
+    RECENT_TRANSACTIONS: "/dashboard/recent-transactions",
   },
   USERS: {
     LIST: "/users",
