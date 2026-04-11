@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { dashboardService } from "@/services";
 import {
   AreaChart,
   Area,
@@ -26,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert } from "lucide-react";
+import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Loader2 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -38,8 +39,67 @@ function getInitials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
+
+const formatCompact = (amount: number) => {
+  if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(0)}K`;
+  return formatCurrency(amount);
+};
+
 // ---------------------------------------------------------------------------
-// Mock data
+// Types for API responses
+// ---------------------------------------------------------------------------
+
+interface DashboardStats {
+  total_portfolio?: number;
+  active_loans?: number;
+  total_collected?: number;
+  overdue_count?: number;
+  // sparkline arrays (optional — API may not return these)
+  portfolio_trend?: { v: number }[];
+  loans_trend?: { v: number }[];
+  collected_trend?: { v: number }[];
+  overdue_trend?: { v: number }[];
+}
+
+interface CollectionsTrendItem {
+  day?: string;
+  week?: string;
+  label?: string;
+  value: number;
+}
+
+interface DailyDueItem {
+  id: number;
+  borrower: string;
+  borrower_name?: string;
+  loan_id?: string;
+  loan_account_number?: string;
+  amount_due: number;
+  amount_paid: number;
+  status: "collected" | "partial" | "pending";
+}
+
+interface RecentTransaction {
+  id: number;
+  name?: string;
+  borrower_name?: string;
+  description?: string;
+  desc?: string;
+  amount: number;
+  date: string;
+  type?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Mock / fallback data
 // ---------------------------------------------------------------------------
 
 const SPARKLINE_PURPLE = [
@@ -55,8 +115,14 @@ const SPARKLINE_BLUE = [
   { v: 40 }, { v: 42 }, { v: 41 }, { v: 43 }, { v: 44 }, { v: 46 }, { v: 47 },
 ];
 
-// Mini area chart for left side of main card
-const COLLECTIONS_TREND = [
+const MOCK_STATS: DashboardStats = {
+  total_portfolio: 15_200_000,
+  active_loans: 843,
+  total_collected: 2_400_000,
+  overdue_count: 47,
+};
+
+const MOCK_COLLECTIONS_TREND: CollectionsTrendItem[] = [
   { day: "W1",  value: 380000 },
   { day: "W2",  value: 520000 },
   { day: "W3",  value: 450000 },
@@ -71,101 +137,26 @@ const COLLECTIONS_TREND = [
   { day: "W12", value: 1100000 },
 ];
 
-// Candlestick data — open/close/high/low per day (like the reference screenshot)
-const CANDLESTICK_DATA = [
-  { date: "12", open: 42, close: 48, high: 52, low: 38, volume: 35 },
-  { date: "13", open: 48, close: 38, high: 50, low: 35, volume: 28 },
-  { date: "14", open: 38, close: 55, high: 58, low: 36, volume: 52 },
-  { date: "15", open: 55, close: 48, high: 57, low: 45, volume: 40 },
-  { date: "16", open: 48, close: 62, high: 65, low: 46, volume: 60 },
-  { date: "17", open: 62, close: 35, high: 64, low: 32, volume: 45 },
-  { date: "18", open: 35, close: 41, high: 44, low: 33, volume: 22 },
-  { date: "19", open: 41, close: 58, high: 61, low: 39, volume: 55 },
-  { date: "20", open: 58, close: 52, high: 60, low: 49, volume: 30 },
-  { date: "21", open: 52, close: 67, high: 70, low: 50, volume: 65 },
-  { date: "22", open: 67, close: 45, high: 69, low: 42, volume: 48 },
-  { date: "23", open: 45, close: 71, high: 74, low: 43, volume: 70 },
-  { date: "24", open: 71, close: 63, high: 73, low: 60, volume: 38 },
-  { date: "25", open: 63, close: 58, high: 66, low: 55, volume: 25 },
-  { date: "26", open: 58, close: 74, high: 78, low: 56, volume: 58 },
-  { date: "27", open: 74, close: 49, high: 76, low: 46, volume: 42 },
-  { date: "28", open: 49, close: 82, high: 85, low: 47, volume: 72 },
-  { date: "29", open: 82, close: 68, high: 84, low: 65, volume: 50 },
-  { date: "30", open: 68, close: 76, high: 80, low: 66, volume: 44 },
-  { date: "31", open: 76, close: 85, high: 88, low: 74, volume: 68 },
+const MOCK_DAILY_DUES: DailyDueItem[] = [
+  { id: 1, borrower: "Rosario D. Santos", loan_id: "LN-2026-0042", amount_due: 5500, amount_paid: 5500, status: "collected" },
+  { id: 2, borrower: "Roberto Garcia", loan_id: "LN-2026-0078", amount_due: 9417, amount_paid: 9417, status: "collected" },
+  { id: 3, borrower: "Eduardo Mendoza", loan_id: "LN-2026-0103", amount_due: 4708, amount_paid: 4708, status: "collected" },
+  { id: 4, borrower: "Maria L. Reyes", loan_id: "LN-2026-0055", amount_due: 3200, amount_paid: 958, status: "partial" },
+  { id: 5, borrower: "Ana Santos", loan_id: "LN-2026-0091", amount_due: 6800, amount_paid: 0, status: "pending" },
+  { id: 6, borrower: "Carmen Torres", loan_id: "LN-2026-0112", amount_due: 12000, amount_paid: 0, status: "pending" },
+  { id: 7, borrower: "Jose Dela Cruz", loan_id: "LN-2026-0067", amount_due: 2500, amount_paid: 0, status: "pending" },
 ];
 
-// Mock data — Loans due today vs actual collections
-const DAILY_DUE_ITEMS = [
-  { id: 1, borrower: "Rosario D. Santos", loanId: "LN-2026-0042", amountDue: 5500, amountPaid: 5500, status: "collected" as const },
-  { id: 2, borrower: "Roberto Garcia", loanId: "LN-2026-0078", amountDue: 9417, amountPaid: 9417, status: "collected" as const },
-  { id: 3, borrower: "Eduardo Mendoza", loanId: "LN-2026-0103", amountDue: 4708, amountPaid: 4708, status: "collected" as const },
-  { id: 4, borrower: "Maria L. Reyes", loanId: "LN-2026-0055", amountDue: 3200, amountPaid: 958, status: "partial" as const },
-  { id: 5, borrower: "Ana Santos", loanId: "LN-2026-0091", amountDue: 6800, amountPaid: 0, status: "pending" as const },
-  { id: 6, borrower: "Carmen Torres", loanId: "LN-2026-0112", amountDue: 12000, amountPaid: 0, status: "pending" as const },
-  { id: 7, borrower: "Jose Dela Cruz", loanId: "LN-2026-0067", amountDue: 2500, amountPaid: 0, status: "pending" as const },
+const MOCK_RECENT_TX: RecentTransaction[] = [
+  { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", type: "payment" },
+  { id: 2, name: "Roberto Garcia", desc: "Cash payment received", amount: 9417, date: "Mar 31, 9:15 AM", type: "payment" },
+  { id: 3, name: "Ana Santos", desc: "Loan released — Bank Transfer", amount: 15000, date: "Mar 30, 3:20 PM", type: "release" },
+  { id: 4, name: "Eduardo Mendoza", desc: "Payment via Bank Transfer", amount: 4708, date: "Mar 30, 2:10 PM", type: "payment" },
+  { id: 5, name: "Maria L. Reyes", desc: "Payment via Maya", amount: 958, date: "Mar 29, 11:05 AM", type: "payment" },
+  { id: 6, name: "Carmen Torres", desc: "Loan released — Bank Transfer", amount: 50000, date: "Mar 29, 10:30 AM", type: "release" },
 ];
 
-const TOTAL_DUE = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountDue, 0);
-const TOTAL_COLLECTED = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountPaid, 0);
-const TOTAL_PARTIAL = DAILY_DUE_ITEMS.filter((i) => i.status === "partial").reduce((sum, i) => sum + i.amountPaid, 0);
-const TOTAL_FULLY_COLLECTED = TOTAL_COLLECTED - TOTAL_PARTIAL;
-const TOTAL_REMAINING = TOTAL_DUE - TOTAL_COLLECTED;
-const COLLECTION_RATE = Math.round((TOTAL_COLLECTED / TOTAL_DUE) * 100);
-
-const COLLECTION_PIE_DATA = [
-  { name: "Collected", value: TOTAL_FULLY_COLLECTED, color: "#10b981" },
-  { name: "Partial", value: TOTAL_PARTIAL, color: "#f59e0b" },
-  { name: "Pending", value: TOTAL_REMAINING, color: "#94a3b8" },
-];
-
-const RECENT_TRANSACTIONS = [
-  { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
-  { id: 2, name: "Roberto Garcia", desc: "Cash payment received", amount: 9417, date: "Mar 31, 9:15 AM", color: "bg-orange-500" },
-  { id: 3, name: "Ana Santos", desc: "Loan released — Bank Transfer", amount: 15000, date: "Mar 30, 3:20 PM", color: "bg-green-500" },
-  { id: 4, name: "Eduardo Mendoza", desc: "Payment via Bank Transfer", amount: 4708, date: "Mar 30, 2:10 PM", color: "bg-blue-500" },
-  { id: 5, name: "Maria L. Reyes", desc: "Payment via Maya", amount: 958, date: "Mar 29, 11:05 AM", color: "bg-purple-500" },
-  { id: 6, name: "Carmen Torres", desc: "Loan released — Bank Transfer", amount: 50000, date: "Mar 29, 10:30 AM", color: "bg-orange-500" },
-];
-
-// ---------------------------------------------------------------------------
-// KPI Card data
-// ---------------------------------------------------------------------------
-
-const KPI_CARDS = [
-  {
-    icon: Wallet,
-    value: "₱15.2M",
-    label: "Total Portfolio",
-    color: "#7c3aed",
-    sparkData: SPARKLINE_PURPLE,
-    href: "/loans",
-  },
-  {
-    icon: FileText,
-    value: "843",
-    label: "Active Loans",
-    color: "#e879f9",
-    sparkData: SPARKLINE_ORANGE,
-    href: "/loans",
-  },
-  {
-    icon: DollarSign,
-    value: "₱2.4M",
-    label: "Collected",
-    color: "#10b981",
-    sparkData: SPARKLINE_GREEN,
-    href: "/payments",
-  },
-  {
-    icon: AlertTriangle,
-    value: "47",
-    label: "Overdue",
-    color: "#f87171",
-    sparkData: SPARKLINE_BLUE,
-    href: "/collections",
-  },
-];
+const AVATAR_COLORS = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500", "bg-pink-500", "bg-indigo-500"];
 
 // ---------------------------------------------------------------------------
 // Sparkline component
@@ -195,113 +186,117 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Candlestick shape renderer
-// ---------------------------------------------------------------------------
-
-function CandlestickShape(props: Record<string, unknown>) {
-  const { x, y, width, height, payload } = props as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    payload: (typeof CANDLESTICK_DATA)[0];
-  };
-
-  if (!payload) return null;
-
-  const isUp = payload.close >= payload.open;
-  const color = isUp ? "#10b981" : "#7c3aed";
-
-  // Scale values to chart coordinates
-  // The bar is rendered at (x, y) with given width/height
-  // We need to calculate wick positions relative to the bar
-  const centerX = x + width / 2;
-  const bodyWidth = Math.max(width * 0.25, 3);
-  const bodyX = centerX - bodyWidth / 2;
-
-  // Wick extends slightly above and below the body
-  const wickTop = y - (height * 0.15);
-  const wickBottom = y + height + (height * 0.15);
-
-  return (
-    <g>
-      {/* Wick (thin line) */}
-      <line
-        x1={centerX}
-        y1={wickTop}
-        x2={centerX}
-        y2={wickBottom}
-        stroke={color}
-        strokeWidth={1}
-      />
-      {/* Body (narrow rectangle) */}
-      <rect
-        x={bodyX}
-        y={y}
-        width={bodyWidth}
-        height={Math.max(height, 2)}
-        fill={color}
-        rx={1}
-        ry={1}
-      />
-    </g>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Custom tooltip for candlestick chart
-// ---------------------------------------------------------------------------
-
-function CandlestickTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { payload: (typeof CANDLESTICK_DATA)[0] }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const isUp = d.close >= d.open;
-  return (
-    <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-medium mb-1">Mar {label}</p>
-      <div className="space-y-0.5">
-        <p>Open: <span className="font-semibold">₱{d.open}K</span></p>
-        <p>Close: <span className={`font-semibold ${isUp ? "text-[#10b981]" : "text-[#7c3aed]"}`}>₱{d.close}K</span></p>
-        <p>High: ₱{d.high}K · Low: ₱{d.low}K</p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Time period toggle
-// ---------------------------------------------------------------------------
-
-const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // API data state
+  const [stats, setStats] = useState<DashboardStats>(MOCK_STATS);
+  const [collectionsTrend, setCollectionsTrend] = useState<CollectionsTrendItem[]>(MOCK_COLLECTIONS_TREND);
+  const [dailyDues, setDailyDues] = useState<DailyDueItem[]>(MOCK_DAILY_DUES);
+  const [recentTx, setRecentTx] = useState<RecentTransaction[]>(MOCK_RECENT_TX);
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    const results = await Promise.allSettled([
+      dashboardService.stats(),
+      dashboardService.collectionsTrend(),
+      dashboardService.dailyDues(),
+      dashboardService.recentTransactions(),
+    ]);
+
+    // Stats
+    if (results[0].status === "fulfilled" && results[0].value) {
+      setStats(results[0].value as DashboardStats);
+    }
+    // Collections trend
+    if (results[1].status === "fulfilled" && Array.isArray(results[1].value)) {
+      const trend = results[1].value as CollectionsTrendItem[];
+      if (trend.length > 0) setCollectionsTrend(trend);
+    }
+    // Daily dues
+    if (results[2].status === "fulfilled") {
+      const raw = results[2].value;
+      const items = Array.isArray(raw) ? raw : (raw as { data?: DailyDueItem[] })?.data;
+      if (Array.isArray(items) && items.length > 0) setDailyDues(items as DailyDueItem[]);
+    }
+    // Recent transactions
+    if (results[3].status === "fulfilled") {
+      const raw = results[3].value;
+      const items = Array.isArray(raw) ? raw : (raw as { data?: RecentTransaction[] })?.data;
+      if (Array.isArray(items) && items.length > 0) setRecentTx(items as RecentTransaction[]);
+    }
+
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  // Derived values
+  const kpiCards = useMemo(() => [
+    {
+      icon: Wallet,
+      value: formatCompact(stats.total_portfolio ?? 0),
+      label: "Total Portfolio",
+      color: "#7c3aed",
+      sparkData: stats.portfolio_trend ?? SPARKLINE_PURPLE,
+      href: "/loans",
+    },
+    {
+      icon: FileText,
+      value: String(stats.active_loans ?? 0),
+      label: "Active Loans",
+      color: "#e879f9",
+      sparkData: stats.loans_trend ?? SPARKLINE_ORANGE,
+      href: "/loans",
+    },
+    {
+      icon: DollarSign,
+      value: formatCompact(stats.total_collected ?? 0),
+      label: "Collected",
+      color: "#10b981",
+      sparkData: stats.collected_trend ?? SPARKLINE_GREEN,
+      href: "/payments",
+    },
+    {
+      icon: AlertTriangle,
+      value: String(stats.overdue_count ?? 0),
+      label: "Overdue",
+      color: "#f87171",
+      sparkData: stats.overdue_trend ?? SPARKLINE_BLUE,
+      href: "/loans",
+    },
+  ], [stats]);
+
+  // Daily due computed values
+  const totalDue = dailyDues.reduce((sum, i) => sum + (i.amount_due ?? 0), 0);
+  const totalCollected = dailyDues.reduce((sum, i) => sum + (i.amount_paid ?? 0), 0);
+  const totalPartial = dailyDues.filter((i) => i.status === "partial").reduce((sum, i) => sum + (i.amount_paid ?? 0), 0);
+  const totalFullyCollected = totalCollected - totalPartial;
+  const totalRemaining = totalDue - totalCollected;
+  const collectionRate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0;
+
+  const collectionPieData = [
+    { name: "Collected", value: totalFullyCollected, color: "#10b981" },
+    { name: "Partial", value: totalPartial, color: "#f59e0b" },
+    { name: "Pending", value: totalRemaining, color: "#94a3b8" },
+  ];
+
+  // Trend chart data key
+  const trendDataKey = collectionsTrend[0]?.day ? "day" : collectionsTrend[0]?.week ? "week" : "label";
 
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
     <div className="space-y-6">
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 1: KPI Cards                                                  */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Row 1: KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {KPI_CARDS.map((kpi) => (
+        {kpiCards.map((kpi) => (
           <Link key={kpi.label} href={kpi.href} className="group">
             <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
               <CardContent className="py-3 px-4">
@@ -314,7 +309,11 @@ export default function DashboardPage() {
                       <kpi.icon className="h-3.5 w-3.5 text-white" />
                     </div>
                     <div>
-                      <p className="text-lg font-bold leading-tight">{kpi.value}</p>
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <p className="text-lg font-bold leading-tight">{kpi.value}</p>
+                      )}
                       <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
                     </div>
                   </div>
@@ -326,9 +325,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 2: Expected vs Actual Daily Collection                        */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Row 2: Expected vs Actual Daily Collection */}
       <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
@@ -338,9 +335,9 @@ export default function DashboardPage() {
                 {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
-            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : COLLECTION_RATE >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
+            <Badge variant="outline" className={collectionRate >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : collectionRate >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              {COLLECTION_RATE}% collected
+              {collectionRate}% collected
             </Badge>
           </div>
 
@@ -352,7 +349,7 @@ export default function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={COLLECTION_PIE_DATA}
+                        data={collectionPieData}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
@@ -362,26 +359,24 @@ export default function DashboardPage() {
                         strokeWidth={0}
                         isAnimationActive={false}
                       >
-                        {COLLECTION_PIE_DATA.map((entry) => (
+                        {collectionPieData.map((entry) => (
                           <Cell key={entry.name} fill={entry.color} />
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value) => `₱${Number(value).toLocaleString("en-PH")}`}
+                        formatter={(value) => formatCurrency(Number(value))}
                         contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : null}
-                {/* Center label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-bold">{COLLECTION_RATE}%</p>
+                  <p className="text-2xl font-bold">{collectionRate}%</p>
                   <p className="text-[11px] text-muted-foreground">Collected</p>
                 </div>
               </div>
-              {/* Legend */}
               <div className="flex items-center gap-4 mt-2">
-                {COLLECTION_PIE_DATA.map((entry) => (
+                {collectionPieData.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
                     <span className="text-[11px] text-muted-foreground">{entry.name}</span>
@@ -389,7 +384,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-
           </div>
         </div>
 
@@ -407,160 +401,93 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {DAILY_DUE_ITEMS.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
-                          {getInitials(item.borrower)}
+                {dailyDues.map((item, i) => {
+                  const borrowerName = item.borrower_name ?? item.borrower ?? "—";
+                  const loanId = item.loan_account_number ?? item.loan_id ?? "—";
+                  return (
+                    <TableRow key={`due-${item.id ?? i}`} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="pl-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
+                            {getInitials(borrowerName)}
+                          </div>
+                          <span className="font-medium text-sm whitespace-nowrap">{borrowerName}</span>
                         </div>
-                        <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">₱{item.amountDue.toLocaleString("en-PH")}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">
-                      {item.amountPaid > 0 ? `₱${item.amountPaid.toLocaleString("en-PH")}` : "—"}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      <Badge
-                        variant="outline"
-                        className={
-                          item.status === "collected"
-                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                            : item.status === "partial"
-                              ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
-                              : "bg-muted text-muted-foreground border-border"
-                        }
-                      >
-                        {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{loanId}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amount_due)}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        {item.amount_paid > 0 ? formatCurrency(item.amount_paid) : "—"}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right">
+                        <Badge
+                          variant="outline"
+                          className={
+                            item.status === "collected"
+                              ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
+                              : item.status === "partial"
+                                ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
+                                : "bg-muted text-muted-foreground border-border"
+                          }
+                        >
+                          {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 3: Main Chart Card — full width single column                 */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Row 3: Collections Trend Chart */}
       <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="flex flex-col lg:flex-row">
-          {/* Left column: value + area chart */}
-          <div className="flex flex-col justify-between p-6 lg:w-[35%] lg:border-r border-border">
-            <div>
-              <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
-              <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
-              <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
-            </div>
-            {/* Purple area chart */}
-            <div className="mt-4" style={{ height: 120 }}>
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-                    <defs>
-                      <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#7c3aed"
-                      strokeWidth={2}
-                      fill="url(#collectionsGrad)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
+        <div className="p-6">
+          <div className="mb-4">
+            <p className="text-3xl font-bold tracking-tight">{formatCurrency(stats.total_collected ?? 0)}</p>
+            <p className="text-sm text-muted-foreground mt-1">Total Collections (12-week trend)</p>
           </div>
-
-          {/* Right column: time toggles + candlestick chart */}
-          <div className="flex-1 p-4 pt-6">
-            <div className="flex justify-end mb-2">
-              <div className="flex items-center gap-1">
-                {TIME_PERIODS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setActivePeriod(p)}
-                    className={
-                      activePeriod === p
-                        ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
-                        : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
-                    }
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Candlestick chart */}
+          <div style={{ height: 200 }}>
             {mounted ? (
-              <>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-                    <XAxis dataKey="date" hide />
-                    <YAxis hide domain={[20, 95]} />
-                    <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
-                    <Bar
-                      dataKey="close"
-                      shape={<CandlestickShape />}
-                      isAnimationActive={false}
-                    >
-                      {CANDLESTICK_DATA.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                {/* Volume bars below candlestick */}
-                <ResponsiveContainer width="100%" height={60}>
-                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 0, right: 8, bottom: 4, left: 8 }}>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10, fill: "currentColor" }}
-                      tickLine={false}
-                      axisLine={false}
-                      className="text-muted-foreground"
-                    />
-                    <YAxis hide />
-                    <Bar dataKey="volume" isAnimationActive={false} radius={[2, 2, 0, 0]}>
-                      {CANDLESTICK_DATA.map((entry, index) => (
-                        <Cell
-                          key={`vol-${index}`}
-                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
-                          fillOpacity={0.6}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={collectionsTrend} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                  <defs>
+                    <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey={trendDataKey}
+                    tick={{ fontSize: 10, fill: "currentColor" }}
+                    tickLine={false}
+                    axisLine={false}
+                    className="text-muted-foreground"
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(Number(value))}
+                    contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#7c3aed"
+                    strokeWidth={2}
+                    fill="url(#collectionsGrad)"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             ) : null}
           </div>
         </div>
-
-        {/* Month labels */}
-        <div className="flex justify-between px-6 pb-4 pt-1">
-          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m) => (
-            <span key={m} className="text-[11px] text-muted-foreground">{m}</span>
-          ))}
-        </div>
       </Card>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 3: Recent Transactions Table                                   */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Row 4: Recent Transactions Table */}
       <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-3">
           <h3 className="text-base font-semibold">Recent Transactions</h3>
@@ -577,23 +504,26 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {RECENT_TRANSACTIONS.map((tx) => {
-                  const initials = getInitials(tx.name);
+                {recentTx.map((tx, idx) => {
+                  const txName = tx.borrower_name ?? tx.name ?? "—";
+                  const txDesc = tx.description ?? tx.desc ?? "—";
+                  const initials = getInitials(txName);
+                  const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
                   return (
-                    <TableRow key={tx.id} className="hover:bg-muted/40 transition-colors">
+                    <TableRow key={`tx-${tx.id ?? idx}`} className="hover:bg-muted/40 transition-colors">
                       <TableCell className="pl-6">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${tx.color}`}
+                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${avatarColor}`}
                           >
                             {initials}
                           </div>
-                          <span className="font-medium text-sm whitespace-nowrap">{tx.name}</span>
+                          <span className="font-medium text-sm whitespace-nowrap">{txName}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{txDesc}</TableCell>
                       <TableCell className="text-right text-sm font-medium">
-                        ₱{tx.amount.toLocaleString("en-PH")}
+                        {formatCurrency(tx.amount)}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground pr-6">
                         {tx.date}
