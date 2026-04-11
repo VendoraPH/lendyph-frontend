@@ -67,6 +67,7 @@ interface BorrowerFormData {
   employer_or_business: string;
   monthly_income: string;
   branch_id: string;
+  pledge_amount: string;
   spouse_first_name: string;
   spouse_middle_name: string;
   spouse_last_name: string;
@@ -88,6 +89,7 @@ function emptyForm(): BorrowerFormData {
     address: "",
     employer_or_business: "",
     monthly_income: "",
+    pledge_amount: "",
     branch_id: "",
     spouse_first_name: "",
     spouse_middle_name: "",
@@ -297,6 +299,7 @@ export default function NewBorrowerPage() {
       if (form.address.trim()) payload.address = form.address.trim();
       if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
       if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
+      payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
 
       // Spouse info (only when married)
       if (form.civil_status === "married") {
@@ -812,18 +815,35 @@ export default function NewBorrowerPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
-              <Input
-                id="monthly_income"
-                type="number"
-                min={0}
-                step={100}
-                placeholder="0"
-                value={form.monthly_income}
-                onChange={(e) => update("monthly_income", e.target.value)}
-              />
-              {fieldError("monthly_income")}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+                <Input
+                  id="monthly_income"
+                  type="number"
+                  min={0}
+                  step={100}
+                  placeholder="0"
+                  value={form.monthly_income}
+                  onChange={(e) => update("monthly_income", e.target.value)}
+                />
+                {fieldError("monthly_income")}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pledge_amount">Pledge Amount (PHP)</Label>
+                <Input
+                  id="pledge_amount"
+                  type="number"
+                  min={0}
+                  step={100}
+                  placeholder="0"
+                  value={form.pledge_amount}
+                  onChange={(e) => update("pledge_amount", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Share capital pledge. Defaults to ₱0 if left empty.</p>
+                {fieldError("pledge_amount")}
+              </div>
             </div>
           </CardContent>
         </Card>
