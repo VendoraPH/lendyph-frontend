@@ -417,7 +417,7 @@ function deriveStepsFromLoanStatus(
 
 const VISIBLE_LOAN_COUNT = 3;
 
-function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string }) {
+function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
@@ -425,7 +425,10 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus }: { lo
   const completedSteps = approvalSteps.filter(
     (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
   );
-  const showRemarks = approvalSteps.length > 0 && loanStatus !== "rejected";
+
+  // Show remarks section if we have local approval steps OR server-side approval remarks
+  const hasServerRemarks = !!(loan?.approval_remarks || loan?.rejection_remarks);
+  const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
 
   return (
     <Card>
@@ -577,6 +580,56 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus }: { lo
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Server-side approval/rejection remarks (visible to all officers) */}
+        {hasServerRemarks && completedSteps.length === 0 && (
+          <>
+            <Separator />
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Approval Remarks</p>
+            {loan?.approval_remarks && (
+              <div className="rounded-lg border border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] bg-green-600">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-xs font-semibold">
+                    {loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "Approver"}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-green-500/10 text-green-700 border-green-500/30">
+                    Approved
+                  </Badge>
+                </div>
+                {loan.approved_at && (
+                  <p className="text-xs text-muted-foreground">{formatDateTime(loan.approved_at)}</p>
+                )}
+                <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
+                  &ldquo;{loan.approval_remarks}&rdquo;
+                </p>
+              </div>
+            )}
+            {loan?.rejection_remarks && (
+              <div className="rounded-lg border border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] bg-red-500">
+                    <XCircle className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-xs font-semibold">
+                    {loan.rejected_by ?? "Reviewer"}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-red-500/10 text-red-700 border-red-500/30">
+                    Rejected
+                  </Badge>
+                </div>
+                {loan.rejected_at && (
+                  <p className="text-xs text-muted-foreground">{formatDateTime(loan.rejected_at)}</p>
+                )}
+                <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
+                  &ldquo;{loan.rejection_remarks}&rdquo;
+                </p>
               </div>
             )}
           </>
@@ -2166,6 +2219,7 @@ export default function LoanDetailPage({
           loading={borrowerLoansLoading}
           approvalSteps={approvalSteps}
           loanStatus={loan.status}
+          loan={loan}
         />
 
         {/* Card 3: Member & Co-Maker */}

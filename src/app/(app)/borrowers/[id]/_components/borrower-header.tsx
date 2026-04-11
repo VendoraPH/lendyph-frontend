@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { ArrowLeft, Pencil, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
+import { PhotoCropDialog } from "./photo-crop-dialog";
 
 const statusBadgeColor: Record<string, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
@@ -28,20 +29,29 @@ interface BorrowerHeaderProps {
 
 export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHeaderProps) {
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedFile(file);
+    setCropDialogOpen(true);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  async function handleCroppedPhoto(blob: Blob) {
     try {
       const formData = new FormData();
-      formData.append("photo", file);
+      formData.append("photo", blob, "profile.jpg");
       await borrowerService.uploadPhoto(borrower.id, formData);
       toast.success("Photo updated");
       onPhotoUpdate?.();
     } catch {
       toast.error("Failed to upload photo");
     }
-    if (photoInputRef.current) photoInputRef.current.value = "";
+    setCropDialogOpen(false);
+    setSelectedFile(null);
   }
   const details = [
     borrower.gender ? (borrower.gender === "male" ? "Male" : "Female") : null,
@@ -82,7 +92,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
               type="file"
               className="hidden"
               accept="image/*"
-              onChange={handlePhotoUpload}
+              onChange={handleFileSelect}
             />
           </div>
           <div>
@@ -115,6 +125,13 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
           Edit Profile
         </Button>
       </div>
+
+      <PhotoCropDialog
+        open={cropDialogOpen}
+        onOpenChange={setCropDialogOpen}
+        imageFile={selectedFile}
+        onCropComplete={handleCroppedPhoto}
+      />
     </div>
   );
 }
