@@ -31,8 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { shareCapitalService, borrowerService } from "@/services";
-import type { Pledge, Borrower } from "@/types";
+import { shareCapitalService } from "@/services";
+import type { Pledge } from "@/types";
 import {
   Search,
   Settings2,
@@ -100,47 +100,16 @@ export default function PledgeEntryPage() {
   const fetchPledges = useCallback(async () => {
     try {
       setLoading(true);
-
-      // Try pledges API first
-      let items: LocalPledge[] = [];
-      try {
-        const res = await shareCapitalService.pledgeList({ per_page: 9999 });
-        const raw = res as unknown;
-        console.log("[Pledges] raw API response:", raw);
-        const pledgeArr = Array.isArray(raw)
-          ? (raw as Pledge[])
-          : Array.isArray((raw as Record<string, unknown>)?.data)
-            ? ((raw as Record<string, unknown>).data as Pledge[])
-            : [];
-        console.log("[Pledges] parsed array:", pledgeArr);
-        items = pledgeArr.map(toLocalPledge);
-        console.log("[Pledges] local items:", items);
-      } catch (err) {
-        console.error("[Pledges] API error:", err);
-      }
-
-      // If no pledges returned, show all borrowers so they can be configured
-      if (items.length === 0) {
-        const borrowerRes = await borrowerService.list({ per_page: 9999 });
-        const raw = borrowerRes as unknown;
-        const borrowers = Array.isArray(raw)
-          ? (raw as Borrower[])
-          : Array.isArray((raw as Record<string, unknown>)?.data)
-            ? ((raw as Record<string, unknown>).data as Borrower[])
-            : [];
-        items = borrowers.map((b) => ({
-          id: b.id,
-          borrowerId: b.id,
-          borrower: b.full_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim(),
-          amount: 0,
-          schedule: "",
-          autoCredit: false,
-        }));
-      }
-
-      setPledges(items);
+      const res = await shareCapitalService.pledgeList({ per_page: 9999 });
+      const raw = res as unknown;
+      const pledgeArr = Array.isArray(raw)
+        ? (raw as Pledge[])
+        : Array.isArray((raw as Record<string, unknown>)?.data)
+          ? ((raw as Record<string, unknown>).data as Pledge[])
+          : [];
+      setPledges(pledgeArr.map(toLocalPledge));
     } catch {
-      toast.error("Failed to load data");
+      toast.error("Failed to load pledges");
     } finally {
       setLoading(false);
     }
@@ -328,7 +297,13 @@ export default function PledgeEntryPage() {
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
     try {
-      await shareCapitalService.pledgeCreateEntry(id, { amount, type: manualTransaction });
+      await shareCapitalService.ledgerCreate({
+        borrower_id: pledge.borrowerId,
+        date: new Date().toISOString().split("T")[0],
+        description: `Manual ${manualTransaction} entry`,
+        type: manualTransaction,
+        amount,
+      });
       toast.success(
         `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}`
       );

@@ -42,11 +42,12 @@ interface LocalMember {
 }
 
 function toLocalMember(m: AutoCreditMember): LocalMember {
+  const raw = m as AutoCreditMember & Record<string, unknown>;
   return {
     id: m.id,
     borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Borrower #${m.borrower_id}`,
-    pledgeAmount: m.pledge_amount,
-    autoCredit: m.auto_credit,
+    pledgeAmount: m.pledge_amount ?? (raw.amount as number) ?? 0,
+    autoCredit: m.auto_credit ?? (raw.autoCredit as boolean) ?? false,
   };
 }
 
@@ -58,19 +59,36 @@ export default function AutoCreditPage() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
   const [showNoPledge, setShowNoPledge] = useState(false);
+  const [totalToCredit, setTotalToCredit] = useState(0);
 
   const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
-      const status = await shareCapitalService.autoCreditStatus();
+      const raw = await shareCapitalService.autoCreditStatus();
+      const status = raw as unknown as Record<string, unknown>;
+
+      const activeArr = (status.active_members ?? []) as AutoCreditMember[];
+      const disabledArr = (status.disabled_members ?? []) as AutoCreditMember[];
+      const noPledgeArr = (status.no_pledge_members ?? []) as AutoCreditMember[];
+
+      // API categorizes members by array — not by a boolean field.
+      // Tag each member with autoCredit based on which array they came from.
       const all = [
-        ...(status.active_members ?? []),
-        ...(status.disabled_members ?? []),
-        ...(status.no_pledge_members ?? []),
-      ].map(toLocalMember);
+        ...activeArr.map((m) => ({ ...toLocalMember(m), autoCredit: true })),
+        ...disabledArr.map((m) => ({ ...toLocalMember(m), autoCredit: false })),
+        ...noPledgeArr.map((m) => ({ ...toLocalMember(m), autoCredit: false })),
+      ];
+
       setMembers(all);
-      if (status.last_run_at) {
-        setLastRun(new Date(status.last_run_at).toLocaleString("en-PH"));
+      setTotalToCredit((status.total_to_credit as number) ?? 0);
+
+      // last_run can be an object or a string
+      const lastRunRaw = status.last_run ?? status.last_run_at;
+      if (lastRunRaw) {
+        const runDate = typeof lastRunRaw === "object" && lastRunRaw !== null
+          ? (lastRunRaw as Record<string, unknown>).processed_at as string
+          : lastRunRaw as string;
+        if (runDate) setLastRun(new Date(runDate).toLocaleString("en-PH"));
       }
     } catch {
       toast.error("Failed to load auto-credit status");
@@ -86,7 +104,7 @@ export default function AutoCreditPage() {
   const activeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount > 0);
   const disabledMembers = members.filter((m) => !m.autoCredit);
   const noPledgeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount === 0);
-  const totalPledge = activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
+  const totalPledge = totalToCredit > 0 ? totalToCredit : activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
 
   function handleInitiate() {
     setConfirmOpen(true);
