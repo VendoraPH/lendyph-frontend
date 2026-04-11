@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,15 +123,16 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            <Image
-              src="/Logo/Lendy_logo.png"
-              alt="Lendy.PH"
-              width={200}
-              height={50}
-              className="h-10 w-auto object-contain brightness-0 invert"
-              priority
-            />
-            <p className="mt-1 text-sm text-white/70">
+            <div className="inline-flex items-center rounded-2xl bg-white/95 backdrop-blur-sm px-6 py-4 shadow-lg shadow-black/10">
+              <img
+                src="/Logo/Lendy_logo.png"
+                alt="Lendy.PH"
+                width={240}
+                height={64}
+                className="drop-shadow-sm"
+              />
+            </div>
+            <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
               Lending Management Platform
             </p>
           </div>
@@ -146,24 +146,6 @@ export default function LoginPage() {
               portfolio — all in one place.
             </p>
 
-            <div className="mt-10 grid grid-cols-2 gap-6">
-              <div className="rounded-xl bg-white/10 backdrop-blur-sm p-4">
-                <p className="text-3xl font-bold text-brand-blue">98%</p>
-                <p className="mt-1 text-sm text-white/70">Collection Rate</p>
-              </div>
-              <div className="rounded-xl bg-white/10 backdrop-blur-sm p-4">
-                <p className="text-3xl font-bold text-brand-blue">2.5k+</p>
-                <p className="mt-1 text-sm text-white/70">Active Borrowers</p>
-              </div>
-              <div className="rounded-xl bg-white/10 backdrop-blur-sm p-4">
-                <p className="text-3xl font-bold text-brand-blue">₱15M</p>
-                <p className="mt-1 text-sm text-white/70">Portfolio Managed</p>
-              </div>
-              <div className="rounded-xl bg-white/10 backdrop-blur-sm p-4">
-                <p className="text-3xl font-bold text-brand-blue">5</p>
-                <p className="mt-1 text-sm text-white/70">User Roles</p>
-              </div>
-            </div>
           </div>
 
           <p className="text-xs text-white/50">
@@ -177,13 +159,11 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex flex-col items-center lg:hidden">
-            <Image
+            <img
               src="/Logo/Lendy_logo.png"
               alt="Lendy.PH"
               width={180}
-              height={45}
-              className="h-10 w-auto object-contain"
-              priority
+              height={48}
             />
             <p className="text-sm text-muted-foreground mt-1">
               Lending Management Platform
