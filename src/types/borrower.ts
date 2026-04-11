@@ -19,6 +19,17 @@ export interface BorrowerBranch {
   code: string;
 }
 
+export interface BorrowerLedgerEntry {
+  id: number;
+  date: string;
+  type: "debit" | "credit";
+  description: string;
+  amount: number;
+  running_balance: number;
+  reference_id?: number;
+  reference_type?: string;
+}
+
 export interface Borrower {
   id: number;
   borrower_code: string;

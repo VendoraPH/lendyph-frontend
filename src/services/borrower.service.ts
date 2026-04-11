@@ -1,6 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { Borrower, CoMaker, PaginatedResponse } from "@/types";
+import type { Borrower, BorrowerLedgerEntry, CoMaker, PaginatedResponse } from "@/types";
 
 export const borrowerService = {
   list: (params?: Record<string, unknown>) =>
@@ -34,4 +34,10 @@ export const borrowerService = {
 
   deletePhoto: (id: number) =>
     api.delete(API_ENDPOINTS.BORROWERS.DELETE_PHOTO(id)),
+
+  uploadValidId: (id: number, formData: FormData) =>
+    api.upload(API_ENDPOINTS.BORROWERS.UPLOAD_VALID_ID(id), formData),
+
+  ledger: (id: number, params?: Record<string, unknown>) =>
+    api.get<PaginatedResponse<BorrowerLedgerEntry>>(API_ENDPOINTS.BORROWERS.LEDGER(id), { params }),
 };

@@ -21,6 +21,8 @@ export const API_ENDPOINTS = {
     REACTIVATE: (id: number) => `/borrowers/${id}/reactivate`,
     UPLOAD_PHOTO: (id: number) => `/borrowers/${id}/photo`,
     DELETE_PHOTO: (id: number) => `/borrowers/${id}/photo`,
+    UPLOAD_VALID_ID: (id: number) => `/borrowers/${id}/valid-ids`,
+    LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
   CO_MAKERS: {
     LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
