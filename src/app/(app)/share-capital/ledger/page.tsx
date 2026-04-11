@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,9 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, isWithinInterval, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
+import { shareCapitalService } from "@/services";
+import type { ShareCapitalLedgerEntry } from "@/types";
+import { toast } from "sonner";
 
 // ── Formatting ──
 
@@ -73,38 +76,34 @@ interface LedgerEntry {
   credit: number;
 }
 
-// ── Mock Data ──
+/** Transform API response into the debit/credit shape the UI expects */
+function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
+  const entry = raw as unknown as Record<string, unknown>;
+  const amount = parseFloat(String(entry.amount ?? 0));
 
-const MOCK_LEDGER: LedgerEntry[] = [
-  // Rosario D. Santos
-  { id: 1, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-01-15", description: "Initial share capital contribution", reference: "OR-2026-0001", debit: 0, credit: 2000 },
-  { id: 2, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-02-01", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0010", debit: 0, credit: 500 },
-  { id: 3, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-02-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0020", debit: 0, credit: 500 },
-  { id: 4, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-03-01", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0030", debit: 0, credit: 500 },
-  { id: 5, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-03-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0042", debit: 0, credit: 500 },
-  { id: 6, memberId: "MBR-001", member: "Rosario D. Santos", date: "2026-04-01", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0055", debit: 0, credit: 500 },
-  // Roberto Garcia
-  { id: 7, memberId: "MBR-002", member: "Roberto Garcia", date: "2026-01-15", description: "Initial share capital contribution", reference: "OR-2026-0002", debit: 0, credit: 5000 },
-  { id: 8, memberId: "MBR-002", member: "Roberto Garcia", date: "2026-02-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0021", debit: 0, credit: 1000 },
-  { id: 9, memberId: "MBR-002", member: "Roberto Garcia", date: "2026-03-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0043", debit: 0, credit: 1000 },
-  { id: 10, memberId: "MBR-002", member: "Roberto Garcia", date: "2026-04-01", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0056", debit: 0, credit: 1000 },
-  // Eduardo Mendoza
-  { id: 11, memberId: "MBR-003", member: "Eduardo Mendoza", date: "2026-01-30", description: "Initial share capital contribution", reference: "OR-2026-0003", debit: 0, credit: 1500 },
-  { id: 12, memberId: "MBR-003", member: "Eduardo Mendoza", date: "2026-02-28", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0015", debit: 0, credit: 500 },
-  { id: 13, memberId: "MBR-003", member: "Eduardo Mendoza", date: "2026-03-15", description: "Withdrawal - partial", reference: "WDR-2026-0005", debit: 200, credit: 0 },
-  { id: 14, memberId: "MBR-003", member: "Eduardo Mendoza", date: "2026-03-30", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0038", debit: 0, credit: 500 },
-  // Maria L. Reyes
-  { id: 15, memberId: "MBR-004", member: "Maria L. Reyes", date: "2026-02-01", description: "Initial share capital contribution", reference: "OR-2026-0008", debit: 0, credit: 3000 },
-  { id: 16, memberId: "MBR-004", member: "Maria L. Reyes", date: "2026-03-01", description: "Monthly pledge - manual", reference: "PLG-2026-0025", debit: 0, credit: 500 },
-  { id: 17, memberId: "MBR-004", member: "Maria L. Reyes", date: "2026-03-30", description: "Monthly pledge - manual", reference: "PLG-2026-0039", debit: 0, credit: 500 },
-  // Ana Santos
-  { id: 18, memberId: "MBR-005", member: "Ana Santos", date: "2026-01-15", description: "Initial share capital contribution", reference: "OR-2026-0004", debit: 0, credit: 3000 },
-  { id: 19, memberId: "MBR-005", member: "Ana Santos", date: "2026-02-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0022", debit: 0, credit: 1000 },
-  { id: 20, memberId: "MBR-005", member: "Ana Santos", date: "2026-03-15", description: "Monthly pledge - auto-credit", reference: "PLG-2026-0044", debit: 0, credit: 1000 },
-  // Carmen Torres
-  { id: 21, memberId: "MBR-006", member: "Carmen Torres", date: "2026-02-15", description: "Initial share capital contribution", reference: "OR-2026-0009", debit: 0, credit: 1000 },
-  { id: 22, memberId: "MBR-006", member: "Carmen Torres", date: "2026-03-15", description: "Monthly pledge - manual", reference: "PLG-2026-0045", debit: 0, credit: 500 },
-];
+  // Support both "type + amount" and "debit + credit" response formats
+  let debit = 0;
+  let credit = 0;
+  if (entry.debit != null || entry.credit != null) {
+    debit = parseFloat(String(entry.debit ?? 0));
+    credit = parseFloat(String(entry.credit ?? 0));
+  } else {
+    const type = String(entry.type ?? "").toLowerCase();
+    debit = type === "debit" ? amount : 0;
+    credit = type === "credit" ? amount : 0;
+  }
+
+  return {
+    id: raw.id,
+    memberId: raw.borrower?.member_id ?? String(raw.borrower_id),
+    member: raw.borrower?.full_name ?? raw.borrower?.name ?? raw.borrower_name ?? `Borrower #${raw.borrower_id}`,
+    date: raw.date,
+    description: raw.description ?? (entry.description as string) ?? "",
+    reference: raw.reference ?? (entry.reference as string) ?? "",
+    debit,
+    credit,
+  };
+}
 
 // ── Date range presets ──
 
@@ -129,17 +128,21 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
   }>();
 
   for (const e of entries) {
-    const existing = map.get(e.member) ?? {
-      memberId: e.memberId,
-      name: e.member,
-      totalDebits: 0,
-      totalCredits: 0,
-      entryCount: 0,
-    };
-    existing.totalDebits += e.debit;
-    existing.totalCredits += e.credit;
-    existing.entryCount++;
-    map.set(e.member, existing);
+    const key = e.memberId;
+    const existing = map.get(key);
+    if (existing) {
+      existing.totalDebits += e.debit;
+      existing.totalCredits += e.credit;
+      existing.entryCount++;
+    } else {
+      map.set(key, {
+        memberId: key,
+        name: e.member,
+        totalDebits: e.debit,
+        totalCredits: e.credit,
+        entryCount: 1,
+      });
+    }
   }
 
   return Array.from(map.values()).map((m) => ({
@@ -174,8 +177,13 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 // ══════════════════════════════════════════════════════════
 
 export default function SubsidiaryLedgerPage() {
+  // ── Data state ──
+  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
   // ── View state ──
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   // ── Master list state ──
   const [search, setSearch] = useState("");
@@ -189,9 +197,27 @@ export default function SubsidiaryLedgerPage() {
   const [detailSort, setDetailSort] = useState<DetailSortField>("date");
   const [detailSortDir, setDetailSortDir] = useState<SortDir>("asc");
 
+  // ── Fetch ledger data ──
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await shareCapitalService.ledgerList({ per_page: 9999 });
+      const entries = Array.isArray(res) ? res : Array.isArray(res.data) ? res.data : [];
+      setLedgerData(entries.map(toLedgerEntry));
+    } catch {
+      toast.error("Failed to load ledger data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   // ── Computed: Master ──
 
-  const allMembers = useMemo(() => computeMemberSummaries(MOCK_LEDGER), []);
+  const allMembers = useMemo(() => computeMemberSummaries(ledgerData), [ledgerData]);
 
   const filteredMembers = useMemo(() => {
     let result = [...allMembers];
@@ -228,11 +254,11 @@ export default function SubsidiaryLedgerPage() {
   // ── Computed: Detail ──
 
   const memberAllEntries = useMemo(() => {
-    if (!selectedMember) return [];
-    return MOCK_LEDGER
-      .filter((e) => e.member === selectedMember)
+    if (!selectedMemberId) return [];
+    return ledgerData
+      .filter((e) => e.memberId === selectedMemberId)
       .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
-  }, [selectedMember]);
+  }, [selectedMemberId, ledgerData]);
 
   // Entries before the date range (for opening balance)
   const { openingBalance, filteredEntries } = useMemo(() => {
@@ -279,7 +305,7 @@ export default function SubsidiaryLedgerPage() {
   const detailTotalCredits = filteredEntries.reduce((s, e) => s + e.credit, 0);
   const endingBalance = openingBalance + detailTotalCredits - detailTotalDebits;
 
-  const selectedSummary = selectedMember ? allMembers.find((m) => m.name === selectedMember) : null;
+  const selectedSummary = selectedMemberId ? allMembers.find((m) => m.memberId === selectedMemberId) : null;
 
   // ── Handlers ──
 
@@ -302,8 +328,9 @@ export default function SubsidiaryLedgerPage() {
     }
   }
 
-  function openMember(name: string) {
+  function openMember(name: string, memberId: string) {
     setSelectedMember(name);
+    setSelectedMemberId(memberId);
     setDateRange(undefined);
     setDetailSort("date");
     setDetailSortDir("asc");
@@ -322,7 +349,7 @@ export default function SubsidiaryLedgerPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setSelectedMember(null)}
+              onClick={() => { setSelectedMember(null); setSelectedMemberId(null); }}
               className="shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -338,7 +365,7 @@ export default function SubsidiaryLedgerPage() {
                   <button
                     type="button"
                     className="hover:underline hover:text-foreground"
-                    onClick={() => setSelectedMember(null)}
+                    onClick={() => { setSelectedMember(null); setSelectedMemberId(null); }}
                   >
                     Subsidiary Ledger
                   </button>
@@ -356,9 +383,46 @@ export default function SubsidiaryLedgerPage() {
         </div>
 
         {/* ════════════════════════════════════════════
-            MASTER LIST VIEW
+            LOADING STATE
             ════════════════════════════════════════════ */}
-        {!selectedMember ? (
+        {loading ? (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                    <div className="h-7 w-16 bg-muted animate-pulse rounded" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            <Card className="sm:col-span-4">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                  <div className="h-8 w-64 bg-muted animate-pulse rounded" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                      <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
+                      <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) :
+
+        /* ════════════════════════════════════════════
+            MASTER LIST VIEW
+            ════════════════════════════════════════════ */
+        !selectedMember ? (
           <>
             {/* Summary Cards */}
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
@@ -450,14 +514,14 @@ export default function SubsidiaryLedgerPage() {
                         <TableRow
                           key={member.name}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => openMember(member.name)}
+                          onClick={() => openMember(member.name, member.memberId)}
                         >
                           <TableCell className="text-xs text-muted-foreground font-mono">
                             {member.memberId}
                           </TableCell>
                           <TableCell className="font-medium text-sm">{member.name}</TableCell>
                           <TableCell className="text-right text-sm font-semibold tabular-nums">
-                            {formatCurrency(member.balance)}
+                            {member.balance > 0 ? formatCurrency(member.balance) : "₱0"}
                           </TableCell>
                           <TableCell>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -524,7 +588,7 @@ export default function SubsidiaryLedgerPage() {
               </CardContent>
             </Card>
           </>
-        ) : (
+        ) : selectedMember ? (
           /* ════════════════════════════════════════════
              MEMBER DETAIL VIEW
              ════════════════════════════════════════════ */
@@ -690,7 +754,8 @@ export default function SubsidiaryLedgerPage() {
                       {entriesWithBalance.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                            No entries found for this period.
+                            <p>No entries found{dateRange?.from ? " for this period" : ""}.</p>
+                            <p className="text-xs mt-1">Create entries via Pledge Entry → Entry button</p>
                           </TableCell>
                         </TableRow>
                       )}
@@ -719,7 +784,7 @@ export default function SubsidiaryLedgerPage() {
               </CardContent>
             </Card>
           </>
-        )}
+        ) : null}
       </div>
     </RouteGuard>
   );

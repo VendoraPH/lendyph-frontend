@@ -222,17 +222,12 @@ function SidebarContent({
           ) : (
             <>
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-gradient-to-br from-brand-orange to-brand-orange-dark shadow-sm">
-                  <span className="text-sm font-bold text-white">L</span>
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-foreground leading-tight">
-                    Lendy.PH
-                  </span>
-                  <span className="text-[9px] font-medium tracking-wider text-muted-foreground uppercase">
-                    Lending System
-                  </span>
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Logo/Lendy_logo.png"
+                  alt="Lendy.PH"
+                  className="h-8 w-auto object-contain"
+                />
               </div>
               {onToggle && (
                 <button
