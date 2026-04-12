@@ -435,18 +435,18 @@ export default function PaymentsPage() {
           : undefined,
       });
 
-      // Credit SCB portion to the borrower's share capital ledger
-      if (selectedLoan.scb_amount && selectedLoan.scb_amount > 0) {
+      // Credit the portion of this payment that was allocated to SCB
+      if (allocation && allocation.scbApplied > 0) {
         try {
           await shareCapitalService.ledgerCreate({
             borrower_id: selectedLoan.borrower_id,
             date: paymentDate,
             description: `Share Capital Build-Up from payment — Loan ${selectedLoan.loan_account_number}`,
             type: "credit",
-            amount: selectedLoan.scb_amount,
+            amount: allocation.scbApplied,
           });
           toast.info("Share Capital credited", {
-            description: `${formatCurrency(selectedLoan.scb_amount)} credited to ${selectedLoan.borrower_name}'s share capital.`,
+            description: `${formatCurrency(allocation.scbApplied)} credited to ${selectedLoan.borrower_name}'s share capital.`,
           });
         } catch {
           toast.warning("Payment recorded but share capital credit failed", {
