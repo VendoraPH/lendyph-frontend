@@ -5,9 +5,10 @@ import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, AlertTriangle, FileText } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { borrowerService, coMakerService, loanProductService, loanService, userService } from "@/services";
+import { api } from "@/lib/api-client";
 import type { Borrower, CoMaker, User } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -262,6 +264,11 @@ export default function NewLoanApplicationPage() {
   // Share Capital Build-Up amount (only required when the selected
   // product has scb_required === true; must fall within product min/max)
   const [scbAmount, setScbAmount] = useState<string>("");
+
+  // ── Policy Exception State ──
+  const [policyException, setPolicyException] = useState(false);
+  const [policyExceptionDetails, setPolicyExceptionDetails] = useState("");
+  const [policyExceptionLetter, setPolicyExceptionLetter] = useState<File | null>(null);
 
   // ── Combobox Open State ──
   const [borrowerOpen, setBorrowerOpen] = useState(false);
@@ -566,8 +573,24 @@ export default function NewLoanApplicationPage() {
         ...(scb > 0 && { scb_amount: scb }),
         ...(accountOfficerId && { account_officer_id: accountOfficerId }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
+        ...(policyException && {
+          policy_exception: true,
+          policy_exception_details: policyExceptionDetails.trim() || undefined,
+        }),
       };
       const loan = await loanService.create(payload);
+
+      // Upload policy exception letter if provided
+      if (policyException && policyExceptionLetter && loan.id) {
+        try {
+          const letterData = new FormData();
+          letterData.append("file", policyExceptionLetter);
+          letterData.append("type", "policy_exception_letter");
+          await api.upload(`/loans/${loan.id}/documents`, letterData);
+        } catch {
+          toast.warning("Loan created but policy exception letter upload failed");
+        }
+      }
       toast.success("Loan Application Created", {
         description: `Loan application has been created successfully.`,
       });
@@ -839,6 +862,94 @@ export default function NewLoanApplicationPage() {
               onChange={(e) => setPurpose(e.target.value)}
               className="min-h-20"
             />
+          </div>
+
+          <Separator />
+
+          {/* Policy Exception */}
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="policy-exception"
+                checked={policyException}
+                onCheckedChange={(checked) => {
+                  setPolicyException(checked === true);
+                  if (!checked) {
+                    setPolicyExceptionDetails("");
+                    setPolicyExceptionLetter(null);
+                  }
+                }}
+              />
+              <div>
+                <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
+                  Policy Exception
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Check this if the loan requires policy exception approval (full BOD review)
+                </p>
+              </div>
+            </div>
+
+            {policyException && (
+              <div className="space-y-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">Policy Exception Workflow</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This loan will follow the policy exception approval chain: Loan Processor → Manager → All BOD Members
+                </p>
+
+                {/* Policy Exception Details */}
+                <div className="space-y-2">
+                  <Label htmlFor="pe-details">Policy Exception Details</Label>
+                  <Textarea
+                    id="pe-details"
+                    placeholder="Describe why this loan requires a policy exception..."
+                    value={policyExceptionDetails}
+                    onChange={(e) => setPolicyExceptionDetails(e.target.value)}
+                    className="min-h-20"
+                  />
+                </div>
+
+                {/* Policy Exception Letter Upload */}
+                <div className="space-y-2">
+                  <Label>Policy Exception Letter</Label>
+                  {policyExceptionLetter ? (
+                    <div className="flex items-center gap-3 rounded-lg border p-3 bg-background">
+                      <FileText className="h-5 w-5 text-brand-orange shrink-0" />
+                      <span className="text-sm truncate flex-1">{policyExceptionLetter.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPolicyExceptionLetter(null)}
+                        className="text-destructive hover:text-destructive shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Click to upload policy exception letter</p>
+                        <p className="text-xs text-muted-foreground/70">PDF, DOC, or image file</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setPolicyExceptionLetter(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

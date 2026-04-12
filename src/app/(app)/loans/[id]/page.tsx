@@ -84,6 +84,7 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -925,21 +926,27 @@ export default function LoanDetailPage({
   // Chain configuration fetched from the approval-workflow service
   const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
 
-  // Load the admin-configured chain once on mount
+  // Load the admin-configured chain based on policy_exception flag
   useEffect(() => {
+    if (!loan) return;
     let cancelled = false;
+    const isPolicyException = loan.policy_exception === true;
     approvalWorkflowService
-      .list()
+      .listForLoan(isPolicyException)
       .then((chain) => {
         if (!cancelled) setChainConfig(chain);
       })
       .catch(() => {
-        if (!cancelled) setChainConfig(approvalWorkflowService.getDefault());
+        if (!cancelled) setChainConfig(
+          isPolicyException
+            ? approvalWorkflowService.getDefault()
+            : approvalWorkflowService.getDefaultNormal()
+        );
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loan?.id, loan?.policy_exception]);
 
   // Current logged-in user (used to gate approval actions by role)
   const currentUser = useAuthStore((s) => s.user);
@@ -2068,6 +2075,41 @@ export default function LoanDetailPage({
                   &ldquo;{loan.rejection_remarks}&rdquo;
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Policy Exception Banner */}
+      {loan.policy_exception && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-amber-700 dark:text-amber-400">Policy Exception</span>
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
+                    Full BOD Approval Required
+                  </Badge>
+                </div>
+                {loan.policy_exception_details && (
+                  <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
+                    {loan.policy_exception_details}
+                  </p>
+                )}
+                {loan.policy_exception_letter && (
+                  <a
+                    href={loan.policy_exception_letter}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-brand-orange hover:underline"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    View Policy Exception Letter
+                  </a>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -41,6 +41,10 @@ export interface Loan {
   grace_period_days?: number;
   // Share Capital Build-Up amount chosen for this loan (within product's range)
   scb_amount?: number;
+  // Policy Exception — when true, loan follows the full BOD approval chain
+  policy_exception?: boolean;
+  policy_exception_details?: string;
+  policy_exception_letter?: string; // URL to uploaded letter
   status: LoanStatus;
   is_editable?: boolean;
   is_releasable?: boolean;
