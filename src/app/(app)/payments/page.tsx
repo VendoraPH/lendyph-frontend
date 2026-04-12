@@ -109,7 +109,8 @@ function computeAllocation(
   currentDue: number,
   overdueAmount: number,
   penaltyAmount: number,
-  interestPortion: number
+  interestPortion: number,
+  scbAmount: number
 ) {
   let remaining = amountPaid;
 
@@ -131,15 +132,22 @@ function computeAllocation(
   const currentPrincipal = Math.min(remaining, currentPrincipalDue);
   remaining -= currentPrincipal;
 
-  // 5. Excess: apply to next amortization interest first, then principal
+  // 5. Excess → SCB (no cap; drains all remaining excess when loan has SCB)
+  const scbApplied = scbAmount > 0 ? remaining : 0;
+  remaining -= scbApplied;
+
+  // 6. Excess → next amortization interest (only reachable when scbAmount === 0)
   const nextInterest = remaining > 0 ? Math.min(remaining, interestPortion) : 0;
   remaining -= nextInterest;
+
+  // 7. Excess → next principal
   const nextPrincipal = remaining;
 
   return {
     penaltyApplied,
     interestApplied: overdueInterest + currentInterest + nextInterest,
     principalApplied: currentPrincipal + nextPrincipal,
+    scbApplied,
     nextInterestApplied: nextInterest,
     nextPrincipalApplied: nextPrincipal,
     total: amountPaid,
@@ -360,7 +368,8 @@ export default function PaymentsPage() {
       selectedLoan.current_due,
       selectedLoan.overdue_amount,
       selectedLoan.penalty_amount,
-      interestPortion
+      interestPortion,
+      selectedLoan.scb_amount ?? 0
     );
   }, [selectedLoan, amountPaid]);
 
