@@ -21,6 +21,20 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Search,
   Receipt,
   Banknote,
@@ -30,7 +44,10 @@ import {
   AlertCircle,
   Clock,
   ArrowRight,
+  Users,
+  Loader2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -55,114 +72,8 @@ interface ActiveLoan {
   next_due_date: string;
   overdue_amount: number;
   penalty_amount: number;
-  // Share Capital Build-Up amount per period (from the loan product).
-  // When present, a portion of each payment is credited to the borrower's
-  // share capital ledger.
   scb_amount?: number;
 }
-
-const MOCK_ACTIVE_LOANS: ActiveLoan[] = [
-  {
-    id: 1,
-    loan_account_number: "LN-20260001",
-    application_number: "LA-20260001",
-    borrower_name: "Rosario D. Santos",
-    borrower_id: 1,
-    loan_product_name: "Salary Loan",
-    principal_amount: 20000,
-    interest_rate: 3,
-    interest_type: "fixed",
-    term_months: 6,
-    payment_frequency: "monthly",
-    outstanding_balance: 12000,
-    total_payable: 23600,
-    status: "ongoing",
-    current_due: 3933,
-    next_due_date: "2026-04-15",
-    overdue_amount: 0,
-    penalty_amount: 0,
-  },
-  {
-    id: 2,
-    loan_account_number: "LN-20260002",
-    application_number: "LA-20260003",
-    borrower_name: "Roberto Garcia",
-    borrower_id: 2,
-    loan_product_name: "Business Loan",
-    principal_amount: 100000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    term_months: 12,
-    payment_frequency: "monthly",
-    outstanding_balance: 75000,
-    total_payable: 113000,
-    status: "ongoing",
-    current_due: 9417,
-    next_due_date: "2026-04-01",
-    overdue_amount: 9417,
-    penalty_amount: 500,
-  },
-  {
-    id: 3,
-    loan_account_number: "LN-20260003",
-    application_number: "LA-20260005",
-    borrower_name: "Maria L. Reyes",
-    borrower_id: 3,
-    loan_product_name: "Emergency Loan",
-    principal_amount: 10000,
-    interest_rate: 5,
-    interest_type: "fixed",
-    term_months: 3,
-    payment_frequency: "weekly",
-    outstanding_balance: 7000,
-    total_payable: 11500,
-    status: "ongoing",
-    current_due: 958,
-    next_due_date: "2026-04-05",
-    overdue_amount: 0,
-    penalty_amount: 0,
-  },
-  {
-    id: 4,
-    loan_account_number: "LN-20260004",
-    application_number: "LA-20260007",
-    borrower_name: "Eduardo Mendoza",
-    borrower_id: 4,
-    loan_product_name: "OFW Loan",
-    principal_amount: 50000,
-    interest_rate: 2,
-    interest_type: "diminishing",
-    term_months: 12,
-    payment_frequency: "monthly",
-    outstanding_balance: 30000,
-    total_payable: 56500,
-    status: "ongoing",
-    current_due: 4708,
-    next_due_date: "2026-04-20",
-    overdue_amount: 0,
-    penalty_amount: 0,
-  },
-  {
-    id: 5,
-    loan_account_number: "LN-20260005",
-    application_number: "LA-20260009",
-    borrower_name: "Danilo Villanueva",
-    borrower_id: 6,
-    loan_product_name: "Business Loan",
-    principal_amount: 80000,
-    interest_rate: 2.5,
-    interest_type: "fixed",
-    term_months: 12,
-    payment_frequency: "monthly",
-    outstanding_balance: 65000,
-    total_payable: 104000,
-    status: "ongoing",
-    current_due: 8667,
-    next_due_date: "2026-03-01",
-    overdue_amount: 17334,
-    penalty_amount: 1200,
-  },
-];
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: "Cash",
@@ -180,12 +91,14 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(amount));
 
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-PH", {
     year: "numeric",
-    month: "long",
+    month: "short",
     day: "numeric",
   });
+};
 
 // ---------------------------------------------------------------------------
 // Allocation logic
@@ -204,22 +117,31 @@ function computeAllocation(
   const penaltyApplied = Math.min(remaining, penaltyAmount);
   remaining -= penaltyApplied;
 
-  // 2. Interest portion of overdue (if any)
+  // 2. Overdue interest (if any arrears)
   const overdueInterest =
     overdueAmount > 0 ? Math.min(remaining, interestPortion) : 0;
   remaining -= overdueInterest;
 
-  // 3. Interest for current due
-  const interestApplied = Math.min(remaining, interestPortion);
-  remaining -= interestApplied;
+  // 3. Current period interest
+  const currentInterest = Math.min(remaining, interestPortion);
+  remaining -= currentInterest;
 
-  // 4. Principal (rest)
-  const principalApplied = remaining;
+  // 4. Current period principal
+  const currentPrincipalDue = Math.max(0, currentDue - interestPortion - penaltyAmount);
+  const currentPrincipal = Math.min(remaining, currentPrincipalDue);
+  remaining -= currentPrincipal;
+
+  // 5. Excess: apply to next amortization interest first, then principal
+  const nextInterest = remaining > 0 ? Math.min(remaining, interestPortion) : 0;
+  remaining -= nextInterest;
+  const nextPrincipal = remaining;
 
   return {
     penaltyApplied,
-    interestApplied: overdueInterest + interestApplied,
-    principalApplied,
+    interestApplied: overdueInterest + currentInterest + nextInterest,
+    principalApplied: currentPrincipal + nextPrincipal,
+    nextInterestApplied: nextInterest,
+    nextPrincipalApplied: nextPrincipal,
     total: amountPaid,
   };
 }
@@ -241,11 +163,92 @@ function detectPaymentType(
   return { label: "Advance Payment", variant: "secondary" };
 }
 
+function getLoanPaymentStatus(loan: ActiveLoan) {
+  if (loan.overdue_amount > 0)
+    return {
+      label: "Overdue",
+      icon: AlertCircle,
+      className: "bg-destructive/10 text-destructive",
+    };
+  if (!loan.next_due_date) return { label: "Current", icon: CheckCircle2, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" };
+  const dueDate = new Date(loan.next_due_date);
+  const today = new Date();
+  const daysUntilDue = Math.ceil(
+    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (daysUntilDue <= 3)
+    return {
+      label: "Due Soon",
+      icon: Clock,
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    };
+  return {
+    label: "Current",
+    icon: CheckCircle2,
+    className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Page
+// Mock data for testing / fallback
 // ---------------------------------------------------------------------------
 
-/** Map API Loan to local ActiveLoan shape */
+const MOCK_ACTIVE_LOANS: ActiveLoan[] = [
+  {
+    id: 1, loan_account_number: "LN-20260001", application_number: "LA-20260001",
+    borrower_name: "Rosario D. Santos", borrower_id: 1, loan_product_name: "Salary Loan",
+    principal_amount: 20000, interest_rate: 3, interest_type: "fixed", term_months: 6,
+    payment_frequency: "monthly", outstanding_balance: 12000, total_payable: 23600,
+    status: "ongoing", current_due: 3933, next_due_date: "2026-04-15", overdue_amount: 0, penalty_amount: 0,
+  },
+  {
+    id: 2, loan_account_number: "LN-20260002", application_number: "LA-20260003",
+    borrower_name: "Roberto Garcia", borrower_id: 2, loan_product_name: "Business Loan",
+    principal_amount: 100000, interest_rate: 2, interest_type: "diminishing", term_months: 12,
+    payment_frequency: "monthly", outstanding_balance: 75000, total_payable: 113000,
+    status: "ongoing", current_due: 9417, next_due_date: "2026-04-01", overdue_amount: 9417, penalty_amount: 500,
+  },
+  {
+    id: 3, loan_account_number: "LN-20260003", application_number: "LA-20260005",
+    borrower_name: "Maria L. Reyes", borrower_id: 3, loan_product_name: "Emergency Loan",
+    principal_amount: 10000, interest_rate: 5, interest_type: "fixed", term_months: 3,
+    payment_frequency: "weekly", outstanding_balance: 7000, total_payable: 11500,
+    status: "ongoing", current_due: 958, next_due_date: "2026-04-05", overdue_amount: 0, penalty_amount: 0,
+  },
+  {
+    id: 4, loan_account_number: "LN-20260004", application_number: "LA-20260007",
+    borrower_name: "Eduardo Mendoza", borrower_id: 4, loan_product_name: "OFW Loan",
+    principal_amount: 50000, interest_rate: 2, interest_type: "diminishing", term_months: 12,
+    payment_frequency: "monthly", outstanding_balance: 30000, total_payable: 56500,
+    status: "ongoing", current_due: 4708, next_due_date: "2026-04-20", overdue_amount: 0, penalty_amount: 0,
+  },
+  {
+    id: 5, loan_account_number: "LN-20260005", application_number: "LA-20260009",
+    borrower_name: "Danilo Villanueva", borrower_id: 6, loan_product_name: "Business Loan",
+    principal_amount: 80000, interest_rate: 2.5, interest_type: "fixed", term_months: 12,
+    payment_frequency: "monthly", outstanding_balance: 65000, total_payable: 104000,
+    status: "ongoing", current_due: 8667, next_due_date: "2026-03-01", overdue_amount: 17334, penalty_amount: 1200,
+  },
+  {
+    id: 6, loan_account_number: "LN-20260006", application_number: "LA-20260011",
+    borrower_name: "Ana Marie Cruz", borrower_id: 7, loan_product_name: "Salary Loan",
+    principal_amount: 15000, interest_rate: 3, interest_type: "fixed", term_months: 6,
+    payment_frequency: "monthly", outstanding_balance: 9500, total_payable: 17700,
+    status: "ongoing", current_due: 2950, next_due_date: "2026-04-12", overdue_amount: 0, penalty_amount: 0,
+  },
+  {
+    id: 7, loan_account_number: "LN-20260007", application_number: "LA-20260013",
+    borrower_name: "Carlos P. Ramos", borrower_id: 8, loan_product_name: "Emergency Loan",
+    principal_amount: 5000, interest_rate: 5, interest_type: "fixed", term_months: 3,
+    payment_frequency: "weekly", outstanding_balance: 3200, total_payable: 5750,
+    status: "ongoing", current_due: 479, next_due_date: "2026-04-08", overdue_amount: 479, penalty_amount: 50,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Map API Loan to local shape
+// ---------------------------------------------------------------------------
+
 function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
   const l = loan as Loan & Record<string, unknown>;
   return {
@@ -271,11 +274,15 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function PaymentsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [showResults, setShowResults] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<ActiveLoan | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [lastReceiptId, setLastReceiptId] = useState<number | null>(null);
 
   // Form state
@@ -289,24 +296,26 @@ export default function PaymentsPage() {
   const [collectedBy, setCollectedBy] = useState("Juan Cashier");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // API-loaded loans + mock fallback
+  // API-loaded loans
   const [apiLoans, setApiLoans] = useState<ActiveLoan[]>([]);
-  const [usingMock, setUsingMock] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchLoans = useCallback(async () => {
+    setLoading(true);
     try {
       const response = await loanService.list({ status: "ongoing", per_page: 100 });
       const loans = response.data;
       if (Array.isArray(loans) && loans.length > 0) {
         setApiLoans(loans.map(mapLoanToActiveLoan));
-        setUsingMock(false);
       } else {
+        // Fallback to mock data when API returns empty
         setApiLoans(MOCK_ACTIVE_LOANS);
-        setUsingMock(true);
       }
     } catch {
+      // Fallback to mock data when API fails
       setApiLoans(MOCK_ACTIVE_LOANS);
-      setUsingMock(true);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -314,17 +323,32 @@ export default function PaymentsPage() {
     fetchLoans();
   }, [fetchLoans]);
 
-  // Search filtering
+  // Filter loans by search
   const filteredLoans = useMemo(() => {
-    if (!searchQuery.trim()) return [];
+    if (!searchQuery.trim()) return apiLoans;
     const q = searchQuery.toLowerCase();
     return apiLoans.filter(
       (loan) =>
         loan.loan_account_number.toLowerCase().includes(q) ||
         loan.application_number.toLowerCase().includes(q) ||
-        loan.borrower_name.toLowerCase().includes(q)
+        loan.borrower_name.toLowerCase().includes(q) ||
+        loan.loan_product_name.toLowerCase().includes(q)
     );
   }, [searchQuery, apiLoans]);
+
+  // Sort: overdue first, then due soon, then by next due date
+  const sortedLoans = useMemo(() => {
+    return [...filteredLoans].sort((a, b) => {
+      // Overdue first
+      if (a.overdue_amount > 0 && b.overdue_amount <= 0) return -1;
+      if (a.overdue_amount <= 0 && b.overdue_amount > 0) return 1;
+      // Then by next due date (earliest first)
+      if (a.next_due_date && b.next_due_date) {
+        return new Date(a.next_due_date).getTime() - new Date(b.next_due_date).getTime();
+      }
+      return 0;
+    });
+  }, [filteredLoans]);
 
   // Allocation preview
   const allocation = useMemo(() => {
@@ -358,37 +382,8 @@ export default function PaymentsPage() {
     );
   }, [selectedLoan, allocation]);
 
-  // Payment status for the selected loan
-  const loanPaymentStatus = useMemo(() => {
-    if (!selectedLoan) return null;
-    if (selectedLoan.overdue_amount > 0)
-      return {
-        label: "Overdue",
-        icon: AlertCircle,
-        className: "bg-destructive/10 text-destructive",
-      };
-    const dueDate = new Date(selectedLoan.next_due_date);
-    const today = new Date();
-    const daysUntilDue = Math.ceil(
-      (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (daysUntilDue <= 3)
-      return {
-        label: "Due Soon",
-        icon: Clock,
-        className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-      };
-    return {
-      label: "Current",
-      icon: CheckCircle2,
-      className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    };
-  }, [selectedLoan]);
-
   function handleSelectLoan(loan: ActiveLoan) {
     setSelectedLoan(loan);
-    setSearchQuery(loan.borrower_name);
-    setShowResults(false);
     setAmountPaid("");
     setReferenceNumber("");
     setRemarks("");
@@ -396,17 +391,18 @@ export default function PaymentsPage() {
     setCollectedBy("Juan Cashier");
     setPaymentDate(new Date().toISOString().split("T")[0]);
     setLastReceiptId(null);
+    setDialogOpen(true);
   }
 
   function resetForm() {
     setSelectedLoan(null);
-    setSearchQuery("");
     setAmountPaid("");
     setPaymentMethod("cash");
     setReferenceNumber("");
     setRemarks("");
     setCollectedBy("Juan Cashier");
     setPaymentDate(new Date().toISOString().split("T")[0]);
+    setDialogOpen(false);
   }
 
   async function handleSubmit() {
@@ -435,7 +431,7 @@ export default function PaymentsPage() {
         try {
           await shareCapitalService.ledgerCreate({
             borrower_id: selectedLoan.borrower_id,
-            date: new Date().toISOString().split("T")[0],
+            date: paymentDate,
             description: `Share Capital Build-Up from payment — Loan ${selectedLoan.loan_account_number}`,
             type: "credit",
             amount: selectedLoan.scb_amount,
@@ -450,8 +446,7 @@ export default function PaymentsPage() {
         }
       }
 
-      // Refresh loan data
-      if (!usingMock) fetchLoans();
+      fetchLoans();
       resetForm();
     } catch {
       toast.error("Failed to post payment", {
@@ -464,6 +459,10 @@ export default function PaymentsPage() {
 
   const needsReference = paymentMethod !== "cash";
 
+  // Stats
+  const overdueCount = apiLoans.filter((l) => l.overdue_amount > 0).length;
+  const totalOutstanding = apiLoans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+
   return (
     <RouteGuard permission="payments:view" pageName="Payments">
     <div className="space-y-6">
@@ -472,452 +471,437 @@ export default function PaymentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment Entry</h1>
           <p className="text-sm text-muted-foreground">
-            Record borrower loan repayments
+            Select a borrower from the list below to record a payment
           </p>
         </div>
+        {lastReceiptId && (
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/payments/${lastReceiptId}`)}
+            className="gap-2"
+          >
+            <Receipt className="size-4" />
+            View Last Receipt
+          </Button>
+        )}
       </div>
 
-      {/* Card 1: Search Active Loan */}
+      {/* Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-brand-orange/10 p-2.5">
+                <Users className="size-5 text-brand-orange" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Active Loans</p>
+                <p className="text-2xl font-bold">{apiLoans.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-destructive/10 p-2.5">
+                <AlertCircle className="size-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Overdue</p>
+                <p className="text-2xl font-bold">{overdueCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-blue-500/10 p-2.5">
+                <Banknote className="size-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Outstanding</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalOutstanding)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Borrower Loan List */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Search className="size-4" />
-            Search Active Loan
+            <Receipt className="size-4" />
+            Borrowers with Active Loans
           </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
+          <div className="relative w-full sm:w-72">
             <Input
-              placeholder="Search by account number, application number, or borrower name..."
+              placeholder="Search borrower, account, or product..."
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setShowResults(true);
-                if (selectedLoan) setSelectedLoan(null);
-              }}
-              onFocus={() => setShowResults(true)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="pr-10"
             />
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-
-            {/* Dropdown results */}
-            {showResults && filteredLoans.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover shadow-md max-h-64 overflow-y-auto">
-                {filteredLoans.map((loan) => (
-                  <button
-                    key={loan.id}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm hover:bg-muted transition-colors border-b last:border-b-0"
-                    onClick={() => handleSelectLoan(loan)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">
-                        {loan.borrower_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {loan.loan_account_number} &middot;{" "}
-                        {loan.loan_product_name}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-semibold text-sm">
-                        {formatCurrency(loan.outstanding_balance)}
-                      </p>
-                      {loan.overdue_amount > 0 && (
-                        <Badge variant="destructive" className="text-[10px]">
-                          Overdue
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showResults &&
-              searchQuery.trim().length > 0 &&
-              filteredLoans.length === 0 &&
-              !selectedLoan && (
-                <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover shadow-md px-4 py-3 text-sm text-muted-foreground">
-                  No active loans found matching &ldquo;{searchQuery}&rdquo;
-                </div>
-              )}
           </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              Loading loans...
+            </div>
+          ) : sortedLoans.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {searchQuery.trim()
+                ? `No active loans found matching "${searchQuery}"`
+                : "No active loans found"}
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Borrower</TableHead>
+                    <TableHead className="hidden sm:table-cell">Loan Product</TableHead>
+                    <TableHead className="hidden md:table-cell">Next Due</TableHead>
+                    <TableHead className="text-right">Due Amount</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">Outstanding</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="w-[80px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedLoans.map((loan) => {
+                    const status = getLoanPaymentStatus(loan);
+                    const StatusIcon = status.icon;
+                    return (
+                      <TableRow
+                        key={loan.id}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSelectLoan(loan)}
+                      >
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{loan.borrower_name}</p>
+                            <p className="text-xs text-muted-foreground">{loan.loan_account_number}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <span className="text-sm">{loan.loan_product_name}</span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <span className="text-sm">{formatDate(loan.next_due_date)}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {formatCurrency(loan.current_due + loan.overdue_amount)}
+                            </p>
+                            {loan.penalty_amount > 0 && (
+                              <p className="text-[10px] text-destructive">
+                                +{formatCurrency(loan.penalty_amount)} penalty
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right hidden sm:table-cell">
+                          <span className="text-sm font-medium tabular-nums">
+                            {formatCurrency(loan.outstanding_balance)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              status.className
+                            )}
+                          >
+                            <StatusIcon className="size-3" />
+                            {status.label}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs text-brand-orange hover:text-brand-orange-dark"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectLoan(loan);
+                            }}
+                          >
+                            Pay
+                            <ArrowRight className="size-3" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
+    </div>
 
-      {selectedLoan && (
-        <>
-          {/* Card 2: Loan & Borrower Details */}
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Receipt className="size-4" />
-                Loan &amp; Borrower Details
-              </CardTitle>
-              {loanPaymentStatus && (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${loanPaymentStatus.className}`}
+    {/* Payment Entry Dialog */}
+    <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Banknote className="size-5" />
+            Record Payment
+          </DialogTitle>
+        </DialogHeader>
+
+        {selectedLoan && (
+          <div className="space-y-5">
+            {/* Loan Summary */}
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-semibold">{selectedLoan.borrower_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedLoan.loan_account_number} &middot; {selectedLoan.loan_product_name}
+                  </p>
+                </div>
+                {(() => {
+                  const s = getLoanPaymentStatus(selectedLoan);
+                  const SIcon = s.icon;
+                  return (
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium", s.className)}>
+                      <SIcon className="size-3" />
+                      {s.label}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Outstanding</p>
+                  <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.outstanding_balance)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Current Due</p>
+                  <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.current_due)}</p>
+                </div>
+                {selectedLoan.overdue_amount > 0 && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Overdue</p>
+                    <p className="text-sm font-bold tabular-nums text-destructive">{formatCurrency(selectedLoan.overdue_amount)}</p>
+                  </div>
+                )}
+                {selectedLoan.penalty_amount > 0 && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Penalty</p>
+                    <p className="text-sm font-bold tabular-nums text-destructive">{formatCurrency(selectedLoan.penalty_amount)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Next Due Date</p>
+                  <p className="text-sm font-medium">{formatDate(selectedLoan.next_due_date)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
+                  <p className="text-sm font-medium">{selectedLoan.interest_rate}% ({selectedLoan.interest_type})</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Form */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="payment-date">
+                  Payment Date <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="payment-date"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                  />
+                  <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="amount-paid">
+                  Amount Paid <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="amount-paid"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="0.00"
+                  value={amountPaid}
+                  onChange={(e) =>
+                    setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>
+                  Payment Method <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(value) => { if (value) setPaymentMethod(value); }}
                 >
-                  <loanPaymentStatus.icon className="size-3" />
-                  {loanPaymentStatus.label}
-                </span>
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-3">
-                  <DetailRow
-                    label="Borrower"
-                    value={selectedLoan.borrower_name}
-                  />
-                  <DetailRow
-                    label="Loan Account"
-                    value={selectedLoan.loan_account_number}
-                  />
-                  <DetailRow
-                    label="Application No."
-                    value={selectedLoan.application_number}
-                  />
-                  <DetailRow
-                    label="Loan Product"
-                    value={selectedLoan.loan_product_name}
-                  />
-                  <DetailRow
-                    label="Principal"
-                    value={formatCurrency(selectedLoan.principal_amount)}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <DetailRow
-                    label="Interest Rate"
-                    value={`${selectedLoan.interest_rate}% (${selectedLoan.interest_type})`}
-                  />
-                  <DetailRow
-                    label="Term"
-                    value={`${selectedLoan.term_months} months (${selectedLoan.payment_frequency.replace("_", "-")})`}
-                  />
-                  <DetailRow
-                    label="Next Due Date"
-                    value={formatDate(selectedLoan.next_due_date)}
-                  />
-                  <DetailRow
-                    label="Current Due"
-                    value={formatCurrency(selectedLoan.current_due)}
-                    bold
-                  />
-                  {selectedLoan.overdue_amount > 0 && (
-                    <DetailRow
-                      label="Overdue Amount"
-                      value={formatCurrency(selectedLoan.overdue_amount)}
-                      className="text-destructive"
-                    />
-                  )}
-                  {selectedLoan.penalty_amount > 0 && (
-                    <DetailRow
-                      label="Penalty"
-                      value={formatCurrency(selectedLoan.penalty_amount)}
-                      className="text-destructive"
-                    />
-                  )}
-                </div>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Separator className="my-4" />
-
-              <div className="flex flex-col items-center justify-center gap-1 py-2">
-                <p className="text-sm text-muted-foreground">
-                  Outstanding Balance
-                </p>
-                <p className="text-3xl font-bold tracking-tight">
-                  {formatCurrency(selectedLoan.outstanding_balance)}
-                </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="reference-number">
+                  Reference Number
+                  {needsReference && <span className="text-destructive"> *</span>}
+                </Label>
+                <Input
+                  id="reference-number"
+                  placeholder={needsReference ? "Required for non-cash payments" : "Optional"}
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                />
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Card 3: Payment Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Banknote className="size-4" />
-                Payment Form
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Payment Date */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="payment-date">
-                    Payment Date <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="payment-date"
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                    />
-                    <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Amount Paid */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="amount-paid">
-                    Amount Paid <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="amount-paid"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    placeholder="0.00"
-                    value={amountPaid}
-                    onChange={(e) =>
-                      setAmountPaid(
-                        e.target.value === "" ? "" : Number(e.target.value)
-                      )
-                    }
-                  />
-                </div>
-
-                {/* Payment Method */}
-                <div className="space-y-1.5">
-                  <Label>
-                    Payment Method <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={paymentMethod}
-                    onValueChange={(value) => {
-                      if (value) setPaymentMethod(value);
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(PAYMENT_METHOD_LABELS).map(
-                        ([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Reference Number */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="reference-number">
-                    Reference Number
-                    {needsReference && (
-                      <span className="text-destructive"> *</span>
-                    )}
-                  </Label>
-                  <Input
-                    id="reference-number"
-                    placeholder={
-                      needsReference
-                        ? "Required for non-cash payments"
-                        : "Optional"
-                    }
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                  />
-                </div>
-
-                {/* Collected By */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="collected-by">Collected By</Label>
-                  <Input
-                    id="collected-by"
-                    value={collectedBy}
-                    onChange={(e) => setCollectedBy(e.target.value)}
-                  />
-                </div>
-
-                {/* Remarks */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="remarks">Remarks</Label>
-                  <Textarea
-                    id="remarks"
-                    placeholder="Optional notes about this payment..."
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    rows={3}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="collected-by">Collected By</Label>
+                <Input
+                  id="collected-by"
+                  value={collectedBy}
+                  onChange={(e) => setCollectedBy(e.target.value)}
+                />
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Card 4: Payment Allocation Preview */}
-          {allocation && paymentType && (
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <CreditCard className="size-4" />
-                  Payment Allocation Preview
-                </CardTitle>
-                <Badge variant={paymentType.variant}>{paymentType.label}</Badge>
-              </CardHeader>
-              <CardContent>
+              <div className="space-y-1.5">
+                <Label htmlFor="remarks">Remarks</Label>
+                <Textarea
+                  id="remarks"
+                  placeholder="Optional notes..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            {/* Allocation Preview */}
+            {allocation && paymentType && (
+              <>
+                <Separator />
                 <div className="space-y-3">
-                  <AllocationRow
-                    label="Penalty"
-                    amount={allocation.penaltyApplied}
-                  />
-                  <AllocationRow
-                    label="Interest"
-                    amount={allocation.interestApplied}
-                  />
-                  <AllocationRow
-                    label="Principal"
-                    amount={allocation.principalApplied}
-                  />
-                  <Separator />
-                  <div className="flex items-center justify-between font-semibold">
-                    <span>Total</span>
-                    <span>{formatCurrency(allocation.total)}</span>
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border p-3 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      New Outstanding Balance
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <CreditCard className="size-4" />
+                      Allocation Preview
                     </p>
-                    <p className="text-xl font-bold">
-                      {newOutstandingBalance !== null
-                        ? formatCurrency(newOutstandingBalance)
-                        : "--"}
-                    </p>
+                    <Badge variant={paymentType.variant}>{paymentType.label}</Badge>
                   </div>
 
-                  {typeof amountPaid === "number" &&
-                    amountPaid < selectedLoan.current_due && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-1">Penalty</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.penaltyApplied)}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-1">Interest</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.interestApplied)}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-1">Principal</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.principalApplied)}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-1">New Outstanding Balance</p>
+                      <p className="text-lg font-bold">
+                        {newOutstandingBalance !== null ? formatCurrency(newOutstandingBalance) : "—"}
+                      </p>
+                    </div>
+
+                    {typeof amountPaid === "number" && amountPaid < selectedLoan.current_due && (
                       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-center">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Remaining Amount Due
-                        </p>
-                        <p className="text-xl font-bold text-destructive">
-                          {formatCurrency(
-                            selectedLoan.current_due - amountPaid
-                          )}
+                        <p className="text-[10px] text-muted-foreground mb-1">Remaining Due</p>
+                        <p className="text-lg font-bold text-destructive">
+                          {formatCurrency(selectedLoan.current_due - amountPaid)}
                         </p>
                       </div>
                     )}
 
-                  {typeof amountPaid === "number" &&
-                    amountPaid >
-                      selectedLoan.current_due +
-                        selectedLoan.overdue_amount +
-                        selectedLoan.penalty_amount && (
+                    {allocation.nextInterestApplied > 0 && (
+                      <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
+                        <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Interest</p>
+                        <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                          {formatCurrency(allocation.nextInterestApplied)}
+                        </p>
+                      </div>
+                    )}
+
+                    {allocation.nextPrincipalApplied > 0 && (
                       <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-center dark:border-green-700 dark:bg-green-900/20">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Excess (Applied to Next Principal)
-                        </p>
-                        <p className="text-xl font-bold text-green-700 dark:text-green-400">
-                          {formatCurrency(
-                            amountPaid -
-                              selectedLoan.current_due -
-                              selectedLoan.overdue_amount -
-                              selectedLoan.penalty_amount
-                          )}
+                        <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Principal</p>
+                        <p className="text-lg font-bold text-green-700 dark:text-green-400">
+                          {formatCurrency(allocation.nextPrincipalApplied)}
                         </p>
                       </div>
                     )}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Submit Button */}
-          <div className="flex items-center justify-end gap-3">
-            {lastReceiptId && !selectedLoan && (
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => router.push(`/payments/${lastReceiptId}`)}
-                className="gap-2"
-              >
-                <Receipt className="size-4" />
-                View Last Receipt
-              </Button>
+              </>
             )}
-            <PermissionButton
-              permission="payments:create"
-              tooltip="Your role doesn't have permission to record payments"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2 px-6"
-              size="lg"
-              disabled={
-                isSubmitting ||
-                !amountPaid ||
-                amountPaid <= 0 ||
-                (needsReference && !referenceNumber.trim())
-              }
-              onClick={handleSubmit}
-            >
-              {isSubmitting ? (
-                <>Posting...</>
-              ) : (
-                <>
-                  <Receipt className="size-4" />
-                  Post Payment
-                  <ArrowRight className="size-4" />
-                </>
-              )}
-            </PermissionButton>
+
+            {/* Submit */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={resetForm} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <PermissionButton
+                permission="payments:create"
+                tooltip="Your role doesn't have permission to record payments"
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2"
+                disabled={
+                  isSubmitting ||
+                  !amountPaid ||
+                  amountPaid <= 0 ||
+                  (needsReference && !referenceNumber.trim())
+                }
+                onClick={handleSubmit}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Posting...
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="size-4" />
+                    Post Payment
+                  </>
+                )}
+              </PermissionButton>
+            </div>
           </div>
-        </>
-      )}
-    </div>
+        )}
+      </DialogContent>
+    </Dialog>
     </RouteGuard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function DetailRow({
-  label,
-  value,
-  bold,
-  className,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-2 text-sm">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span
-        className={`text-right ${bold ? "font-semibold" : ""} ${className ?? ""}`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function AllocationRow({
-  label,
-  amount,
-}: {
-  label: string;
-  amount: number;
-}) {
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono">{formatCurrency(amount)}</span>
-    </div>
   );
 }
