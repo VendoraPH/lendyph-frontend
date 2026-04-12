@@ -855,6 +855,15 @@ export default function PaymentsPage() {
                       </div>
                     )}
 
+                    {allocation.scbApplied > 0 && (
+                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-700 dark:bg-amber-900/20">
+                        <p className="text-[10px] text-muted-foreground mb-1">Excess → SCB</p>
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                          {formatCurrency(allocation.scbApplied)}
+                        </p>
+                      </div>
+                    )}
+
                     {allocation.nextInterestApplied > 0 && (
                       <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
                         <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Interest</p>
