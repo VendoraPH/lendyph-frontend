@@ -44,13 +44,18 @@ import { Spinner } from "@/components/ui/spinner";
 
 import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
+import { IdCropDialog } from "./_components/id-crop-dialog";
+import { Crop as CropIcon } from "lucide-react";
 import { branchService, type ApiBranch } from "@/services/branch.service";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
 interface ValidIdEntry {
   type: string;
-  file: File | null;
-  preview: string | null;
+  id_number: string;
+  front_file: File | null;
+  front_preview: string | null;
+  back_file: File | null;
+  back_preview: string | null;
 }
 
 interface BorrowerFormData {
@@ -64,6 +69,9 @@ interface BorrowerFormData {
   contact_number: string;
   email: string;
   address: string;
+  barangay: string;
+  city: string;
+  province: string;
   employer_or_business: string;
   monthly_income: string;
   branch_id: string;
@@ -87,6 +95,9 @@ function emptyForm(): BorrowerFormData {
     contact_number: "",
     email: "",
     address: "",
+    barangay: "",
+    city: "",
+    province: "",
     employer_or_business: "",
     monthly_income: "",
     pledge_amount: "",
@@ -122,6 +133,7 @@ export default function NewBorrowerPage() {
 
   // Valid IDs
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+  const [cropTarget, setCropTarget] = useState<{ index: number; side: "front" | "back"; src: string } | null>(null);
 
   useEffect(() => {
     async function fetchBranches() {
@@ -230,20 +242,31 @@ export default function NewBorrowerPage() {
   }, [cameraOpen]);
 
   function addValidId() {
-    setValidIds((prev) => [...prev, { type: "", file: null, preview: null }]);
+    setValidIds((prev) => [...prev, {
+      type: "",
+      id_number: "",
+      front_file: null,
+      front_preview: null,
+      back_file: null,
+      back_preview: null,
+    }]);
   }
 
   function updateValidId(index: number, field: keyof ValidIdEntry, value: unknown) {
     setValidIds((prev) => prev.map((entry, i) => i === index ? { ...entry, [field]: value } : entry));
   }
 
-  function handleValidIdFile(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+  function handleValidIdFile(index: number, side: "front" | "back", e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       setValidIds((prev) => prev.map((entry, i) =>
-        i === index ? { ...entry, file, preview: reader.result as string } : entry
+        i === index
+          ? side === "front"
+            ? { ...entry, front_file: file, front_preview: reader.result as string }
+            : { ...entry, back_file: file, back_preview: reader.result as string }
+          : entry
       ));
     };
     reader.readAsDataURL(file);
@@ -265,6 +288,44 @@ export default function NewBorrowerPage() {
     }
   }
 
+  // Check for potential duplicate borrower by comparing first/middle/last names
+  async function checkDuplicate(): Promise<{ isDuplicate: boolean; match?: string }> {
+    try {
+      const searchQuery = `${form.first_name.trim()} ${form.last_name.trim()}`;
+      const res = await borrowerService.list({ search: searchQuery, per_page: 20 });
+      const borrowers = Array.isArray(res)
+        ? res
+        : ((res as unknown as { data?: Array<Record<string, unknown>> }).data ?? []);
+
+      const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+      const firstN = normalize(form.first_name);
+      const middleN = normalize(form.middle_name);
+      const lastN = normalize(form.last_name);
+
+      for (const b of borrowers as Array<Record<string, unknown>>) {
+        const bFirst = normalize(String(b.first_name ?? ""));
+        const bMiddle = normalize(String(b.middle_name ?? ""));
+        const bLast = normalize(String(b.last_name ?? ""));
+
+        // Exact match on all three
+        if (bFirst === firstN && bMiddle === middleN && bLast === lastN) {
+          return { isDuplicate: true, match: String(b.full_name ?? `${b.first_name} ${b.last_name}`) };
+        }
+        // Fuzzy: same last name + same first name (even if middle differs slightly)
+        if (bFirst === firstN && bLast === lastN) {
+          return { isDuplicate: true, match: String(b.full_name ?? `${b.first_name} ${b.last_name}`) };
+        }
+      }
+      return { isDuplicate: false };
+    } catch {
+      // If the duplicate check fails, allow the user to proceed — don't block on network errors
+      return { isDuplicate: false };
+    }
+  }
+
+  const [duplicateConfirm, setDuplicateConfirm] = useState<string | null>(null);
+  const [forceSubmit, setForceSubmit] = useState(false);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
@@ -273,11 +334,29 @@ export default function NewBorrowerPage() {
     const clientErrors: Record<string, string[]> = {};
     if (!form.first_name.trim()) clientErrors.first_name = ["First name is required"];
     if (!form.last_name.trim()) clientErrors.last_name = ["Last name is required"];
+    if (!form.middle_name.trim()) clientErrors.middle_name = ["Middle name is required"];
+    if (!form.birthdate) clientErrors.birthdate = ["Birthdate is required"];
+    if (!form.gender) clientErrors.gender = ["Gender is required"];
+    if (!form.civil_status) clientErrors.civil_status = ["Civil status is required"];
+    if (!form.contact_number.trim()) clientErrors.contact_number = ["Contact number is required"];
+    if (!form.address.trim()) clientErrors.address = ["Street address is required"];
+    if (!form.city.trim()) clientErrors.city = ["City / Municipality is required"];
+    if (!form.province.trim()) clientErrors.province = ["Province is required"];
     if (!form.branch_id) clientErrors.branch_id = ["Branch is required"];
 
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
+      toast.error("Please fill in all required fields");
       return;
+    }
+
+    // Duplicate check (skip if user already confirmed to proceed)
+    if (!forceSubmit) {
+      const dup = await checkDuplicate();
+      if (dup.isDuplicate && dup.match) {
+        setDuplicateConfirm(dup.match);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -297,6 +376,9 @@ export default function NewBorrowerPage() {
       if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
       if (form.email.trim()) payload.email = form.email.trim();
       if (form.address.trim()) payload.address = form.address.trim();
+      if (form.barangay.trim()) payload.barangay = form.barangay.trim();
+      if (form.city.trim()) payload.city = form.city.trim();
+      if (form.province.trim()) payload.province = form.province.trim();
       if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
       if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
       payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
@@ -324,14 +406,16 @@ export default function NewBorrowerPage() {
         }
       }
 
-      // Upload valid IDs if provided
-      const idsWithFiles = validIds.filter((v) => v.type && v.file);
-      if (idsWithFiles.length > 0 && borrowerId) {
-        for (const entry of idsWithFiles) {
+      // Upload valid IDs if provided (front and back separately)
+      const validIdsToUpload = validIds.filter((v) => v.type && (v.front_file || v.back_file));
+      if (validIdsToUpload.length > 0 && borrowerId) {
+        for (const entry of validIdsToUpload) {
           try {
             const idData = new FormData();
             idData.append("type", entry.type);
-            idData.append("file", entry.file!);
+            if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
+            if (entry.front_file) idData.append("front_file", entry.front_file);
+            if (entry.back_file) idData.append("back_file", entry.back_file);
             await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
           } catch {
             toast.error(`Failed to upload ${entry.type} ID`);
@@ -529,13 +613,16 @@ export default function NewBorrowerPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="middle_name">Middle Name</Label>
+                <Label htmlFor="middle_name">
+                  Middle Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="middle_name"
                   placeholder="Dela Cruz"
                   value={form.middle_name}
                   onChange={(e) => update("middle_name", e.target.value)}
                 />
+                {fieldError("middle_name")}
               </div>
               <div className="space-y-2">
                 <Label>Suffix</Label>
@@ -544,7 +631,13 @@ export default function NewBorrowerPage() {
                   onValueChange={(v) => update("suffix", v ?? "")}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="None" />
+                    <SelectValue placeholder="None">
+                      {(value: string | null) =>
+                        value
+                          ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                          : "None"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {SUFFIX_OPTIONS.map((opt) => (
@@ -559,16 +652,21 @@ export default function NewBorrowerPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="birthdate">Birthdate</Label>
+                <Label htmlFor="birthdate">
+                  Birthdate <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="birthdate"
                   type="date"
                   value={form.birthdate}
                   onChange={(e) => update("birthdate", e.target.value)}
                 />
+                {fieldError("birthdate")}
               </div>
               <div className="space-y-2">
-                <Label>Gender</Label>
+                <Label>
+                  Gender <span className="text-destructive">*</span>
+                </Label>
                 <RadioGroup
                   className="flex gap-4 pt-2"
                   value={form.gender || null}
@@ -583,17 +681,26 @@ export default function NewBorrowerPage() {
                     <span className="text-sm">Female</span>
                   </label>
                 </RadioGroup>
+                {fieldError("gender")}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Civil Status</Label>
+              <Label>
+                Civil Status <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
                 <SelectTrigger className="w-full sm:w-1/2">
-                  <SelectValue placeholder="Select civil status" />
+                  <SelectValue placeholder="Select civil status">
+                    {(value: string | null) =>
+                      value
+                        ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                        : "Select civil status"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {CIVIL_STATUS_OPTIONS.map((opt) => (
@@ -675,7 +782,9 @@ export default function NewBorrowerPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="contact_number">Contact Number</Label>
+                <Label htmlFor="contact_number">
+                  Contact Number <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="contact_number"
                   type="tel"
@@ -699,13 +808,53 @@ export default function NewBorrowerPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
+              <Label htmlFor="address">
+                Street Address <span className="text-destructive">*</span>
+              </Label>
+              <Input
                 id="address"
-                placeholder="Full address"
+                placeholder="House/Lot/Block number, Street name"
                 value={form.address}
                 onChange={(e) => update("address", e.target.value)}
               />
+              {fieldError("address")}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="barangay">Barangay</Label>
+                <Input
+                  id="barangay"
+                  placeholder="Barangay"
+                  value={form.barangay}
+                  onChange={(e) => update("barangay", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">
+                  City / Municipality <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="city"
+                  placeholder="City name"
+                  value={form.city}
+                  onChange={(e) => update("city", e.target.value)}
+                />
+                {fieldError("city")}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="province">
+                Province <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="province"
+                placeholder="Province"
+                value={form.province}
+                onChange={(e) => update("province", e.target.value)}
+              />
+              {fieldError("province")}
             </div>
           </CardContent>
         </Card>
@@ -733,65 +882,147 @@ export default function NewBorrowerPage() {
             ) : (
               <div className="space-y-4">
                 {validIds.map((entry, index) => (
-                  <div key={index} className="flex flex-col sm:flex-row gap-3 p-3 rounded-lg border bg-muted/30">
-                    <div className="flex-1 space-y-2">
-                      <Label>ID Type</Label>
-                      <Select
-                        value={entry.type || null}
-                        onValueChange={(v) => updateValidId(index, "type", v ?? "")}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select ID type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {VALID_ID_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div key={index} className="relative space-y-3 p-4 rounded-lg border bg-muted/30">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeValidId(index)}
+                      className="absolute top-2 right-2 text-destructive hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+
+                    {/* ID Type + ID Number */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
+                      <div className="space-y-2">
+                        <Label>ID Type</Label>
+                        <Select
+                          value={entry.type || null}
+                          onValueChange={(v) => updateValidId(index, "type", v ?? "")}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select ID type">
+                              {(value: string | null) =>
+                                value
+                                  ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                  : "Select ID type"
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {VALID_ID_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>ID Number</Label>
+                        <Input
+                          placeholder="ID number"
+                          value={entry.id_number}
+                          onChange={(e) => updateValidId(index, "id_number", e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div className="flex-1 space-y-2">
-                      <Label>Upload ID</Label>
-                      {entry.preview ? (
-                        <div className="relative h-20 rounded-lg overflow-hidden border">
-                          <img
-                            src={entry.preview}
-                            alt="ID preview"
-                            className="h-full w-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => updateValidId(index, "file", null)}
-                            className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">Choose file...</span>
-                          <input
-                            type="file"
-                            accept="image/*,.pdf"
-                            onChange={(e) => handleValidIdFile(index, e)}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                    </div>
-                    <div className="flex items-end">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => removeValidId(index)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+
+                    {/* Front / Back Uploads */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Front of ID</Label>
+                        {entry.front_preview ? (
+                          <div className="space-y-2">
+                            <div className="relative h-28 rounded-lg overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={entry.front_preview}
+                                alt="Front ID preview"
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateValidId(index, "front_file", null);
+                                  updateValidId(index, "front_preview", null);
+                                }}
+                                className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-8 text-xs gap-1"
+                              onClick={() => setCropTarget({ index, side: "front", src: entry.front_preview! })}
+                            >
+                              <CropIcon className="h-3.5 w-3.5" />
+                              Crop
+                            </Button>
+                          </div>
+                        ) : (
+                          <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Upload Front</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(e) => handleValidIdFile(index, "front", e)}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Back of ID</Label>
+                        {entry.back_preview ? (
+                          <div className="space-y-2">
+                            <div className="relative h-28 rounded-lg overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={entry.back_preview}
+                                alt="Back ID preview"
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateValidId(index, "back_file", null);
+                                  updateValidId(index, "back_preview", null);
+                                }}
+                                className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-8 text-xs gap-1"
+                              onClick={() => setCropTarget({ index, side: "back", src: entry.back_preview! })}
+                            >
+                              <CropIcon className="h-3.5 w-3.5" />
+                              Crop
+                            </Button>
+                          </div>
+                        ) : (
+                          <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Upload Back</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(e) => handleValidIdFile(index, "back", e)}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -941,6 +1172,70 @@ export default function NewBorrowerPage() {
           </Button>
         </div>
       </form>
+
+      {/* ID Crop Dialog */}
+      <IdCropDialog
+        open={!!cropTarget}
+        onOpenChange={(open) => { if (!open) setCropTarget(null); }}
+        imageSrc={cropTarget?.src ?? null}
+        onCropComplete={(blob, dataUrl) => {
+          if (!cropTarget) return;
+          const { index, side } = cropTarget;
+          const croppedFile = new File([blob], `${side}-id-cropped.jpg`, { type: "image/jpeg" });
+          setValidIds((prev) => prev.map((entry, i) => {
+            if (i !== index) return entry;
+            return side === "front"
+              ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
+              : { ...entry, back_file: croppedFile, back_preview: dataUrl };
+          }));
+          setCropTarget(null);
+          toast.success("ID cropped");
+        }}
+      />
+
+      {/* Duplicate Account Warning Dialog */}
+      <Dialog open={!!duplicateConfirm} onOpenChange={(open) => { if (!open) setDuplicateConfirm(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <X className="h-5 w-5 text-amber-500" />
+              Possible Duplicate Account
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              An existing member with a matching name was found:
+            </p>
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 p-3">
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                {duplicateConfirm}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to create a new member? This may create a duplicate.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setDuplicateConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setDuplicateConfirm(null);
+                setForceSubmit(true);
+                // Re-trigger submit after state update
+                setTimeout(() => {
+                  const formEl = document.querySelector("form");
+                  if (formEl) formEl.requestSubmit();
+                }, 0);
+              }}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              Create Anyway
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
     </RouteGuard>
   );
