@@ -17,8 +17,9 @@ export interface ApprovalChainStep {
 }
 
 const STORAGE_KEY = "approval-workflow-config";
+const STORAGE_KEY_NORMAL = "approval-workflow-config-normal";
 
-// Default chain matches the LOAN RELEASE FLOWCHART spec
+// Policy Exception chain — full BOD approval
 const DEFAULT_CHAIN: ApprovalChainStep[] = [
   { id: "loan-processor", name: "Loan Processor", role: "loan_processor", kind: "submit" },
   { id: "manager", name: "Manager", role: "manager", kind: "approve" },
@@ -30,6 +31,13 @@ const DEFAULT_CHAIN: ApprovalChainStep[] = [
   { id: "bod6", name: "BOD6", role: "bod6", kind: "approve" },
   { id: "bod7", name: "BOD7", role: "bod7", kind: "approve" },
   { id: "cashier", name: "Cashier", role: "cashier", kind: "release" },
+];
+
+// Normal loan flow — Manager approval, Chairwoman confirmation only
+const DEFAULT_NORMAL_CHAIN: ApprovalChainStep[] = [
+  { id: "loan-processor", name: "Loan Processor", role: "loan_processor", kind: "submit" },
+  { id: "manager", name: "Manager", role: "manager", kind: "approve" },
+  { id: "chairwoman", name: "BOD Chairwoman", role: "bod1", kind: "release" },
 ];
 
 export interface ChainValidationError {
@@ -154,5 +162,46 @@ export const approvalWorkflowService = {
    */
   validate(steps: ApprovalChainStep[]): ChainValidationError | null {
     return validateChain(steps);
+  },
+
+  // ── Normal (non-policy-exception) workflow ──
+
+  async listNormal(): Promise<ApprovalChainStep[]> {
+    if (typeof window === "undefined") return DEFAULT_NORMAL_CHAIN;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_NORMAL);
+      if (!raw) return DEFAULT_NORMAL_CHAIN;
+      const parsed = JSON.parse(raw) as ApprovalChainStep[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_NORMAL_CHAIN;
+      if (validateChain(parsed) !== null) return DEFAULT_NORMAL_CHAIN;
+      return parsed;
+    } catch {
+      return DEFAULT_NORMAL_CHAIN;
+    }
+  },
+
+  async saveNormal(steps: ApprovalChainStep[]): Promise<ApprovalChainStep[]> {
+    const error = validateChain(steps);
+    if (error) throw new Error(error.message);
+    if (typeof window === "undefined") return steps;
+    localStorage.setItem(STORAGE_KEY_NORMAL, JSON.stringify(steps));
+    return steps;
+  },
+
+  async resetNormal(): Promise<ApprovalChainStep[]> {
+    if (typeof window === "undefined") return DEFAULT_NORMAL_CHAIN;
+    localStorage.removeItem(STORAGE_KEY_NORMAL);
+    return DEFAULT_NORMAL_CHAIN;
+  },
+
+  getDefaultNormal(): ApprovalChainStep[] {
+    return DEFAULT_NORMAL_CHAIN;
+  },
+
+  /**
+   * Get the correct chain for a loan based on policy_exception flag.
+   */
+  async listForLoan(policyException: boolean): Promise<ApprovalChainStep[]> {
+    return policyException ? this.list() : this.listNormal();
   },
 };

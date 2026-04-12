@@ -244,11 +244,26 @@ function StepFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
+type WorkflowTab = "normal" | "policy_exception";
+
 export default function ApprovalWorkflowPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [steps, setSteps] = useState<ApprovalChainStep[]>([]);
-  const [savedSteps, setSavedSteps] = useState<ApprovalChainStep[]>([]);
+  const [activeTab, setActiveTab] = useState<WorkflowTab>("normal");
+
+  // Normal flow state
+  const [normalSteps, setNormalSteps] = useState<ApprovalChainStep[]>([]);
+  const [savedNormalSteps, setSavedNormalSteps] = useState<ApprovalChainStep[]>([]);
+
+  // Policy Exception flow state
+  const [peSteps, setPeSteps] = useState<ApprovalChainStep[]>([]);
+  const [savedPeSteps, setSavedPeSteps] = useState<ApprovalChainStep[]>([]);
+
+  // Active chain = whatever tab is selected
+  const steps = activeTab === "normal" ? normalSteps : peSteps;
+  const setSteps = activeTab === "normal" ? setNormalSteps : setPeSteps;
+  const savedSteps = activeTab === "normal" ? savedNormalSteps : savedPeSteps;
+
   const [formOpen, setFormOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<ApprovalChainStep | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -257,10 +272,15 @@ export default function ApprovalWorkflowPage() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await approvalWorkflowService.list();
+        const [normalData, peData] = await Promise.all([
+          approvalWorkflowService.listNormal(),
+          approvalWorkflowService.list(),
+        ]);
         if (!cancelled) {
-          setSteps(data);
-          setSavedSteps(data);
+          setNormalSteps(normalData);
+          setSavedNormalSteps(normalData);
+          setPeSteps(peData);
+          setSavedPeSteps(peData);
         }
       } catch {
         toast.error("Failed to load approval workflow");
@@ -344,9 +364,14 @@ export default function ApprovalWorkflowPage() {
     }
     try {
       setSaving(true);
-      const result = await approvalWorkflowService.save(steps);
-      setSavedSteps(result);
-      toast.success("Approval workflow saved");
+      if (activeTab === "normal") {
+        const result = await approvalWorkflowService.saveNormal(steps);
+        setSavedNormalSteps(result);
+      } else {
+        const result = await approvalWorkflowService.save(steps);
+        setSavedPeSteps(result);
+      }
+      toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow saved`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save workflow";
       toast.error(message);
@@ -356,17 +381,27 @@ export default function ApprovalWorkflowPage() {
   }
 
   function handleRevert() {
-    setSteps(savedSteps);
+    if (activeTab === "normal") {
+      setNormalSteps(savedNormalSteps);
+    } else {
+      setPeSteps(savedPeSteps);
+    }
     toast.info("Changes reverted");
   }
 
   async function handleReset() {
     try {
       setSaving(true);
-      const defaults = await approvalWorkflowService.reset();
-      setSteps(defaults);
-      setSavedSteps(defaults);
-      toast.success("Approval workflow reset to default");
+      if (activeTab === "normal") {
+        const defaults = await approvalWorkflowService.resetNormal();
+        setNormalSteps(defaults);
+        setSavedNormalSteps(defaults);
+      } else {
+        const defaults = await approvalWorkflowService.reset();
+        setPeSteps(defaults);
+        setSavedPeSteps(defaults);
+      }
+      toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow reset to default`);
     } catch {
       toast.error("Failed to reset workflow");
     } finally {
@@ -399,6 +434,34 @@ export default function ApprovalWorkflowPage() {
             <p className="text-sm text-muted-foreground">
               Configure the loan approval chain — who acts at each step and in what order
             </p>
+          </div>
+
+          {/* Workflow Type Tabs */}
+          <div className="flex rounded-lg border p-1 bg-muted/50 self-start">
+            <button
+              type="button"
+              onClick={() => setActiveTab("normal")}
+              className={cn(
+                "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                activeTab === "normal"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Normal Flow
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("policy_exception")}
+              className={cn(
+                "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                activeTab === "policy_exception"
+                  ? "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-300"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Policy Exception
+            </button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
