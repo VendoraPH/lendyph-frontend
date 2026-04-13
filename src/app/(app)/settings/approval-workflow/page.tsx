@@ -431,62 +431,45 @@ export default function ApprovalWorkflowPage() {
   return (
     <RouteGuard permission="settings:view" pageName="Approval Workflow">
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        {/* Header row: title + actions */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight">
               Approval Workflow
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-1">
               Configure the loan approval chain — who acts at each step and in what order
             </p>
           </div>
 
-          {/* Workflow Type Tabs */}
-          <div className="flex rounded-lg border p-1 bg-muted/50 self-start">
-            <button
-              type="button"
-              onClick={() => setActiveTab("normal")}
-              className={cn(
-                "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                activeTab === "normal"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Normal Flow
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("policy_exception")}
-              className={cn(
-                "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                activeTab === "policy_exception"
-                  ? "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-300"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Policy Exception
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setResetConfirmOpen(true)}
               disabled={saving}
+              className="h-9"
             >
               <RotateCcw className="mr-2 h-4 w-4" />
-              Reset to Default
+              <span className="hidden sm:inline">Reset to Default</span>
+              <span className="sm:hidden">Reset</span>
             </Button>
             {isDirty && (
-              <Button variant="outline" onClick={handleRevert} disabled={saving}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRevert}
+                disabled={saving}
+                className="h-9"
+              >
                 Revert
               </Button>
             )}
             <Button
+              size="sm"
               onClick={handleSave}
               disabled={saving || !!validationError || !isDirty}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
               {saving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -498,8 +481,36 @@ export default function ApprovalWorkflowPage() {
           </div>
         </div>
 
+        {/* Workflow Type Tabs — own row so they never fight with title/actions */}
+        <div className="flex w-full rounded-lg border p-1 bg-muted/50 sm:w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveTab("normal")}
+            className={cn(
+              "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+              activeTab === "normal"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Normal Flow
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("policy_exception")}
+            className={cn(
+              "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+              activeTab === "policy_exception"
+                ? "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-300"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Policy Exception
+          </button>
+        </div>
+
         {/* Summary cards */}
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
           <Card>
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
@@ -603,7 +614,7 @@ export default function ApprovalWorkflowPage() {
               return (
                 <div
                   key={step.id}
-                  className="flex items-center gap-3 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
                 >
                   {/* Reorder buttons */}
                   <div className="flex flex-col gap-0.5 shrink-0">
@@ -645,7 +656,7 @@ export default function ApprovalWorkflowPage() {
                   </div>
 
                   {/* Name + role */}
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-[180px]">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold truncate">{step.name}</p>
                       <Badge
@@ -655,21 +666,21 @@ export default function ApprovalWorkflowPage() {
                         {meta.label}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       Role:{" "}
                       <span className="font-mono">
                         {roleConfig?.label ?? step.role}
                       </span>
                       {!roleConfig && (
                         <span className="ml-1 text-red-600">
-                          (role not found in system)
+                          (role not found)
                         </span>
                       )}
                     </p>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  {/* Actions — wrap to their own row on very narrow widths */}
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <Button
                       variant="outline"
                       size="sm"
@@ -683,6 +694,7 @@ export default function ApprovalWorkflowPage() {
                       size="sm"
                       className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
                       onClick={() => handleDeleteStep(step.id)}
+                      aria-label="Delete step"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
