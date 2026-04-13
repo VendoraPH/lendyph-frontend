@@ -5,7 +5,7 @@ import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, AlertTriangle, FileText } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { borrowerService, coMakerService, loanProductService, loanService, userService } from "@/services";
 import { api } from "@/lib/api-client";
@@ -907,14 +907,6 @@ export default function NewLoanApplicationPage() {
 
             {policyException && (
               <div className="space-y-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm font-medium">Policy Exception Workflow</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  This loan will follow the policy exception approval chain: Loan Processor → Manager → All BOD Members
-                </p>
-
                 {/* Policy Exception Details */}
                 <div className="space-y-2">
                   <Label htmlFor="pe-details">Policy Exception Details</Label>

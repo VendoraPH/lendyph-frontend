@@ -203,7 +203,7 @@ export function PhotoCropDialog({
             <div className="flex items-center gap-3 px-1">
               <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
               <Slider
-                value={[zoom]}
+                value={zoom}
                 onValueChange={handleZoomChange}
                 min={MIN_ZOOM}
                 max={MAX_ZOOM}

@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Camera, Check, ChevronsUpDown, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,19 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from "@/components/ui/command";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -46,7 +32,8 @@ import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { IdCropDialog } from "./_components/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
-import { branchService, type ApiBranch } from "@/services/branch.service";
+import { useAuth } from "@/hooks/use-auth";
+import { PhotoCropDialog } from "@/app/(app)/borrowers/[id]/_components/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
 interface ValidIdEntry {
@@ -112,17 +99,20 @@ function emptyForm(): BorrowerFormData {
 
 export default function NewBorrowerPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
-  const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
-  const [branchOpen, setBranchOpen] = useState(false);
-  const [selectedBranchName, setSelectedBranchName] = useState("");
 
   // Profile photo
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo crop dialog — opened after a file is chosen (upload or camera) so
+  // the user can drag/zoom to position the image the way they want it.
+  const [photoCropOpen, setPhotoCropOpen] = useState(false);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
 
   // Camera capture
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -135,26 +125,34 @@ export default function NewBorrowerPage() {
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
   const [cropTarget, setCropTarget] = useState<{ index: number; side: "front" | "back"; src: string } | null>(null);
 
+  // Auto-assign branch from the currently signed-in user. Members inherit
+  // the branch of whoever creates them, so there's no manual selector.
   useEffect(() => {
-    async function fetchBranches() {
-      try {
-        const res = await branchService.list();
-        const list = Array.isArray(res) ? res : (res as unknown as { data: ApiBranch[] }).data ?? [];
-        setBranches(list.filter((b) => b.is_active));
-      } catch {
-        toast.error("Failed to load branches");
-      }
+    const branchId = user?.branch?.id;
+    if (branchId) {
+      setForm((prev) =>
+        prev.branch_id === String(branchId) ? prev : { ...prev, branch_id: String(branchId) }
+      );
     }
-    fetchBranches();
-  }, []);
+  }, [user?.branch?.id]);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPendingPhotoFile(file);
+    setPhotoCropOpen(true);
+    // Allow re-selecting the same file later
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  function handlePhotoCropComplete(blob: Blob) {
+    const file = new File([blob], "profile-photo.jpg", { type: "image/jpeg" });
     setProfilePhoto(file);
     const reader = new FileReader();
     reader.onload = () => setPhotoPreview(reader.result as string);
     reader.readAsDataURL(file);
+    setPhotoCropOpen(false);
+    setPendingPhotoFile(null);
   }
 
   function removePhoto() {
@@ -214,10 +212,12 @@ export default function NewBorrowerPage() {
     canvas.toBlob((blob) => {
       if (!blob) return;
       const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
-      setProfilePhoto(file);
-      setPhotoPreview(canvas.toDataURL("image/jpeg", 0.9));
       setCameraOpen(false);
       stopCamera();
+      // Open the crop dialog so the user can position the capture as they
+      // prefer before it becomes the profile photo.
+      setPendingPhotoFile(file);
+      setPhotoCropOpen(true);
     }, "image/jpeg", 0.9);
   }
 
@@ -302,18 +302,20 @@ export default function NewBorrowerPage() {
       const middleN = normalize(form.middle_name);
       const lastN = normalize(form.last_name);
 
+      // A member is a duplicate only when first, middle, and last names all
+      // match an existing record. Partial matches (same first + last only)
+      // are not blocked — two people can share a first/last name but differ
+      // on the middle name.
       for (const b of borrowers as Array<Record<string, unknown>>) {
         const bFirst = normalize(String(b.first_name ?? ""));
         const bMiddle = normalize(String(b.middle_name ?? ""));
         const bLast = normalize(String(b.last_name ?? ""));
 
-        // Exact match on all three
         if (bFirst === firstN && bMiddle === middleN && bLast === lastN) {
-          return { isDuplicate: true, match: String(b.full_name ?? `${b.first_name} ${b.last_name}`) };
-        }
-        // Fuzzy: same last name + same first name (even if middle differs slightly)
-        if (bFirst === firstN && bLast === lastN) {
-          return { isDuplicate: true, match: String(b.full_name ?? `${b.first_name} ${b.last_name}`) };
+          return {
+            isDuplicate: true,
+            match: String(b.full_name ?? `${b.first_name} ${b.middle_name} ${b.last_name}`),
+          };
         }
       }
       return { isDuplicate: false };
@@ -322,9 +324,6 @@ export default function NewBorrowerPage() {
       return { isDuplicate: false };
     }
   }
-
-  const [duplicateConfirm, setDuplicateConfirm] = useState<string | null>(null);
-  const [forceSubmit, setForceSubmit] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -342,7 +341,11 @@ export default function NewBorrowerPage() {
     if (!form.address.trim()) clientErrors.address = ["Street address is required"];
     if (!form.city.trim()) clientErrors.city = ["City / Municipality is required"];
     if (!form.province.trim()) clientErrors.province = ["Province is required"];
-    if (!form.branch_id) clientErrors.branch_id = ["Branch is required"];
+    if (!form.branch_id) {
+      clientErrors.branch_id = [
+        "Your account is not assigned to a branch. Contact an administrator.",
+      ];
+    }
 
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
@@ -350,13 +353,21 @@ export default function NewBorrowerPage() {
       return;
     }
 
-    // Duplicate check (skip if user already confirmed to proceed)
-    if (!forceSubmit) {
-      const dup = await checkDuplicate();
-      if (dup.isDuplicate && dup.match) {
-        setDuplicateConfirm(dup.match);
-        return;
-      }
+    // Duplicate check — hard block. A member with the same first, middle,
+    // and last name already exists; creating another would produce a
+    // duplicate account.
+    const dup = await checkDuplicate();
+    if (dup.isDuplicate) {
+      const message = dup.match
+        ? `This account already exists (${dup.match})`
+        : "This account already exists";
+      setErrors({
+        first_name: [message],
+        middle_name: [message],
+        last_name: [message],
+      });
+      toast.error(message);
+      return;
     }
 
     setSubmitting(true);
@@ -1079,75 +1090,6 @@ export default function NewBorrowerPage() {
           </CardContent>
         </Card>
 
-        {/* Branch Assignment */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <h2 className="text-base font-semibold">Branch Assignment</h2>
-
-            <div className="space-y-2">
-              <Label>
-                Branch <span className="text-destructive">*</span>
-              </Label>
-              {branches.length === 0 ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                  <Spinner className="size-4" />
-                  Loading branches...
-                </div>
-              ) : (
-                <Popover open={branchOpen} onOpenChange={setBranchOpen}>
-                  <PopoverTrigger
-                    render={
-                      <button
-                        type="button"
-                        role="combobox"
-                        aria-expanded={branchOpen}
-                        className="flex h-8 w-full sm:w-1/2 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                      />
-                    }
-                  >
-                    <span className={cn("truncate", !form.branch_id && "text-muted-foreground")}>
-                      {form.branch_id && selectedBranchName
-                        ? selectedBranchName
-                        : "Select a branch"}
-                    </span>
-                    <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                  </PopoverTrigger>
-                  <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search branch..." />
-                      <CommandList>
-                        <CommandEmpty>No branch found.</CommandEmpty>
-                        <CommandGroup>
-                          {branches.map((branch) => (
-                            <CommandItem
-                              key={branch.id}
-                              value={branch.name}
-                              onSelect={() => {
-                                update("branch_id", String(branch.id));
-                                setSelectedBranchName(branch.name);
-                                setBranchOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 size-4",
-                                  form.branch_id === String(branch.id) ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {branch.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              )}
-              {fieldError("branch_id")}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Submit */}
         <div className="flex justify-end gap-3 pb-8">
           <Link
@@ -1173,6 +1115,17 @@ export default function NewBorrowerPage() {
         </div>
       </form>
 
+      {/* Profile Photo Crop Dialog — drag/zoom to position the image */}
+      <PhotoCropDialog
+        open={photoCropOpen}
+        onOpenChange={(open) => {
+          setPhotoCropOpen(open);
+          if (!open) setPendingPhotoFile(null);
+        }}
+        imageFile={pendingPhotoFile}
+        onCropComplete={handlePhotoCropComplete}
+      />
+
       {/* ID Crop Dialog */}
       <IdCropDialog
         open={!!cropTarget}
@@ -1192,50 +1145,6 @@ export default function NewBorrowerPage() {
           toast.success("ID cropped");
         }}
       />
-
-      {/* Duplicate Account Warning Dialog */}
-      <Dialog open={!!duplicateConfirm} onOpenChange={(open) => { if (!open) setDuplicateConfirm(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <X className="h-5 w-5 text-amber-500" />
-              Possible Duplicate Account
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              An existing member with a matching name was found:
-            </p>
-            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 p-3">
-              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                {duplicateConfirm}
-              </p>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to create a new member? This may create a duplicate.
-            </p>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setDuplicateConfirm(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                setDuplicateConfirm(null);
-                setForceSubmit(true);
-                // Re-trigger submit after state update
-                setTimeout(() => {
-                  const formEl = document.querySelector("form");
-                  if (formEl) formEl.requestSubmit();
-                }, 0);
-              }}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              Create Anyway
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
     </RouteGuard>
   );

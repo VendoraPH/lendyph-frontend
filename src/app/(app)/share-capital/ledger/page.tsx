@@ -125,6 +125,7 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
     totalDebits: number;
     totalCredits: number;
     entryCount: number;
+    lastTransactionDate: string | null;
   }>();
 
   for (const e of entries) {
@@ -134,6 +135,9 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
       existing.totalDebits += e.debit;
       existing.totalCredits += e.credit;
       existing.entryCount++;
+      if (!existing.lastTransactionDate || e.date > existing.lastTransactionDate) {
+        existing.lastTransactionDate = e.date;
+      }
     } else {
       map.set(key, {
         memberId: key,
@@ -141,6 +145,7 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
         totalDebits: e.debit,
         totalCredits: e.credit,
         entryCount: 1,
+        lastTransactionDate: e.date ?? null,
       });
     }
   }
@@ -497,6 +502,7 @@ export default function SubsidiaryLedgerPage() {
                             <SortIcon active={masterSort === "name"} dir={masterSortDir} />
                           </span>
                         </TableHead>
+                        <TableHead className="text-xs">Last Transaction Date</TableHead>
                         <TableHead
                           className="text-right cursor-pointer select-none hover:text-foreground"
                           onClick={() => toggleMasterSort("balance")}
@@ -520,6 +526,11 @@ export default function SubsidiaryLedgerPage() {
                             {member.memberId}
                           </TableCell>
                           <TableCell className="font-medium text-sm">{member.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {member.lastTransactionDate
+                              ? formatDate(member.lastTransactionDate)
+                              : "—"}
+                          </TableCell>
                           <TableCell className="text-right text-sm font-semibold tabular-nums">
                             {member.balance > 0 ? formatCurrency(member.balance) : "₱0"}
                           </TableCell>
@@ -530,7 +541,7 @@ export default function SubsidiaryLedgerPage() {
                       ))}
                       {paginatedMembers.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                          <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                             No members found.
                           </TableCell>
                         </TableRow>
@@ -540,7 +551,7 @@ export default function SubsidiaryLedgerPage() {
                     {paginatedMembers.length > 0 && (
                       <TableFooter>
                         <TableRow className="bg-muted/50 font-semibold">
-                          <TableCell colSpan={2} className="text-sm">
+                          <TableCell colSpan={3} className="text-sm">
                             Total ({filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""})
                           </TableCell>
                           <TableCell className="text-right text-sm tabular-nums">
