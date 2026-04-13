@@ -935,12 +935,12 @@ export default function NewBorrowerPage() {
                         <Label>Front of ID</Label>
                         {entry.front_preview ? (
                           <div className="space-y-2">
-                            <div className="relative h-28 rounded-lg overflow-hidden border">
+                            <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={entry.front_preview}
                                 alt="Front ID preview"
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                               />
                               <button
                                 type="button"
@@ -965,7 +965,7 @@ export default function NewBorrowerPage() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
                             <FileText className="h-5 w-5 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">Upload Front</span>
                             <input
@@ -981,12 +981,12 @@ export default function NewBorrowerPage() {
                         <Label>Back of ID</Label>
                         {entry.back_preview ? (
                           <div className="space-y-2">
-                            <div className="relative h-28 rounded-lg overflow-hidden border">
+                            <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={entry.back_preview}
                                 alt="Back ID preview"
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                               />
                               <button
                                 type="button"
@@ -1011,7 +1011,7 @@ export default function NewBorrowerPage() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
                             <FileText className="h-5 w-5 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">Upload Back</span>
                             <input
