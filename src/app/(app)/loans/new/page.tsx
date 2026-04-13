@@ -591,8 +591,23 @@ export default function NewLoanApplicationPage() {
           toast.warning("Loan created but policy exception letter upload failed");
         }
       }
+
+      // Auto-forward to Manager: creating the loan IS the Loan Processor's action,
+      // so skip the redundant "Submit for Review" click on the detail page.
+      let forwarded = false;
+      try {
+        await loanService.submit(loan.id);
+        forwarded = true;
+      } catch {
+        toast.warning(
+          "Loan created but could not be forwarded for review. Open the loan to submit it manually."
+        );
+      }
+
       toast.success("Loan Application Created", {
-        description: `Loan application has been created successfully.`,
+        description: forwarded
+          ? "Forwarded to Manager for approval."
+          : "Loan application has been created successfully.",
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
