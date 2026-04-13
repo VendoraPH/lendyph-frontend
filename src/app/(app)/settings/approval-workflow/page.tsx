@@ -171,15 +171,16 @@ function StepFormDialog({
             <Label htmlFor="step-role">
               Required Role <span className="text-destructive">*</span>
             </Label>
-            <Select value={role} onValueChange={(v) => setRole(v ?? "")}>
+            <Select
+              value={role || null}
+              onValueChange={(v) => setRole(v ?? "")}
+              items={availableRoles.map((r) => ({
+                value: r,
+                label: ROLES[r].label,
+              }))}
+            >
               <SelectTrigger id="step-role">
-                <SelectValue>
-                  {(value: string | null) => {
-                    if (!value) return "Select a role";
-                    const cfg = ROLES[value as Role];
-                    return cfg?.label ?? value;
-                  }}
-                </SelectValue>
+                <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
                 {availableRoles.map((r) => (
@@ -200,14 +201,13 @@ function StepFormDialog({
             <Select
               value={kind}
               onValueChange={(v) => setKind(v as ChainStepKind)}
+              items={(Object.keys(KIND_META) as ChainStepKind[]).map((k) => ({
+                value: k,
+                label: KIND_META[k].label,
+              }))}
             >
               <SelectTrigger id="step-kind">
-                <SelectValue>
-                  {(value: string | null) => {
-                    if (!value) return "Select kind";
-                    return KIND_META[value as ChainStepKind]?.label ?? value;
-                  }}
-                </SelectValue>
+                <SelectValue placeholder="Select kind" />
               </SelectTrigger>
               <SelectContent>
                 {(Object.keys(KIND_META) as ChainStepKind[]).map((k) => (
@@ -365,11 +365,17 @@ export default function ApprovalWorkflowPage() {
     try {
       setSaving(true);
       if (activeTab === "normal") {
-        const result = await approvalWorkflowService.saveNormal(steps);
-        setSavedNormalSteps(result);
+        await approvalWorkflowService.saveNormal(steps);
+        // Refetch from server so display reflects server truth — catches any
+        // persistence or response-shape discrepancies immediately.
+        const fresh = await approvalWorkflowService.listNormal();
+        setNormalSteps(fresh);
+        setSavedNormalSteps(fresh);
       } else {
-        const result = await approvalWorkflowService.save(steps);
-        setSavedPeSteps(result);
+        await approvalWorkflowService.save(steps);
+        const fresh = await approvalWorkflowService.list();
+        setPeSteps(fresh);
+        setSavedPeSteps(fresh);
       }
       toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow saved`);
     } catch (err) {
