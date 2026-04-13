@@ -33,12 +33,12 @@ const DEFAULT_CHAIN: ApprovalChainStep[] = [
   { id: "cashier", name: "Cashier", role: "cashier", kind: "release" },
 ];
 
-// Normal loan flow — Manager approval, Chairwoman confirmation, Cashier release
+// Normal loan flow — Manager approval, Chairwoman confirmation, General Bookkeeper release
 const DEFAULT_NORMAL_CHAIN: ApprovalChainStep[] = [
   { id: "loan-processor", name: "Loan Processor", role: "loan_processor", kind: "submit" },
   { id: "manager", name: "Manager", role: "manager", kind: "approve" },
   { id: "chairwoman", name: "BOD Chairwoman", role: "bod1", kind: "approve" },
-  { id: "cashier", name: "Cashier", role: "cashier", kind: "release" },
+  { id: "general-bookkeeper", name: "General Bookkeeper", role: "general_bookkeeper", kind: "release" },
 ];
 
 export interface ChainValidationError {

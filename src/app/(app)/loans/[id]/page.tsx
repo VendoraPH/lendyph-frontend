@@ -1224,6 +1224,12 @@ export default function LoanDetailPage({
 
   const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
   const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  // Confirmation step = the last approve step (next step is release). Its button
+  // reads "Confirm & Forward" instead of "Approve & Forward" to signal the
+  // chairwoman's role as final confirmation before release.
+  const isConfirmationStep =
+    currentStep?.kind === "approve" &&
+    approvalSteps[currentStepIndex + 1]?.kind === "release";
   const allStepsApproved =
     approvalSteps.length > 0 && approvalSteps.every((s) => s.status === "approved");
   const canActOnCurrentStep = currentStep
@@ -1987,7 +1993,7 @@ export default function LoanDetailPage({
                             disabled={stepActionLoading}
                           >
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Approve &amp; Forward
+                            {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
                           </Button>
                         </>
                       )}
