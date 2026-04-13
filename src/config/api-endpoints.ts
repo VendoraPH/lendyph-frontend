@@ -147,6 +147,9 @@ export const API_ENDPOINTS = {
     STATUS: "/auto-credit/status",
     PROCESS: "/auto-credit/process",
   },
+  SETTINGS: {
+    APPROVAL_WORKFLOW: "/settings/approval-workflow",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

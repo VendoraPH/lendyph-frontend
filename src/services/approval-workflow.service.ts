@@ -1,25 +1,30 @@
 // Approval Workflow Service
 // ---------------------------------------------------------------------------
-// Mock service layer for configuring the loan approval chain. Currently
-// backed by localStorage so admins can customize the chain without code
-// changes. The shape and method signatures mirror what a real REST API
-// would expose, so swapping to a backend is a one-line change inside the
-// methods below (replace localStorage with api.get/api.post calls).
+// Backed by the real API at /settings/approval-workflow. The backend swagger
+// does not document the request/response body shape, so we:
+//   * bypass api-client's auto-unwrap and talk to axios directly
+//   * accept multiple response shapes (array, {steps}, {data:{steps}}, etc.)
+// The normal and policy-exception chains are stored server-side; this module
+// is a thin wrapper plus a synchronous default fallback used by loan
+// snapshotting when the server is unreachable.
 // ---------------------------------------------------------------------------
+
+import axiosClient from "@/lib/axios-client";
+import { API_ENDPOINTS } from "@/config/api-endpoints";
 
 export type ChainStepKind = "submit" | "approve" | "release";
 
 export interface ApprovalChainStep {
-  id: string;         // Stable identifier (slug)
-  name: string;       // Display name ("Manager", "BOD1")
-  role: string;       // Required role slug to act on this step
+  id: string;
+  name: string;
+  role: string;
   kind: ChainStepKind;
 }
 
-const STORAGE_KEY = "approval-workflow-config";
-const STORAGE_KEY_NORMAL = "approval-workflow-config-normal";
+type ChainType = "normal" | "policy_exception";
 
-// Policy Exception chain — full BOD approval
+// Policy Exception chain — full BOD approval. Used as a client-side
+// fallback and for pre-submit validation; the server owns the source of truth.
 const DEFAULT_CHAIN: ApprovalChainStep[] = [
   { id: "loan-processor", name: "Loan Processor", role: "loan_processor", kind: "submit" },
   { id: "manager", name: "Manager", role: "manager", kind: "approve" },
@@ -102,106 +107,141 @@ function validateChain(steps: ApprovalChainStep[]): ChainValidationError | null 
   return null;
 }
 
-export const approvalWorkflowService = {
-  /**
-   * Fetch the current chain configuration. Returns the default chain if no
-   * custom config has been saved.
-   *
-   * TODO(backend): replace with `api.get<ApprovalChainStep[]>("/settings/approval-workflow")`
-   */
-  async list(): Promise<ApprovalChainStep[]> {
-    if (typeof window === "undefined") return DEFAULT_CHAIN;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return DEFAULT_CHAIN;
-      const parsed = JSON.parse(raw) as ApprovalChainStep[];
-      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_CHAIN;
-      // Validate the stored config; fall back to default if corrupted
-      if (validateChain(parsed) !== null) return DEFAULT_CHAIN;
-      return parsed;
-    } catch {
-      return DEFAULT_CHAIN;
+// ---------------------------------------------------------------------------
+// Response shape coercion
+// ---------------------------------------------------------------------------
+// The backend swagger doesn't document the chain response shape, so we
+// probe several possibilities and pull out the array no matter how it's
+// wrapped. Known shapes in the wild:
+//   [ ...steps ]
+//   { steps: [...] }
+//   { type, steps: [...] }
+//   { success, data: [...] }
+//   { success, data: { steps: [...] } }
+//   { success, data: { type, steps: [...] } }
+//   { data: [...] }
+//   { data: { steps: [...] } }
+
+function isApprovalChainStep(v: unknown): v is ApprovalChainStep {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    typeof o.name === "string" &&
+    typeof o.role === "string" &&
+    (o.kind === "submit" || o.kind === "approve" || o.kind === "release")
+  );
+}
+
+function extractSteps(payload: unknown): ApprovalChainStep[] {
+  if (Array.isArray(payload) && payload.every(isApprovalChainStep)) {
+    return payload;
+  }
+  if (payload && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj.steps) && obj.steps.every(isApprovalChainStep)) {
+      return obj.steps as ApprovalChainStep[];
     }
+    if (obj.data !== undefined) {
+      return extractSteps(obj.data);
+    }
+  }
+  throw new Error("Unexpected approval workflow response shape");
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers (bypass api-client's auto-unwrap so we see the raw envelope)
+// ---------------------------------------------------------------------------
+
+async function fetchChain(type: ChainType): Promise<ApprovalChainStep[]> {
+  const { data } = await axiosClient.get(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, {
+    params: { type },
+  });
+  return extractSteps(data);
+}
+
+async function putChain(
+  type: ChainType,
+  steps: ApprovalChainStep[]
+): Promise<ApprovalChainStep[]> {
+  const { data } = await axiosClient.put(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, {
+    type,
+    steps,
+  });
+  // Some backends return 204/empty or a plain success envelope on PUT; in
+  // that case fall back to a follow-up GET so the caller always receives
+  // the freshly persisted chain.
+  try {
+    return extractSteps(data);
+  } catch {
+    return fetchChain(type);
+  }
+}
+
+async function deleteChain(type: ChainType): Promise<ApprovalChainStep[]> {
+  const { data } = await axiosClient.delete(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, {
+    params: { type },
+  });
+  try {
+    return extractSteps(data);
+  } catch {
+    return fetchChain(type);
+  }
+}
+
+export const approvalWorkflowService = {
+  // ── Policy Exception chain ──
+
+  /** Fetch the current policy-exception chain from the backend. */
+  async list(): Promise<ApprovalChainStep[]> {
+    return fetchChain("policy_exception");
   },
 
-  /**
-   * Persist a new chain configuration. Validates the chain and throws if
-   * it is invalid.
-   *
-   * TODO(backend): replace with `api.post("/settings/approval-workflow", { steps })`
-   */
+  /** Persist a new policy-exception chain. Client-validates before sending. */
   async save(steps: ApprovalChainStep[]): Promise<ApprovalChainStep[]> {
     const error = validateChain(steps);
     if (error) {
       throw new Error(error.message);
     }
-    if (typeof window === "undefined") return steps;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(steps));
-    return steps;
+    return putChain("policy_exception", steps);
   },
 
-  /**
-   * Reset the chain configuration back to the default.
-   *
-   * TODO(backend): replace with `api.delete("/settings/approval-workflow")`
-   */
+  /** Reset the policy-exception chain back to the server-side default. */
   async reset(): Promise<ApprovalChainStep[]> {
-    if (typeof window === "undefined") return DEFAULT_CHAIN;
-    localStorage.removeItem(STORAGE_KEY);
-    return DEFAULT_CHAIN;
+    return deleteChain("policy_exception");
   },
 
-  /**
-   * Get the default chain without touching storage.
-   */
+  /** Synchronous default — used by loan snapshotting when the server is unreachable. */
   getDefault(): ApprovalChainStep[] {
     return DEFAULT_CHAIN;
   },
 
-  /**
-   * Validate a chain without saving. Useful for live form validation.
-   */
+  /** Validate a chain without saving. Useful for live form validation. */
   validate(steps: ApprovalChainStep[]): ChainValidationError | null {
     return validateChain(steps);
   },
 
-  // ── Normal (non-policy-exception) workflow ──
+  // ── Normal (non-policy-exception) chain ──
 
   async listNormal(): Promise<ApprovalChainStep[]> {
-    if (typeof window === "undefined") return DEFAULT_NORMAL_CHAIN;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_NORMAL);
-      if (!raw) return DEFAULT_NORMAL_CHAIN;
-      const parsed = JSON.parse(raw) as ApprovalChainStep[];
-      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_NORMAL_CHAIN;
-      if (validateChain(parsed) !== null) return DEFAULT_NORMAL_CHAIN;
-      return parsed;
-    } catch {
-      return DEFAULT_NORMAL_CHAIN;
-    }
+    return fetchChain("normal");
   },
 
   async saveNormal(steps: ApprovalChainStep[]): Promise<ApprovalChainStep[]> {
     const error = validateChain(steps);
     if (error) throw new Error(error.message);
-    if (typeof window === "undefined") return steps;
-    localStorage.setItem(STORAGE_KEY_NORMAL, JSON.stringify(steps));
-    return steps;
+    return putChain("normal", steps);
   },
 
   async resetNormal(): Promise<ApprovalChainStep[]> {
-    if (typeof window === "undefined") return DEFAULT_NORMAL_CHAIN;
-    localStorage.removeItem(STORAGE_KEY_NORMAL);
-    return DEFAULT_NORMAL_CHAIN;
+    return deleteChain("normal");
   },
 
   getDefaultNormal(): ApprovalChainStep[] {
     return DEFAULT_NORMAL_CHAIN;
   },
 
-  /**
-   * Get the correct chain for a loan based on policy_exception flag.
-   */
+  /** Get the correct chain for a loan based on policy_exception flag. */
   async listForLoan(policyException: boolean): Promise<ApprovalChainStep[]> {
     return policyException ? this.list() : this.listNormal();
   },
