@@ -3,6 +3,7 @@ export type Role =
   | "loan_officer"
   | "loan_processor"
   | "cashier"
+  | "general_bookkeeper"
   | "collector"
   | "viewer"
   | "manager"

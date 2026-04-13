@@ -72,6 +72,19 @@ export const ROLES: Record<Role, RoleConfig> = {
       "payments:void",
     ],
   },
+  general_bookkeeper: {
+    label: "General Bookkeeper",
+    description: "Releases approved loans after chairwoman confirmation",
+    permissions: [
+      "dashboard:view",
+      "borrowers:view",
+      "loans:view",
+      "loans:release",
+      "payments:view",
+      "reports:view",
+      "share_capital:view",
+    ],
+  },
   collector: {
     label: "Collector",
     description: "View and manage collections",
