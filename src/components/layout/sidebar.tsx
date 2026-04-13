@@ -226,7 +226,7 @@ function SidebarContent({
                 <img
                   src="/Logo/Lendy_logo.png"
                   alt="Lendy.PH"
-                  className="h-8 w-auto object-contain"
+                  className="h-6 w-auto object-contain"
                 />
               </div>
               {onToggle && (
