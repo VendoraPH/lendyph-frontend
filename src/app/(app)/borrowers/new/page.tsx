@@ -28,7 +28,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
-import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { IdCropDialog } from "./_components/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
@@ -386,7 +385,11 @@ export default function NewBorrowerPage() {
       if (form.civil_status) payload.civil_status = form.civil_status;
       if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
       if (form.email.trim()) payload.email = form.email.trim();
-      if (form.address.trim()) payload.address = form.address.trim();
+      if (form.address.trim()) {
+        const street = form.address.trim();
+        payload.street_address = street;
+        payload.address = street;
+      }
       if (form.barangay.trim()) payload.barangay = form.barangay.trim();
       if (form.city.trim()) payload.city = form.city.trim();
       if (form.province.trim()) payload.province = form.province.trim();
@@ -402,6 +405,8 @@ export default function NewBorrowerPage() {
         if (form.spouse_contact_number.trim()) payload.spouse_contact_number = form.spouse_contact_number.trim();
         if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
       }
+
+      payload.force = forceSubmit;
 
       const created = await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
       const borrowerId = (created as unknown as { id: number }).id;
@@ -427,7 +432,7 @@ export default function NewBorrowerPage() {
             if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
             if (entry.front_file) idData.append("front_file", entry.front_file);
             if (entry.back_file) idData.append("back_file", entry.back_file);
-            await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
+            await borrowerService.uploadValidId(borrowerId, idData);
           } catch {
             toast.error(`Failed to upload ${entry.type} ID`);
           }

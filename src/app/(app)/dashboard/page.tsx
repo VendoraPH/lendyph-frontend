@@ -28,7 +28,51 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert, Landmark } from "lucide-react";
 import { shareCapitalService } from "@/services";
+import { dashboardService } from "@/services/dashboard.service";
 import type { ShareCapitalLedgerEntry } from "@/types";
+
+// ---------------------------------------------------------------------------
+// Backend response shapes (best-effort — wire defensively, fall back if empty)
+// ---------------------------------------------------------------------------
+
+interface DashboardStats {
+  total_portfolio?: number;
+  active_loans?: number;
+  total_collected?: number;
+  overdue_count?: number;
+  share_capital_total?: number;
+}
+
+interface CollectionsTrendPoint {
+  period_label?: string;
+  label?: string;
+  day?: string;
+  value?: number;
+  amount?: number;
+}
+
+interface DailyDueItem {
+  id?: number;
+  borrower?: string;
+  borrower_name?: string;
+  loan_id?: number | string;
+  loan_account_number?: string;
+  amount_due?: number;
+  amount_paid?: number;
+  status?: "paid" | "partial" | "overdue" | "pending" | "collected";
+}
+
+interface RecentTransactionItem {
+  id?: number;
+  name?: string;
+  borrower_name?: string;
+  description?: string;
+  desc?: string;
+  amount?: number;
+  date?: string;
+  created_at?: string;
+  type?: "release" | "repayment";
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,19 +155,6 @@ const DAILY_DUE_ITEMS = [
   { id: 7, borrower: "Jose Dela Cruz", loanId: "LN-2026-0067", amountDue: 2500, amountPaid: 0, status: "pending" as const },
 ];
 
-const TOTAL_DUE = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountDue, 0);
-const TOTAL_COLLECTED = DAILY_DUE_ITEMS.reduce((sum, item) => sum + item.amountPaid, 0);
-const TOTAL_PARTIAL = DAILY_DUE_ITEMS.filter((i) => i.status === "partial").reduce((sum, i) => sum + i.amountPaid, 0);
-const TOTAL_FULLY_COLLECTED = TOTAL_COLLECTED - TOTAL_PARTIAL;
-const TOTAL_REMAINING = TOTAL_DUE - TOTAL_COLLECTED;
-const COLLECTION_RATE = Math.round((TOTAL_COLLECTED / TOTAL_DUE) * 100);
-
-const COLLECTION_PIE_DATA = [
-  { name: "Collected", value: TOTAL_FULLY_COLLECTED, color: "#10b981" },
-  { name: "Partial", value: TOTAL_PARTIAL, color: "#f59e0b" },
-  { name: "Pending", value: TOTAL_REMAINING, color: "#94a3b8" },
-];
-
 const RECENT_TRANSACTIONS = [
   { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
   { id: 2, name: "Roberto Garcia", desc: "Cash payment received", amount: 9417, date: "Mar 31, 9:15 AM", color: "bg-orange-500" },
@@ -134,51 +165,15 @@ const RECENT_TRANSACTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// KPI Card data
+// KPI Card structure (values populated from state in the component)
 // ---------------------------------------------------------------------------
 
-const KPI_CARDS = [
-  {
-    icon: Wallet,
-    value: "₱15.2M",
-    label: "Total Portfolio",
-    color: "#7c3aed",
-    sparkData: SPARKLINE_PURPLE,
-    href: "/loans",
-  },
-  {
-    icon: FileText,
-    value: "843",
-    label: "Active Loans",
-    color: "#e879f9",
-    sparkData: SPARKLINE_ORANGE,
-    href: "/loans",
-  },
-  {
-    icon: DollarSign,
-    value: "₱2.4M",
-    label: "Collected",
-    color: "#10b981",
-    sparkData: SPARKLINE_GREEN,
-    href: "/payments",
-  },
-  {
-    icon: AlertTriangle,
-    value: "47",
-    label: "Overdue",
-    color: "#f87171",
-    sparkData: SPARKLINE_BLUE,
-    href: "/collections",
-  },
-  {
-    icon: Landmark,
-    value: "—",
-    label: "Share Capital",
-    color: "#14b8a6",
-    sparkData: SPARKLINE_TEAL,
-    href: "/share-capital/ledger",
-    dynamic: true,
-  },
+const KPI_CARD_STRUCTURE = [
+  { key: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", sparkData: SPARKLINE_PURPLE, href: "/loans" },
+  { key: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", sparkData: SPARKLINE_ORANGE, href: "/loans" },
+  { key: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", sparkData: SPARKLINE_GREEN, href: "/payments" },
+  { key: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", sparkData: SPARKLINE_BLUE, href: "/collections" },
+  { key: "share_capital" as const, icon: Landmark, label: "Share Capital", color: "#14b8a6", sparkData: SPARKLINE_TEAL, href: "/share-capital/ledger" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -310,9 +305,15 @@ export default function DashboardPage() {
   const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
   const [mounted, setMounted] = useState(false);
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [trendData, setTrendData] = useState<typeof COLLECTIONS_TREND | null>(null);
+  const [dailyDues, setDailyDues] = useState<typeof DAILY_DUE_ITEMS | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<typeof RECENT_TRANSACTIONS | null>(null);
 
   useEffect(() => {
     setMounted(true);
+
+    // Share capital — existing, kept as-is
     shareCapitalService
       .ledgerList({ per_page: 9999 })
       .then((res) => {
@@ -327,7 +328,115 @@ export default function DashboardPage() {
       .catch(() => {
         setShareCapitalTotal("—");
       });
+
+    // Dashboard stats
+    dashboardService
+      .stats()
+      .then((res) => {
+        if (res && typeof res === "object") setStats(res as DashboardStats);
+      })
+      .catch(() => {});
+
+    // Collections trend
+    dashboardService
+      .collectionsTrend()
+      .then((res) => {
+        const raw = Array.isArray(res)
+          ? (res as CollectionsTrendPoint[])
+          : ((res as { data?: CollectionsTrendPoint[] })?.data ?? []);
+        if (Array.isArray(raw) && raw.length > 0) {
+          const mapped = raw.map((p, i) => ({
+            day: p.period_label ?? p.label ?? p.day ?? `W${i + 1}`,
+            value: Number(p.value ?? p.amount ?? 0),
+          }));
+          setTrendData(mapped);
+        }
+      })
+      .catch(() => {});
+
+    // Daily dues
+    dashboardService
+      .dailyDues()
+      .then((res) => {
+        const raw = Array.isArray(res)
+          ? (res as DailyDueItem[])
+          : ((res as { data?: DailyDueItem[] })?.data ?? []);
+        if (Array.isArray(raw) && raw.length > 0) {
+          const mapped = raw.map((item, i) => {
+            const statusMap: Record<string, "collected" | "partial" | "pending"> = {
+              paid: "collected",
+              collected: "collected",
+              partial: "partial",
+              overdue: "pending",
+              pending: "pending",
+            };
+            const status = statusMap[item.status ?? "pending"] ?? "pending";
+            return {
+              id: Number(item.id ?? i + 1),
+              borrower: item.borrower ?? item.borrower_name ?? "—",
+              loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
+              amountDue: Number(item.amount_due ?? 0),
+              amountPaid: Number(item.amount_paid ?? 0),
+              status,
+            };
+          });
+          setDailyDues(mapped);
+        }
+      })
+      .catch(() => {});
+
+    // Recent transactions
+    dashboardService
+      .recentTransactions()
+      .then((res) => {
+        const raw = Array.isArray(res)
+          ? (res as RecentTransactionItem[])
+          : ((res as { data?: RecentTransactionItem[] })?.data ?? []);
+        if (Array.isArray(raw) && raw.length > 0) {
+          const palette = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500"];
+          const mapped = raw.slice(0, 10).map((tx, i) => ({
+            id: Number(tx.id ?? i + 1),
+            name: tx.name ?? tx.borrower_name ?? "—",
+            desc: tx.description ?? tx.desc ?? (tx.type === "release" ? "Loan released" : "Payment received"),
+            amount: Number(tx.amount ?? 0),
+            date: tx.date ?? tx.created_at ?? "",
+            color: palette[i % palette.length]!,
+          }));
+          setRecentTransactions(mapped);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  // ---------------------------------------------------------------------
+  // Derived values — prefer live data, fall back to existing mocks so the
+  // page never renders empty if the backend is not yet wired up.
+  // ---------------------------------------------------------------------
+  const kpiValues: Record<typeof KPI_CARD_STRUCTURE[number]["key"], string> = {
+    portfolio: stats?.total_portfolio != null ? formatCompactCurrency(stats.total_portfolio) : "₱15.2M",
+    active_loans: stats?.active_loans != null ? String(stats.active_loans) : "843",
+    collected: stats?.total_collected != null ? formatCompactCurrency(stats.total_collected) : "₱2.4M",
+    overdue: stats?.overdue_count != null ? String(stats.overdue_count) : "47",
+    share_capital: shareCapitalTotal,
+  };
+
+  const collectionsTrend = trendData ?? COLLECTIONS_TREND;
+  const dueItems = dailyDues ?? DAILY_DUE_ITEMS;
+  const transactions = recentTransactions ?? RECENT_TRANSACTIONS;
+
+  const totalDue = dueItems.reduce((sum, item) => sum + item.amountDue, 0);
+  const totalCollected = dueItems.reduce((sum, item) => sum + item.amountPaid, 0);
+  const totalPartial = dueItems
+    .filter((i) => i.status === "partial")
+    .reduce((sum, i) => sum + i.amountPaid, 0);
+  const totalFullyCollected = totalCollected - totalPartial;
+  const totalRemaining = totalDue - totalCollected;
+  const collectionRate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0;
+  const pieData = [
+    { name: "Collected", value: totalFullyCollected, color: "#10b981" },
+    { name: "Partial", value: totalPartial, color: "#f59e0b" },
+    { name: "Pending", value: totalRemaining, color: "#94a3b8" },
+  ];
 
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
@@ -336,7 +445,7 @@ export default function DashboardPage() {
       {/* Row 1: KPI Cards                                                  */}
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {KPI_CARDS.map((kpi) => (
+        {KPI_CARD_STRUCTURE.map((kpi) => (
           <Link key={kpi.label} href={kpi.href} className="group">
             <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
               <CardContent className="py-3 px-4">
@@ -349,7 +458,7 @@ export default function DashboardPage() {
                       <kpi.icon className="h-3.5 w-3.5 text-white" />
                     </div>
                     <div>
-                      <p className="text-lg font-bold leading-tight">{"dynamic" in kpi && kpi.dynamic ? shareCapitalTotal : kpi.value}</p>
+                      <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
                       <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
                     </div>
                   </div>
@@ -373,9 +482,9 @@ export default function DashboardPage() {
                 {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
-            <Badge variant="outline" className={COLLECTION_RATE >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : COLLECTION_RATE >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
+            <Badge variant="outline" className={collectionRate >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : collectionRate >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              {COLLECTION_RATE}% collected
+              {collectionRate}% collected
             </Badge>
           </div>
 
@@ -387,7 +496,7 @@ export default function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={COLLECTION_PIE_DATA}
+                        data={pieData}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
@@ -397,7 +506,7 @@ export default function DashboardPage() {
                         strokeWidth={0}
                         isAnimationActive={false}
                       >
-                        {COLLECTION_PIE_DATA.map((entry) => (
+                        {pieData.map((entry) => (
                           <Cell key={entry.name} fill={entry.color} />
                         ))}
                       </Pie>
@@ -410,13 +519,13 @@ export default function DashboardPage() {
                 ) : null}
                 {/* Center label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-bold">{COLLECTION_RATE}%</p>
+                  <p className="text-2xl font-bold">{collectionRate}%</p>
                   <p className="text-[11px] text-muted-foreground">Collected</p>
                 </div>
               </div>
               {/* Legend */}
               <div className="flex items-center gap-4 mt-2">
-                {COLLECTION_PIE_DATA.map((entry) => (
+                {pieData.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
                     <span className="text-[11px] text-muted-foreground">{entry.name}</span>
@@ -442,7 +551,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {DAILY_DUE_ITEMS.map((item) => (
+                {dueItems.map((item) => (
                   <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-3">
@@ -495,7 +604,7 @@ export default function DashboardPage() {
             <div className="mt-4" style={{ height: 120 }}>
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={COLLECTIONS_TREND} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                  <AreaChart data={collectionsTrend} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
                     <defs>
                       <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
@@ -612,7 +721,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {RECENT_TRANSACTIONS.map((tx) => {
+                {transactions.map((tx) => {
                   const initials = getInitials(tx.name);
                   return (
                     <TableRow key={tx.id} className="hover:bg-muted/40 transition-colors">

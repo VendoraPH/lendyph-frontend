@@ -1,6 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { Borrower, BorrowerLedgerEntry, CoMaker, PaginatedResponse } from "@/types";
+import type { Borrower, BorrowerLedgerEntry, PaginatedResponse } from "@/types";
 
 export const borrowerService = {
   list: (params?: Record<string, unknown>) =>
@@ -20,8 +20,11 @@ export const borrowerService = {
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.BORROWERS.DELETE(id)),
 
-  coMakers: (borrowerId: number) =>
-    api.get<CoMaker[]>(API_ENDPOINTS.CO_MAKERS.LIST(borrowerId)),
+  bulkDelete: (ids: number[]) =>
+    api.delete(API_ENDPOINTS.BORROWERS.BULK_DELETE, { data: { ids } }),
+
+  bulkDeactivate: (ids: number[]) =>
+    api.patch(API_ENDPOINTS.BORROWERS.BULK_DEACTIVATE, { ids }),
 
   deactivate: (id: number) =>
     api.patch<Borrower>(API_ENDPOINTS.BORROWERS.DEACTIVATE(id)),

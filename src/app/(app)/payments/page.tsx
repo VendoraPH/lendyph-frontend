@@ -5,7 +5,9 @@ import { RouteGuard, PermissionButton } from "@/components/common";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loanService, repaymentService, shareCapitalService } from "@/services";
+import type { RepaymentPreview } from "@/services/repayment.service";
 import type { Loan } from "@/types";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -198,62 +200,6 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data for testing / fallback
-// ---------------------------------------------------------------------------
-
-const MOCK_ACTIVE_LOANS: ActiveLoan[] = [
-  {
-    id: 1, loan_account_number: "LN-20260001", application_number: "LA-20260001",
-    borrower_name: "Rosario D. Santos", borrower_id: 1, loan_product_name: "Salary Loan",
-    principal_amount: 20000, interest_rate: 3, interest_type: "fixed", term_months: 6,
-    payment_frequency: "monthly", outstanding_balance: 12000, total_payable: 23600,
-    status: "ongoing", current_due: 3933, next_due_date: "2026-04-15", overdue_amount: 0, penalty_amount: 0,
-  },
-  {
-    id: 2, loan_account_number: "LN-20260002", application_number: "LA-20260003",
-    borrower_name: "Roberto Garcia", borrower_id: 2, loan_product_name: "Business Loan",
-    principal_amount: 100000, interest_rate: 2, interest_type: "diminishing", term_months: 12,
-    payment_frequency: "monthly", outstanding_balance: 75000, total_payable: 113000,
-    status: "ongoing", current_due: 9417, next_due_date: "2026-04-01", overdue_amount: 9417, penalty_amount: 500,
-  },
-  {
-    id: 3, loan_account_number: "LN-20260003", application_number: "LA-20260005",
-    borrower_name: "Maria L. Reyes", borrower_id: 3, loan_product_name: "Emergency Loan",
-    principal_amount: 10000, interest_rate: 5, interest_type: "fixed", term_months: 3,
-    payment_frequency: "weekly", outstanding_balance: 7000, total_payable: 11500,
-    status: "ongoing", current_due: 958, next_due_date: "2026-04-05", overdue_amount: 0, penalty_amount: 0,
-  },
-  {
-    id: 4, loan_account_number: "LN-20260004", application_number: "LA-20260007",
-    borrower_name: "Eduardo Mendoza", borrower_id: 4, loan_product_name: "OFW Loan",
-    principal_amount: 50000, interest_rate: 2, interest_type: "diminishing", term_months: 12,
-    payment_frequency: "monthly", outstanding_balance: 30000, total_payable: 56500,
-    status: "ongoing", current_due: 4708, next_due_date: "2026-04-20", overdue_amount: 0, penalty_amount: 0,
-  },
-  {
-    id: 5, loan_account_number: "LN-20260005", application_number: "LA-20260009",
-    borrower_name: "Danilo Villanueva", borrower_id: 6, loan_product_name: "Business Loan",
-    principal_amount: 80000, interest_rate: 2.5, interest_type: "fixed", term_months: 12,
-    payment_frequency: "monthly", outstanding_balance: 65000, total_payable: 104000,
-    status: "ongoing", current_due: 8667, next_due_date: "2026-03-01", overdue_amount: 17334, penalty_amount: 1200,
-  },
-  {
-    id: 6, loan_account_number: "LN-20260006", application_number: "LA-20260011",
-    borrower_name: "Ana Marie Cruz", borrower_id: 7, loan_product_name: "Salary Loan",
-    principal_amount: 15000, interest_rate: 3, interest_type: "fixed", term_months: 6,
-    payment_frequency: "monthly", outstanding_balance: 9500, total_payable: 17700,
-    status: "ongoing", current_due: 2950, next_due_date: "2026-04-12", overdue_amount: 0, penalty_amount: 0,
-  },
-  {
-    id: 7, loan_account_number: "LN-20260007", application_number: "LA-20260013",
-    borrower_name: "Carlos P. Ramos", borrower_id: 8, loan_product_name: "Emergency Loan",
-    principal_amount: 5000, interest_rate: 5, interest_type: "fixed", term_months: 3,
-    payment_frequency: "weekly", outstanding_balance: 3200, total_payable: 5750,
-    status: "ongoing", current_due: 479, next_due_date: "2026-04-08", overdue_amount: 479, penalty_amount: 50,
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Map API Loan to local shape
 // ---------------------------------------------------------------------------
 
@@ -288,6 +234,9 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
 
 export default function PaymentsPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const defaultCollector = user?.full_name || user?.username || "";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLoan, setSelectedLoan] = useState<ActiveLoan | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -301,7 +250,7 @@ export default function PaymentsPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [collectedBy, setCollectedBy] = useState("Juan Cashier");
+  const [collectedBy, setCollectedBy] = useState(defaultCollector);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // API-loaded loans
@@ -312,16 +261,11 @@ export default function PaymentsPage() {
     setLoading(true);
     try {
       const response = await loanService.list({ status: "ongoing", per_page: 100 });
-      const loans = response.data;
-      if (Array.isArray(loans) && loans.length > 0) {
-        setApiLoans(loans.map(mapLoanToActiveLoan));
-      } else {
-        // Fallback to mock data when API returns empty
-        setApiLoans(MOCK_ACTIVE_LOANS);
-      }
+      const loans = Array.isArray(response?.data) ? response.data : [];
+      setApiLoans(loans.map(mapLoanToActiveLoan));
     } catch {
-      // Fallback to mock data when API fails
-      setApiLoans(MOCK_ACTIVE_LOANS);
+      setApiLoans([]);
+      toast.error("Failed to load active loans");
     } finally {
       setLoading(false);
     }
@@ -383,13 +327,127 @@ export default function PaymentsPage() {
     );
   }, [selectedLoan, amountPaid]);
 
+  // Server-side preview of the repayment breakdown — debounced to avoid spamming.
+  const [serverPreview, setServerPreview] = useState<RepaymentPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Breakdown of what's currently due (principal/interest/penalty/scb).
+  // Computed once when the dialog opens by running a "full payment" preview.
+  const [duesBreakdown, setDuesBreakdown] = useState<{
+    principal: number;
+    interest: number;
+    penalty: number;
+    scb: number;
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedLoan || !dialogOpen) {
+      setDuesBreakdown(null);
+      return;
+    }
+    const fullDue =
+      (selectedLoan.current_due ?? 0) +
+      (selectedLoan.overdue_amount ?? 0) +
+      (selectedLoan.penalty_amount ?? 0);
+    if (fullDue <= 0) {
+      setDuesBreakdown({
+        principal: 0,
+        interest: 0,
+        penalty: 0,
+        scb: selectedLoan.scb_amount ?? 0,
+        total: 0,
+      });
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await repaymentService.preview(selectedLoan.id, {
+          amount_paid: fullDue,
+          payment_date: new Date().toISOString().split("T")[0],
+        });
+        if (cancelled) return;
+        const principal =
+          typeof res?.total_principal === "number" ? res.total_principal : 0;
+        const interest =
+          typeof res?.total_interest === "number" ? res.total_interest : 0;
+        const penalty =
+          typeof res?.total_penalty === "number"
+            ? res.total_penalty
+            : (selectedLoan.penalty_amount ?? 0);
+        // SCB due comes from the loan config, not the preview (preview.excess
+        // represents unallocated overflow, not the scheduled SCB contribution).
+        const scb = selectedLoan.scb_amount ?? 0;
+        setDuesBreakdown({
+          principal,
+          interest,
+          penalty,
+          scb,
+          total: principal + interest + penalty + scb,
+        });
+      } catch {
+        if (cancelled) return;
+        setDuesBreakdown(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLoan, dialogOpen]);
+
   const newOutstandingBalance = useMemo(() => {
-    if (!selectedLoan || !allocation) return null;
+    if (!selectedLoan) return null;
+    const principalAppliedForBalance =
+      (typeof serverPreview?.total_principal === "number" ? serverPreview.total_principal : null) ??
+      allocation?.principalApplied ??
+      null;
+    if (principalAppliedForBalance === null) return null;
     return Math.max(
       0,
-      (selectedLoan.outstanding_balance ?? 0) - allocation.principalApplied
+      (selectedLoan.outstanding_balance ?? 0) - principalAppliedForBalance
     );
-  }, [selectedLoan, allocation]);
+  }, [selectedLoan, allocation, serverPreview]);
+
+  // Prefer server-returned numbers over client math when present.
+  const displayAllocation = useMemo(() => {
+    if (!allocation) return null;
+    if (!serverPreview) return allocation;
+    const pick = <T,>(server: T | undefined, fallback: T) =>
+      typeof server === "number" && !Number.isNaN(server) ? (server as T) : fallback;
+    return {
+      ...allocation,
+      penaltyApplied: pick(serverPreview.total_penalty, allocation.penaltyApplied),
+      interestApplied: pick(serverPreview.total_interest, allocation.interestApplied),
+      principalApplied: pick(serverPreview.total_principal, allocation.principalApplied),
+      scbApplied: pick(serverPreview.excess, allocation.scbApplied),
+    };
+  }, [allocation, serverPreview]);
+
+  useEffect(() => {
+    setServerPreview(null);
+    if (!selectedLoan || typeof amountPaid !== "number" || amountPaid <= 0 || !paymentDate) {
+      return;
+    }
+    const loanId = selectedLoan.id;
+    const amount = amountPaid;
+    const date = paymentDate;
+    const handle = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const res = await repaymentService.preview(loanId, {
+          amount_paid: amount,
+          payment_date: date,
+        });
+        setServerPreview(res ?? null);
+      } catch {
+        setServerPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [selectedLoan, amountPaid, paymentDate]);
 
   function handleSelectLoan(loan: ActiveLoan) {
     setSelectedLoan(loan);
@@ -397,7 +455,7 @@ export default function PaymentsPage() {
     setReferenceNumber("");
     setRemarks("");
     setPaymentMethod("cash");
-    setCollectedBy("Juan Cashier");
+    setCollectedBy(defaultCollector);
     setPaymentDate(new Date().toISOString().split("T")[0]);
     setLastReceiptId(null);
     setDialogOpen(true);
@@ -409,7 +467,7 @@ export default function PaymentsPage() {
     setPaymentMethod("cash");
     setReferenceNumber("");
     setRemarks("");
-    setCollectedBy("Juan Cashier");
+    setCollectedBy(defaultCollector);
     setPaymentDate(new Date().toISOString().split("T")[0]);
     setDialogOpen(false);
   }
@@ -418,11 +476,20 @@ export default function PaymentsPage() {
     if (!selectedLoan || !amountPaid || amountPaid <= 0) return;
     setIsSubmitting(true);
 
+    // Backend only stores payment_date/amount_paid/remarks — fold the cashier
+    // UI metadata into remarks so nothing is lost.
+    const metaParts: string[] = [];
+    metaParts.push(`method=${PAYMENT_METHOD_LABELS[paymentMethod] ?? paymentMethod}`);
+    if (referenceNumber.trim()) metaParts.push(`ref=${referenceNumber.trim()}`);
+    if (collectedBy.trim()) metaParts.push(`collected_by=${collectedBy.trim()}`);
+    const metaLine = `[${metaParts.join(" | ")}]`;
+    const composedRemarks = remarks.trim() ? `${remarks.trim()}\n${metaLine}` : metaLine;
+
     try {
       const repayment = await repaymentService.create(selectedLoan.id, {
         payment_date: paymentDate,
         amount_paid: amountPaid,
-        remarks: remarks || undefined,
+        remarks: composedRemarks,
       });
 
       const receiptId = repayment?.id;
@@ -436,17 +503,18 @@ export default function PaymentsPage() {
       });
 
       // Credit the portion of this payment that was allocated to SCB
-      if (allocation && allocation.scbApplied > 0) {
+      const scbToCredit = displayAllocation?.scbApplied ?? 0;
+      if (scbToCredit > 0) {
         try {
           await shareCapitalService.ledgerCreate({
             borrower_id: selectedLoan.borrower_id,
             date: paymentDate,
             description: `Share Capital Build-Up from payment — Loan ${selectedLoan.loan_account_number}`,
             type: "credit",
-            amount: allocation.scbApplied,
+            amount: scbToCredit,
           });
           toast.info("Share Capital credited", {
-            description: `${formatCurrency(allocation.scbApplied)} credited to ${selectedLoan.borrower_name}'s share capital.`,
+            description: `${formatCurrency(scbToCredit)} credited to ${selectedLoan.borrower_name}'s share capital.`,
           });
         } catch {
           toast.warning("Payment recorded but share capital credit failed", {
@@ -695,21 +763,16 @@ export default function PaymentsPage() {
                   <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.outstanding_balance)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Current Due</p>
-                  <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.current_due)}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Total Due</p>
+                  <p className="text-sm font-bold tabular-nums">
+                    {formatCurrency(
+                      (duesBreakdown?.total ??
+                        (selectedLoan.current_due +
+                          selectedLoan.overdue_amount +
+                          selectedLoan.penalty_amount))
+                    )}
+                  </p>
                 </div>
-                {selectedLoan.overdue_amount > 0 && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Overdue</p>
-                    <p className="text-sm font-bold tabular-nums text-destructive">{formatCurrency(selectedLoan.overdue_amount)}</p>
-                  </div>
-                )}
-                {selectedLoan.penalty_amount > 0 && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Penalty</p>
-                    <p className="text-sm font-bold tabular-nums text-destructive">{formatCurrency(selectedLoan.penalty_amount)}</p>
-                  </div>
-                )}
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Next Due Date</p>
                   <p className="text-sm font-medium">{formatDate(selectedLoan.next_due_date)}</p>
@@ -717,6 +780,69 @@ export default function PaymentsPage() {
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
                   <p className="text-sm font-medium">{selectedLoan.interest_rate}% ({selectedLoan.interest_type})</p>
+                </div>
+              </div>
+
+              {/* Total Dues breakdown: Principal, Interest, Penalty, SCB */}
+              <Separator />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase mb-2">
+                  Total Dues Breakdown
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-md border bg-background p-2 text-center">
+                    <p className="text-[10px] text-muted-foreground">Principal</p>
+                    <p className="text-sm font-semibold tabular-nums">
+                      {duesBreakdown
+                        ? formatCurrency(duesBreakdown.principal)
+                        : "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-2 text-center">
+                    <p className="text-[10px] text-muted-foreground">Interest</p>
+                    <p className="text-sm font-semibold tabular-nums">
+                      {duesBreakdown
+                        ? formatCurrency(duesBreakdown.interest)
+                        : "—"}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-md border bg-background p-2 text-center",
+                      (duesBreakdown?.penalty ?? 0) > 0 &&
+                        "border-destructive/30 bg-destructive/5"
+                    )}
+                  >
+                    <p className="text-[10px] text-muted-foreground">Penalty</p>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        (duesBreakdown?.penalty ?? 0) > 0 && "text-destructive"
+                      )}
+                    >
+                      {duesBreakdown
+                        ? formatCurrency(duesBreakdown.penalty)
+                        : "—"}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-md border bg-background p-2 text-center",
+                      (duesBreakdown?.scb ?? 0) > 0 &&
+                        "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                    )}
+                  >
+                    <p className="text-[10px] text-muted-foreground">SCB</p>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        (duesBreakdown?.scb ?? 0) > 0 &&
+                          "text-amber-700 dark:text-amber-400"
+                      )}
+                    >
+                      {duesBreakdown ? formatCurrency(duesBreakdown.scb) : "—"}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -811,7 +937,7 @@ export default function PaymentsPage() {
             </div>
 
             {/* Allocation Preview */}
-            {allocation && paymentType && (
+            {displayAllocation && paymentType && (
               <>
                 <Separator />
                 <div className="space-y-3">
@@ -819,6 +945,14 @@ export default function PaymentsPage() {
                     <p className="text-sm font-medium flex items-center gap-2">
                       <CreditCard className="size-4" />
                       Allocation Preview
+                      {previewLoading && (
+                        <span className="text-[10px] font-normal text-muted-foreground">checking…</span>
+                      )}
+                      {!previewLoading && serverPreview && (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          Server-verified
+                        </Badge>
+                      )}
                     </p>
                     <Badge variant={paymentType.variant}>{paymentType.label}</Badge>
                   </div>
@@ -826,15 +960,15 @@ export default function PaymentsPage() {
                   <div className="grid grid-cols-3 gap-3">
                     <div className="rounded-lg border p-3 text-center">
                       <p className="text-[10px] text-muted-foreground mb-1">Penalty</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.penaltyApplied)}</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.penaltyApplied)}</p>
                     </div>
                     <div className="rounded-lg border p-3 text-center">
                       <p className="text-[10px] text-muted-foreground mb-1">Interest</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.interestApplied)}</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.interestApplied)}</p>
                     </div>
                     <div className="rounded-lg border p-3 text-center">
                       <p className="text-[10px] text-muted-foreground mb-1">Principal</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(allocation.principalApplied)}</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.principalApplied)}</p>
                     </div>
                   </div>
 
@@ -855,29 +989,29 @@ export default function PaymentsPage() {
                       </div>
                     )}
 
-                    {allocation.scbApplied > 0 && (
+                    {displayAllocation.scbApplied > 0 && (
                       <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-700 dark:bg-amber-900/20">
                         <p className="text-[10px] text-muted-foreground mb-1">Excess → SCB</p>
                         <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
-                          {formatCurrency(allocation.scbApplied)}
+                          {formatCurrency(displayAllocation.scbApplied)}
                         </p>
                       </div>
                     )}
 
-                    {allocation.nextInterestApplied > 0 && (
+                    {displayAllocation.nextInterestApplied > 0 && (
                       <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
                         <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Interest</p>
                         <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                          {formatCurrency(allocation.nextInterestApplied)}
+                          {formatCurrency(displayAllocation.nextInterestApplied)}
                         </p>
                       </div>
                     )}
 
-                    {allocation.nextPrincipalApplied > 0 && (
+                    {displayAllocation.nextPrincipalApplied > 0 && (
                       <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-center dark:border-green-700 dark:bg-green-900/20">
                         <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Principal</p>
                         <p className="text-lg font-bold text-green-700 dark:text-green-400">
-                          {formatCurrency(allocation.nextPrincipalApplied)}
+                          {formatCurrency(displayAllocation.nextPrincipalApplied)}
                         </p>
                       </div>
                     )}

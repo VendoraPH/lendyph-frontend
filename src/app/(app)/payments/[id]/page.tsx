@@ -111,52 +111,6 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback mock data (used when API is unavailable)
-// ---------------------------------------------------------------------------
-
-const MOCK_RECEIPTS: ReceiptData[] = [
-  {
-    id: 1,
-    receipt_number: "OR-20260001",
-    borrower_name: "Rosario D. Santos",
-    loan_account_number: "LN-20260001",
-    loan_product_name: "Salary Loan",
-    payment_date: "2026-03-15",
-    method: "gcash",
-    reference_number: "GC-20260315-001",
-    penalty: 0,
-    interest: 600,
-    principal: 3333,
-    total: 3933,
-    previous_balance: 15000,
-    new_balance: 11067,
-    next_due_date: "2026-04-15",
-    collected_by: "Juan Cashier",
-    remarks: "Monthly payment",
-    status: "completed",
-  },
-  {
-    id: 2,
-    receipt_number: "OR-20260002",
-    borrower_name: "Roberto Garcia",
-    loan_account_number: "LN-20260002",
-    loan_product_name: "Business Loan",
-    payment_date: "2026-03-20",
-    method: "cash",
-    penalty: 500,
-    interest: 1500,
-    principal: 7417,
-    total: 9417,
-    previous_balance: 75000,
-    new_balance: 65583,
-    next_due_date: "2026-04-20",
-    collected_by: "Maria Cashier",
-    remarks: "Payment with penalty for late",
-    status: "completed",
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -207,15 +161,14 @@ export default function PaymentReceiptPage({
     setLoading(true);
     try {
       const repayment = await repaymentService.detail(Number(id));
+      if (!repayment) {
+        setNotFound(true);
+        return;
+      }
       setReceipt(mapPaymentToReceipt(repayment));
     } catch {
-      // Fallback to mock data if API fails
-      const mock = MOCK_RECEIPTS.find((r) => r.id === Number(id));
-      if (mock) {
-        setReceipt(mock);
-      } else {
-        setNotFound(true);
-      }
+      setNotFound(true);
+      toast.error("Failed to load receipt");
     } finally {
       setLoading(false);
     }

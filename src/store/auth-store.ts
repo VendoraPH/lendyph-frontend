@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { User, Permission, Role } from "@/types";
-import { ROLES } from "@/constants/rbac";
+import type { User, Permission } from "@/types";
+import { authService } from "@/services/auth.service";
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   setUser: (user: User) => void;
   clearAuth: () => void;
+  refreshUser: () => Promise<void>;
   getPermissions: () => Permission[];
   hasPermission: (permission: Permission) => boolean;
   hasAnyPermission: (permissions: Permission[]) => boolean;
@@ -21,17 +22,18 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       setUser: (user) => set({ user, isAuthenticated: true }),
       clearAuth: () => set({ user: null, isAuthenticated: false }),
+      refreshUser: async () => {
+        try {
+          const fresh = await authService.me();
+          set({ user: fresh, isAuthenticated: true });
+        } catch {
+          // swallow; caller decides whether to redirect
+        }
+      },
       getPermissions: () => {
         const user = get().user;
         if (!user) return [];
-        // Combine user-level permissions with role-based defaults
-        const userPerms = user.permissions ?? [];
-        const primaryRole = user.roles?.[0] as Role | undefined;
-        const rolePerms = primaryRole
-          ? (ROLES[primaryRole]?.permissions ?? [])
-          : [];
-        const combined = new Set([...userPerms, ...rolePerms]);
-        return Array.from(combined);
+        return user.permissions ?? [];
       },
       hasPermission: (permission) => {
         return get().getPermissions().includes(permission);

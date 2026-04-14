@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUIStore } from "@/store/ui-store";
+import { systemService } from "@/services";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -203,6 +204,26 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const { can } = usePermission();
+  const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await systemService.health();
+        if (cancelled) return;
+        setApiStatus(res?.status === "ok" ? "ok" : "down");
+      } catch {
+        if (!cancelled) setApiStatus("down");
+      }
+    };
+    check();
+    const interval = setInterval(check, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <TooltipProvider>
@@ -268,6 +289,28 @@ function SidebarContent({
           <div className="border-t border-border px-5 py-2.5 shrink-0">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-muted-foreground/50 font-medium">v1.0.0</span>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          apiStatus === "ok" && "bg-emerald-500",
+                          apiStatus === "down" && "bg-red-500",
+                          apiStatus === "checking" && "bg-muted-foreground/40 animate-pulse"
+                        )}
+                      />
+                      API
+                    </span>
+                  }
+                />
+                <TooltipContent side="top">
+                  {apiStatus === "ok" && "API healthy"}
+                  {apiStatus === "down" && "API unreachable"}
+                  {apiStatus === "checking" && "Checking API..."}
+                </TooltipContent>
+              </Tooltip>
               <span className="text-[10px] text-muted-foreground/50">© Lendy.PH</span>
             </div>
           </div>
