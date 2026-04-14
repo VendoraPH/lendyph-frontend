@@ -25,11 +25,14 @@ import {
 } from "@/components/ui/dialog";
 import { ROLES } from "@/constants/rbac";
 import type { Module, Action, Permission } from "@/types";
+import { roleService } from "@/services/role.service";
+import type { ApiRole } from "@/services/role.service";
+import { PermissionGate } from "@/components/common";
+import { useAuthStore } from "@/store";
+import { Spinner } from "@/components/ui/spinner";
 import {
   ShieldCheck,
   Search,
-  Plus,
-  Pencil,
   LayoutDashboard,
   Users,
   FileText,
@@ -40,6 +43,11 @@ import {
   History,
   Landmark,
   Lock,
+  Plus,
+  Pencil,
+  Trash2,
+  Power,
+  PowerOff,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -186,6 +194,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
 // ---------------------------------------------------------------------------
 
 interface RoleItem {
+  id?: number;
   key: string;
   label: string;
   description: string;
@@ -215,17 +224,28 @@ function stripCollections(perms: Permission[]): Permission[] {
   return perms.filter((p) => !p.startsWith("collections:"));
 }
 
-function initialRoles(): RoleItem[] {
-  return (Object.keys(ROLES) as (keyof typeof ROLES)[])
-    .filter((k) => k !== "collector") // collector role was collections-only — no longer applicable
-    .map((k) => ({
-      key: k,
-      label: ROLES[k].label,
-      description: ROLES[k].description,
-      permissions: stripCollections([...ROLES[k].permissions]),
-      isSystem: true,
-      isActive: true,
-    }));
+function titleCase(s: string): string {
+  return s
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// Map an API role to the UI RoleItem shape, enriching snake_case keys
+// with local label/description when the frontend recognises the role.
+function apiRoleToItem(api: ApiRole): RoleItem {
+  const key = api.name;
+  const known = (ROLES as Record<string, { label: string; description: string }>)[key];
+  return {
+    id: api.id,
+    key,
+    label: known?.label ?? titleCase(key),
+    description: api.description ?? known?.description ?? "",
+    permissions: stripCollections(api.permissions as Permission[]),
+    isSystem: api.is_system === true,
+    isActive: api.is_active ?? true,
+  };
 }
 
 function groupByModule(permissions: Permission[]): Record<string, Action[]> {
@@ -253,6 +273,8 @@ interface RoleFormDialogProps {
   role: RoleItem | null; // null = create
   existingKeys: string[];
   onSave: (role: RoleItem) => void;
+  readOnly?: boolean;
+  saving?: boolean;
 }
 
 function RoleFormDialog({
@@ -261,6 +283,8 @@ function RoleFormDialog({
   role,
   existingKeys,
   onSave,
+  readOnly = false,
+  saving = false,
 }: RoleFormDialogProps) {
   const isEdit = !!role;
   const [label, setLabel] = useState("");
@@ -321,6 +345,7 @@ function RoleFormDialog({
     }
 
     onSave({
+      id: role?.id,
       key,
       label: label.trim(),
       description: description.trim(),
@@ -328,8 +353,6 @@ function RoleFormDialog({
       isSystem: role?.isSystem ?? false,
       isActive: role?.isActive ?? true,
     });
-    onOpenChange(false);
-    toast.success(isEdit ? "Role updated" : "Role created");
   }
 
   const modules = Object.keys(MODULE_META) as UIModule[];
@@ -341,7 +364,7 @@ function RoleFormDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-brand-orange" />
-            {isEdit ? "Edit Role" : "Create New Role"}
+            {readOnly ? "Role Details" : isEdit ? "Edit Role" : "Create New Role"}
             {role?.isSystem && (
               <Badge variant="outline" className="ml-2 text-xs gap-1">
                 <Lock className="h-3 w-3" />
@@ -350,9 +373,11 @@ function RoleFormDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {isEdit
-              ? "Update role details and configure permissions per module."
-              : "Define a new role and select which permissions it should grant."}
+            {readOnly
+              ? "System role — permissions are built-in and cannot be changed."
+              : isEdit
+                ? "Update role details and configure permissions per module."
+                : "Define a new role and select which permissions it should grant."}
           </DialogDescription>
         </DialogHeader>
 
@@ -368,13 +393,8 @@ function RoleFormDialog({
                 placeholder="e.g. Branch Manager"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                disabled={role?.isSystem}
+                disabled={readOnly}
               />
-              {role?.isSystem && (
-                <p className="text-xs text-muted-foreground">
-                  System role names cannot be changed
-                </p>
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="role-desc">
@@ -385,6 +405,7 @@ function RoleFormDialog({
                 placeholder="Short description of this role"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                disabled={readOnly}
               />
             </div>
           </div>
@@ -442,6 +463,7 @@ function RoleFormDialog({
                           checked={allSelected}
                           indeterminate={someSelected}
                           onCheckedChange={() => toggleModule(mod, !allSelected)}
+                          disabled={readOnly}
                           aria-label={`Toggle all ${meta.label} permissions`}
                         />
                       </div>
@@ -455,15 +477,18 @@ function RoleFormDialog({
                           <label
                             key={act}
                             className={cn(
-                              "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs cursor-pointer select-none transition-colors",
+                              "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
+                              readOnly ? "cursor-default" : "cursor-pointer",
                               granted
                                 ? ACTION_META[act].colorClass
-                                : "bg-background text-muted-foreground border-border hover:bg-muted"
+                                : "bg-background text-muted-foreground border-border",
+                              !readOnly && !granted && "hover:bg-muted"
                             )}
                           >
                             <Checkbox
                               checked={granted}
                               onCheckedChange={() => togglePermission(mod, act)}
+                              disabled={readOnly}
                               className="h-3.5 w-3.5"
                               aria-label={`${meta.label} ${ACTION_META[act].label}`}
                             />
@@ -480,72 +505,22 @@ function RoleFormDialog({
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
           <Button
-            onClick={handleSave}
-            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
           >
-            {isEdit ? "Save Changes" : "Create Role"}
+            {readOnly ? "Close" : "Cancel"}
           </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Deactivate / Activate Dialog
-// ---------------------------------------------------------------------------
-
-interface ToggleStatusDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  role: RoleItem | null;
-  onConfirm: () => void;
-}
-
-function ToggleStatusDialog({ open, onOpenChange, role, onConfirm }: ToggleStatusDialogProps) {
-  const isDeactivating = role?.isActive ?? true;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {isDeactivating ? "Deactivate Role" : "Activate Role"}
-          </DialogTitle>
-          <DialogDescription>
-            {isDeactivating ? (
-              <>
-                Are you sure you want to deactivate{" "}
-                <span className="font-semibold text-foreground">{role?.label}</span>?
-                Users with this role will lose access to its permissions.
-                You can reactivate it later.
-              </>
-            ) : (
-              <>
-                Reactivate{" "}
-                <span className="font-semibold text-foreground">{role?.label}</span>?
-                Users with this role will regain access to its permissions.
-              </>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant={isDeactivating ? "destructive" : "default"}
-            className={!isDeactivating ? "bg-green-600 text-white hover:bg-green-700" : undefined}
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
-            }}
-          >
-            {isDeactivating ? "Deactivate" : "Activate"}
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Role"}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -557,12 +532,106 @@ function ToggleStatusDialog({ open, onOpenChange, role, onConfirm }: ToggleStatu
 // ---------------------------------------------------------------------------
 
 export default function UserRolesPage() {
-  const [roles, setRoles] = useState<RoleItem[]>(() => initialRoles());
+  const [roles, setRoles] = useState<RoleItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [formRole, setFormRole] = useState<RoleItem | null>(null);
-  const [toggleStatusOpen, setToggleStatusOpen] = useState(false);
-  const [toggleStatusRole, setToggleStatusRole] = useState<RoleItem | null>(null);
+  const [formMode, setFormMode] = useState<"view" | "edit" | "create">("view");
+  const [deleteTarget, setDeleteTarget] = useState<RoleItem | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
+  const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+
+  const maybeRefreshCurrentUser = async (affectedRoleKey?: string) => {
+    if (!affectedRoleKey) return;
+    if (currentUserRoles.includes(affectedRoleKey)) {
+      await refreshUser();
+    }
+  };
+
+  async function loadRoles() {
+    setLoading(true);
+    try {
+      const res = await roleService.list();
+      const list = Array.isArray(res)
+        ? res
+        : (res as unknown as { data: ApiRole[] })?.data ?? [];
+      setRoles(list.map(apiRoleToItem));
+    } catch {
+      toast.error("Failed to load roles");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadRoles();
+  }, []);
+
+  async function handleSaveRole(item: RoleItem) {
+    setActionLoading(true);
+    try {
+      const payload = {
+        name: item.key,
+        description: item.description,
+        permissions: item.permissions,
+      };
+      if (formMode === "create") {
+        await roleService.create(payload);
+        toast.success("Role created");
+      } else if (formMode === "edit" && item.id != null) {
+        await roleService.update(item.id, payload);
+        toast.success("Role updated");
+      }
+      setFormOpen(false);
+      await loadRoles();
+      if (formMode === "edit") {
+        await maybeRefreshCurrentUser(item.key);
+      }
+    } catch {
+      toast.error(formMode === "create" ? "Failed to create role" : "Failed to update role");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleToggleActive(role: RoleItem) {
+    if (role.id == null) return;
+    setActionLoading(true);
+    try {
+      if (role.isActive) {
+        await roleService.deactivate(role.id);
+        toast.success("Role deactivated");
+      } else {
+        await roleService.reactivate(role.id);
+        toast.success("Role reactivated");
+      }
+      await loadRoles();
+      await maybeRefreshCurrentUser(role.key);
+    } catch {
+      toast.error("Failed to update role status");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDeleteRole() {
+    if (!deleteTarget || deleteTarget.id == null) return;
+    setActionLoading(true);
+    try {
+      const affected = deleteTarget.key;
+      await roleService.delete(deleteTarget.id);
+      toast.success("Role deleted");
+      setDeleteTarget(null);
+      await loadRoles();
+      await maybeRefreshCurrentUser(affected);
+    } catch {
+      toast.error("Failed to delete role");
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!search.trim()) return roles;
@@ -578,46 +647,16 @@ export default function UserRolesPage() {
   const totalModules = Object.keys(MODULE_META).length;
   const customCount = roles.filter((r) => !r.isSystem).length;
 
+  function openView(role: RoleItem) {
+    setFormRole(role);
+    setFormMode("edit");
+    setFormOpen(true);
+  }
+
   function openCreate() {
     setFormRole(null);
+    setFormMode("create");
     setFormOpen(true);
-  }
-
-  function openEdit(role: RoleItem) {
-    setFormRole(role);
-    setFormOpen(true);
-  }
-
-  function openToggleStatus(role: RoleItem) {
-    setToggleStatusRole(role);
-    setToggleStatusOpen(true);
-  }
-
-  function handleSave(updated: RoleItem) {
-    setRoles((prev) => {
-      const idx = prev.findIndex((r) => r.key === updated.key);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...updated, isActive: prev[idx].isActive };
-        return next;
-      }
-      return [...prev, { ...updated, isActive: true }];
-    });
-  }
-
-  function handleToggleStatus() {
-    if (!toggleStatusRole) return;
-    const newActive = !toggleStatusRole.isActive;
-    setRoles((prev) =>
-      prev.map((r) =>
-        r.key === toggleStatusRole.key ? { ...r, isActive: newActive } : r
-      )
-    );
-    toast.success(
-      newActive
-        ? `Role "${toggleStatusRole.label}" activated`
-        : `Role "${toggleStatusRole.label}" deactivated`
-    );
   }
 
   return (
@@ -628,16 +667,18 @@ export default function UserRolesPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
             <p className="text-sm text-muted-foreground">
-              Define roles and configure their access rights across every system module
+              Manage roles and their access rights across every system module
             </p>
           </div>
-          <Button
-            onClick={openCreate}
-            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Role
-          </Button>
+          <PermissionGate permission="settings:update">
+            <Button
+              onClick={openCreate}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Role
+            </Button>
+          </PermissionGate>
         </div>
 
         {/* Summary Cards */}
@@ -650,7 +691,7 @@ export default function UserRolesPage() {
             <CardContent>
               <p className="text-2xl font-bold">{roles.length}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {roles.length - customCount} system, {customCount} custom
+                Defined in the backend
               </p>
             </CardContent>
           </Card>
@@ -671,7 +712,9 @@ export default function UserRolesPage() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{customCount}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">User-defined roles</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Created on top of the built-in roles
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -698,122 +741,123 @@ export default function UserRolesPage() {
                     <TableHead>Description</TableHead>
                     <TableHead>Modules</TableHead>
                     <TableHead>Permissions</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((r) => {
-                    const grouped = groupByModule(r.permissions);
-                    const moduleCount = Object.keys(grouped).length;
-                    return (
-                      <TableRow
-                        key={r.key}
-                        className={cn(
-                          "cursor-pointer hover:bg-muted/50",
-                          !r.isActive && "opacity-50"
-                        )}
-                        onClick={() => openEdit(r)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "font-medium",
-                                ROLE_BADGE[r.key] ??
-                                  "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                              )}
-                            >
-                              {r.label}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{r.description}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {moduleCount}{" "}
-                            <span className="text-muted-foreground">of {totalModules}</span>
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {r.permissions.length}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {r.isSystem ? (
-                            <Badge
-                              variant="outline"
-                              className="text-xs gap-1 bg-muted text-muted-foreground"
-                            >
-                              <Lock className="h-3 w-3" />
-                              System
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-brand-orange/10 text-brand-orange border-brand-orange/30"
-                            >
-                              Custom
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs",
-                              r.isActive
-                                ? "bg-green-500/10 text-green-700 border-green-500/30"
-                                : "bg-red-500/10 text-red-700 border-red-500/30"
-                            )}
-                          >
-                            {r.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEdit(r);
-                              }}
-                            >
-                              <Pencil className="h-3 w-3" />
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={cn(
-                                "h-7 text-xs",
-                                r.isActive
-                                  ? "text-destructive border-destructive/30 hover:bg-destructive/5"
-                                  : "text-green-600 border-green-500/30 hover:bg-green-500/5"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openToggleStatus(r);
-                              }}
-                            >
-                              {r.isActive ? "Deactivate" : "Activate"}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {filtered.length === 0 && (
+                  {loading && (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        <div className="flex items-center justify-center">
+                          <Spinner className="size-5 text-muted-foreground" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!loading &&
+                    filtered.map((r) => {
+                      const grouped = groupByModule(r.permissions);
+                      const moduleCount = Object.keys(grouped).length;
+                      return (
+                        <TableRow
+                          key={r.key}
+                          className={cn(
+                            "cursor-pointer hover:bg-muted/50",
+                            !r.isActive && "opacity-60"
+                          )}
+                          onClick={() => openView(r)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "font-medium",
+                                  ROLE_BADGE[r.key] ??
+                                    "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                                )}
+                              >
+                                {r.label}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {r.description || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {moduleCount}{" "}
+                              <span className="text-muted-foreground">of {totalModules}</span>
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {r.permissions.length}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <PermissionGate permission="settings:update">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openView(r);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  Edit
+                                </Button>
+                              </PermissionGate>
+                              <PermissionGate permission="settings:update">
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
+                                    disabled={actionLoading}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleActive(r);
+                                    }}
+                                  >
+                                    {r.isActive ? (
+                                      <PowerOff className="h-3 w-3" />
+                                    ) : (
+                                      <Power className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </>
+                              </PermissionGate>
+                              <PermissionGate permission="settings:delete">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                  title="Delete role"
+                                  disabled={actionLoading}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteTarget(r);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </PermissionGate>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  {!loading && filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                         No roles match your search.
                       </TableCell>
                     </TableRow>
@@ -858,14 +902,42 @@ export default function UserRolesPage() {
           onOpenChange={setFormOpen}
           role={formRole}
           existingKeys={roles.map((r) => r.key)}
-          onSave={handleSave}
+          onSave={handleSaveRole}
+          readOnly={formMode === "view"}
+          saving={actionLoading}
         />
-        <ToggleStatusDialog
-          open={toggleStatusOpen}
-          onOpenChange={setToggleStatusOpen}
-          role={toggleStatusRole}
-          onConfirm={handleToggleStatus}
-        />
+
+        <Dialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete role?</DialogTitle>
+              <DialogDescription>
+                This permanently deletes {deleteTarget?.label}. Users currently
+                assigned to this role will lose its permissions. This action
+                cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteTarget(null)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteRole}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Deleting..." : "Delete Role"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </RouteGuard>
   );

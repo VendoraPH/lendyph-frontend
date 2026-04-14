@@ -146,7 +146,7 @@ export default function BorrowersPage() {
 
   const handleBulkDeactivate = async (ids: number[]) => {
     try {
-      await Promise.all(ids.map((id) => borrowerService.deactivate(id)));
+      await borrowerService.bulkDeactivate(ids);
       toast.success(`${ids.length} borrower(s) deactivated`);
       fetchBorrowers();
     } catch {
@@ -156,7 +156,7 @@ export default function BorrowersPage() {
 
   const handleBulkDelete = async (ids: number[]) => {
     try {
-      await Promise.all(ids.map((id) => borrowerService.delete(id)));
+      await borrowerService.bulkDelete(ids);
       toast.success(`${ids.length} borrower(s) deleted`);
       fetchBorrowers();
     } catch {

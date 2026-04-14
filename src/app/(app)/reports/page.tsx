@@ -23,6 +23,9 @@ import {
   PieChart,
   TrendingUp,
   Users,
+  ListChecks,
+  Receipt,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +44,10 @@ type ReportId =
   | "income_report"
   | "aging_report"
   | "borrower_report"
-  | "disbursement_report";
+  | "disbursement_report"
+  | "releases_list"
+  | "repayments_list"
+  | "due_past_due_list";
 
 interface ReportCard {
   id: ReportId;
@@ -108,6 +114,30 @@ const REPORTS: ReportCard[] = [
     icon: Banknote,
     color: "text-cyan-600",
     iconBg: "bg-cyan-50",
+  },
+  {
+    id: "releases_list",
+    title: "Releases List",
+    description: "Paginated list of released loans",
+    icon: ListChecks,
+    color: "text-indigo-600",
+    iconBg: "bg-indigo-50",
+  },
+  {
+    id: "repayments_list",
+    title: "Repayments List",
+    description: "Paginated list of repayments",
+    icon: Receipt,
+    color: "text-emerald-600",
+    iconBg: "bg-emerald-50",
+  },
+  {
+    id: "due_past_due_list",
+    title: "Due / Past Due List",
+    description: "Schedules due or overdue as of today",
+    icon: AlertTriangle,
+    color: "text-amber-600",
+    iconBg: "bg-amber-50",
   },
 ];
 
@@ -204,34 +234,82 @@ function getSamplePreview(reportId: ReportId, from: string, to: string) {
 
 // ── Main Page ──
 
+interface ListPreview {
+  title: string;
+  rows: Array<Record<string, unknown>>;
+}
+
 export default function ReportsPage() {
   const [generateTarget, setGenerateTarget] = useState<ReportCard | null>(null);
   const [fromDate, setFromDate] = useState("2026-03-31");
   const [toDate, setToDate] = useState("2026-03-31");
   const [preview, setPreview] = useState<ReportPreview | null>(null);
+  const [listPreview, setListPreview] = useState<ListPreview | null>(null);
+  const [listLoading, setListLoading] = useState(false);
 
   function openGenerateDialog(report: ReportCard) {
     setGenerateTarget(report);
     setPreview(null);
+    setListPreview(null);
   }
 
   async function handleGenerate() {
     if (!generateTarget) return;
 
+    const params = { date_from: fromDate, date_to: toDate, per_page: 25 };
+
+    // List-style reports (releases/repayments/due-past-due) render real API data
+    if (
+      generateTarget.id === "releases_list" ||
+      generateTarget.id === "repayments_list" ||
+      generateTarget.id === "due_past_due_list"
+    ) {
+      setListLoading(true);
+      setListPreview(null);
+      try {
+        let res: unknown;
+        if (generateTarget.id === "releases_list") {
+          res = await reportService.releases(params);
+        } else if (generateTarget.id === "repayments_list") {
+          res = await reportService.repayments(params);
+        } else {
+          res = await reportService.duePastDue(params);
+        }
+        const payload =
+          res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+            ? (res as { data: unknown }).data
+            : res;
+        const rows = Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
+        setListPreview({ title: generateTarget.title, rows });
+        toast.success(`Loaded ${rows.length} ${rows.length === 1 ? "row" : "rows"}`);
+      } catch {
+        toast.error("Failed to load report data");
+        setListPreview({ title: generateTarget.title, rows: [] });
+      } finally {
+        setListLoading(false);
+      }
+      return;
+    }
+
     try {
-      const params = { date_from: fromDate, date_to: toDate };
       switch (generateTarget.id) {
         case "daily_collection":
-          await reportService.duePastDue(params);
+          await reportService.dailyCollection(params);
           break;
         case "portfolio_summary":
           await reportService.loanBalanceSummary(params);
           break;
-        case "disbursement_report":
-          await reportService.releases(params);
+        case "income_report":
+          await reportService.income(params);
           break;
-        default:
-          await reportService.repayments(params);
+        case "aging_report":
+          await reportService.aging(params);
+          break;
+        case "borrower_report":
+          await reportService.borrowers(params);
+          break;
+        case "disbursement_report":
+          await reportService.disbursements(params);
           break;
       }
       toast.success("Report generated from API");
@@ -242,9 +320,52 @@ export default function ReportsPage() {
     setPreview({ reportId: generateTarget.id, from: fromDate, to: toDate });
   }
 
+  async function handleExport() {
+    if (!generateTarget) return;
+    const params = { date_from: fromDate, date_to: toDate };
+    try {
+      let blob: Blob;
+      let filename: string;
+      switch (generateTarget.id) {
+        case "disbursement_report":
+          blob = await reportService.exportReleases(params);
+          filename = `releases-${fromDate}-to-${toDate}.csv`;
+          break;
+        case "daily_collection":
+          blob = await reportService.exportRepayments(params);
+          filename = `repayments-${fromDate}-to-${toDate}.csv`;
+          break;
+        case "aging_report":
+          blob = await reportService.exportDuePastDue(params);
+          filename = `due-past-due-${fromDate}-to-${toDate}.csv`;
+          break;
+        default:
+          toast.info("Export is not available for this report.");
+          return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Export downloaded");
+    } catch {
+      toast.error("Failed to export report");
+    }
+  }
+
+  const canExport =
+    generateTarget?.id === "disbursement_report" ||
+    generateTarget?.id === "daily_collection" ||
+    generateTarget?.id === "aging_report";
+
   function handleClose() {
     setGenerateTarget(null);
     setPreview(null);
+    setListPreview(null);
   }
 
   const previewData =
@@ -344,6 +465,33 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* List-style preview (real API data) */}
+          {listLoading && (
+            <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+              Loading data from API…
+            </div>
+          )}
+          {listPreview && !listLoading && (
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">{listPreview.title}</p>
+                <span className="text-xs text-muted-foreground">
+                  {listPreview.rows.length}{" "}
+                  {listPreview.rows.length === 1 ? "row" : "rows"}
+                </span>
+              </div>
+              {listPreview.rows.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No data in the selected range
+                </p>
+              ) : (
+                <pre className="max-h-[40vh] overflow-auto rounded-md bg-background p-2 text-[11px] leading-relaxed font-mono">
+                  {JSON.stringify(listPreview.rows, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+
           {/* Preview Card */}
           {previewData && (
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
@@ -368,6 +516,11 @@ export default function ReportsPage() {
           )}
 
           <DialogFooter showCloseButton>
+            {canExport && (
+              <Button variant="outline" onClick={handleExport}>
+                Export CSV
+              </Button>
+            )}
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleGenerate}

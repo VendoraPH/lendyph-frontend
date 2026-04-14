@@ -351,6 +351,31 @@ export default function AuditTrailPage() {
     setActionFilter("all");
   };
 
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params: Record<string, unknown> = {};
+      if (search.trim()) params.search = search.trim();
+      if (actionFilter !== "all") params.action = actionFilter;
+      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      const blob = await auditService.export(params);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Audit logs exported");
+    } catch {
+      toast.error("Failed to export audit logs");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
     <div className="space-y-6">
@@ -362,9 +387,14 @@ export default function AuditTrailPage() {
             Track and review all user actions across the system
           </p>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={handleExport}
+          disabled={exporting}
+        >
           <Download className="h-4 w-4" />
-          Export
+          {exporting ? "Exporting..." : "Export"}
         </Button>
       </div>
 
@@ -494,7 +524,15 @@ export default function AuditTrailPage() {
                     <TableRow
                       key={log.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedLog(log)}
+                      onClick={async () => {
+                        setSelectedLog(log);
+                        try {
+                          const fresh = await auditService.detail(log.id);
+                          if (fresh) setSelectedLog(fresh);
+                        } catch {
+                          // Keep the list row data if detail fetch fails
+                        }
+                      }}
                     >
                       <TableCell>
                         <div>

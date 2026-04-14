@@ -5,11 +5,19 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Camera } from "lucide-react";
+import { ArrowLeft, Pencil, Camera, X } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
 import { PhotoCropDialog } from "./photo-crop-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const statusBadgeColor: Record<string, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
@@ -31,6 +39,22 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  async function handleRemovePhoto() {
+    setRemoving(true);
+    try {
+      await borrowerService.deletePhoto(borrower.id);
+      toast.success("Photo removed");
+      setRemoveConfirmOpen(false);
+      onPhotoUpdate?.();
+    } catch {
+      toast.error("Failed to remove photo");
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -75,25 +99,37 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="relative group cursor-pointer" onClick={() => photoInputRef.current?.click()}>
-            <Avatar size="lg">
-              {borrower.photo ? (
-                <AvatarImage src={borrower.photo} alt={borrower.full_name} />
-              ) : null}
-              <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xl font-semibold">
-                {getInitials(borrower.full_name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="h-5 w-5 text-white" />
+          <div className="relative">
+            <div className="relative group cursor-pointer" onClick={() => photoInputRef.current?.click()}>
+              <Avatar size="lg">
+                {borrower.photo ? (
+                  <AvatarImage src={borrower.photo} alt={borrower.full_name} />
+                ) : null}
+                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xl font-semibold">
+                  {getInitials(borrower.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-5 w-5 text-white" />
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                className="hidden"
+                accept="image/*"
+                onChange={handleFileSelect}
+              />
             </div>
-            <input
-              ref={photoInputRef}
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={handleFileSelect}
-            />
+            {borrower.photo ? (
+              <button
+                type="button"
+                aria-label="Remove photo"
+                onClick={() => setRemoveConfirmOpen(true)}
+                className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            ) : null}
           </div>
           <div>
             <div className="flex items-center gap-3">
@@ -132,6 +168,25 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         imageFile={selectedFile}
         onCropComplete={handleCroppedPhoto}
       />
+
+      <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove profile photo?</DialogTitle>
+            <DialogDescription>
+              This will delete {borrower.full_name}&apos;s current photo. You can upload a new one anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveConfirmOpen(false)} disabled={removing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRemovePhoto} disabled={removing}>
+              {removing ? "Removing..." : "Remove Photo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

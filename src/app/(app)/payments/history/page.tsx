@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { repaymentService } from "@/services";
+import type { Repayment } from "@/types";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,223 +67,33 @@ interface MockPayment {
   voided_at?: string;
 }
 
-// ── Mock Data ──
-
-const INITIAL_PAYMENTS: MockPayment[] = [
-  {
-    id: 1,
-    receipt_number: "RCP-2026-0001",
-    borrower_name: "Maria Santos",
-    borrower_id: 101,
-    loan_account: "LN-2026-0042",
-    loan_id: 42,
-    date: "2026-03-28",
-    amount: 2500,
-    penalty_amount: 0,
-    method: "cash",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 47500,
-    balance_after: 45000,
-  },
-  {
-    id: 2,
-    receipt_number: "RCP-2026-0002",
-    borrower_name: "Pedro Garcia",
-    borrower_id: 102,
-    loan_account: "LN-2026-0031",
-    loan_id: 31,
-    date: "2026-03-27",
-    amount: 1800,
-    penalty_amount: 200,
-    method: "gcash",
-    status: "completed",
-    collected_by: "Ana Reyes",
-    balance_before: 28000,
-    balance_after: 26000,
-    reference_number: "GC-20260327-88412",
-    remarks: "Late payment with penalty",
-  },
-  {
-    id: 3,
-    receipt_number: "RCP-2026-0003",
-    borrower_name: "Rosa dela Vega",
-    borrower_id: 103,
-    loan_account: "LN-2026-0018",
-    loan_id: 18,
-    date: "2026-03-26",
-    amount: 5000,
-    penalty_amount: 0,
-    method: "bank_transfer",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 75000,
-    balance_after: 70000,
-    reference_number: "BDO-TXN-20260326-00123",
-  },
-  {
-    id: 4,
-    receipt_number: "RCP-2026-0004",
-    borrower_name: "Carlo Mendoza",
-    borrower_id: 104,
-    loan_account: "LN-2026-0055",
-    loan_id: 55,
-    date: "2026-03-25",
-    amount: 3200,
-    penalty_amount: 0,
-    method: "maya",
-    status: "voided",
-    collected_by: "Ana Reyes",
-    balance_before: 41200,
-    balance_after: 38000,
-    reference_number: "MAYA-20260325-55901",
-    void_reason: "Duplicate transaction — payment was processed twice.",
-    voided_by: "Augustin Maputol",
-    voided_at: "2026-03-25T16:42:00",
-  },
-  {
-    id: 5,
-    receipt_number: "RCP-2026-0005",
-    borrower_name: "Lena Aquino",
-    borrower_id: 105,
-    loan_account: "LN-2026-0009",
-    loan_id: 9,
-    date: "2026-03-24",
-    amount: 4500,
-    penalty_amount: 0,
-    method: "cash",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 63000,
-    balance_after: 58500,
-  },
-  {
-    id: 6,
-    receipt_number: "RCP-2026-0006",
-    borrower_name: "Ramon Torres",
-    borrower_id: 106,
-    loan_account: "LN-2026-0067",
-    loan_id: 67,
-    date: "2026-03-22",
-    amount: 1500,
-    penalty_amount: 300,
-    method: "gcash",
-    status: "completed",
-    collected_by: "Ana Reyes",
-    balance_before: 21800,
-    balance_after: 20000,
-    reference_number: "GC-20260322-44201",
-    remarks: "Penalty included for 10-day delay",
-  },
-  {
-    id: 7,
-    receipt_number: "RCP-2026-0007",
-    borrower_name: "Nelia Cruz",
-    borrower_id: 107,
-    loan_account: "LN-2026-0024",
-    loan_id: 24,
-    date: "2026-03-20",
-    amount: 6000,
-    penalty_amount: 0,
-    method: "online",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 84000,
-    balance_after: 78000,
-    reference_number: "ONL-20260320-77300",
-  },
-  {
-    id: 8,
-    receipt_number: "RCP-2026-0008",
-    borrower_name: "Felix Reyes",
-    borrower_id: 108,
-    loan_account: "LN-2026-0033",
-    loan_id: 33,
-    date: "2026-03-18",
-    amount: 2200,
-    penalty_amount: 0,
-    method: "cash",
-    status: "voided",
-    collected_by: "Ana Reyes",
-    balance_before: 32200,
-    balance_after: 30000,
-    void_reason: "Wrong loan account — payment applied to incorrect borrower.",
-    voided_by: "Augustin Maputol",
-    voided_at: "2026-03-18T11:15:00",
-  },
-  {
-    id: 9,
-    receipt_number: "RCP-2026-0009",
-    borrower_name: "Gloria Hernandez",
-    borrower_id: 109,
-    loan_account: "LN-2026-0011",
-    loan_id: 11,
-    date: "2026-03-15",
-    amount: 7500,
-    penalty_amount: 0,
-    method: "bank_transfer",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 112500,
-    balance_after: 105000,
-    reference_number: "BDO-TXN-20260315-09812",
-  },
-  {
-    id: 10,
-    receipt_number: "RCP-2026-0010",
-    borrower_name: "Aling Nena Ramos",
-    borrower_id: 110,
-    loan_account: "LN-2026-0078",
-    loan_id: 78,
-    date: "2026-03-12",
-    amount: 1200,
-    penalty_amount: 150,
-    method: "cash",
-    status: "completed",
-    collected_by: "Ana Reyes",
-    balance_before: 14350,
-    balance_after: 13000,
-    remarks: "Cash collected at borrower's residence",
-  },
-  {
-    id: 11,
-    receipt_number: "RCP-2026-0011",
-    borrower_name: "Danilo Santiago",
-    borrower_id: 111,
-    loan_account: "LN-2026-0046",
-    loan_id: 46,
-    date: "2026-03-10",
-    amount: 3800,
-    penalty_amount: 0,
-    method: "maya",
-    status: "completed",
-    collected_by: "Juan Dela Cruz",
-    balance_before: 53800,
-    balance_after: 50000,
-    reference_number: "MAYA-20260310-12409",
-  },
-  {
-    id: 12,
-    receipt_number: "RCP-2026-0012",
-    borrower_name: "Tessie Villanueva",
-    borrower_id: 112,
-    loan_account: "LN-2026-0059",
-    loan_id: 59,
-    date: "2026-03-08",
-    amount: 2800,
-    penalty_amount: 400,
-    method: "gcash",
-    status: "voided",
-    collected_by: "Ana Reyes",
-    balance_before: 43200,
-    balance_after: 40000,
-    reference_number: "GC-20260308-33109",
-    remarks: "Returned due to system error",
-    void_reason: "GCash transaction failed on borrower end — funds returned.",
-    voided_by: "Augustin Maputol",
-    voided_at: "2026-03-09T09:00:00",
-  },
-];
+function mapRepaymentToRow(r: Repayment): MockPayment {
+  const p = r as Repayment & Record<string, unknown>;
+  return {
+    id: p.id,
+    receipt_number: (p.receipt_number as string) || `RCP-${String(p.id).padStart(8, "0")}`,
+    borrower_name: (p.borrower_name as string) || "—",
+    borrower_id: (p.borrower_id as number) || 0,
+    loan_account: (p.loan_account_number as string) || (p.loan_account as string) || "—",
+    loan_id: p.loan_id,
+    date: p.payment_date,
+    amount:
+      (p.amount as number) ||
+      p.amount_paid ||
+      0,
+    penalty_amount: (p.penalty_applied as number) || (p.penalty_amount as number) || 0,
+    method: ((p.method as PaymentMethod) || "cash"),
+    status: (p.status === "voided" ? "voided" : "completed") as PaymentStatus,
+    collected_by: (p.collected_by as string) || "—",
+    balance_before: (p.balance_before as number) || 0,
+    balance_after: (p.balance_after as number) || 0,
+    reference_number: p.reference_number as string | undefined,
+    remarks: p.remarks || undefined,
+    void_reason: p.void_reason || undefined,
+    voided_by: p.voided_by || undefined,
+    voided_at: p.voided_at || undefined,
+  };
+}
 
 // ── Helpers ──
 
@@ -596,13 +410,32 @@ function PaymentCard({
 // ── Main Page ──
 
 export default function PaymentHistoryPage() {
-  const [payments, setPayments] = useState<MockPayment[]>(INITIAL_PAYMENTS);
+  const [payments, setPayments] = useState<MockPayment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+
+  const fetchPayments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await repaymentService.listAll({ per_page: 100 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setPayments(rows.map(mapRepaymentToRow));
+    } catch {
+      setPayments([]);
+      toast.error("Failed to load payment history");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
 
   // Filter logic
   const filtered = useMemo(() => {
@@ -649,21 +482,14 @@ export default function PaymentHistoryPage() {
     setVoidDialogOpen(true);
   };
 
-  const handleVoid = (id: number, reason: string) => {
-    setPayments((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              status: "voided",
-              void_reason: reason,
-              voided_by: "Augustin Maputol",
-              voided_at: new Date().toISOString(),
-              balance_after: p.balance_before,
-            }
-          : p
-      )
-    );
+  const handleVoid = async (id: number, reason: string) => {
+    try {
+      await repaymentService.void(id, { void_reason: reason });
+      toast.success("Payment voided");
+      fetchPayments();
+    } catch {
+      toast.error("Failed to void payment");
+    }
   };
 
   return (
@@ -910,7 +736,20 @@ export default function PaymentHistoryPage() {
                     </TableRow>
                   );
                 })}
-                {filtered.length === 0 && (
+                {loading && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="h-32 text-center text-muted-foreground"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="size-4 animate-spin" />
+                        Loading payments...
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!loading && filtered.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={8}
@@ -966,7 +805,13 @@ export default function PaymentHistoryPage() {
                 onVoidClick={handleVoidClick}
               />
             ))}
-            {filtered.length === 0 && (
+            {loading && (
+              <div className="py-12 text-center text-muted-foreground text-sm inline-flex w-full items-center justify-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Loading payments...
+              </div>
+            )}
+            {!loading && filtered.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm">
                 No payments found.
               </div>

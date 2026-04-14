@@ -17,6 +17,8 @@ export const API_ENDPOINTS = {
     CREATE: "/borrowers",
     UPDATE: (id: number) => `/borrowers/${id}`,
     DELETE: (id: number) => `/borrowers/${id}`,
+    BULK_DELETE: "/borrowers/bulk",
+    BULK_DEACTIVATE: "/borrowers/bulk-deactivate",
     DEACTIVATE: (id: number) => `/borrowers/${id}/deactivate`,
     REACTIVATE: (id: number) => `/borrowers/${id}/reactivate`,
     UPLOAD_PHOTO: (id: number) => `/borrowers/${id}/photo`,
@@ -70,6 +72,7 @@ export const API_ENDPOINTS = {
     LIST: (loanId: number) => `/loans/${loanId}/repayments`,
     LIST_ALL: "/repayments",
     CREATE: (loanId: number) => `/loans/${loanId}/repayments`,
+    PREVIEW: (loanId: number) => `/loans/${loanId}/repayments/preview`,
     DETAIL: (id: number) => `/repayments/${id}`,
     VOID: (id: number) => `/repayments/${id}/void`,
   },
@@ -121,10 +124,16 @@ export const API_ENDPOINTS = {
   AUDIT_LOGS: {
     LIST: "/audit-logs",
     DETAIL: (id: number) => `/audit-logs/${id}`,
+    EXPORT: "/audit-logs/export",
   },
   ROLES: {
     LIST: "/roles",
     DETAIL: (id: number) => `/roles/${id}`,
+    CREATE: "/roles",
+    UPDATE: (id: number) => `/roles/${id}`,
+    DELETE: (id: number) => `/roles/${id}`,
+    DEACTIVATE: (id: number) => `/roles/${id}/deactivate`,
+    REACTIVATE: (id: number) => `/roles/${id}/reactivate`,
   },
   BRANCHES: {
     LIST: "/branches",

@@ -104,6 +104,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Profile", href: "/settings/profile" },
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
+      { title: "Fees", href: "/settings/fees" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
     ],

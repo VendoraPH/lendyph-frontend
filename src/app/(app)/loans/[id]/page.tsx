@@ -7,10 +7,12 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
   loanAdjustmentService,
+  loanDocumentService,
   repaymentService,
   coMakerService,
   userService,
   approvalWorkflowService,
+  reportService,
   type ApprovalChainStep,
 } from "@/services";
 import { useAuthStore } from "@/store/auth-store";
@@ -725,6 +727,30 @@ export default function LoanDetailPage({
   const [actionLoading, setActionLoading] = useState(false);
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
 
+  // Server-side balance summary (for released loans). Populated via
+  // loanService.summary — gives authoritative outstanding/overdue figures
+  // that supersede client-side calculations when present.
+  const [loanSummary, setLoanSummary] = useState<{
+    outstanding_balance?: number;
+    total_paid?: number;
+    principal_paid?: number;
+    interest_paid?: number;
+    overdue_amount?: number;
+    penalty_amount?: number;
+    next_due_date?: string;
+    next_due_amount?: number;
+  } | null>(null);
+
+  // Server-computed amortization preview (for pre-release loans). Populated
+  // via loanService.amortizationPreview — lets approvers see the same schedule
+  // the server will persist on release.
+  const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+
+  // Statement of Account dialog state
+  const [soaOpen, setSoaOpen] = useState(false);
+  const [soaLoading, setSoaLoading] = useState(false);
+  const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
+
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [repaymentsLoading, setRepaymentsLoading] = useState(false);
@@ -853,11 +879,45 @@ export default function LoanDetailPage({
     }
   }, []);
 
+  // Fetch server-side balance summary for released+ loans
+  const fetchLoanSummary = useCallback(async (id: number) => {
+    try {
+      const res = await loanService.summary(id);
+      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+        ? (res as { data: unknown }).data
+        : res) as Record<string, unknown> | null;
+      setLoanSummary(payload ?? null);
+    } catch {
+      setLoanSummary(null);
+    }
+  }, []);
+
+  // Fetch server-computed amortization preview for draft/for_review loans
+  const fetchAmortizationPreview = useCallback(async (id: number) => {
+    try {
+      const res = await loanService.amortizationPreview(id);
+      const rows = Array.isArray(res)
+        ? res
+        : ((res as unknown as { data?: LoanSchedule[] })?.data ?? []);
+      setPreviewSchedule(rows);
+    } catch {
+      setPreviewSchedule(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
       fetchSchedule(loan.id);
+      fetchLoanSummary(loan.id);
     }
-  }, [loan?.id, loan?.status, fetchSchedule]);
+  }, [loan?.id, loan?.status, fetchSchedule, fetchLoanSummary]);
+
+  // Pre-release preview (draft / for_review / approved)
+  useEffect(() => {
+    if (loan && ["draft", "for_review", "approved"].includes(loan.status)) {
+      fetchAmortizationPreview(loan.id);
+    }
+  }, [loan?.id, loan?.status, fetchAmortizationPreview]);
 
   // Fetch repayments for released+ loans
   const fetchRepayments = useCallback(async (id: number) => {
@@ -918,6 +978,18 @@ export default function LoanDetailPage({
   const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+
+  // Edit Loan Application dialog (used by Loan Processor after a send-back
+  // and while the draft is still unsent)
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    principal_amount: "",
+    interest_rate: "",
+    start_date: "",
+    scb_amount: "",
+    purpose: "",
+  });
 
   // Borrower's other active loans — shown during approval so officers can
   // see the borrower's existing obligations before approving.
@@ -1241,6 +1313,66 @@ export default function LoanDetailPage({
     setApprovalSteps(steps);
     setApprovalRounds(rounds);
     saveApprovalState(loan.id, { current_steps: steps, rounds });
+  };
+
+  // Edit Loan Application — available to the Loan Processor while the loan
+  // is still a draft OR has been sent back by an approver. Seeds the form
+  // from the current loan values and opens the dialog.
+  const canEditLoanApplication =
+    !!loan &&
+    !isLocked &&
+    loan.status !== "rejected" &&
+    !!currentStep &&
+    currentStep.kind === "submit" &&
+    canActOnCurrentStep;
+
+  const handleOpenEdit = () => {
+    if (!loan) return;
+    setEditForm({
+      principal_amount: String(loan.principal_amount ?? ""),
+      interest_rate: String(loan.interest_rate ?? ""),
+      start_date: (loan.start_date ?? "").slice(0, 10),
+      scb_amount: String(loan.scb_amount ?? ""),
+      purpose: loan.purpose ?? "",
+    });
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!loan) return;
+    const principal = parseFloat(editForm.principal_amount);
+    const rate = parseFloat(editForm.interest_rate);
+    if (!Number.isFinite(principal) || principal <= 0) {
+      toast.error("Principal amount must be greater than zero");
+      return;
+    }
+    if (!Number.isFinite(rate) || rate < 0) {
+      toast.error("Interest rate must be a valid number");
+      return;
+    }
+    if (!editForm.start_date) {
+      toast.error("Start date is required");
+      return;
+    }
+    const scb = editForm.scb_amount ? parseFloat(editForm.scb_amount) : 0;
+    try {
+      setEditSaving(true);
+      const payload: Partial<Loan> = {
+        principal_amount: principal,
+        interest_rate: rate,
+        start_date: editForm.start_date,
+        scb_amount: Number.isFinite(scb) ? scb : 0,
+        purpose: editForm.purpose.trim() || undefined,
+      } as Partial<Loan>;
+      const updated = await loanService.update(loan.id, payload);
+      setLoan(updated);
+      toast.success("Loan application updated");
+      setEditOpen(false);
+    } catch {
+      toast.error("Failed to update loan application");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // Step 0 (Loan Processor): Submit the draft for review.
@@ -1586,11 +1718,62 @@ export default function LoanDetailPage({
     }
   };
 
+  // ── Statement of Account ──
+  const handleOpenStatementOfAccount = async () => {
+    if (!loan) return;
+    setSoaOpen(true);
+    setSoaLoading(true);
+    setSoaData(null);
+    try {
+      const res = await reportService.statementOfAccount(loan.id);
+      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+        ? (res as { data: unknown }).data
+        : res) as Record<string, unknown> | null;
+      setSoaData(payload ?? {});
+    } catch {
+      toast.error("Failed to fetch statement of account");
+      setSoaData(null);
+    } finally {
+      setSoaLoading(false);
+    }
+  };
+
   // ── Loan Document Handlers ──
 
-  const handleDownloadDocument = (type: "disclosure" | "promissory-note") => {
+  const handleDownloadDocument = async (type: "disclosure" | "promissory-note") => {
     try {
       setDocLoading(type);
+
+      if (type === "disclosure") {
+        try {
+          const apiData = await loanDocumentService.disclosure(loan.id);
+          if (apiData && apiData.borrower_name) {
+            const html = generateDisclosureHTML(apiData);
+            const blob = new Blob([html], { type: "text/html" });
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank");
+            toast.success("Disclosure Statement opened");
+            return;
+          }
+        } catch {
+          // Fall through to local extraction
+        }
+      } else {
+        try {
+          const apiData = await loanDocumentService.promissoryNote(loan.id);
+          if (apiData && apiData.borrower_name) {
+            const html = generatePromissoryNoteHTML(apiData);
+            const blob = new Blob([html], { type: "text/html" });
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank");
+            toast.success("Promissory Note opened");
+            return;
+          }
+        } catch {
+          // Fall through to local extraction
+        }
+      }
+
       // Access actual API fields (differ from TS types)
       const raw = loan as unknown as Record<string, unknown>;
       const borrowerObj = raw.borrower as Record<string, unknown> | undefined;
@@ -1963,6 +2146,18 @@ export default function LoanDetailPage({
                             <Ban className="mr-2 h-4 w-4" />
                             Void Loan
                           </Button>
+                          {canEditLoanApplication && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              onClick={handleOpenEdit}
+                              disabled={stepActionLoading || editSaving}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit Loan Application
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
@@ -2392,11 +2587,24 @@ export default function LoanDetailPage({
       {/* Release Details — only for released+ loans */}
       {isLocked && loan.release_date && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Unlock className="h-4 w-4 text-cyan-600" />
               Release Details
+              {loanSummary && (
+                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
+                  Server-verified
+                </Badge>
+              )}
             </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenStatementOfAccount}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Statement of Account
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2410,17 +2618,69 @@ export default function LoanDetailPage({
                   <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
                 </div>
               )}
-              {loan.next_due_date && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Next Due Date</p>
-                  <p className="text-sm font-medium">{formatDate(loan.next_due_date)}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Next Due Date</p>
+                <p className="text-sm font-medium">
+                  {loanSummary?.next_due_date
+                    ? formatDate(loanSummary.next_due_date)
+                    : loan.next_due_date
+                      ? formatDate(loan.next_due_date)
+                      : "—"}
+                </p>
+              </div>
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">{formatCurrency(loan.outstanding_balance ?? 0)}</p>
+                <p className="text-sm font-semibold">
+                  {formatCurrency(
+                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
+                  )}
+                </p>
               </div>
             </div>
+            {loanSummary && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Paid</p>
+                  <p className="text-sm font-medium">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Principal Paid</p>
+                  <p className="text-sm font-medium">{formatCurrency(loanSummary.principal_paid ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest Paid</p>
+                  <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Overdue + Penalty</p>
+                  <p className="text-sm font-semibold text-red-600">
+                    {formatCurrency(
+                      (loanSummary.overdue_amount ?? 0) + (loanSummary.penalty_amount ?? 0)
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Server-verified preview (pre-release) */}
+      {loan && ["draft", "for_review", "approved"].includes(loan.status) && previewSchedule && previewSchedule.length > 0 && (
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-2 text-xs">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="font-semibold text-green-700 dark:text-green-400">
+                Server-verified amortization preview loaded
+              </span>
+              <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
+                {previewSchedule.length} installments
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The backend computed {previewSchedule.length} periodic payments. This preview matches what will be persisted on release.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -2700,6 +2960,146 @@ export default function LoanDetailPage({
       )}
 
       {/* ── Dialogs ── */}
+
+      {/* Statement of Account Dialog */}
+      <Dialog open={soaOpen} onOpenChange={setSoaOpen}>
+        <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Statement of Account</DialogTitle>
+            <DialogDescription>
+              Full transaction history and balance for{" "}
+              <span className="font-medium">{loan.application_number}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          {soaLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-muted-foreground" />
+            </div>
+          ) : soaData ? (
+            <div className="space-y-3 pt-2">
+              <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
+                {JSON.stringify(soaData, null, 2)}
+              </pre>
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No data available
+            </p>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setSoaOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Loan Application Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Loan Application</DialogTitle>
+            <DialogDescription>
+              Update the draft for{" "}
+              <span className="font-medium">{loanBorrowerName}</span>. Changes
+              are saved immediately and the loan will keep its current workflow
+              state.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-principal">Principal Amount</Label>
+                <Input
+                  id="edit-principal"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={editForm.principal_amount}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, principal_amount: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-rate">Interest Rate (%)</Label>
+                <Input
+                  id="edit-rate"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={editForm.interest_rate}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, interest_rate: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-start-date">Start Date</Label>
+                <Input
+                  id="edit-start-date"
+                  type="date"
+                  value={editForm.start_date}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, start_date: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-scb">SCB Amount</Label>
+                <Input
+                  id="edit-scb"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={editForm.scb_amount}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, scb_amount: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-purpose">Purpose</Label>
+              <Textarea
+                id="edit-purpose"
+                placeholder="What is this loan for?"
+                value={editForm.purpose}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, purpose: e.target.value }))
+                }
+                className="min-h-[80px]"
+              />
+            </div>
+            {approvalRounds.length > 0 && (
+              <div className="rounded-md border border-amber-300/50 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-900/10 dark:text-amber-200">
+                This loan was sent back for revision. Update the fields above
+                and then use <span className="font-semibold">Submit for Review</span>{" "}
+                to restart the approval chain.
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={editSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              onClick={handleSaveEdit}
+              disabled={editSaving}
+            >
+              {editSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Submit for Review Dialog */}
       <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
