@@ -218,44 +218,23 @@ function generateUponMaturity(input: AmortizationInput): AmortizationRow[] {
   const { principal, monthlyRate, termMonths, frequency, startDate } = input;
   const scbPerPeriod = round(input.scbAmount ?? 0);
 
-  if (termMonths <= 1) {
-    // Single lump sum at maturity
-    const totalInterest = round(principal * (monthlyRate / 100) * termMonths);
-    return [{
-      period: 1,
-      dueDate: addMonths(startDate, termMonths),
-      beginningBalance: principal,
-      principal,
-      interest: totalInterest,
-      penalty: 0,
-      shareCapitalBuildUp: scbPerPeriod,
-      totalDue: round(principal + totalInterest + scbPerPeriod),
-      endingBalance: 0,
-    }];
-  }
+  // Upon Maturity = a single consolidated payment at the maturity date.
+  // Regardless of term length or frequency, the borrower pays full
+  // principal + total interest for the whole term in one shot.
+  const totalInterest = round(principal * (monthlyRate / 100) * termMonths);
+  const totalScb = round(scbPerPeriod * getPeriodsCount(termMonths, frequency));
 
-  // Interest-only periodic payments + principal at maturity
-  const periods = getPeriodsCount(termMonths, frequency, "fixed"); // use "fixed" to get actual period count
-  const interestPerPeriod = round(principal * (monthlyRate / 100));
-  const rows: AmortizationRow[] = [];
-
-  for (let i = 1; i <= periods; i++) {
-    const isLast = i === periods;
-    const baseTotal = isLast ? round(principal + interestPerPeriod) : interestPerPeriod;
-    rows.push({
-      period: i,
-      dueDate: getDueDate(startDate, i, frequency),
-      beginningBalance: principal,
-      principal: isLast ? principal : 0,
-      interest: interestPerPeriod,
-      penalty: 0,
-      shareCapitalBuildUp: scbPerPeriod,
-      totalDue: round(baseTotal + scbPerPeriod),
-      endingBalance: isLast ? 0 : principal,
-    });
-  }
-
-  return rows;
+  return [{
+    period: 1,
+    dueDate: addMonths(startDate, termMonths),
+    beginningBalance: principal,
+    principal,
+    interest: totalInterest,
+    penalty: 0,
+    shareCapitalBuildUp: totalScb,
+    totalDue: round(principal + totalInterest + totalScb),
+    endingBalance: 0,
+  }];
 }
 
 // ── Main API ──
@@ -288,16 +267,12 @@ export function generateSchedule(input: AmortizationInput): GeneratedSchedule {
   const firstPayment = rows[0]?.totalDue ?? 0;
   const lastPayment = rows[rows.length - 1]?.totalDue ?? 0;
 
-  // Per-period payment is constant for fixed; null for diminishing;
-  // for upon_maturity with term > 1: interest-only amount (first payment), null if single lump sum
+  // Per-period payment is constant for fixed; null for diminishing and
+  // upon_maturity (upon_maturity is a single consolidated payment, not periodic).
   const perPeriodPayment =
-    input.interestMethod === "diminishing"
+    input.interestMethod === "diminishing" || input.interestMethod === "upon_maturity"
       ? null
-      : input.interestMethod === "upon_maturity" && numberOfPayments > 1
-        ? firstPayment
-        : input.interestMethod === "upon_maturity"
-          ? null
-          : firstPayment;
+      : firstPayment;
 
   const maturityDate =
     rows.length > 0 ? rows[rows.length - 1]!.dueDate : input.startDate;

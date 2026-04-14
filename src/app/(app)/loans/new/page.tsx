@@ -69,8 +69,8 @@ const formatCurrency = (amount: number) =>
 
 // ── Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
-type InterestType = "straight" | "fixed" | "diminishing" | "upon_maturity";
+type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
+type InterestType = "straight" | "fixed" | "diminishing";
 
 function getPeriodsFromMonths(
   termMonths: number,
@@ -147,12 +147,31 @@ function computeAmortization(
   releaseDate: Date,
   scbAmount: number = 0,
 ): AmortizationRow[] {
+  const r = interestRate / 100;
+  const scb = Math.round(scbAmount);
+
+  // Upon Maturity is a bullet / balloon repayment schedule: one single
+  // payment on the maturity date containing full principal + simple
+  // interest for the whole term + any SCB. It's a payment-frequency
+  // concept, not an interest-type concept — the interest type is still
+  // straight or diminishing, but with no intermediate paydowns the two
+  // converge to the same total here.
+  if (frequency === "upon_maturity") {
+    const totalInterest = Math.round(principal * r * termMonths);
+    return [{
+      period: 1,
+      dueDate: addMonths(releaseDate, termMonths),
+      principal,
+      interest: totalInterest,
+      shareCapitalBuildUp: scb,
+      totalPayment: principal + totalInterest + scb,
+    }];
+  }
+
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
-  const r = interestRate / 100;
   const rows: AmortizationRow[] = [];
   let remainingBalance = principal;
-  const scb = Math.round(scbAmount);
 
   // Straight/Fixed: equal principal each period, constant interest on original principal
   if (interestType === "straight" || interestType === "fixed") {
@@ -204,28 +223,6 @@ function computeAmortization(
         totalPayment: baseTotal + scb,
       });
       remainingBalance -= periodPrincipal;
-    }
-  }
-
-  // Upon Maturity: interest-only payments, full principal at the end
-  else if (interestType === "upon_maturity") {
-    const interestPerPeriod = Math.round(principal * r);
-
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
-      const isLast = i === totalPeriods;
-      const periodPrincipal = isLast ? principal : 0;
-
-      rows.push({
-        period: i,
-        dueDate,
-        principal: periodPrincipal,
-        interest: interestPerPeriod,
-        shareCapitalBuildUp: scb,
-        totalPayment: periodPrincipal + interestPerPeriod + scb,
-      });
     }
   }
 
