@@ -178,7 +178,7 @@ export default function AmortizationPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Amortization Schedule
+          Amortization Calculator
         </h1>
         <p className="text-muted-foreground">
           Generate and preview loan repayment schedules
