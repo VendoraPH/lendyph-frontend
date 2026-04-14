@@ -406,8 +406,6 @@ export default function NewBorrowerPage() {
         if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
       }
 
-      payload.force = forceSubmit;
-
       const created = await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
       const borrowerId = (created as unknown as { id: number }).id;
 
