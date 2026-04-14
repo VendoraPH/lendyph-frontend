@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -621,84 +622,6 @@ export function AddBorrowerDialog({
   );
 }
 
-// ── Edit Borrower Dialog ──
-
-export function EditBorrowerDialog({
-  borrower,
-  open,
-  onOpenChange,
-  onSave,
-}: {
-  borrower: Borrower;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSave: (updated: Borrower) => void;
-}) {
-  const [form, setForm] = useState<BorrowerForm>(borrowerToForm(borrower));
-
-  const update = (field: keyof BorrowerForm, value: string | undefined) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      ...borrower,
-      first_name: form.first_name,
-      middle_name: form.middle_name || undefined,
-      last_name: form.last_name,
-      full_name: buildFullName(form),
-      suffix: form.suffix || undefined,
-      birthdate: form.birthdate || undefined,
-      civil_status: (form.civil_status || borrower.civil_status || undefined) as CivilStatus | undefined,
-      gender: (form.gender || borrower.gender || undefined) as Gender | undefined,
-      email: form.email || undefined,
-      contact_number: form.phone || undefined,
-      address: form.address || undefined,
-      employer_or_business: form.employer_or_business || undefined,
-      monthly_income: form.monthly_income
-        ? Number(form.monthly_income)
-        : undefined,
-      photo: form.photo,
-      updated_at: new Date().toISOString().split("T")[0]!,
-    });
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>Edit Member</DialogTitle>
-          <DialogDescription>
-            Update profile for {borrower.full_name} —{" "}
-            <span className="font-mono text-brand-orange">
-              {borrower.borrower_code}
-            </span>
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <BorrowerFormTabs form={form} update={update} />
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              Save Changes
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── Toggle Status Dialog ──
 
 export function ToggleStatusDialog({
@@ -800,15 +723,14 @@ export function DeleteBorrowerDialog({
 
 export function BorrowerActionsCell({
   borrower,
-  onEdit,
   onToggleStatus,
   onDelete,
 }: {
   borrower: Borrower;
-  onEdit: (updated: Borrower) => void;
   onToggleStatus: () => void;
   onDelete: () => void;
 }) {
+  const router = useRouter();
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = borrower.status === "active";
 
@@ -819,7 +741,9 @@ export function BorrowerActionsCell({
           <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setOpenDialog("edit")}>
+          <DropdownMenuItem
+            onClick={() => router.push(`/borrowers/${borrower.id}/edit`)}
+          >
             <Pencil className="mr-2 h-4 w-4" />
             Edit
           </DropdownMenuItem>
@@ -842,12 +766,6 @@ export function BorrowerActionsCell({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditBorrowerDialog
-        borrower={borrower}
-        open={openDialog === "edit"}
-        onOpenChange={(v) => !v && setOpenDialog(null)}
-        onSave={onEdit}
-      />
       <ToggleStatusDialog
         borrower={borrower}
         open={openDialog === "status"}

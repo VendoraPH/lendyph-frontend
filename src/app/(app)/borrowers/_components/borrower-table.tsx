@@ -37,7 +37,6 @@ import { BorrowerActionsCell } from "./borrower-actions";
 
 interface BorrowerTableProps {
   borrowers: Borrower[];
-  onEdit: (updated: Borrower) => void;
   onToggleStatus: (id: number) => void;
   onDelete: (id: number) => void;
   onBulkDeactivate: (ids: number[]) => void;
@@ -73,7 +72,6 @@ function SortIcon({ direction }: { direction: SortDirection }) {
 
 export function BorrowerTable({
   borrowers,
-  onEdit,
   onToggleStatus,
   onDelete,
   onBulkDeactivate,
@@ -343,7 +341,6 @@ export function BorrowerTable({
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <BorrowerActionsCell
                     borrower={borrower}
-                    onEdit={onEdit}
                     onToggleStatus={() => onToggleStatus(borrower.id)}
                     onDelete={() => onDelete(borrower.id)}
                   />

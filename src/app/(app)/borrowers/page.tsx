@@ -105,16 +105,6 @@ export default function BorrowersPage() {
     setCurrentPage(1);
   }
 
-  const handleEdit = async (updated: Borrower) => {
-    try {
-      await borrowerService.update(updated.id, updated);
-      toast.success("Borrower updated successfully");
-      fetchBorrowers();
-    } catch {
-      toast.error("Failed to update borrower");
-    }
-  };
-
   const handleToggleStatus = async (id: number) => {
     const borrower = borrowers.find((b) => b.id === id);
     if (!borrower) return;
@@ -282,7 +272,6 @@ export default function BorrowersPage() {
           ) : (
             <BorrowerTable
               borrowers={paginatedBorrowers}
-              onEdit={handleEdit}
               onToggleStatus={handleToggleStatus}
               onDelete={handleDelete}
               onBulkDeactivate={handleBulkDeactivate}

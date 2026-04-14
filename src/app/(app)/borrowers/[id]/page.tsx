@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
-import { EditBorrowerDialog } from "../_components/borrower-actions";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -22,12 +21,12 @@ export default function BorrowerDetailPage() {
   const params = useParams();
   const borrowerId = Number(params.id);
 
+  const router = useRouter();
   const [borrower, setBorrower] = useState<Borrower | undefined>();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editOpen, setEditOpen] = useState(false);
 
   const fetchCoMakers = useCallback(async () => {
     try {
@@ -122,34 +121,6 @@ export default function BorrowerDetailPage() {
     }
   };
 
-  const handleEditBorrower = async (updated: Borrower) => {
-    try {
-      // Build payload with only the fields the API accepts
-      const payload: Record<string, unknown> = {
-        first_name: updated.first_name,
-        last_name: updated.last_name,
-        middle_name: updated.middle_name ?? null,
-        suffix: updated.suffix ?? null,
-        birthdate: updated.birthdate ?? null,
-        gender: updated.gender ?? null,
-        civil_status: updated.civil_status ?? null,
-        contact_number: updated.contact_number ?? updated.phone ?? null,
-        email: updated.email ?? null,
-        address: updated.address ?? null,
-        employer_or_business: updated.employer_or_business ?? null,
-        monthly_income: updated.monthly_income ? Number(updated.monthly_income) : null,
-      };
-      await borrowerService.update(borrowerId, payload as Partial<Borrower>);
-      toast.success("Member updated successfully");
-      // Refresh data
-      const refreshed = await borrowerService.detail(borrowerId);
-      setBorrower(refreshed);
-      setEditOpen(false);
-    } catch {
-      toast.error("Failed to update borrower");
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
@@ -170,15 +141,8 @@ export default function BorrowerDetailPage() {
     <div className="space-y-6">
       <BorrowerHeader
         borrower={borrower}
-        onEdit={() => setEditOpen(true)}
+        onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
         onPhotoUpdate={fetchData}
-      />
-
-      <EditBorrowerDialog
-        borrower={borrower}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSave={handleEditBorrower}
       />
 
       <Tabs defaultValue="overview">
