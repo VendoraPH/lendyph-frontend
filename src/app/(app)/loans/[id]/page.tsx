@@ -995,6 +995,10 @@ export default function LoanDetailPage({
   const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+  // Index of the step an approver is sending the loan back to. Defaults to
+  // the most recent prior approver, falling back to the Loan Processor. See
+  // `sendBackTargets` below for the list of valid choices.
+  const [sendBackTargetIndex, setSendBackTargetIndex] = useState<number>(0);
 
   // Edit Loan Application dialog (used by Loan Processor after a send-back
   // and while the draft is still unsent)
@@ -1180,6 +1184,31 @@ export default function LoanDetailPage({
       cancelled = true;
     };
   }, [loan?.id, loan?.borrower?.id, loan?.borrower_id]);
+
+  // Valid send-back targets for the current approver: every earlier step
+  // whose kind is "submit" (Loan Processor) or "approve" (a prior approver).
+  // An approver at position N can return the loan to any of these. Computed
+  // here (before the loading/not-found early returns) so hook order is stable.
+  const sendBackTargets = useMemo(() => {
+    const pendingIdx = approvalSteps.findIndex((s) => s.status === "pending");
+    if (pendingIdx < 0) return [];
+    const pending = approvalSteps[pendingIdx];
+    if (pending.kind !== "approve") return [];
+    return approvalSteps
+      .slice(0, pendingIdx)
+      .filter((s) => s.kind === "submit" || s.kind === "approve")
+      .map((s) => ({ index: s.index, name: s.name, kind: s.kind }));
+  }, [approvalSteps]);
+
+  // When the set of valid targets changes, default to the most recent prior
+  // approver (or the Loan Processor if there is none).
+  useEffect(() => {
+    if (sendBackTargets.length > 0) {
+      setSendBackTargetIndex(
+        sendBackTargets[sendBackTargets.length - 1].index
+      );
+    }
+  }, [sendBackTargets]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
 
@@ -1488,7 +1517,7 @@ export default function LoanDetailPage({
   // no "send-back" endpoint exists yet — the loan server status stays at
   // for_review while the local chain is reset. Loan Processor can then submit
   // again to restart the chain.
-  const handleStepSendBack = async () => {
+  const handleStepSendBack = async (targetIndex: number) => {
     if (!loan || !currentStep || currentStep.kind !== "approve") return;
     if (!canActOnCurrentStep) {
       toast.error(
@@ -1500,6 +1529,15 @@ export default function LoanDetailPage({
       toast.error("Please enter a reason before sending back for revision");
       return;
     }
+    if (
+      targetIndex < 0 ||
+      targetIndex >= currentStep.index ||
+      approvalSteps[targetIndex] === undefined
+    ) {
+      toast.error("Invalid send-back target");
+      return;
+    }
+    const targetStep = approvalSteps[targetIndex];
     try {
       setStepActionLoading(true);
       const actedAt = new Date().toISOString();
@@ -1522,17 +1560,38 @@ export default function LoanDetailPage({
         steps: roundSteps,
         sent_back_by: currentUserDisplayName,
         sent_back_at: actedAt,
-        sent_back_remarks: stepRemarks.trim(),
+        sent_back_remarks: `To ${targetStep.name}: ${stepRemarks.trim()}`,
       };
 
-      // Reset the chain — Loan Processor is pending again.
-      // Use the current chain config (fall back to the default if unavailable).
-      const chain = chainConfig ?? approvalWorkflowService.getDefault();
-      const freshSteps = buildFreshSteps(chain, 0);
+      // Rebuild the chain so `targetStep` is pending again. Steps before the
+      // target keep their prior approval intact (so the approver doesn't have
+      // to re-act on them); steps from the target onward are reset to waiting,
+      // except the target itself which becomes pending.
+      const freshSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
+        if (i < targetIndex) {
+          return { ...s, status: "approved" as ApprovalStepStatus };
+        }
+        if (i === targetIndex) {
+          return {
+            index: s.index,
+            name: s.name,
+            role: s.role,
+            kind: s.kind,
+            status: "pending" as ApprovalStepStatus,
+          };
+        }
+        return {
+          index: s.index,
+          name: s.name,
+          role: s.role,
+          kind: s.kind,
+          status: "waiting" as ApprovalStepStatus,
+        };
+      });
       persistApprovalState(freshSteps, [...approvalRounds, nextRound]);
       setStepRemarks("");
       toast.success(
-        `${currentStep.name} sent the loan back to the Loan Processor for revision.`
+        `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
     } catch {
       toast.error("Failed to send back for revision");
@@ -2117,8 +2176,16 @@ export default function LoanDetailPage({
                           (currentStep.index < approvalSteps.length - 2
                             ? ` — on approve, the loan will be forwarded to ${
                                 approvalSteps[currentStep.index + 1].name
-                              }. Send back for revision to return it to the Loan Processor.`
-                            : " — this is the final approver. Approve to forward to the Cashier for release.")}
+                              }.${
+                                sendBackTargets.length > 1
+                                  ? " You may send it back to any earlier step for revision."
+                                  : " Send back for revision to return it to the Loan Processor."
+                              }`
+                            : ` — this is the final approver. Approve to forward for release${
+                                sendBackTargets.length > 1
+                                  ? ", or send the loan back to any earlier step for revision."
+                                  : "."
+                              }`)}
                         {currentStep.kind === "release" &&
                           " — open the release dialog to complete the loan release."}
                       </p>
@@ -2188,11 +2255,51 @@ export default function LoanDetailPage({
                       )}
                       {currentStep.kind === "approve" && (
                         <>
+                          {sendBackTargets.length > 1 && (
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <Label
+                                htmlFor="send-back-target"
+                                className="text-xs text-muted-foreground whitespace-nowrap"
+                              >
+                                Send back to
+                              </Label>
+                              <Select
+                                value={String(sendBackTargetIndex)}
+                                onValueChange={(v) =>
+                                  setSendBackTargetIndex(Number(v))
+                                }
+                                disabled={stepActionLoading}
+                              >
+                                <SelectTrigger
+                                  id="send-back-target"
+                                  className="h-9 w-full sm:w-[180px] text-xs"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {sendBackTargets.map((t) => (
+                                    <SelectItem
+                                      key={t.index}
+                                      value={String(t.index)}
+                                    >
+                                      {t.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
                             className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
-                            onClick={handleStepSendBack}
+                            onClick={() =>
+                              handleStepSendBack(
+                                sendBackTargets.length > 1
+                                  ? sendBackTargetIndex
+                                  : 0
+                              )
+                            }
                             disabled={stepActionLoading || !stepRemarks.trim()}
                           >
                             <XCircle className="mr-2 h-4 w-4" />
