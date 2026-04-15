@@ -112,8 +112,6 @@ export default function AmortizationPage() {
   } | null>(null);
 
   const isUponMaturity = interestMethod === "upon_maturity";
-  const parsedTerm = parseInt(termMonths) || 0;
-  const isUponMaturitySinglePayment = isUponMaturity && parsedTerm <= 1;
 
   const isFormValid = useMemo(() => {
     const p = parseFloat(principal);
@@ -142,20 +140,12 @@ export default function AmortizationPage() {
     const t = parseInt(termMonths);
     if (!p || !r || !t) return;
 
-    const uponMaturityFreq = t <= 1 ? "monthly" : frequency;
-    const selected = generateSchedule(
-      buildInput(interestMethod, isUponMaturity ? uponMaturityFreq : frequency)
-    );
+    const selected = generateSchedule(buildInput(interestMethod, frequency));
     setSchedule(selected);
 
-    // Three-way comparison
     const fixed = generateSchedule(buildInput("fixed", frequency));
-    const diminishing = generateSchedule(
-      buildInput("diminishing", frequency)
-    );
-    const upon_maturity = generateSchedule(
-      buildInput("upon_maturity", uponMaturityFreq)
-    );
+    const diminishing = generateSchedule(buildInput("diminishing", frequency));
+    const upon_maturity = generateSchedule(buildInput("upon_maturity", frequency));
     setComparison({ fixed, diminishing, upon_maturity });
   }
 
@@ -360,9 +350,7 @@ export default function AmortizationPage() {
                   interestMethod === "diminishing"
                     ? "Varies"
                     : interestMethod === "upon_maturity"
-                      ? schedule.summary.numberOfPayments > 1
-                        ? `${formatPHP(schedule.summary.perPeriodPayment ?? 0)} (interest only)`
-                        : "Single Payment"
+                      ? "Single Payment"
                       : formatPHP(schedule.summary.perPeriodPayment ?? 0)
                 }
               />
@@ -596,9 +584,7 @@ function MethodComparison({
                     method.key === "diminishing"
                       ? `${formatPHP(s.firstPayment)} - ${formatPHP(s.lastPayment)}`
                       : method.key === "upon_maturity"
-                        ? s.numberOfPayments > 1
-                          ? `${formatPHP(s.firstPayment)} interest + principal at end`
-                          : `${formatPHP(s.totalPayable)} (single)`
+                        ? `${formatPHP(s.totalPayable)} (single)`
                         : formatPHP(s.perPeriodPayment ?? 0)
                   }
                 />

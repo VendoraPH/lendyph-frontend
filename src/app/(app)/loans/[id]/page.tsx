@@ -193,6 +193,23 @@ function generateSchedule(
   startDate: Date,
   scbAmount: number = 0,
 ): AmortizationRow[] {
+  // Upon Maturity = a single consolidated payment at the maturity date.
+  // Full principal + total interest for the whole term, regardless of
+  // term length or frequency.
+  if (interestType === "upon_maturity") {
+    const totalInterest = principal * (rate / 100) * termMonths;
+    const totalScb = scbAmount * getPeriodsFromMonths(termMonths, frequency);
+    return [{
+      period: 1,
+      dueDate: addMonths(startDate, termMonths),
+      principal,
+      interest: totalInterest,
+      shareCapitalBuildUp: totalScb,
+      totalPayment: principal + totalInterest + totalScb,
+      balance: 0,
+    }];
+  }
+
   const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
   const intervalDays = getIntervalDays(frequency);
   const principalPerPeriod = principal / totalPeriods;
