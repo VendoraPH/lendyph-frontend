@@ -290,7 +290,7 @@ function formToApiPayload(form: ProductForm) {
     name: form.name,
     min_interest_rate: Number(form.min_interest_rate),
     max_interest_rate: Number(form.max_interest_rate),
-    interest_method: form.interest_method as "straight" | "diminishing",
+    interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
     frequencies: form.frequencies,
@@ -338,6 +338,20 @@ function ProductFormDialog({
       setExpandedFee(null);
     }
   }, [open, initialData]);
+
+  // Upon Maturity is a bullet schedule — no intermediate paydowns, so
+  // straight vs diminishing interest converge to the same total. When a
+  // product is *only* Upon Maturity, force interest_method to match so
+  // the backend's validator doesn't reject a mismatched combination. Users
+  // with mixed frequencies (e.g. monthly + upon_maturity) keep their
+  // chosen method since it still applies to the periodic frequency.
+  const onlyUponMaturity =
+    form.frequencies.length === 1 && form.frequencies[0] === "upon_maturity";
+  useEffect(() => {
+    if (onlyUponMaturity && form.interest_method !== "upon_maturity") {
+      setForm((prev) => ({ ...prev, interest_method: "upon_maturity" }));
+    }
+  }, [onlyUponMaturity, form.interest_method]);
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -508,14 +522,16 @@ function ProductFormDialog({
                 <Select
                   value={form.interest_method}
                   onValueChange={(v) => update("interest_method", v as string)}
+                  disabled={onlyUponMaturity}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select method">
-                      {(value: string | null) =>
-                        value
+                      {(value: string | null) => {
+                        if (value === "upon_maturity") return "Upon Maturity";
+                        return value
                           ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select method"
-                      }
+                          : "Select method";
+                      }}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -524,8 +540,17 @@ function ProductFormDialog({
                         {opt.label}
                       </SelectItem>
                     ))}
+                    {onlyUponMaturity && (
+                      <SelectItem value="upon_maturity">Upon Maturity</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {onlyUponMaturity && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Locked to <span className="font-medium">Upon Maturity</span> —
+                    bullet payment schedules have no periodic paydowns.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Payment Frequency <span className="text-red-500">*</span></Label>
