@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
@@ -15,7 +15,8 @@ import {
   loanService,
   userService,
 } from "@/services";
-import type { Borrower, CoMaker, User } from "@/types";
+import { api } from "@/lib/api-client";
+import type { Borrower, CoMaker, Loan, User } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -236,15 +237,31 @@ function computeAmortization(
 }
 
 // ── Main Page Component ──
+//
+// This page handles both **create** and **edit** for a loan application.
+// Edit mode is triggered by `?edit={loanId}` — the Edit Loan Application
+// button on `/loans/[id]` links here instead of opening an inline dialog
+// so the Loan Processor gets the full form (product, term, frequency,
+// interest type, policy exception, etc.) after a send-back, matching the
+// New Loan experience exactly.
 
-export default function NewLoanApplicationPage() {
+function NewLoanApplicationInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editLoanId = (() => {
+    const raw = searchParams.get("edit");
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+  const isEditMode = editLoanId !== null;
 
   // ── API Data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
 
   // ── Users (Account Officers) ──
   const [users, setUsers] = useState<User[]>([]);
@@ -288,16 +305,18 @@ export default function NewLoanApplicationPage() {
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
 
-  // ── Fetch borrowers and products on mount ──
+  // ── Fetch borrowers, products, users — and the loan when editing ──
   useEffect(() => {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, usersResult] = await Promise.allSettled([
-        borrowerService.list({ per_page: 200 }),
-        loanProductService.list(),
-        userService.list(),
-      ]);
+      const [borrowersResult, productsResult, usersResult, loanResult] =
+        await Promise.allSettled([
+          borrowerService.list({ per_page: 200 }),
+          loanProductService.list(),
+          userService.list(),
+          editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
+        ]);
 
       if (borrowersResult.status === "fulfilled") {
         const borrowerData = Array.isArray(borrowersResult.value)
@@ -308,12 +327,12 @@ export default function NewLoanApplicationPage() {
         toast.error("Failed to load members");
       }
 
+      let productsList: LoanProduct[] = [];
       if (productsResult.status === "fulfilled") {
-        setProducts(
-          Array.isArray(productsResult.value)
-            ? productsResult.value
-            : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? []
-        );
+        productsList = Array.isArray(productsResult.value)
+          ? productsResult.value
+          : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
+        setProducts(productsList);
       } else {
         toast.error("Failed to load loan products");
       }
@@ -325,10 +344,49 @@ export default function NewLoanApplicationPage() {
         setUsers(userData.filter((u) => u.status === "active"));
       }
 
+      // Hydrate form state from the loan being edited. Runs after products
+      // are loaded so the product-change handler (if used) has them, but
+      // we set fields directly to avoid clobbering fee ranges the user may
+      // have already tuned on this specific loan.
+      if (editLoanId) {
+        if (loanResult.status === "fulfilled" && loanResult.value) {
+          const loan = loanResult.value;
+          setExistingLoan(loan);
+          const l = loan as unknown as Record<string, unknown>;
+          const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
+          if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
+          const coMakerIdList: number[] = Array.isArray(loan.co_makers)
+            ? loan.co_makers.map((c) => c.id).filter((id): id is number => typeof id === "number")
+            : [];
+          setCoMakerIds(coMakerIdList.length > 0 ? coMakerIdList : [null]);
+          const aoId = (l.account_officer_id as number | undefined) ?? null;
+          if (aoId) setAccountOfficerId(aoId);
+          setPurpose(loan.purpose ?? "");
+          const productIdVal = loan.loan_product?.id ?? loan.loan_product_id ?? null;
+          if (productIdVal) setProductId(String(productIdVal));
+          setPrincipalAmount(String(loan.principal_amount ?? ""));
+          setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+          setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
+          setInterestRate(String(loan.interest_rate ?? ""));
+          const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
+          setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
+          setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
+          if (loan.start_date) setReleaseDate(new Date(loan.start_date));
+          if (loan.policy_exception) {
+            setPolicyException(true);
+            setPolicyExceptionDetails(loan.policy_exception_details ?? "");
+          }
+        } else {
+          toast.error("Failed to load loan — redirecting");
+          router.push(`/loans/${editLoanId}`);
+        }
+      }
+
       setLoadingData(false);
     }
     fetchData();
-  }, []);
+    // Re-fetch if user switches between create and edit in the same tab
+  }, [editLoanId, router]);
 
   // Co-makers: all borrowers except the selected borrower and already-picked co-makers
   const availableCoMakersFor = useCallback(
@@ -581,6 +639,29 @@ export default function NewLoanApplicationPage() {
           policy_exception_details: policyExceptionDetails.trim() || undefined,
         }),
       };
+
+      // Edit mode — update existing loan, skip auto-submit (the loan is
+      // already beyond draft and already in the approval chain).
+      if (isEditMode && editLoanId) {
+        const updated = await loanService.update(editLoanId, payload);
+
+        if (policyException && policyExceptionLetter) {
+          try {
+            const letterData = new FormData();
+            letterData.append("file", policyExceptionLetter);
+            letterData.append("type", "policy_exception_letter");
+            await api.upload(`/loans/${updated.id}/documents`, letterData);
+          } catch {
+            toast.warning("Loan updated but policy exception letter upload failed");
+          }
+        }
+
+        toast.success("Loan application updated");
+        router.push(`/loans/${updated.id}`);
+        return;
+      }
+
+      // Create mode
       const loan = await loanService.create(payload);
 
       // Upload policy exception letter if provided
@@ -619,7 +700,7 @@ export default function NewLoanApplicationPage() {
       if (axiosErr?.response?.status === 422) {
         toast.error(axiosErr.response.data?.message ?? "Validation error. Please check your inputs.");
       } else {
-        toast.error("Failed to create loan application");
+        toast.error(isEditMode ? "Failed to update loan application" : "Failed to create loan application");
       }
     } finally {
       setSubmitting(false);
@@ -635,21 +716,29 @@ export default function NewLoanApplicationPage() {
   }
 
   return (
-    <RouteGuard permission="loans:create" pageName="New Loan Application">
+    <RouteGuard
+      permission={isEditMode ? "loans:update" : "loans:create"}
+      pageName={isEditMode ? "Edit Loan Application" : "New Loan Application"}
+    >
     <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <Link
-            href="/loans"
+            href={isEditMode && editLoanId ? `/loans/${editLoanId}` : "/loans"}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />
-            Back to Loans
+            {isEditMode ? "Back to Loan" : "Back to Loans"}
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">
-            New Loan Application
+            {isEditMode ? "Edit Loan Application" : "New Loan Application"}
           </h1>
+          {isEditMode && existingLoan?.application_number && (
+            <p className="text-sm text-muted-foreground font-mono">
+              {existingLoan.application_number}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1488,11 +1577,27 @@ export default function NewLoanApplicationPage() {
           disabled={!canSubmit || submitting}
           onClick={handleSubmit}
         >
-          {submitting ? "Submitting..." : "Submit Loan Application"}
+          {submitting
+            ? isEditMode ? "Saving..." : "Submitting..."
+            : isEditMode ? "Save Changes" : "Submit Loan Application"}
         </Button>
       </div>
 
     </div>
     </RouteGuard>
+  );
+}
+
+export default function NewLoanApplicationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      }
+    >
+      <NewLoanApplicationInner />
+    </Suspense>
   );
 }
