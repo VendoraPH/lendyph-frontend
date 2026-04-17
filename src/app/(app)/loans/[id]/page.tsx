@@ -1422,8 +1422,10 @@ export default function LoanDetailPage({
   };
 
   // Step 0 (Loan Processor): Submit the draft for review.
-  // Moves loan status draft → for_review via the existing loanService.submit(),
-  // marks Loan Processor step approved and Manager step pending.
+  // First submission (draft → for_review) goes through loanService.submit().
+  // Resubmissions after a send-back are a local-only chain reset — the loan's
+  // server status is already for_review (send-back has no backend endpoint),
+  // so calling submit again would 422. Gate the API call on loan.status.
   const handleStepSubmit = async () => {
     if (!loan || !currentStep || currentStep.kind !== "submit") return;
     if (!canActOnCurrentStep) {
@@ -1432,8 +1434,10 @@ export default function LoanDetailPage({
     }
     try {
       setStepActionLoading(true);
-      const updatedLoan = await loanService.submit(loan.id);
-      setLoan(updatedLoan);
+      if (loan.status === "draft") {
+        const updatedLoan = await loanService.submit(loan.id);
+        setLoan(updatedLoan);
+      }
       const actedAt = new Date().toISOString();
       const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
         if (i === 0) {
