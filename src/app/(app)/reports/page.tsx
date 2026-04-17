@@ -1,536 +1,184 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { RouteGuard } from "@/components/common";
-import { toast } from "sonner";
-import { reportService } from "@/services";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Banknote,
-  ClipboardList,
-  Clock,
-  PieChart,
-  TrendingUp,
-  Users,
-  ListChecks,
-  Receipt,
-  AlertTriangle,
-} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FileBarChart, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ── Formatters ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
-    Math.round(amount)
-  );
-
-// ── Types ──
-
-type ReportId =
-  | "daily_collection"
-  | "portfolio_summary"
-  | "income_report"
-  | "aging_report"
-  | "borrower_report"
-  | "disbursement_report"
-  | "releases_list"
-  | "repayments_list"
-  | "due_past_due_list";
-
-interface ReportCard {
-  id: ReportId;
-  title: string;
-  description: string;
-  icon: React.ElementType;
-  color: string;
-  iconBg: string;
-}
-
-interface ReportPreview {
-  reportId: ReportId;
-  from: string;
-  to: string;
-}
-
-// ── Report Definitions ──
-
-const REPORTS: ReportCard[] = [
-  {
-    id: "daily_collection",
-    title: "Daily Collection Report",
-    description: "View today's collection summary",
-    icon: ClipboardList,
-    color: "text-brand-orange",
-    iconBg: "bg-brand-orange/10",
-  },
-  {
-    id: "portfolio_summary",
-    title: "Portfolio Summary",
-    description: "Overall loan portfolio status",
-    icon: PieChart,
-    color: "text-blue-600",
-    iconBg: "bg-blue-50",
-  },
-  {
-    id: "income_report",
-    title: "Income Report",
-    description: "Interest and fee income breakdown",
-    icon: TrendingUp,
-    color: "text-green-600",
-    iconBg: "bg-green-50",
-  },
-  {
-    id: "aging_report",
-    title: "Aging Report",
-    description: "Overdue accounts by aging bucket",
-    icon: Clock,
-    color: "text-red-600",
-    iconBg: "bg-red-50",
-  },
-  {
-    id: "borrower_report",
-    title: "Borrower Report",
-    description: "Active borrowers and loan summary",
-    icon: Users,
-    color: "text-purple-600",
-    iconBg: "bg-purple-50",
-  },
-  {
-    id: "disbursement_report",
-    title: "Disbursement Report",
-    description: "Loan releases for a period",
-    icon: Banknote,
-    color: "text-cyan-600",
-    iconBg: "bg-cyan-50",
-  },
-  {
-    id: "releases_list",
-    title: "Releases List",
-    description: "Paginated list of released loans",
-    icon: ListChecks,
-    color: "text-indigo-600",
-    iconBg: "bg-indigo-50",
-  },
-  {
-    id: "repayments_list",
-    title: "Repayments List",
-    description: "Paginated list of repayments",
-    icon: Receipt,
-    color: "text-emerald-600",
-    iconBg: "bg-emerald-50",
-  },
-  {
-    id: "due_past_due_list",
-    title: "Due / Past Due List",
-    description: "Schedules due or overdue as of today",
-    icon: AlertTriangle,
-    color: "text-amber-600",
-    iconBg: "bg-amber-50",
-  },
-];
-
-// ── Sample Preview Data ──
-
-function getSamplePreview(reportId: ReportId, from: string, to: string) {
-  const fromLabel = from
-    ? new Date(from).toLocaleDateString("en-PH", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "—";
-  const toLabel = to
-    ? new Date(to).toLocaleDateString("en-PH", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "—";
-
-  const period =
-    from === to || !to ? fromLabel : `${fromLabel} – ${toLabel}`;
-
-  switch (reportId) {
-    case "daily_collection":
-      return {
-        title: "Daily Collection Report",
-        period,
-        rows: [
-          { label: "Total Due", value: formatCurrency(45000) },
-          { label: "Total Collected", value: formatCurrency(38500) },
-          { label: "Collection Rate", value: "85.6%" },
-          { label: "Uncollected", value: formatCurrency(6500) },
-        ],
-      };
-    case "portfolio_summary":
-      return {
-        title: "Portfolio Summary",
-        period,
-        rows: [
-          { label: "Total Active Loans", value: "48" },
-          { label: "Outstanding Balance", value: formatCurrency(3_850_000) },
-          { label: "At Risk (>30d overdue)", value: formatCurrency(420_000) },
-          { label: "PAR Ratio", value: "10.9%" },
-        ],
-      };
-    case "income_report":
-      return {
-        title: "Income Report",
-        period,
-        rows: [
-          { label: "Interest Income", value: formatCurrency(82_500) },
-          { label: "Processing Fees", value: formatCurrency(12_800) },
-          { label: "Penalty Income", value: formatCurrency(4_350) },
-          { label: "Total Income", value: formatCurrency(99_650) },
-        ],
-      };
-    case "aging_report":
-      return {
-        title: "Aging Report",
-        period,
-        rows: [
-          { label: "1–30 Days Overdue", value: formatCurrency(85_000) },
-          { label: "31–60 Days Overdue", value: formatCurrency(210_000) },
-          { label: "61–90 Days Overdue", value: formatCurrency(98_500) },
-          { label: ">90 Days Overdue", value: formatCurrency(26_500) },
-        ],
-      };
-    case "borrower_report":
-      return {
-        title: "Borrower Report",
-        period,
-        rows: [
-          { label: "Total Active Borrowers", value: "63" },
-          { label: "New Borrowers", value: "7" },
-          { label: "Avg Loan Size", value: formatCurrency(85_000) },
-          { label: "Repeat Borrowers", value: "41" },
-        ],
-      };
-    case "disbursement_report":
-      return {
-        title: "Disbursement Report",
-        period,
-        rows: [
-          { label: "Loans Released", value: "12" },
-          { label: "Total Disbursed", value: formatCurrency(1_040_000) },
-          { label: "Avg Disbursement", value: formatCurrency(86_667) },
-          { label: "Pending Release", value: "3" },
-        ],
-      };
-  }
-}
-
-// ── Main Page ──
-
-interface ListPreview {
-  title: string;
-  rows: Array<Record<string, unknown>>;
-}
+import { REPORT_CATALOG } from "./_lib/report-catalog";
+import { CATEGORY_META } from "./_lib/types";
+import type { ReportCategory, ReportDefinition } from "./_lib/types";
 
 export default function ReportsPage() {
-  const [generateTarget, setGenerateTarget] = useState<ReportCard | null>(null);
-  const [fromDate, setFromDate] = useState("2026-03-31");
-  const [toDate, setToDate] = useState("2026-03-31");
-  const [preview, setPreview] = useState<ReportPreview | null>(null);
-  const [listPreview, setListPreview] = useState<ListPreview | null>(null);
-  const [listLoading, setListLoading] = useState(false);
+  const [query, setQuery] = useState("");
 
-  function openGenerateDialog(report: ReportCard) {
-    setGenerateTarget(report);
-    setPreview(null);
-    setListPreview(null);
-  }
+  const grouped = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = REPORT_CATALOG.filter((r) => {
+      if (!needle) return true;
+      return (
+        r.title.toLowerCase().includes(needle) ||
+        r.description.toLowerCase().includes(needle)
+      );
+    });
+    const byCategory = new Map<ReportCategory, ReportDefinition[]>();
+    filtered.forEach((r) => {
+      const list = byCategory.get(r.category) ?? [];
+      list.push(r);
+      byCategory.set(r.category, list);
+    });
+    return byCategory;
+  }, [query]);
 
-  async function handleGenerate() {
-    if (!generateTarget) return;
+  const orderedCategories: ReportCategory[] = [
+    "operations",
+    "portfolio",
+    "member",
+    "disbursement",
+  ];
 
-    const params = { date_from: fromDate, date_to: toDate, per_page: 25 };
-
-    // List-style reports (releases/repayments/due-past-due) render real API data
-    if (
-      generateTarget.id === "releases_list" ||
-      generateTarget.id === "repayments_list" ||
-      generateTarget.id === "due_past_due_list"
-    ) {
-      setListLoading(true);
-      setListPreview(null);
-      try {
-        let res: unknown;
-        if (generateTarget.id === "releases_list") {
-          res = await reportService.releases(params);
-        } else if (generateTarget.id === "repayments_list") {
-          res = await reportService.repayments(params);
-        } else {
-          res = await reportService.duePastDue(params);
-        }
-        const payload =
-          res && typeof res === "object" && "data" in (res as Record<string, unknown>)
-            ? (res as { data: unknown }).data
-            : res;
-        const rows = Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
-        setListPreview({ title: generateTarget.title, rows });
-        toast.success(`Loaded ${rows.length} ${rows.length === 1 ? "row" : "rows"}`);
-      } catch {
-        toast.error("Failed to load report data");
-        setListPreview({ title: generateTarget.title, rows: [] });
-      } finally {
-        setListLoading(false);
-      }
-      return;
-    }
-
-    try {
-      switch (generateTarget.id) {
-        case "daily_collection":
-          await reportService.dailyCollection(params);
-          break;
-        case "portfolio_summary":
-          await reportService.loanBalanceSummary(params);
-          break;
-        case "income_report":
-          await reportService.income(params);
-          break;
-        case "aging_report":
-          await reportService.aging(params);
-          break;
-        case "borrower_report":
-          await reportService.borrowers(params);
-          break;
-        case "disbursement_report":
-          await reportService.disbursements(params);
-          break;
-      }
-      toast.success("Report generated from API");
-    } catch {
-      // Fall through to sample preview
-    }
-
-    setPreview({ reportId: generateTarget.id, from: fromDate, to: toDate });
-  }
-
-  async function handleExport() {
-    if (!generateTarget) return;
-    const params = { date_from: fromDate, date_to: toDate };
-    try {
-      let blob: Blob;
-      let filename: string;
-      switch (generateTarget.id) {
-        case "disbursement_report":
-          blob = await reportService.exportReleases(params);
-          filename = `releases-${fromDate}-to-${toDate}.csv`;
-          break;
-        case "daily_collection":
-          blob = await reportService.exportRepayments(params);
-          filename = `repayments-${fromDate}-to-${toDate}.csv`;
-          break;
-        case "aging_report":
-          blob = await reportService.exportDuePastDue(params);
-          filename = `due-past-due-${fromDate}-to-${toDate}.csv`;
-          break;
-        default:
-          toast.info("Export is not available for this report.");
-          return;
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success("Export downloaded");
-    } catch {
-      toast.error("Failed to export report");
-    }
-  }
-
-  const canExport =
-    generateTarget?.id === "disbursement_report" ||
-    generateTarget?.id === "daily_collection" ||
-    generateTarget?.id === "aging_report";
-
-  function handleClose() {
-    setGenerateTarget(null);
-    setPreview(null);
-    setListPreview(null);
-  }
-
-  const previewData =
-    preview
-      ? getSamplePreview(preview.reportId, preview.from, preview.to)
-      : null;
+  const hasResults = Array.from(grouped.values()).some((v) => v.length > 0);
 
   return (
     <RouteGuard permission="reports:view" pageName="Reports">
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-        <p className="text-muted-foreground">
-          Generate and view business reports
-        </p>
-      </div>
-
-      {/* Report Cards Grid */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {REPORTS.map((report) => {
-          const Icon = report.icon;
-          return (
-            <Card
-              key={report.id}
-              className="flex flex-col transition-shadow hover:shadow-md"
-            >
-              <CardHeader className="flex flex-row items-start gap-4 pb-3">
-                <div
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-                    report.iconBg
-                  )}
-                >
-                  <Icon className={cn("h-5 w-5", report.color)} />
+      <div className="space-y-6">
+        {/* Hero / header */}
+        <div className="rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
+                <FileBarChart className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                  Reports
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+                  Pick a report, preview it, then export to Excel. What you see
+                  in the preview is what you&apos;ll get in the file — titles,
+                  totals, and all.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-brand-orange/30 bg-brand-orange/10 text-brand-orange"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    WYSIWYG preview
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {REPORT_CATALOG.length} reports available
+                  </span>
                 </div>
-                <div className="space-y-1">
-                  <CardTitle className="text-sm font-semibold leading-tight">
-                    {report.title}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {report.description}
-                  </p>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0 mt-auto">
-                <Button
-                  size="sm"
-                  className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                  onClick={() => openGenerateDialog(report)}
-                >
-                  Generate
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Generate Dialog */}
-      <Dialog open={!!generateTarget} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogTitle>
-              {generateTarget?.title ?? "Generate Report"}
-            </DialogTitle>
-            <DialogDescription>
-              Select a date range and generate the report.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Date Range Inputs */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="from-date">From</Label>
-              <Input
-                id="from-date"
-                type="date"
-                value={fromDate}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  setPreview(null);
-                }}
-              />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="to-date">To</Label>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                id="to-date"
-                type="date"
-                value={toDate}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  setPreview(null);
-                }}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search reports…"
+                className="pl-9"
               />
             </div>
           </div>
+        </div>
 
-          {/* List-style preview (real API data) */}
-          {listLoading && (
-            <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-              Loading data from API…
-            </div>
-          )}
-          {listPreview && !listLoading && (
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{listPreview.title}</p>
-                <span className="text-xs text-muted-foreground">
-                  {listPreview.rows.length}{" "}
-                  {listPreview.rows.length === 1 ? "row" : "rows"}
-                </span>
-              </div>
-              {listPreview.rows.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  No data in the selected range
-                </p>
-              ) : (
-                <pre className="max-h-[40vh] overflow-auto rounded-md bg-background p-2 text-[11px] leading-relaxed font-mono">
-                  {JSON.stringify(listPreview.rows, null, 2)}
-                </pre>
-              )}
-            </div>
-          )}
-
-          {/* Preview Card */}
-          {previewData && (
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{previewData.title}</p>
-                <span className="text-xs text-muted-foreground">
-                  {previewData.period}
-                </span>
-              </div>
-              <div className="divide-y">
-                {previewData.rows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-center justify-between py-2 text-sm"
-                  >
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className="font-semibold">{row.value}</span>
+        {/* Catalog */}
+        {!hasResults ? (
+          <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+            No reports match <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {orderedCategories.map((cat) => {
+              const items = grouped.get(cat) ?? [];
+              if (items.length === 0) return null;
+              const meta = CATEGORY_META[cat];
+              return (
+                <section key={cat}>
+                  <div className="mb-3 flex items-baseline justify-between">
+                    <div>
+                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                        {meta.label}
+                      </h2>
+                      <p className="text-xs text-muted-foreground/80">
+                        {meta.description}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {items.length}{" "}
+                      {items.length === 1 ? "report" : "reports"}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter showCloseButton>
-            {canExport && (
-              <Button variant="outline" onClick={handleExport}>
-                Export CSV
-              </Button>
-            )}
-            <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={handleGenerate}
-            >
-              Generate Report
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {items.map((report) => (
+                      <ReportCard key={report.id} report={report} />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </RouteGuard>
+  );
+}
+
+interface ReportCardProps {
+  report: ReportDefinition;
+}
+
+function ReportCard({ report }: ReportCardProps) {
+  const Icon = report.icon;
+  return (
+    <Link
+      href={`/reports/${report.id}`}
+      aria-label={`Open ${report.title}`}
+      className="group text-left"
+    >
+      <Card
+        className={cn(
+          "h-full border transition-all",
+          "group-hover:shadow-md group-hover:-translate-y-0.5 group-hover:border-brand-orange/30",
+          "group-focus-visible:ring-2 group-focus-visible:ring-brand-orange/40 group-focus-visible:outline-none"
+        )}
+      >
+        <CardContent className="flex h-full flex-col gap-3 p-4">
+          <div className="flex items-start gap-3">
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1",
+                report.accent.bg,
+                report.accent.ring
+              )}
+            >
+              <Icon className={cn("h-5 w-5", report.accent.text)} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold leading-tight">
+                {report.title}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                {report.description}
+              </p>
+            </div>
+          </div>
+          <div className="mt-auto flex items-center justify-between pt-1">
+            <span className="text-[11px] text-muted-foreground/70">
+              Preview · Excel export
+            </span>
+            <span className="text-xs font-medium text-brand-orange group-hover:underline">
+              Open →
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
