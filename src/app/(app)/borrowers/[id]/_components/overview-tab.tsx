@@ -29,7 +29,11 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
-  const ongoingLoans = loans.filter((l) => l.status === "ongoing").length;
+  // "Current" in this count also includes legacy "ongoing" responses, since
+  // older backend versions emit that status for the same lifecycle stage.
+  const currentLoans = loans.filter(
+    (l) => l.status === "current" || l.status === "ongoing"
+  ).length;
   const completedLoans = loans.filter((l) => l.status === "completed").length;
   const defaultedLoans = loans.filter((l) => l.status === "defaulted").length;
   const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
@@ -115,9 +119,9 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
               <p className="text-2xl font-bold text-brand-orange">{formatCurrency(totalOutstanding)}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Ongoing / Completed / Defaulted</p>
+              <p className="text-xs text-muted-foreground">Current / Completed / Defaulted</p>
               <p className="text-2xl font-bold">
-                <span className="text-green-600">{ongoingLoans}</span>
+                <span className="text-green-600">{currentLoans}</span>
                 {" / "}
                 <span className="text-gray-600">{completedLoans}</span>
                 {" / "}
