@@ -1024,7 +1024,7 @@ export default function EditBorrowerPage() {
                           <Label>Front of ID</Label>
                           {entry.front_preview ? (
                             <div className="space-y-2">
-                              <div className="relative h-28 rounded-lg overflow-hidden border">
+                              <div className="relative h-44 rounded-lg overflow-hidden border">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={entry.front_preview}
@@ -1060,7 +1060,7 @@ export default function EditBorrowerPage() {
                               </Button>
                             </div>
                           ) : (
-                            <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
                               <FileText className="h-5 w-5 text-muted-foreground" />
                               <span className="text-xs text-muted-foreground">Upload Front</span>
                               <input
@@ -1076,7 +1076,7 @@ export default function EditBorrowerPage() {
                           <Label>Back of ID</Label>
                           {entry.back_preview ? (
                             <div className="space-y-2">
-                              <div className="relative h-28 rounded-lg overflow-hidden border">
+                              <div className="relative h-44 rounded-lg overflow-hidden border">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={entry.back_preview}
@@ -1112,7 +1112,7 @@ export default function EditBorrowerPage() {
                               </Button>
                             </div>
                           ) : (
-                            <label className="flex h-28 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
                               <FileText className="h-5 w-5 text-muted-foreground" />
                               <span className="text-xs text-muted-foreground">Upload Back</span>
                               <input
