@@ -11,6 +11,7 @@
 
 import axiosClient from "@/lib/axios-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import type { LoanStatus } from "@/types/loan";
 
 export type ChainStepKind = "submit" | "approve" | "release";
 
@@ -19,6 +20,7 @@ export interface ApprovalChainStep {
   name: string;
   role: string;
   kind: ChainStepKind;
+  status?: LoanStatus;
 }
 
 type ChainType = "normal" | "policy_exception";
@@ -122,14 +124,33 @@ function validateChain(steps: ApprovalChainStep[]): ChainValidationError | null 
 //   { data: [...] }
 //   { data: { steps: [...] } }
 
+const LOAN_STATUS_VALUES: readonly LoanStatus[] = [
+  "draft",
+  "for_review",
+  "approved",
+  "rejected",
+  "released",
+  "ongoing",
+  "completed",
+  "defaulted",
+  "restructured",
+  "closed",
+];
+
 function isApprovalChainStep(v: unknown): v is ApprovalChainStep {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
+  const statusValid =
+    o.status === undefined ||
+    o.status === null ||
+    (typeof o.status === "string" &&
+      (LOAN_STATUS_VALUES as readonly string[]).includes(o.status));
   return (
     typeof o.id === "string" &&
     typeof o.name === "string" &&
     typeof o.role === "string" &&
-    (o.kind === "submit" || o.kind === "approve" || o.kind === "release")
+    (o.kind === "submit" || o.kind === "approve" || o.kind === "release") &&
+    statusValid
   );
 }
 

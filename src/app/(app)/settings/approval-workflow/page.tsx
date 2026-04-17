@@ -27,7 +27,8 @@ import {
   type ChainStepKind,
 } from "@/services";
 import { ROLES } from "@/constants/rbac";
-import type { Role } from "@/types";
+import { LOAN_STATUS, LOAN_STATUS_LABELS } from "@/constants";
+import type { Role, LoanStatus } from "@/types";
 import {
   Workflow,
   Plus,
@@ -113,12 +114,14 @@ function StepFormDialog({
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
+  const [status, setStatus] = useState<LoanStatus | "">("");
 
   useEffect(() => {
     if (open) {
       setName(step?.name ?? "");
       setRole(step?.role ?? "");
       setKind(step?.kind ?? "approve");
+      setStatus(step?.status ?? "");
     }
   }, [open, step]);
 
@@ -137,11 +140,13 @@ function StepFormDialog({
       name: name.trim(),
       role: role.trim(),
       kind,
+      ...(status ? { status: status as LoanStatus } : {}),
     });
     onOpenChange(false);
   }
 
   const availableRoles = Object.keys(ROLES) as Role[];
+  const statusValues = Object.values(LOAN_STATUS) as LoanStatus[];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -221,6 +226,43 @@ function StepFormDialog({
               <strong>Submit</strong> must be the first step.{" "}
               <strong>Release</strong> must be the last step.{" "}
               <strong>Approve</strong> steps sit between them.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="step-status">Status</Label>
+              {status && (
+                <button
+                  type="button"
+                  onClick={() => setStatus("")}
+                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <Select
+              value={status || null}
+              onValueChange={(v) => setStatus((v as LoanStatus | null) ?? "")}
+              items={statusValues.map((s) => ({
+                value: s,
+                label: LOAN_STATUS_LABELS[s] ?? s,
+              }))}
+            >
+              <SelectTrigger id="step-status">
+                <SelectValue placeholder="Select a status (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusValues.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {LOAN_STATUS_LABELS[s] ?? s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              When a user executes this step, the loan application&apos;s status
+              will be set to this value.
             </p>
           </div>
         </div>
@@ -308,7 +350,8 @@ export default function ApprovalWorkflowPage() {
         s.id !== saved.id ||
         s.name !== saved.name ||
         s.role !== saved.role ||
-        s.kind !== saved.kind
+        s.kind !== saved.kind ||
+        (s.status ?? null) !== (saved.status ?? null)
       );
     });
   }, [steps, savedSteps]);
@@ -675,6 +718,17 @@ export default function ApprovalWorkflowPage() {
                         <span className="ml-1 text-red-600">
                           (role not found)
                         </span>
+                      )}
+                      {step.status && (
+                        <>
+                          <span className="mx-1.5 text-muted-foreground/40">
+                            ·
+                          </span>
+                          Status:{" "}
+                          <span className="font-mono">
+                            {LOAN_STATUS_LABELS[step.status] ?? step.status}
+                          </span>
+                        </>
                       )}
                     </p>
                   </div>
