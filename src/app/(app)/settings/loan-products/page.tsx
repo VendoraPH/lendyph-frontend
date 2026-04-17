@@ -320,7 +320,10 @@ function formToApiPayload(form: ProductForm) {
     ...(form.past_due_transfer_value && Number(form.past_due_transfer_value) > 0
       ? {
           past_due_transfer_value: Number(form.past_due_transfer_value),
-          past_due_transfer_unit: form.past_due_transfer_unit,
+          past_due_transfer_unit: form.past_due_transfer_unit as
+            | "days"
+            | "months"
+            | "amortization_periods",
         }
       : {}),
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
