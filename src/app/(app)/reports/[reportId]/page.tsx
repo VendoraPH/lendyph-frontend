@@ -446,7 +446,7 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
               return (
                 <DropdownMenuItem
                   key={fmt.id}
-                  onSelect={() => onExport(fmt.id)}
+                  onClick={() => onExport(fmt.id)}
                   disabled={disabled || exporting}
                   className="flex items-start gap-3 py-2"
                 >
