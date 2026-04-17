@@ -22,6 +22,12 @@ export const documentService = {
   coMakerUpload: (coMakerId: number, formData: FormData) =>
     api.upload<Document>(API_ENDPOINTS.DOCUMENTS.CO_MAKER_UPLOAD(coMakerId), formData),
 
+  loanList: (loanId: number) =>
+    api.get<Document[]>(API_ENDPOINTS.DOCUMENTS.LOAN_LIST(loanId)),
+
+  loanUpload: (loanId: number, formData: FormData) =>
+    api.upload<Document>(API_ENDPOINTS.DOCUMENTS.LOAN_UPLOAD(loanId), formData),
+
   detail: (id: number) =>
     api.get<Document>(API_ENDPOINTS.DOCUMENTS.DETAIL(id)),
 

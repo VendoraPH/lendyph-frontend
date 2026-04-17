@@ -25,6 +25,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
+import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2877,7 +2878,7 @@ export default function LoanDetailPage({
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              Loan Documents
+              Generated Documents
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -2902,6 +2903,10 @@ export default function LoanDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Attached documents — available for every loan, including drafts so
+          the policy exception letter is reachable from the very first save. */}
+      <LoanDocumentsCard loanId={loan.id} />
 
       {/* Repayments — only for released+ loans */}
       {isLocked && (
