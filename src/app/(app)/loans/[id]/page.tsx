@@ -2038,7 +2038,13 @@ export default function LoanDetailPage({
                           ) : isSentBack ? (
                             <XCircle className="h-3.5 w-3.5" />
                           ) : isCurrent ? (
-                            <Clock className="h-3.5 w-3.5" />
+                            step.kind === "submit" ? (
+                              <Send className="h-3.5 w-3.5" />
+                            ) : step.kind === "release" ? (
+                              <Unlock className="h-3.5 w-3.5" />
+                            ) : (
+                              <Clock className="h-3.5 w-3.5" />
+                            )
                           ) : (
                             <span>{i + 1}</span>
                           )}
