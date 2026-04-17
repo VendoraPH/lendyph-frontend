@@ -10,6 +10,8 @@ export const API_ENDPOINTS = {
     LOGOUT: "/auth/logout",
     REFRESH: "/auth/refresh",
     ME: "/auth/me",
+    UPDATE_ME: "/auth/me",
+    CHANGE_PASSWORD: "/auth/change-password",
   },
   BORROWERS: {
     LIST: "/borrowers",
