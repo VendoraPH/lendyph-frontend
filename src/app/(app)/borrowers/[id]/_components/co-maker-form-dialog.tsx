@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { UserPlus, Upload, AlertTriangle } from "lucide-react";
+import { UserPlus, Upload, AlertTriangle, Loader2 } from "lucide-react";
 import { RELATIONSHIP_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { CoMaker, CoMakerRelationship, Loan, ValidIdType } from "@/types";
-import type { CreateCoMakerData } from "@/services/co-maker.service";
+import { coMakerService, type CreateCoMakerData } from "@/services/co-maker.service";
 
 interface CoMakerFormData {
   first_name: string;
@@ -207,9 +207,38 @@ export function EditCoMakerDialog({
   onOpenChange,
   onSave,
 }: EditCoMakerDialogProps) {
+  // Start from the list snapshot so the form is usable immediately; a fresh
+  // copy from the detail endpoint replaces it as soon as it arrives. This
+  // catches any fields another user (or an admin) edited since the list
+  // was last fetched.
+  const [fresh, setFresh] = useState<CoMaker>(coMaker);
   const [form, setForm] = useState<CoMakerFormData>(coMakerToForm(coMaker));
+  const [refreshing, setRefreshing] = useState(false);
   const idPhotoRef = useRef<HTMLInputElement>(null);
   const [idPhotoName, setIdPhotoName] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setRefreshing(true);
+    coMakerService
+      .detail(coMaker.id)
+      .then((data) => {
+        if (cancelled) return;
+        setFresh(data);
+        setForm(coMakerToForm(data));
+      })
+      .catch(() => {
+        // Fall back to the list snapshot silently — the form is already
+        // populated from it, so the user can still edit.
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, coMaker.id]);
 
   const update = (field: keyof CoMakerFormData, value: string | number | undefined) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -219,7 +248,7 @@ export function EditCoMakerDialog({
     if (!form.first_name.trim() || !form.last_name.trim() || !form.relationship || !form.phone.trim()) return;
 
     onSave({
-      ...coMaker,
+      ...fresh,
       full_name: [form.first_name, form.middle_name, form.last_name, form.suffix].filter(Boolean).join(" "),
       relationship: form.relationship as CoMakerRelationship,
       phone: form.phone,
@@ -240,10 +269,20 @@ export function EditCoMakerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Edit Co-Maker</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Edit Co-Maker
+            {refreshing && (
+              <Loader2
+                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+                aria-label="Refreshing latest data"
+              />
+            )}
+          </DialogTitle>
           <DialogDescription>
-            Update co-maker profile for {coMaker.full_name} —{" "}
-            <span className="font-mono text-brand-orange">{coMaker.co_maker_code}</span>
+            Update co-maker profile for {fresh.full_name ?? coMaker.full_name} —{" "}
+            <span className="font-mono text-brand-orange">
+              {fresh.co_maker_code ?? coMaker.co_maker_code}
+            </span>
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
