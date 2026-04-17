@@ -57,6 +57,10 @@ const statusColors: Record<string, string> = {
   approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
   rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
+  current: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  past_due: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  // Legacy — older data may still return "ongoing"; keep it visually
+  // identical to "current" until backend migration.
   ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
   defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
@@ -75,7 +79,8 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "released", label: "Released" },
-  { value: "ongoing", label: "Ongoing" },
+  { value: "current", label: "Current" },
+  { value: "past_due", label: "Past Due" },
   { value: "completed", label: "Completed" },
 ];
 
@@ -118,7 +123,11 @@ export default function LoansPage() {
   const summaryStats = useMemo(() => {
     const forReview = loans.filter((l) => l.status === "for_review").length;
     const active = loans.filter(
-      (l) => l.status === "released" || l.status === "ongoing"
+      (l) =>
+        l.status === "released" ||
+        l.status === "current" ||
+        l.status === "ongoing" ||
+        l.status === "past_due"
     ).length;
     const rejected = loans.filter((l) => l.status === "rejected").length;
     return { total: loans.length, forReview, active, rejected };
