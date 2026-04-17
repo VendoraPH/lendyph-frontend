@@ -2937,38 +2937,67 @@ export default function LoanDetailPage({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Principal</TableHead>
+                      <TableHead className="text-right">Interest</TableHead>
+                      <TableHead className="text-right">SCB</TableHead>
+                      <TableHead className="text-right">Penalty</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                       <TableHead>Remarks</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-20" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {repayments.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell>{formatDate(r.payment_date)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(r.amount_paid)}</TableCell>
-                        <TableCell className="text-muted-foreground">{r.remarks ?? "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant={r.status === "voided" ? "destructive" : "default"} className="text-xs">
-                            {r.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {r.status !== "voided" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-600 hover:text-red-700 text-xs"
-                              onClick={() => handleVoidRepayment(r.id)}
-                              disabled={actionLoading}
-                            >
-                              Void
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {repayments.map((r) => {
+                      const dash = <span className="text-muted-foreground/60">—</span>;
+                      const fmt = (n: number | undefined) =>
+                        n != null && n > 0 ? formatCurrency(n) : dash;
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell>{formatDate(r.payment_date)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {fmt(r.principal_paid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {fmt(r.interest_paid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {fmt(r.scb_paid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {r.penalty_paid != null && r.penalty_paid > 0 ? (
+                              <span className="text-destructive">
+                                {formatCurrency(r.penalty_paid)}
+                              </span>
+                            ) : (
+                              dash
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {formatCurrency(r.amount_paid)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{r.remarks ?? "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant={r.status === "voided" ? "destructive" : "default"} className="text-xs">
+                              {r.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {r.status !== "voided" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700 text-xs"
+                                onClick={() => handleVoidRepayment(r.id)}
+                                disabled={actionLoading}
+                              >
+                                Void
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
