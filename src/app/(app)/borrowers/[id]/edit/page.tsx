@@ -46,6 +46,7 @@ import type { Borrower } from "@/types";
 
 interface ValidIdEntry {
   type: string;
+  custom_type_name: string;
   id_number: string;
   front_file: File | null;
   front_preview: string | null;
@@ -311,6 +312,7 @@ export default function EditBorrowerPage() {
       ...prev,
       {
         type: "",
+        custom_type_name: "",
         id_number: "",
         front_file: null,
         front_preview: null,
@@ -429,12 +431,18 @@ export default function EditBorrowerPage() {
       }
 
       const validIdsToUpload = validIds.filter(
-        (v) => v.type && (v.front_file || v.back_file)
+        (v) =>
+          v.type &&
+          (v.front_file || v.back_file) &&
+          (v.type !== "others" || v.custom_type_name.trim())
       );
       for (const entry of validIdsToUpload) {
         try {
           const idData = new FormData();
           idData.append("type", entry.type);
+          if (entry.type === "others" && entry.custom_type_name.trim()) {
+            idData.append("custom_type_name", entry.custom_type_name.trim());
+          }
           if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
           if (entry.front_file) idData.append("front_file", entry.front_file);
           if (entry.back_file) idData.append("back_file", entry.back_file);
@@ -1017,6 +1025,20 @@ export default function EditBorrowerPage() {
                             onChange={(e) => updateValidId(index, "id_number", e.target.value)}
                           />
                         </div>
+                        {entry.type === "others" && (
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label>
+                              ID Name <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              placeholder="e.g. Senior Citizen ID, Company ID"
+                              value={entry.custom_type_name}
+                              onChange={(e) =>
+                                updateValidId(index, "custom_type_name", e.target.value)
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
