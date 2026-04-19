@@ -7,8 +7,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { borrowerService, coMakerService, loanProductService, loanService, userService } from "@/services";
-import { api } from "@/lib/api-client";
+import {
+  borrowerService,
+  coMakerService,
+  documentService,
+  loanProductService,
+  loanService,
+  userService,
+} from "@/services";
 import type { Borrower, CoMaker, User } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -583,7 +589,8 @@ export default function NewLoanApplicationPage() {
           const letterData = new FormData();
           letterData.append("file", policyExceptionLetter);
           letterData.append("type", "policy_exception_letter");
-          await api.upload(`/loans/${loan.id}/documents`, letterData);
+          letterData.append("label", policyExceptionLetter.name);
+          await documentService.loanUpload(loan.id, letterData);
         } catch {
           toast.warning("Loan created but policy exception letter upload failed");
         }

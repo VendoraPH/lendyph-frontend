@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
     BORROWER_UPLOAD: (borrowerId: number) => `/borrowers/${borrowerId}/documents`,
     CO_MAKER_LIST: (coMakerId: number) => `/co-makers/${coMakerId}/documents`,
     CO_MAKER_UPLOAD: (coMakerId: number) => `/co-makers/${coMakerId}/documents`,
+    LOAN_LIST: (loanId: number) => `/loans/${loanId}/documents`,
+    LOAN_UPLOAD: (loanId: number) => `/loans/${loanId}/documents`,
     DETAIL: (id: number) => `/documents/${id}`,
     DELETE: (id: number) => `/documents/${id}`,
   },
