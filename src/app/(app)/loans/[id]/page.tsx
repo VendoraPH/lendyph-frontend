@@ -29,6 +29,11 @@ import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -2800,7 +2805,7 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Server-verified preview (pre-release) */}
+      {/* Server-verified preview banner (pre-release) */}
       {loan && ["draft", "for_review", "approved"].includes(loan.status) && previewSchedule && previewSchedule.length > 0 && (
         <Card className="border-green-500/30 bg-green-500/5">
           <CardContent className="py-3">
@@ -2818,6 +2823,80 @@ export default function LoanDetailPage({
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Collapsible amortization preview — lets approvers audit the full
+          schedule during for_review/approved without cluttering the page.
+          For released+ loans the full stored schedule already renders below,
+          so this pre-release block intentionally skips that status. */}
+      {loan && ["draft", "for_review", "approved"].includes(loan.status) && previewSchedule && previewSchedule.length > 0 && (
+        <Collapsible>
+          <Card>
+            <CollapsibleTrigger
+              render={
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  aria-label="Toggle amortization schedule"
+                />
+              }
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Amortization Schedule (Preview)
+                    <Badge variant="outline" className="text-[10px]">
+                      {previewSchedule.length} installments
+                    </Badge>
+                  </CardTitle>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground group">
+                    <span>Show</span>
+                    <ChevronDown className="h-4 w-4 transition-transform group-aria-expanded:rotate-180" />
+                  </span>
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 text-center">#</TableHead>
+                        <TableHead>Due Date</TableHead>
+                        <TableHead className="text-right">Principal</TableHead>
+                        <TableHead className="text-right">Interest</TableHead>
+                        <TableHead className="text-right">Amount Due</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previewSchedule.map((row, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-center">{idx + 1}</TableCell>
+                          <TableCell>{formatDate(row.due_date)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(Number(row.principal) || 0)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(Number(row.interest) || 0)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {formatCurrency(Number(row.amount_due) || 0)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(Number(row.balance) || 0)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
       {/* Amortization Schedule — only for released+ loans */}
