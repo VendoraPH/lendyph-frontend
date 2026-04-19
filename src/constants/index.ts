@@ -4,6 +4,8 @@ export const LOAN_STATUS = {
   APPROVED: "approved",
   REJECTED: "rejected",
   RELEASED: "released",
+  CURRENT: "current",
+  PAST_DUE: "past_due",
   ONGOING: "ongoing",
   COMPLETED: "completed",
   DEFAULTED: "defaulted",
@@ -17,12 +19,24 @@ export const LOAN_STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   rejected: "Rejected",
   released: "Released",
-  ongoing: "Ongoing",
+  current: "Current",
+  past_due: "Past Due",
+  // Legacy — older backend versions may still emit "ongoing" for a loan
+  // that has been released and is on an amortization schedule. Display it
+  // the same as "current" so the UI stays consistent until backend
+  // migration.
+  ongoing: "Current",
   completed: "Completed",
   defaulted: "Defaulted",
   restructured: "Restructured",
   closed: "Closed",
 };
+
+export const PAST_DUE_TRANSFER_UNIT_OPTIONS = [
+  { value: "days", label: "Days" },
+  { value: "months", label: "Months" },
+  { value: "amortization_periods", label: "Amortization Periods" },
+] as const;
 
 export const INTEREST_TYPE = {
   FIXED: "fixed",

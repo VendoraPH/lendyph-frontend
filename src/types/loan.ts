@@ -6,11 +6,19 @@ export type LoanStatus =
   | "approved"
   | "rejected"
   | "released"
+  | "current"
+  | "past_due"
+  // Legacy: kept so data returned by older backend versions still parses.
+  // New code paths should prefer `current` / `past_due`.
   | "ongoing"
   | "completed"
   | "defaulted"
   | "restructured"
   | "closed";
+
+// Unit for Past Due Transfer config on LoanProduct: how the value is
+// interpreted when deciding when a missed payment becomes past_due.
+export type PastDueTransferUnit = "days" | "months" | "amortization_periods";
 
 export type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
@@ -116,6 +124,13 @@ export interface LoanProduct {
   max_service_fee?: number;
   penalty_rate: number;
   grace_period: number;
+  // Past Due Transfer — determines when a missed payment flips the loan's
+  // status to `past_due`. `past_due_transfer_value` is a positive integer;
+  // `past_due_transfer_unit` says how to interpret it (days, months, or
+  // number of amortization periods). Both are optional — a product with
+  // neither set falls back to the backend's default behavior.
+  past_due_transfer_value?: number;
+  past_due_transfer_unit?: PastDueTransferUnit;
   // Share Capital Build-Up (SCB) — optional required contribution added to
   // every amortization period. When the borrower pays, the SCB portion is
   // credited to their share capital ledger.

@@ -63,6 +63,7 @@ import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
+  PAST_DUE_TRANSFER_UNIT_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
 
@@ -183,6 +184,12 @@ interface ProductForm {
   penalty_rate: string;
   grace_period_enabled: boolean;
   grace_period_days: string;
+  // Past Due Transfer — value + unit. When the value is blank, backend
+  // falls back to default behavior; when set, a missed payment flips the
+  // loan to past_due after `value` `unit`s (days / months / amortization
+  // periods).
+  past_due_transfer_value: string;
+  past_due_transfer_unit: string;
   scb_required: boolean;
   min_scb: string;
   max_scb: string;
@@ -208,6 +215,8 @@ const EMPTY_FORM: ProductForm = {
   penalty_rate: "",
   grace_period_enabled: false,
   grace_period_days: "",
+  past_due_transfer_value: "",
+  past_due_transfer_unit: "days",
   scb_required: false,
   min_scb: "",
   max_scb: "",
@@ -250,6 +259,11 @@ function productToForm(p: LoanProduct): ProductForm {
     penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
+    past_due_transfer_value:
+      apiProduct.past_due_transfer_value != null
+        ? String(apiProduct.past_due_transfer_value)
+        : "",
+    past_due_transfer_unit: String(apiProduct.past_due_transfer_unit ?? "days"),
     scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
     min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
     max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
@@ -303,6 +317,15 @@ function formToApiPayload(form: ProductForm) {
     notarial_fee: form.notarial_fee ? Number(form.notarial_fee) : undefined,
     penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
+    ...(form.past_due_transfer_value && Number(form.past_due_transfer_value) > 0
+      ? {
+          past_due_transfer_value: Number(form.past_due_transfer_value),
+          past_due_transfer_unit: form.past_due_transfer_unit as
+            | "days"
+            | "months"
+            | "amortization_periods",
+        }
+      : {}),
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
     max_amount: form.max_amount ? Number(form.max_amount) : undefined,
     scb_required: form.scb_required,
@@ -715,6 +738,51 @@ function ProductFormDialog({
                   />
                 </div>
               )}
+            </div>
+
+            {/* Past Due Transfer — when to flip a missed payment into past_due */}
+            <div className="space-y-2">
+              <Label>Past Due Transfer</Label>
+              <p className="text-xs text-muted-foreground">
+                After the grace period, move a loan with a missed payment to{" "}
+                <span className="font-medium">Past Due</span> once this threshold is reached.
+                Leave blank to use the backend default.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="past-due-value" className="text-xs text-muted-foreground">
+                    Value
+                  </Label>
+                  <Input
+                    id="past-due-value"
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={form.past_due_transfer_value}
+                    onChange={(e) => update("past_due_transfer_value", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="past-due-unit" className="text-xs text-muted-foreground">
+                    Unit
+                  </Label>
+                  <Select
+                    value={form.past_due_transfer_unit}
+                    onValueChange={(v) => update("past_due_transfer_unit", v ?? "days")}
+                  >
+                    <SelectTrigger id="past-due-unit" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAST_DUE_TRANSFER_UNIT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </div>
 
