@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -105,6 +106,16 @@ export default function NewBorrowerPage() {
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  // Surface the backend's Levenshtein/birthdate duplicate detection as a
+  // confirmation dialog instead of leaking "Pass force=true to create
+  // anyway" through the field-errors panel. See handleSubmit for wiring.
+  const [duplicateMatch, setDuplicateMatch] = useState<{
+    code?: string;
+    birthdate?: string;
+    fullName?: string;
+    rawMessage: string;
+  } | null>(null);
+  const [creatingAnyway, setCreatingAnyway] = useState(false);
 
   // Profile photo
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
@@ -291,43 +302,6 @@ export default function NewBorrowerPage() {
     }
   }
 
-  // Check for potential duplicate borrower by comparing first/middle/last names
-  async function checkDuplicate(): Promise<{ isDuplicate: boolean; match?: string }> {
-    try {
-      const searchQuery = `${form.first_name.trim()} ${form.last_name.trim()}`;
-      const res = await borrowerService.list({ search: searchQuery, per_page: 20 });
-      const borrowers = Array.isArray(res)
-        ? res
-        : ((res as unknown as { data?: Array<Record<string, unknown>> }).data ?? []);
-
-      const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-      const firstN = normalize(form.first_name);
-      const middleN = normalize(form.middle_name);
-      const lastN = normalize(form.last_name);
-
-      // A member is a duplicate only when first, middle, and last names all
-      // match an existing record. Partial matches (same first + last only)
-      // are not blocked — two people can share a first/last name but differ
-      // on the middle name.
-      for (const b of borrowers as Array<Record<string, unknown>>) {
-        const bFirst = normalize(String(b.first_name ?? ""));
-        const bMiddle = normalize(String(b.middle_name ?? ""));
-        const bLast = normalize(String(b.last_name ?? ""));
-
-        if (bFirst === firstN && bMiddle === middleN && bLast === lastN) {
-          return {
-            isDuplicate: true,
-            match: String(b.full_name ?? `${b.first_name} ${b.middle_name} ${b.last_name}`),
-          };
-        }
-      }
-      return { isDuplicate: false };
-    } catch {
-      // If the duplicate check fails, allow the user to proceed — don't block on network errors
-      return { isDuplicate: false };
-    }
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
@@ -356,61 +330,79 @@ export default function NewBorrowerPage() {
       return;
     }
 
-    // Duplicate check — hard block. A member with the same first, middle,
-    // and last name already exists; creating another would produce a
-    // duplicate account.
-    const dup = await checkDuplicate();
-    if (dup.isDuplicate) {
-      const message = dup.match
-        ? `This account already exists (${dup.match})`
-        : "This account already exists";
-      setErrors({
-        first_name: [message],
-        middle_name: [message],
-        last_name: [message],
-      });
-      toast.error(message);
-      return;
+    // Duplicate detection is owned server-side now (Levenshtein on
+    // normalized name + birthdate match). If it fires we surface it via
+    // the <DuplicateMatchDialog/> below with a Create Anyway button that
+    // retries with force=true — no client-side pre-check needed.
+
+    await submitBorrower(false);
+  }
+
+  function buildBorrowerPayload(force: boolean): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      branch_id: Number(form.branch_id),
+    };
+
+    if (form.middle_name.trim()) payload.middle_name = form.middle_name.trim();
+    if (form.suffix && form.suffix !== "none") payload.suffix = form.suffix;
+    if (form.birthdate) payload.birthdate = form.birthdate;
+    if (form.gender) payload.gender = form.gender;
+    if (form.civil_status) payload.civil_status = form.civil_status;
+    if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
+    if (form.email.trim()) payload.email = form.email.trim();
+    if (form.address.trim()) {
+      const street = form.address.trim();
+      payload.street_address = street;
+      payload.address = street;
+    }
+    if (form.barangay.trim()) payload.barangay = form.barangay.trim();
+    if (form.city.trim()) payload.city = form.city.trim();
+    if (form.province.trim()) payload.province = form.province.trim();
+    if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
+    if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
+    payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
+
+    if (form.civil_status === "married") {
+      if (form.spouse_first_name.trim()) payload.spouse_first_name = form.spouse_first_name.trim();
+      if (form.spouse_middle_name.trim()) payload.spouse_middle_name = form.spouse_middle_name.trim();
+      if (form.spouse_last_name.trim()) payload.spouse_last_name = form.spouse_last_name.trim();
+      if (form.spouse_contact_number.trim()) payload.spouse_contact_number = form.spouse_contact_number.trim();
+      if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
     }
 
-    setSubmitting(true);
+    if (force) payload.force = true;
+    return payload;
+  }
+
+  // Parse the backend's duplicate 422 error message into structured pieces
+  // so the dialog can show the match cleanly without exposing the internal
+  // "Pass force=true" hint. Expected format:
+  //   "A similar borrower already exists: <Full Name> (BRW-XXXXXX, born YYYY-MM-DD). Pass force=true to create anyway."
+  function parseDuplicateMessage(raw: string) {
+    const codeMatch = raw.match(/(BRW-[A-Z0-9]+)/i);
+    const dobMatch = raw.match(/born\s+(\d{4}-\d{2}-\d{2})/i);
+    const nameMatch = raw.match(/already exists:\s*([^(]+?)\s*\(/);
+    return {
+      code: codeMatch?.[1],
+      birthdate: dobMatch?.[1],
+      fullName: nameMatch?.[1]?.trim(),
+    };
+  }
+
+  function isDuplicateError(message?: string): boolean {
+    if (!message) return false;
+    return /similar borrower|force=true|already exists/i.test(message);
+  }
+
+  async function submitBorrower(force: boolean) {
+    if (force) setCreatingAnyway(true);
+    else setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        branch_id: Number(form.branch_id),
-      };
-
-      // Only include optional fields if they have values
-      if (form.middle_name.trim()) payload.middle_name = form.middle_name.trim();
-      if (form.suffix && form.suffix !== "none") payload.suffix = form.suffix;
-      if (form.birthdate) payload.birthdate = form.birthdate;
-      if (form.gender) payload.gender = form.gender;
-      if (form.civil_status) payload.civil_status = form.civil_status;
-      if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
-      if (form.email.trim()) payload.email = form.email.trim();
-      if (form.address.trim()) {
-        const street = form.address.trim();
-        payload.street_address = street;
-        payload.address = street;
-      }
-      if (form.barangay.trim()) payload.barangay = form.barangay.trim();
-      if (form.city.trim()) payload.city = form.city.trim();
-      if (form.province.trim()) payload.province = form.province.trim();
-      if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
-      if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
-      payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
-
-      // Spouse info (only when married)
-      if (form.civil_status === "married") {
-        if (form.spouse_first_name.trim()) payload.spouse_first_name = form.spouse_first_name.trim();
-        if (form.spouse_middle_name.trim()) payload.spouse_middle_name = form.spouse_middle_name.trim();
-        if (form.spouse_last_name.trim()) payload.spouse_last_name = form.spouse_last_name.trim();
-        if (form.spouse_contact_number.trim()) payload.spouse_contact_number = form.spouse_contact_number.trim();
-        if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
-      }
-
-      const created = await borrowerService.create(payload as Parameters<typeof borrowerService.create>[0]);
+      const created = await borrowerService.create(
+        buildBorrowerPayload(force) as Parameters<typeof borrowerService.create>[0]
+      );
       const borrowerId = (created as unknown as { id: number }).id;
 
       // Upload profile photo if provided
@@ -451,20 +443,40 @@ export default function NewBorrowerPage() {
         }
       }
 
+      setDuplicateMatch(null);
       toast.success("Member created successfully");
       router.push("/borrowers");
     } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
-      if (apiError?.response?.data?.errors) {
-        setErrors(apiError.response.data.errors);
+      const apiError = err as {
+        response?: {
+          status?: number;
+          data?: { errors?: Record<string, string[]>; message?: string };
+        };
+      };
+      const data = apiError?.response?.data;
+      const errs = data?.errors ?? {};
+      const firstMessage =
+        errs.first_name?.[0] ?? errs.middle_name?.[0] ?? errs.last_name?.[0] ?? data?.message;
+
+      // Duplicate detection: surface as a dedicated dialog with a "Create
+      // Anyway" button that retries with force=true. Don't dump the raw
+      // "Pass force=true" line into the form errors — that's internal.
+      if (!force && apiError?.response?.status === 422 && isDuplicateError(firstMessage)) {
+        setDuplicateMatch({ ...parseDuplicateMessage(firstMessage!), rawMessage: firstMessage! });
+        return;
+      }
+
+      if (data?.errors) {
+        setErrors(data.errors);
         toast.error("Please fix the validation errors below");
-      } else if (apiError?.response?.data?.message) {
-        toast.error(apiError.response.data.message);
+      } else if (data?.message) {
+        toast.error(data.message);
       } else {
         toast.error("Failed to create member");
       }
     } finally {
       setSubmitting(false);
+      setCreatingAnyway(false);
     }
   }
 
@@ -1176,6 +1188,67 @@ export default function NewBorrowerPage() {
           toast.success("ID cropped");
         }}
       />
+
+      {/* Duplicate match confirmation — fires when the backend's 422
+          detects a similar existing borrower. Offers "Create Anyway" which
+          retries the POST with force=true. */}
+      <Dialog
+        open={!!duplicateMatch}
+        onOpenChange={(open) => { if (!open) setDuplicateMatch(null); }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" />
+              Similar Member Found
+            </DialogTitle>
+            <DialogDescription>
+              An existing member looks like this one. Review the match before
+              creating a new account to avoid duplicates.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
+            {duplicateMatch?.fullName && (
+              <div>
+                <span className="text-muted-foreground">Name:</span>{" "}
+                <span className="font-medium">{duplicateMatch.fullName}</span>
+              </div>
+            )}
+            {duplicateMatch?.code && (
+              <div>
+                <span className="text-muted-foreground">Member Code:</span>{" "}
+                <span className="font-mono text-brand-orange">
+                  {duplicateMatch.code}
+                </span>
+              </div>
+            )}
+            {duplicateMatch?.birthdate && (
+              <div>
+                <span className="text-muted-foreground">Birthdate:</span>{" "}
+                <span>{duplicateMatch.birthdate}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setDuplicateMatch(null)}
+              disabled={creatingAnyway}
+            >
+              Review Details
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              onClick={async () => {
+                await submitBorrower(true);
+              }}
+              disabled={creatingAnyway}
+            >
+              {creatingAnyway ? "Creating..." : "Create Anyway"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
     </RouteGuard>
   );
