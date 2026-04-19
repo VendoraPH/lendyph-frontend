@@ -11,11 +11,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle } from "lucide-react";
+import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle, Paperclip } from "lucide-react";
 import type { CoMaker, Loan } from "@/types";
 import type { CreateCoMakerData } from "@/services/co-maker.service";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
+import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
@@ -41,6 +42,7 @@ export function CoMakersTab({
   const loanMap = new Map(loans.map((l) => [l.id, l]));
   const [editingCoMaker, setEditingCoMaker] = useState<CoMaker | null>(null);
   const [deletingCoMaker, setDeletingCoMaker] = useState<CoMaker | null>(null);
+  const [docsCoMaker, setDocsCoMaker] = useState<CoMaker | null>(null);
 
   return (
     <div className="space-y-4">
@@ -95,7 +97,18 @@ export function CoMakersTab({
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      onClick={() => setDocsCoMaker(cm)}
+                      aria-label="Documents"
+                      title="Documents"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => setEditingCoMaker(cm)}
+                      aria-label="Edit"
+                      title="Edit"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -104,6 +117,8 @@ export function CoMakersTab({
                       size="icon-sm"
                       className="text-destructive hover:text-destructive"
                       onClick={() => setDeletingCoMaker(cm)}
+                      aria-label="Delete"
+                      title="Delete"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -164,6 +179,14 @@ export function CoMakersTab({
           }}
         />
       )}
+
+      {/* Documents dialog */}
+      <CoMakerDocumentsDialog
+        coMakerId={docsCoMaker?.id ?? null}
+        coMakerName={docsCoMaker?.full_name ?? docsCoMaker?.name ?? "Co-Maker"}
+        open={!!docsCoMaker}
+        onOpenChange={(v) => { if (!v) setDocsCoMaker(null); }}
+      />
 
       {/* Delete confirmation */}
       {deletingCoMaker && (
