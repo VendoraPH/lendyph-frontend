@@ -121,6 +121,9 @@ export const VALID_ID_OPTIONS = [
   { value: "postal_id", label: "Postal ID" },
   { value: "prc_id", label: "PRC ID" },
   { value: "tin_id", label: "TIN ID" },
+  // Catch-all — when chosen, the form reveals an extra text field for the
+  // custom ID name, which is submitted alongside the id_number.
+  { value: "others", label: "Others" },
 ] as const;
 
 export const RELATIONSHIP_OPTIONS = [
