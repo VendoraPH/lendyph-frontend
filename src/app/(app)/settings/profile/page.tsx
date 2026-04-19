@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
 import { toast } from "sonner";
-import { Camera, KeyRound, User } from "lucide-react";
+import { Camera, KeyRound, Loader2, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,27 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/use-auth";
+import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
+
+// ── API error helper (matches codebase convention) ──
+
+type ApiError = {
+  response?: {
+    data?: { message?: string; errors?: Record<string, string[]> };
+  };
+};
+
+function showApiError(err: unknown, fallback: string): void {
+  const apiError = err as ApiError;
+  const errors = apiError?.response?.data?.errors;
+  if (errors) {
+    const firstError = Object.values(errors)[0]?.[0];
+    toast.error(firstError || fallback);
+    return;
+  }
+  toast.error(apiError?.response?.data?.message || fallback);
+}
 
 // ── Helpers ──
 
@@ -135,20 +155,51 @@ interface ProfileForm {
 }
 
 function EditProfileCard() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
 
   const [form, setForm] = useState<ProfileForm>({
     name: user?.full_name ?? "",
     email: user?.email ?? "",
     mobile: user?.mobile_number ?? "",
   });
+  const [saving, setSaving] = useState(false);
 
   const update = (field: keyof ProfileForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Only the three editable fields go to the backend. Username/branch are
+  // shown read-only and not sent — admin-only per the API contract.
+  const isDirty =
+    form.name.trim() !== (user?.full_name ?? "") ||
+    form.email.trim() !== (user?.email ?? "") ||
+    form.mobile.trim() !== (user?.mobile_number ?? "");
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Profile updated successfully");
+    if (!isDirty || saving) return;
+
+    setSaving(true);
+    try {
+      await authService.updateMe({
+        full_name: form.name.trim(),
+        email: form.email.trim(),
+        mobile_number: form.mobile.trim(),
+      });
+      // Refetch the canonical user so the header avatar / sidebar pick up
+      // the rename without a full page refresh.
+      const fresh = await authService.me();
+      setUser(fresh);
+      setForm({
+        name: fresh.full_name,
+        email: fresh.email,
+        mobile: fresh.mobile_number ?? "",
+      });
+      toast.success("Profile updated");
+    } catch (err) {
+      showApiError(err, "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -238,9 +289,11 @@ function EditProfileCard() {
           <div className="flex justify-end">
             <Button
               type="submit"
+              disabled={saving || !isDirty}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
             >
-              Save Changes
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saving ? "Saving…" : "Save Changes"}
             </Button>
           </div>
         </form>
@@ -261,12 +314,14 @@ const EMPTY_PASSWORD: PasswordForm = { current: "", next: "", confirm: "" };
 
 function ChangePasswordCard() {
   const [form, setForm] = useState<PasswordForm>(EMPTY_PASSWORD);
+  const [saving, setSaving] = useState(false);
 
   const update = (field: keyof PasswordForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
 
     if (form.next !== form.confirm) {
       toast.error("New password and confirmation do not match");
@@ -278,8 +333,20 @@ function ChangePasswordCard() {
       return;
     }
 
-    toast.success("Password updated successfully");
-    setForm(EMPTY_PASSWORD);
+    setSaving(true);
+    try {
+      await authService.changePassword({
+        current_password: form.current,
+        new_password: form.next,
+        new_password_confirmation: form.confirm,
+      });
+      toast.success("Password updated. Other active sessions have been signed out.");
+      setForm(EMPTY_PASSWORD);
+    } catch (err) {
+      showApiError(err, "Failed to update password");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -348,9 +415,16 @@ function ChangePasswordCard() {
             <Button
               type="submit"
               variant="outline"
+              disabled={
+                saving ||
+                !form.current ||
+                !form.next ||
+                form.next !== form.confirm
+              }
               className="w-full sm:w-auto"
             >
-              Update Password
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saving ? "Updating…" : "Update Password"}
             </Button>
           </div>
         </form>
