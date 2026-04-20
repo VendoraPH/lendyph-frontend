@@ -29,6 +29,7 @@ import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -453,17 +454,22 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
   const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          Borrower&rsquo;s Active Loans
-          <Badge variant="outline" className="ml-auto text-xs font-normal">
-            {loading ? "Loading..." : `${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Collapsible defaultOpen={false}>
+      <Card>
+        <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+          <CollapsibleTrigger className="w-full text-left group/trigger">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Borrower&rsquo;s Active Loans
+              <Badge variant="outline" className="text-xs font-normal">
+                {loading ? "Loading..." : `${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
+              </Badge>
+              <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+            </CardTitle>
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
         {loading ? (
           <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
         ) : loans.length === 0 ? (
@@ -656,8 +662,10 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
@@ -1932,27 +1940,32 @@ export default function LoanDetailPage({
 
 
       {loan.status !== "rejected" && approvalSteps.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-              Loan Approval Process
-              <Badge variant="outline" className="ml-auto text-xs font-normal">
-                {allStepsApproved
-                  ? "Complete"
-                  : currentStep
-                    ? `Step ${currentStep.index + 1} of ${approvalSteps.length}`
-                    : `${approvalSteps.length} steps`}
-              </Badge>
-            </CardTitle>
-            {approvalRounds.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Revision {approvalRounds.length + 1} — previously sent back{" "}
-                {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
-              </p>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-5">
+        <Collapsible defaultOpen={false}>
+          <Card>
+            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+              <CollapsibleTrigger className="w-full text-left group/trigger">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                  Loan Approval Process
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {allStepsApproved
+                      ? "Complete"
+                      : currentStep
+                        ? `Step ${currentStep.index + 1} of ${approvalSteps.length}`
+                        : `${approvalSteps.length} steps`}
+                  </Badge>
+                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                </CardTitle>
+              </CollapsibleTrigger>
+              {approvalRounds.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Revision {approvalRounds.length + 1} — previously sent back{" "}
+                  {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
+                </p>
+              )}
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-5">
             {/* Horizontal progress tracker — all 10 steps at a glance.
                 Circles are clickable: click any step to view/act on it below.
                 The currently-selected step is marked with an orange ring. */}
@@ -2323,8 +2336,10 @@ export default function LoanDetailPage({
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
       {/* The "Release Loan" action has moved to the Approval Chain card
@@ -2541,14 +2556,19 @@ export default function LoanDetailPage({
         />
 
         {/* Card 3: Member & Co-Maker */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-              Member & Co-Maker
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Collapsible defaultOpen={false}>
+          <Card>
+            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+              <CollapsibleTrigger className="w-full text-left group/trigger">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  Member & Co-Maker
+                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                </CardTitle>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4">
             <div>
               <p className="text-xs text-muted-foreground">Member</p>
               <p className="text-sm font-medium">
@@ -2642,21 +2662,30 @@ export default function LoanDetailPage({
                 </p>
               )}
             </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         {/* Card 4: Workflow History */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Workflow History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <WorkflowHistory loan={loan} />
-          </CardContent>
-        </Card>
+        <Collapsible defaultOpen={false}>
+          <Card>
+            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+              <CollapsibleTrigger className="w-full text-left group/trigger">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  Workflow History
+                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                </CardTitle>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <WorkflowHistory loan={loan} />
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </div>
 
       {/* Release Details — only for released+ loans */}
