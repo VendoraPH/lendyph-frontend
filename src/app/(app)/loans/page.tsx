@@ -70,7 +70,10 @@ const statusColors: Record<string, string> = {
 
 // ── Filter Tabs ──
 
-type FilterTab = "all" | LoanStatus;
+// "active" is a virtual tab value (not a real status) used when the Active
+// Loans KPI card is clicked — it matches any post-release, not-yet-completed
+// status so the table reflects what's still in the portfolio.
+type FilterTab = "all" | "active" | LoanStatus;
 
 const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "all", label: "All" },
@@ -83,6 +86,52 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "past_due", label: "Past Due" },
   { value: "completed", label: "Completed" },
 ];
+
+const ACTIVE_STATUSES: LoanStatus[] = ["released", "current", "ongoing", "past_due"];
+
+// Clickable KPI card. When `active` is true the card is visually "pressed"
+// so it's obvious that it drives the filter below.
+function StatCard({
+  label,
+  value,
+  valueClassName,
+  icon,
+  iconBg,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  valueClassName?: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "text-left rounded-lg border bg-card transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
+        active
+          ? "border-brand-orange ring-1 ring-brand-orange/40 shadow-sm"
+          : "hover:border-brand-orange/40 hover:shadow-sm"
+      )}
+    >
+      <div className="py-4 px-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className={cn("text-2xl font-bold", valueClassName)}>{value}</p>
+          </div>
+          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+        </div>
+      </div>
+    </button>
+  );
+}
 
 // ── Main Page ──
 
@@ -122,12 +171,8 @@ export default function LoansPage() {
   // Summary stats
   const summaryStats = useMemo(() => {
     const forReview = loans.filter((l) => l.status === "for_review").length;
-    const active = loans.filter(
-      (l) =>
-        l.status === "released" ||
-        l.status === "current" ||
-        l.status === "ongoing" ||
-        l.status === "past_due"
+    const active = loans.filter((l) =>
+      ACTIVE_STATUSES.includes(l.status)
     ).length;
     const rejected = loans.filter((l) => l.status === "rejected").length;
     return { total: loans.length, forReview, active, rejected };
@@ -137,7 +182,9 @@ export default function LoansPage() {
   const filteredLoans = useMemo(() => {
     let filtered = loans;
 
-    if (activeTab !== "all") {
+    if (activeTab === "active") {
+      filtered = filtered.filter((l) => ACTIVE_STATUSES.includes(l.status));
+    } else if (activeTab !== "all") {
       filtered = filtered.filter((l) => l.status === activeTab);
     }
 
@@ -176,77 +223,46 @@ export default function LoansPage() {
         </PermissionGate>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — clicking any card sets the status filter below so
+          the table reflects the KPI the user just tapped. Active Loans is a
+          virtual "active" filter matching released/current/ongoing/past_due. */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Total Applications
-                </p>
-                <p className="text-2xl font-bold">{summaryStats.total}</p>
-              </div>
-              <div className="rounded-full bg-brand-blue/10 p-2.5">
-                <FileText className="h-5 w-5 text-brand-blue" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Pending Approval
-                </p>
-                <p className="text-2xl font-bold text-amber-600">
-                  {summaryStats.forReview}
-                </p>
-              </div>
-              <div className="rounded-full bg-amber-500/10 p-2.5">
-                <Clock className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Active Loans
-                </p>
-                <p className="text-2xl font-bold text-green-600">
-                  {summaryStats.active}
-                </p>
-              </div>
-              <div className="rounded-full bg-green-500/10 p-2.5">
-                <Banknote className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Rejected
-                </p>
-                <p className="text-2xl font-bold text-red-600">
-                  {summaryStats.rejected}
-                </p>
-              </div>
-              <div className="rounded-full bg-red-500/10 p-2.5">
-                <XCircle className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Total Applications"
+          value={summaryStats.total}
+          valueClassName=""
+          icon={<FileText className="h-5 w-5 text-brand-blue" />}
+          iconBg="bg-brand-blue/10"
+          active={activeTab === "all"}
+          onClick={() => setActiveTab("all")}
+        />
+        <StatCard
+          label="Pending Approval"
+          value={summaryStats.forReview}
+          valueClassName="text-amber-600"
+          icon={<Clock className="h-5 w-5 text-amber-600" />}
+          iconBg="bg-amber-500/10"
+          active={activeTab === "for_review"}
+          onClick={() => setActiveTab("for_review")}
+        />
+        <StatCard
+          label="Active Loans"
+          value={summaryStats.active}
+          valueClassName="text-green-600"
+          icon={<Banknote className="h-5 w-5 text-green-600" />}
+          iconBg="bg-green-500/10"
+          active={activeTab === "active"}
+          onClick={() => setActiveTab("active")}
+        />
+        <StatCard
+          label="Rejected"
+          value={summaryStats.rejected}
+          valueClassName="text-red-600"
+          icon={<XCircle className="h-5 w-5 text-red-600" />}
+          iconBg="bg-red-500/10"
+          active={activeTab === "rejected"}
+          onClick={() => setActiveTab("rejected")}
+        />
       </div>
 
       {/* Status Filter Tabs */}
