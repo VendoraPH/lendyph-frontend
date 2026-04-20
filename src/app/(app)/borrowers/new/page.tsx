@@ -113,8 +113,16 @@ export default function NewBorrowerPage() {
     code?: string;
     birthdate?: string;
     fullName?: string;
+    // Human-readable reason why this was flagged as a potential duplicate.
+    // Populated by the client-side pre-check; absent for backend responses.
+    matchReason?: string;
+    // Raw backend error message when the 422 path fires; empty string when
+    // the client-side check fires.
     rawMessage: string;
   } | null>(null);
+  // Running the pre-check is a list fetch, not instant. Show a spinner on
+  // the submit button while it's in flight so the form doesn't feel stuck.
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [creatingAnyway, setCreatingAnyway] = useState(false);
 
   // Profile photo
@@ -330,12 +338,147 @@ export default function NewBorrowerPage() {
       return;
     }
 
-    // Duplicate detection is owned server-side now (Levenshtein on
-    // normalized name + birthdate match). If it fires we surface it via
-    // the <DuplicateMatchDialog/> below with a Create Anyway button that
-    // retries with force=true — no client-side pre-check needed.
+    // Tiered duplicate detection (client-side first, backend as safety net).
+    //
+    // The backend Levenshtein+birthdate matcher misses cases where the
+    // typist misspells ONE name and the birthdate also differs slightly —
+    // but the rest of the identity (phone/email/address/civil status) is
+    // clearly the same person. Per the original feature spec:
+    //   1. If all 3 names (first + middle + last) match exactly → duplicate.
+    //   2. If 2 of 3 names match AND at least 2 other identity fields
+    //      (birthdate, gender, civil status, phone, email, address) also
+    //      match → duplicate.
+    // Backend still runs its own check on submit; if this client-side pass
+    // misses, the 422 path will catch it and use the same dialog.
+    setCheckingDuplicate(true);
+    try {
+      const match = await preCheckDuplicate();
+      if (match) {
+        setDuplicateMatch({ ...match, rawMessage: "" });
+        return;
+      }
+    } finally {
+      setCheckingDuplicate(false);
+    }
 
     await submitBorrower(false);
+  }
+
+  // Tiered client-side duplicate check. Returns the matched borrower +
+  // reason when either name tier fires, or null when the applicant looks
+  // clean. All comparisons are case- and whitespace-normalized.
+  async function preCheckDuplicate() {
+    const normalize = (s: string | undefined | null) =>
+      (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
+    const firstN = normalize(form.first_name);
+    const middleN = normalize(form.middle_name);
+    const lastN = normalize(form.last_name);
+    if (!firstN || !lastN) return null;
+
+    type Candidate = Record<string, unknown> & {
+      first_name?: string;
+      middle_name?: string;
+      last_name?: string;
+      full_name?: string;
+      borrower_code?: string;
+      birthdate?: string;
+      gender?: string;
+      civil_status?: string;
+      contact_number?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+    };
+
+    let list: Candidate[] = [];
+    try {
+      // Wider per_page than a typed page because the list endpoint returns
+      // the first N matches of the search string — surnames like "Dela Cruz"
+      // easily fill a small page.
+      const res = await borrowerService.list({
+        search: `${form.first_name.trim()} ${form.last_name.trim()}`,
+        per_page: 50,
+      });
+      list = Array.isArray(res)
+        ? (res as unknown as Candidate[])
+        : ((res as unknown as { data?: Candidate[] }).data ?? []);
+    } catch {
+      // Network failure: fall through and let the backend be the gate.
+      return null;
+    }
+
+    for (const b of list) {
+      const bFirst = normalize(b.first_name);
+      const bMiddle = normalize(b.middle_name);
+      const bLast = normalize(b.last_name);
+      const firstMatch = bFirst && bFirst === firstN;
+      const middleMatch = bMiddle && middleN && bMiddle === middleN;
+      const lastMatch = bLast && bLast === lastN;
+      const nameMatches =
+        (firstMatch ? 1 : 0) + (middleMatch ? 1 : 0) + (lastMatch ? 1 : 0);
+
+      const candidateInfo = {
+        fullName:
+          b.full_name ??
+          `${b.first_name ?? ""} ${b.middle_name ?? ""} ${b.last_name ?? ""}`
+            .trim()
+            .replace(/\s+/g, " "),
+        code: b.borrower_code,
+        birthdate: b.birthdate,
+      };
+
+      // Tier A — exact match on all 3 name components. Treat as hard
+      // duplicate regardless of other fields.
+      if (nameMatches === 3) {
+        return {
+          ...candidateInfo,
+          matchReason: "First, middle, and last name all match an existing member.",
+        };
+      }
+
+      // Tier B — 2-of-3 names match AND at least 2 other identity fields
+      // also line up. Covers the "misspelled middle name but same person"
+      // case that was slipping through.
+      if (nameMatches === 2) {
+        const otherChecks: { label: string; hit: boolean }[] = [
+          {
+            label: "birthdate",
+            hit: !!form.birthdate && b.birthdate === form.birthdate,
+          },
+          {
+            label: "gender",
+            hit: !!form.gender && normalize(b.gender) === normalize(form.gender),
+          },
+          {
+            label: "civil status",
+            hit: !!form.civil_status && normalize(b.civil_status) === normalize(form.civil_status),
+          },
+          {
+            label: "contact number",
+            hit:
+              !!form.contact_number.trim() &&
+              normalize(b.contact_number ?? b.phone) === normalize(form.contact_number),
+          },
+          {
+            label: "email",
+            hit: !!form.email.trim() && normalize(b.email) === normalize(form.email),
+          },
+          {
+            label: "address",
+            hit: !!form.address.trim() && normalize(b.address) === normalize(form.address),
+          },
+        ];
+        const hits = otherChecks.filter((c) => c.hit).map((c) => c.label);
+        if (hits.length >= 2) {
+          return {
+            ...candidateInfo,
+            matchReason: `2 of 3 names and ${hits.join(", ")} match an existing member.`,
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   function buildBorrowerPayload(force: boolean): Record<string, unknown> {
@@ -1143,10 +1286,15 @@ export default function NewBorrowerPage() {
           </Link>
           <Button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || checkingDuplicate}
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
           >
-            {submitting ? (
+            {checkingDuplicate ? (
+              <>
+                <Spinner className="size-4 mr-2" />
+                Checking...
+              </>
+            ) : submitting ? (
               <>
                 <Spinner className="size-4 mr-2" />
                 Creating...
@@ -1189,9 +1337,10 @@ export default function NewBorrowerPage() {
         }}
       />
 
-      {/* Duplicate match confirmation — fires when the backend's 422
-          detects a similar existing borrower. Offers "Create Anyway" which
-          retries the POST with force=true. */}
+      {/* Duplicate match confirmation — fires from either the client-side
+          pre-check (Tier A: 3/3 names, or Tier B: 2/3 names + 2+ identity
+          fields) or the backend's 422 response. Offers Create Anyway which
+          submits with force=true to bypass both checks. */}
       <Dialog
         open={!!duplicateMatch}
         onOpenChange={(open) => { if (!open) setDuplicateMatch(null); }}
@@ -1207,6 +1356,11 @@ export default function NewBorrowerPage() {
               creating a new account to avoid duplicates.
             </DialogDescription>
           </DialogHeader>
+          {duplicateMatch?.matchReason && (
+            <p className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/50 dark:border-amber-700/40 rounded-md px-3 py-2">
+              {duplicateMatch.matchReason}
+            </p>
+          )}
           <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
             {duplicateMatch?.fullName && (
               <div>
