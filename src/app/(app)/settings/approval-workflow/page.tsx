@@ -23,12 +23,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   approvalWorkflowService,
+  roleService,
   type ApprovalChainStep,
   type ChainStepKind,
 } from "@/services";
+import type { ApiRole } from "@/services/role.service";
 import { ROLES } from "@/constants/rbac";
-import { LOAN_STATUS, LOAN_STATUS_LABELS } from "@/constants";
-import type { Role, LoanStatus } from "@/types";
+import type { Role } from "@/types";
 import {
   Workflow,
   Plus,
@@ -37,6 +38,7 @@ import {
   ChevronDown,
   Send,
   CheckCircle2,
+  BadgeCheck,
   Unlock,
   Save,
   RotateCcw,
@@ -73,6 +75,12 @@ const KIND_META: Record<
     description: "Finalizes and releases the loan",
     colorClass: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   },
+  confirmed: {
+    label: "Confirmed",
+    icon: BadgeCheck,
+    description: "Confirms the decision before proceeding to the next step",
+    colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  },
 };
 
 function slugify(s: string): string {
@@ -100,6 +108,7 @@ interface StepFormDialogProps {
   onOpenChange: (open: boolean) => void;
   step: ApprovalChainStep | null; // null = add
   existingIds: string[];
+  roles: ApiRole[];
   onSave: (step: ApprovalChainStep) => void;
 }
 
@@ -108,13 +117,14 @@ function StepFormDialog({
   onOpenChange,
   step,
   existingIds,
+  roles,
   onSave,
 }: StepFormDialogProps) {
   const isEdit = !!step;
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
-  const [status, setStatus] = useState<LoanStatus | "">("");
+  const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
     if (open) {
@@ -131,7 +141,11 @@ function StepFormDialog({
       return;
     }
     if (!role.trim()) {
-      toast.error("Step role is required");
+      toast.error("Required role is required");
+      return;
+    }
+    if (!status.trim()) {
+      toast.error("Status is required");
       return;
     }
     const id = isEdit && step ? step.id : generateUniqueId(name, existingIds);
@@ -140,13 +154,10 @@ function StepFormDialog({
       name: name.trim(),
       role: role.trim(),
       kind,
-      ...(status ? { status: status as LoanStatus } : {}),
+      status: status.trim(),
     });
     onOpenChange(false);
   }
-
-  const availableRoles = Object.keys(ROLES) as Role[];
-  const statusValues = Object.values(LOAN_STATUS) as LoanStatus[];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -179,18 +190,18 @@ function StepFormDialog({
             <Select
               value={role || null}
               onValueChange={(v) => setRole(v ?? "")}
-              items={availableRoles.map((r) => ({
-                value: r,
-                label: ROLES[r].label,
+              items={roles.map((r) => ({
+                value: r.name,
+                label: ROLES[r.name as Role]?.label ?? r.description ?? r.name,
               }))}
             >
               <SelectTrigger id="step-role">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {availableRoles.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLES[r].label}
+                {roles.map((r) => (
+                  <SelectItem key={r.id} value={r.name}>
+                    {ROLES[r.name as Role]?.label ?? r.description ?? r.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -214,7 +225,7 @@ function StepFormDialog({
               <SelectTrigger id="step-kind">
                 <SelectValue placeholder="Select kind" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="min-w-[28rem]">
                 {(Object.keys(KIND_META) as ChainStepKind[]).map((k) => (
                   <SelectItem key={k} value={k}>
                     {KIND_META[k].label} — {KIND_META[k].description}
@@ -229,37 +240,15 @@ function StepFormDialog({
             </p>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="step-status">Status</Label>
-              {status && (
-                <button
-                  type="button"
-                  onClick={() => setStatus("")}
-                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <Select
-              value={status || null}
-              onValueChange={(v) => setStatus((v as LoanStatus | null) ?? "")}
-              items={statusValues.map((s) => ({
-                value: s,
-                label: LOAN_STATUS_LABELS[s] ?? s,
-              }))}
-            >
-              <SelectTrigger id="step-status">
-                <SelectValue placeholder="Select a status (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusValues.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {LOAN_STATUS_LABELS[s] ?? s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="step-status">
+              Status <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="step-status"
+              placeholder="e.g. for_review"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            />
             <p className="text-xs text-muted-foreground">
               When a user executes this step, the loan application&apos;s status
               will be set to this value.
@@ -292,6 +281,7 @@ export default function ApprovalWorkflowPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkflowTab>("normal");
+  const [roles, setRoles] = useState<ApiRole[]>([]);
 
   // Normal flow state
   const [normalSteps, setNormalSteps] = useState<ApprovalChainStep[]>([]);
@@ -314,15 +304,20 @@ export default function ApprovalWorkflowPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [normalData, peData] = await Promise.all([
+        const [normalData, peData, rolesData] = await Promise.all([
           approvalWorkflowService.listNormal(),
           approvalWorkflowService.list(),
+          roleService.list(),
         ]);
         if (!cancelled) {
           setNormalSteps(normalData);
           setSavedNormalSteps(normalData);
           setPeSteps(peData);
           setSavedPeSteps(peData);
+          const list = Array.isArray(rolesData)
+            ? rolesData
+            : (rolesData as { data: ApiRole[] })?.data ?? [];
+          setRoles(list);
         }
       } catch {
         toast.error("Failed to load approval workflow");
@@ -725,9 +720,7 @@ export default function ApprovalWorkflowPage() {
                             ·
                           </span>
                           Status:{" "}
-                          <span className="font-mono">
-                            {LOAN_STATUS_LABELS[step.status] ?? step.status}
-                          </span>
+                          <span className="font-mono">{step.status}</span>
                         </>
                       )}
                     </p>
@@ -765,6 +758,7 @@ export default function ApprovalWorkflowPage() {
           onOpenChange={setFormOpen}
           step={editingStep}
           existingIds={existingIds}
+          roles={roles}
           onSave={handleSaveStep}
         />
 

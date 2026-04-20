@@ -274,7 +274,7 @@ const statusColors: Record<string, string> = {
 // revision (the chain does NOT support terminal rejection — "Void Loan"
 // is the escape hatch for drafts).
 
-type ChainStepKind = "submit" | "approve" | "release";
+type ChainStepKind = "submit" | "approve" | "release" | "confirmed";
 
 type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
 
