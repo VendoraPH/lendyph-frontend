@@ -656,16 +656,18 @@ export default function NewBorrowerPage() {
             <div className="flex items-center gap-6">
               <div className="relative">
                 {photoPreview ? (
-                  <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
-                    <img
-                      src={photoPreview}
-                      alt="Profile preview"
-                      className="h-full w-full object-cover"
-                    />
+                  <div className="relative h-24 w-24">
+                    <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                      <img
+                        src={photoPreview}
+                        alt="Profile preview"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={removePhoto}
-                      className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90 shadow-sm"
                     >
                       <X className="h-3 w-3" />
                     </button>
