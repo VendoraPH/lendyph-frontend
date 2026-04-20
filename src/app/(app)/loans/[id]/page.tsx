@@ -1006,18 +1006,6 @@ export default function LoanDetailPage({
   // `sendBackTargets` below for the list of valid choices.
   const [sendBackTargetIndex, setSendBackTargetIndex] = useState<number>(0);
 
-  // Edit Loan Application dialog (used by Loan Processor after a send-back
-  // and while the draft is still unsent)
-  const [editOpen, setEditOpen] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editForm, setEditForm] = useState({
-    principal_amount: "",
-    interest_rate: "",
-    start_date: "",
-    scb_amount: "",
-    purpose: "",
-  });
-
   // Borrower's other active loans — shown during approval so officers can
   // see the borrower's existing obligations before approving.
   const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
@@ -1368,8 +1356,8 @@ export default function LoanDetailPage({
   };
 
   // Edit Loan Application — available to the Loan Processor while the loan
-  // is still a draft OR has been sent back by an approver. Seeds the form
-  // from the current loan values and opens the dialog.
+  // is still a draft OR has been sent back by an approver. The button links
+  // to /loans/new?edit={id} so the full New Loan form is used for editing.
   const canEditLoanApplication =
     !!loan &&
     !isLocked &&
@@ -1377,55 +1365,6 @@ export default function LoanDetailPage({
     !!currentStep &&
     currentStep.kind === "submit" &&
     canActOnCurrentStep;
-
-  const handleOpenEdit = () => {
-    if (!loan) return;
-    setEditForm({
-      principal_amount: String(loan.principal_amount ?? ""),
-      interest_rate: String(loan.interest_rate ?? ""),
-      start_date: (loan.start_date ?? "").slice(0, 10),
-      scb_amount: String(loan.scb_amount ?? ""),
-      purpose: loan.purpose ?? "",
-    });
-    setEditOpen(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!loan) return;
-    const principal = parseFloat(editForm.principal_amount);
-    const rate = parseFloat(editForm.interest_rate);
-    if (!Number.isFinite(principal) || principal <= 0) {
-      toast.error("Principal amount must be greater than zero");
-      return;
-    }
-    if (!Number.isFinite(rate) || rate < 0) {
-      toast.error("Interest rate must be a valid number");
-      return;
-    }
-    if (!editForm.start_date) {
-      toast.error("Start date is required");
-      return;
-    }
-    const scb = editForm.scb_amount ? parseFloat(editForm.scb_amount) : 0;
-    try {
-      setEditSaving(true);
-      const payload: Partial<Loan> = {
-        principal_amount: principal,
-        interest_rate: rate,
-        start_date: editForm.start_date,
-        scb_amount: Number.isFinite(scb) ? scb : 0,
-        purpose: editForm.purpose.trim() || undefined,
-      } as Partial<Loan>;
-      const updated = await loanService.update(loan.id, payload);
-      setLoan(updated);
-      toast.success("Loan application updated");
-      setEditOpen(false);
-    } catch {
-      toast.error("Failed to update loan application");
-    } finally {
-      setEditSaving(false);
-    }
-  };
 
   // Step 0 (Loan Processor): Submit the draft for review.
   // First submission (draft → for_review) goes through loanService.submit().
@@ -2246,13 +2185,13 @@ export default function LoanDetailPage({
                             <Ban className="mr-2 h-4 w-4" />
                             Void Loan
                           </Button>
-                          {canEditLoanApplication && (
+                          {canEditLoanApplication && loan && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="w-full sm:w-auto"
-                              onClick={handleOpenEdit}
-                              disabled={stepActionLoading || editSaving}
+                              disabled={stepActionLoading}
+                              render={<Link href={`/loans/new?edit=${loan.id}`} />}
                             >
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit Loan Application
@@ -3236,113 +3175,6 @@ export default function LoanDetailPage({
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setSoaOpen(false)}>
               Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Loan Application Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Loan Application</DialogTitle>
-            <DialogDescription>
-              Update the draft for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>. Changes
-              are saved immediately and the loan will keep its current workflow
-              state.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-principal">Principal Amount</Label>
-                <Input
-                  id="edit-principal"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={editForm.principal_amount}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, principal_amount: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-rate">Interest Rate (%)</Label>
-                <Input
-                  id="edit-rate"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={editForm.interest_rate}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, interest_rate: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-start-date">Start Date</Label>
-                <Input
-                  id="edit-start-date"
-                  type="date"
-                  value={editForm.start_date}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, start_date: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-scb">SCB Amount</Label>
-                <Input
-                  id="edit-scb"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={editForm.scb_amount}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, scb_amount: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-purpose">Purpose</Label>
-              <Textarea
-                id="edit-purpose"
-                placeholder="What is this loan for?"
-                value={editForm.purpose}
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, purpose: e.target.value }))
-                }
-                className="min-h-[80px]"
-              />
-            </div>
-            {approvalRounds.length > 0 && (
-              <div className="rounded-md border border-amber-300/50 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-900/10 dark:text-amber-200">
-                This loan was sent back for revision. Update the fields above
-                and then use <span className="font-semibold">Submit for Review</span>{" "}
-                to restart the approval chain.
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setEditOpen(false)}
-              disabled={editSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={handleSaveEdit}
-              disabled={editSaving}
-            >
-              {editSaving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </DialogContent>
