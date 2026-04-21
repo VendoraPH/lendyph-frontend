@@ -1121,6 +1121,29 @@ export default function LoanDetailPage({
     );
   }, [storedSchedule]);
 
+  // Opening running-balance per period: how much Principal / Interest / SCB
+  // is still owed at the START of period N (before that period's payment).
+  // First row shows the full original obligation; last row shows what the
+  // final payment will settle; after the term everything reaches zero.
+  const balancesRows = useMemo(() => {
+    if (storedSchedule.length === 0) return [];
+    let remainingPrincipal = storedScheduleTotals.principal;
+    let remainingInterest = storedScheduleTotals.interest;
+    let remainingScb = storedScheduleTotals.shareCapitalBuildUp;
+    return storedSchedule.map((row) => {
+      const opening = {
+        principal: remainingPrincipal,
+        interest: remainingInterest,
+        scb: remainingScb,
+        total: remainingPrincipal + remainingInterest + remainingScb,
+      };
+      remainingPrincipal = Math.max(0, remainingPrincipal - row.principal);
+      remainingInterest = Math.max(0, remainingInterest - row.interest);
+      remainingScb = Math.max(0, remainingScb - row.shareCapitalBuildUp);
+      return { ...row, opening };
+    });
+  }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
+
   // Seed/load multi-step approval state whenever the loan or chain config changes.
   // The chain is visible for every status except "rejected" (voided drafts).
   useEffect(() => {
@@ -2762,8 +2785,9 @@ export default function LoanDetailPage({
 
       {/* Amortization — released+ loans. Two tabs:
           • Schedule: per-period Principal / Interest / SCB / Total / Balance
-          • Balances: focused running-balance view for quick at-a-glance
-            reading of how much is left after each payment. */}
+            (what's DUE this period).
+          • Balances: running remaining balance of each component at the
+            start of each period (what's still OWED), not payment amounts. */}
       {storedSchedule.length > 0 && (
         <Card>
           <CardHeader>
@@ -2835,27 +2859,39 @@ export default function LoanDetailPage({
                       <TableRow>
                         <TableHead className="w-12 text-center">#</TableHead>
                         <TableHead>Due Date</TableHead>
-                        <TableHead className="text-right">Payment</TableHead>
-                        <TableHead className="text-right">Remaining Balance</TableHead>
+                        <TableHead className="text-right">Principal Balance</TableHead>
+                        <TableHead className="text-right">Interest Balance</TableHead>
+                        {storedScheduleTotals.shareCapitalBuildUp > 0 && (
+                          <TableHead className="text-right">SCB Balance</TableHead>
+                        )}
+                        <TableHead className="text-right">Total Balance</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {storedSchedule.map((row, idx) => {
-                        const isLast = idx === storedSchedule.length - 1;
+                      {balancesRows.map((row, idx) => {
+                        const isLast = idx === balancesRows.length - 1;
                         return (
                           <TableRow key={row.period}>
                             <TableCell className="text-center">{row.period}</TableCell>
                             <TableCell>{formatDateObj(row.dueDate)}</TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatCurrency(row.totalPayment)}
+                              {formatCurrency(row.opening.principal)}
                             </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatCurrency(row.opening.interest)}
+                            </TableCell>
+                            {storedScheduleTotals.shareCapitalBuildUp > 0 && (
+                              <TableCell className="text-right tabular-nums text-brand-orange">
+                                {formatCurrency(row.opening.scb)}
+                              </TableCell>
+                            )}
                             <TableCell
                               className={cn(
                                 "text-right font-medium tabular-nums",
                                 isLast && "text-green-600 dark:text-green-400"
                               )}
                             >
-                              {formatCurrency(row.balance)}
+                              {formatCurrency(row.opening.total)}
                             </TableCell>
                           </TableRow>
                         );
