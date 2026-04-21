@@ -597,7 +597,12 @@ function ProductFormDialog({
                     <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-(--anchor-width) p-1">
-                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                    {/* Loan product templates must not offer "upon_maturity"
+                        as a selectable frequency — the backend validator for
+                        loan products rejects it (upon_maturity is a bullet
+                        loan concept applied at loan creation time, not a
+                        product-template cadence). */}
+                    {PAYMENT_FREQUENCY_OPTIONS.filter((opt) => opt.value !== "upon_maturity").map((opt) => (
                       <button
                         key={opt.value}
                         type="button"
