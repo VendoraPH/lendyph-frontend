@@ -94,9 +94,9 @@ export const INTEREST_TYPE_OPTIONS = [
 export const PAYMENT_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
   { value: "semi_monthly", label: "Semi-Monthly" },
   { value: "monthly", label: "Monthly" },
-  { value: "upon_maturity", label: "Upon Maturity" },
 ] as const;
 export const CIVIL_STATUS_OPTIONS = [
   { value: "single", label: "Single" },
