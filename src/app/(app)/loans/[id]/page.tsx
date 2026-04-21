@@ -1236,14 +1236,39 @@ export default function LoanDetailPage({
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
-  const loanProcessingFee = loan?.deductions?.processing_fee ?? loan?.processing_fee ?? 0;
-  const loanServiceFee = loan?.deductions?.service_fee ?? loan?.service_fee ?? 0;
-  const loanOtherDeductions = (loan?.total_deductions ?? 0) - loanProcessingFee - loanServiceFee;
+  // Backend stores `deductions` as an array of {name, amount, type} objects
+  // (LoanService::computeDeductions). Earlier code assumed it was an object
+  // keyed by fee name and silently fell through to 0 for every fee, which
+  // collapsed all fees into the "Other Deductions" bucket on the UI.
+  const deductionsArray: Array<{ name?: string; amount?: number | string }> = Array.isArray(loan?.deductions)
+    ? (loan.deductions as Array<{ name?: string; amount?: number | string }>)
+    : [];
+  const findDeductionAmount = (name: string): number => {
+    const match = deductionsArray.find((d) => (d?.name ?? "").toLowerCase() === name.toLowerCase());
+    return match ? Number(match.amount ?? 0) : 0;
+  };
+  const loanProcessingFee = findDeductionAmount("Processing Fee");
+  const loanServiceFee = findDeductionAmount("Service Fee");
+  const loanNotarialFee = findDeductionAmount("Notarial Fee");
+  const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
+  const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
   const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
   const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
   const loanRejectedBy = loan?.created_by_user?.full_name ?? loan?.rejected_by; // TODO: actual rejected_by_user
-  const loanTotalPayable = loan?.total_payable ?? (storedSchedule.length > 0 ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0) : 0);
+  // total_payable from API is computed by summing amortization_schedules. For
+  // unreleased loans (draft/for_review/approved) those rows don't exist yet,
+  // so the API returns 0. Fall back to a straight-line projection — same math
+  // the loan-creation form uses for its preview — so the value matches what
+  // the user expected when they filled out the form.
+  const expectedInterest =
+    Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
+  const loanTotalPayable =
+    Number(loan?.total_payable ?? 0) > 0
+      ? Number(loan!.total_payable)
+      : storedSchedule.length > 0
+        ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
+        : Number(loan?.principal_amount ?? 0) + expectedInterest;
 
   if (loading) {
     return (
@@ -1831,10 +1856,16 @@ export default function LoanDetailPage({
       const frequency = String(raw.frequency ?? "");
       const netProceeds = parseFloat(String(raw.net_proceeds ?? 0));
       const totalDeductionsVal = parseFloat(String(raw.total_deductions ?? 0));
-      const deductions = raw.deductions as Record<string, unknown> | undefined;
-      const processingFee = parseFloat(String(deductions?.processing_fee ?? 0));
-      const serviceFee = parseFloat(String(deductions?.service_fee ?? 0));
-      const otherDeductions = totalDeductionsVal - processingFee - serviceFee;
+      // Backend returns `deductions` as an array of {name, amount, type}.
+      const deductionsArr = (Array.isArray(raw.deductions) ? raw.deductions : []) as Array<Record<string, unknown>>;
+      const findFee = (name: string): number => {
+        const m = deductionsArr.find((d) => String(d?.name ?? "").toLowerCase() === name.toLowerCase());
+        return m ? parseFloat(String(m.amount ?? 0)) : 0;
+      };
+      const processingFee = findFee("Processing Fee");
+      const serviceFee = findFee("Service Fee");
+      const notarialFee = findFee("Notarial Fee");
+      const otherDeductions = Math.max(0, totalDeductionsVal - processingFee - serviceFee - notarialFee);
       const appNumber = String(raw.application_number ?? raw.loan_account_number ?? "");
       const startDate = String(raw.start_date ?? "");
       const maturityDate = String(raw.maturity_date ?? "");
