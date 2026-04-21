@@ -97,6 +97,11 @@ export const PAYMENT_FREQUENCY_OPTIONS = [
   { value: "bi_weekly", label: "Bi-Weekly" },
   { value: "semi_monthly", label: "Semi-Monthly" },
   { value: "monthly", label: "Monthly" },
+  // Upon Maturity = bullet / balloon: a single consolidated payment on
+  // the maturity date. Valid for loan creation and amortization preview;
+  // NOT valid for loan product templates — the loan products settings
+  // form filters this value out before rendering the multi-select.
+  { value: "upon_maturity", label: "Upon Maturity" },
 ] as const;
 export const CIVIL_STATUS_OPTIONS = [
   { value: "single", label: "Single" },
