@@ -109,6 +109,7 @@ import {
   CreditCard,
   Loader2,
   BookOpen,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -816,6 +817,8 @@ export default function LoanDetailPage({
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
+  const [autoPayConfirmOpen, setAutoPayConfirmOpen] = useState(false);
+  const [autoPayProcessing, setAutoPayProcessing] = useState(false);
 
   // Loan Extension state (Upon Maturity loans)
   const [extendOpen, setExtendOpen] = useState(false);
@@ -2011,6 +2014,29 @@ export default function LoanDetailPage({
     await submitRepayment(payload);
   };
 
+  // ── Auto Pay (Upon Maturity) ──
+
+  const handleAutoPayConfirm = async () => {
+    const amount = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
+    if (!amount || amount <= 0) return;
+    setAutoPayProcessing(true);
+    try {
+      const repayment = await repaymentService.create(loan.id, {
+        payment_date: formatDateISO(new Date()),
+        amount_paid: amount,
+        remarks: "[AUTO PAY]",
+      });
+      setAutoPayConfirmOpen(false);
+      toast.success("Auto pay processed successfully");
+      router.push(`/payments/${repayment.id}`);
+    } catch {
+      toast.error("Failed to process auto pay");
+    } finally {
+      setAutoPayProcessing(false);
+    }
+  };
+
+
   const handleVoidRepayment = async (repaymentId: number) => {
     const reason = prompt("Reason for voiding this payment:");
     if (!reason?.trim()) return;
@@ -3180,11 +3206,38 @@ export default function LoanDetailPage({
                   </Badge>
                 )}
               </CardTitle>
-              {scheduleOpen ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const isUponMaturity =
+                    loan.frequency === "upon_maturity" ||
+                    loan.interest_method === "upon_maturity" ||
+                    loan.interest_type === "upon_maturity";
+                  const canAutoPay =
+                    isUponMaturity &&
+                    ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 &&
+                    storedSchedule.some((r) => r.status !== "paid");
+                  if (!canAutoPay) return null;
+                  return (
+                    <Button
+                      size="sm"
+                      className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAutoPayConfirmOpen(true);
+                      }}
+                    >
+                      <Zap className="h-3.5 w-3.5 mr-1" />
+                      Auto Pay
+                    </Button>
+                  );
+                })()}
+                {scheduleOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
             </div>
           </CardHeader>
           {scheduleOpen && (
@@ -3562,6 +3615,54 @@ export default function LoanDetailPage({
       )}
 
       {/* ── Dialogs ── */}
+
+      {/* Auto Pay Confirmation Dialog */}
+      <Dialog open={autoPayConfirmOpen} onOpenChange={setAutoPayConfirmOpen}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-brand-orange" />
+              Confirm Auto Pay
+            </DialogTitle>
+            <DialogDescription>
+              The full outstanding balance will be recorded as a payment for this upon-maturity loan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-6">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Outstanding Balance</p>
+            <p className="text-5xl font-bold text-brand-orange">
+              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
+                Math.round(loanSummary?.outstanding_balance ?? loan?.outstanding_balance ?? 0)
+              )}
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {loan?.borrower?.full_name ?? loan?.borrower?.name ?? "Member"}
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setAutoPayConfirmOpen(false)} disabled={autoPayProcessing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAutoPayConfirm}
+              disabled={autoPayProcessing}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              {autoPayProcessing ? (
+                <>
+                  <Spinner className="size-4 mr-2" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Confirm & Process
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Statement of Account Dialog */}
       <Dialog open={soaOpen} onOpenChange={setSoaOpen}>
