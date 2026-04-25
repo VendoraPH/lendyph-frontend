@@ -25,7 +25,8 @@ export type Module =
   | "settings"
   | "users"
   | "audit_logs"
-  | "share_capital";
+  | "share_capital"
+  | "collaterals";
 
 export type Action =
   | "view"

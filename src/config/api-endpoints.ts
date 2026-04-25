@@ -94,6 +94,25 @@ export const API_ENDPOINTS = {
     UPDATE: (id: number) => `/fees/${id}`,
     DELETE: (id: number) => `/fees/${id}`,
   },
+  COLLATERAL_TYPES: {
+    LIST: "/collateral-types",
+    CREATE: "/collateral-types",
+    DETAIL: (id: number) => `/collateral-types/${id}`,
+    UPDATE: (id: number) => `/collateral-types/${id}`,
+    DELETE: (id: number) => `/collateral-types/${id}`,
+    REORDER: "/collateral-types/reorder",
+  },
+  COLLATERALS: {
+    LIST: "/collaterals",
+    CREATE: "/collaterals",
+    DETAIL: (id: number) => `/collaterals/${id}`,
+    UPDATE: (id: number) => `/collaterals/${id}`,
+    DELETE: (id: number) => `/collaterals/${id}`,
+    LIST_FOR_LOAN: (loanId: number) => `/loans/${loanId}/collaterals`,
+    ATTACH: (loanId: number) => `/loans/${loanId}/collaterals`,
+    DETACH: (loanId: number, collateralId: number) =>
+      `/loans/${loanId}/collaterals/${collateralId}`,
+  },
   REPORTS: {
     DUE_PAST_DUE: "/reports/due-past-due",
     LOAN_BALANCE_SUMMARY: "/reports/loan-balance-summary",

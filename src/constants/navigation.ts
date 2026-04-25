@@ -13,6 +13,7 @@ import {
   FilePlus,
   Package,
   Landmark,
+  ShieldCheck,
 } from "lucide-react";
 
 export interface NavSubItem {
@@ -78,6 +79,16 @@ export const SIDEBAR_NAV: NavItem[] = [
     ],
   },
   {
+    title: "Collateral Management",
+    href: "/collaterals",
+    icon: ShieldCheck,
+    permission: "collaterals:view",
+    children: [
+      { title: "Collateral Listing", href: "/collaterals" },
+      { title: "Collateral Entry", href: "/collaterals/new" },
+    ],
+  },
+  {
     title: "User Management",
     href: "/users",
     icon: UserCog,
@@ -105,6 +116,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
       { title: "Fees", href: "/settings/fees" },
+      { title: "Collateral Types", href: "/settings/collateral-types" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
     ],

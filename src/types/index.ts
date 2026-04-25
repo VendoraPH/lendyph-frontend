@@ -13,3 +13,5 @@ export type { LoanAdjustment, LoanAdjustmentType, LoanAdjustmentStatus, CreateLo
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
+export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus } from "./collateral";
+export { computeSecurityStatus, securityStatusLabel } from "./collateral";

@@ -123,6 +123,17 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Run auto-credit batches",
     ],
   },
+  collaterals: {
+    label: "Collateral Management",
+    description: "Register collaterals and attach them to loans.",
+    icon: ShieldCheck,
+    features: [
+      "View registered collaterals across members",
+      "Register new collaterals",
+      "Update collateral details",
+      "Delete collaterals (when not attached to active loans)",
+    ],
+  },
   reports: {
     label: "Reports",
     description: "Business reports, analytics, and exports.",
@@ -170,6 +181,7 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   loans: ["view", "create", "update", "delete", "approve", "reject", "release"],
   payments: ["view", "create", "update", "void"],
   share_capital: ["view", "create", "update"],
+  collaterals: ["view", "create", "update", "delete"],
   reports: ["view", "export"],
   users: ["view", "create", "update", "delete"],
   settings: ["view", "update"],
