@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   XCircle,
   Banknote,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
@@ -213,14 +214,22 @@ export default function LoansPage() {
             Manage loan applications and track approval workflow
           </p>
         </div>
-        <PermissionGate permission="loans:create">
-          <Link href="/loans/new">
-            <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
-              <Plus className="mr-2 h-4 w-4" />
-              New Application
+        <div className="flex items-center gap-2">
+          <Link href="/loans/past-due">
+            <Button variant="outline">
+              <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
+              Past Due Loans
             </Button>
           </Link>
-        </PermissionGate>
+          <PermissionGate permission="loans:create">
+            <Link href="/loans/new">
+              <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
+                <Plus className="mr-2 h-4 w-4" />
+                New Application
+              </Button>
+            </Link>
+          </PermissionGate>
+        </div>
       </div>
 
       {/* Summary Cards — clicking any card sets the status filter below so
