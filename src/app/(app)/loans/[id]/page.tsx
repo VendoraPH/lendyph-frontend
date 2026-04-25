@@ -44,6 +44,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -84,6 +94,7 @@ import {
   XCircle,
   AlertCircle,
   CalendarIcon,
+  CalendarPlus,
   Download,
   Plus,
   DollarSign,
@@ -804,6 +815,16 @@ export default function LoanDetailPage({
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
+
+  // Loan Extension state (Upon Maturity loans)
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendRemarks, setExtendRemarks] = useState("");
+  const [partialExtendOpen, setPartialExtendOpen] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<{
+    payment_date: string;
+    amount_paid: number;
+    remarks?: string;
+  } | null>(null);
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -1840,28 +1861,26 @@ export default function LoanDetailPage({
 
   // ── Repayment Handlers ──
 
-  const handleRecordPayment = async () => {
-    if (!paymentAmount || Number(paymentAmount) <= 0) return;
+  // Whether the current loan qualifies for "Upon Maturity" extension flows.
+  // Mirrors the predicate used by storedSchedule (line ~1136).
+  const isUponMaturityLoan = (() => {
+    if (!loan) return false;
+    const freq = loan.frequency ?? loan.payment_frequency ?? "";
+    return (
+      freq === "upon_maturity" ||
+      loan.interest_method === "upon_maturity" ||
+      loan.interest_type === "upon_maturity"
+    );
+  })();
+
+  const submitRepayment = async (data: {
+    payment_date: string;
+    amount_paid: number;
+    remarks?: string;
+  }) => {
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      // Annotate the remarks so the receipt/audit log preserves the
-      // cashier's intent. Backend only persists payment_date, amount_paid,
-      // and remarks — no dedicated "is_advance" column — so the tag in
-      // remarks is the audit trail for advance payments.
-      const tag =
-        paymentMode === "advance"
-          ? `[ADVANCE: ${advancePeriods} period${advancePeriods === 1 ? "" : "s"}]`
-          : null;
-      const composedRemarks = tag
-        ? paymentRemarks.trim()
-          ? `${paymentRemarks.trim()}\n${tag}`
-          : tag
-        : paymentRemarks || undefined;
-      const repayment = await repaymentService.create(loan.id, {
-        payment_date: formatDateISO(paymentDate),
-        amount_paid: Number(paymentAmount),
-        remarks: composedRemarks,
-      });
+      const repayment = await repaymentService.create(loan.id, data);
       toast.success(
         paymentMode === "advance" ? "Advance payment recorded" : "Payment recorded"
       );
@@ -1878,6 +1897,104 @@ export default function LoanDetailPage({
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!paymentAmount || Number(paymentAmount) <= 0) return;
+    // Annotate the remarks so the receipt/audit log preserves the
+    // cashier's intent. Backend only persists payment_date, amount_paid,
+    // and remarks — no dedicated "is_advance" column — so the tag in
+    // remarks is the audit trail for advance payments.
+    const tag =
+      paymentMode === "advance"
+        ? `[ADVANCE: ${advancePeriods} period${advancePeriods === 1 ? "" : "s"}]`
+        : null;
+    const composedRemarks = tag
+      ? paymentRemarks.trim()
+        ? `${paymentRemarks.trim()}\n${tag}`
+        : tag
+      : paymentRemarks || undefined;
+    const payload = {
+      payment_date: formatDateISO(paymentDate),
+      amount_paid: Number(paymentAmount),
+      remarks: composedRemarks,
+    };
+
+    // Upon Maturity loans: if the cashier is recording less than the
+    // full amount due for the current period, prompt to extend instead
+    // of silently posting a partial payment.
+    if (isUponMaturityLoan && paymentMode === "regular") {
+      const currentDue = storedSchedule.find((row) => row.status !== "paid");
+      if (currentDue && payload.amount_paid < currentDue.totalPayment) {
+        setPendingPayment(payload);
+        setPartialExtendOpen(true);
+        return;
+      }
+    }
+
+    await submitRepayment(payload);
+  };
+
+  // ── Loan Extension Handlers (Upon Maturity) ──
+
+  const handleExtendLoan = async () => {
+    setActionLoading(true);
+    try {
+      await loanService.extend(loan.id, {
+        remarks: extendRemarks.trim() || undefined,
+      });
+      toast.success("Loan extended by one cycle");
+      setExtendOpen(false);
+      setExtendRemarks("");
+      // Refresh loan + schedule + summary so the new due date and
+      // carried-over balances render immediately.
+      const updated = await loanService.detail(loan.id);
+      setLoan(updated);
+      fetchSchedule(loan.id);
+      fetchLoanSummary(loan.id);
+      fetchRepayments(loan.id);
+    } catch {
+      toast.error("Failed to extend loan");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePartialExtendConfirm = async () => {
+    if (!pendingPayment) return;
+    setActionLoading(true);
+    try {
+      await loanService.extend(loan.id, {
+        remarks: `Auto-extend on partial payment of ${pendingPayment.amount_paid}`,
+      });
+      toast.success("Loan extended");
+    } catch {
+      toast.error("Failed to extend loan");
+      setActionLoading(false);
+      return;
+    }
+    // Refresh server-side state so the repayment posts against the
+    // new (extended) schedule, then submit the payment.
+    try {
+      const updated = await loanService.detail(loan.id);
+      setLoan(updated);
+      await fetchSchedule(loan.id);
+      await fetchLoanSummary(loan.id);
+    } catch {
+      // non-fatal; submitRepayment will still attempt the post
+    }
+    setPartialExtendOpen(false);
+    const payload = pendingPayment;
+    setPendingPayment(null);
+    await submitRepayment(payload);
+  };
+
+  const handlePartialExtendDecline = async () => {
+    if (!pendingPayment) return;
+    const payload = pendingPayment;
+    setPartialExtendOpen(false);
+    setPendingPayment(null);
+    await submitRepayment(payload);
   };
 
   const handleVoidRepayment = async (repaymentId: number) => {
@@ -2177,6 +2294,18 @@ export default function LoanDetailPage({
             </div>
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
+          {isUponMaturityLoan &&
+            ["released", "ongoing", "current", "past_due"].includes(loan.status) && (
+              <div className="sm:self-start">
+                <Button
+                  onClick={() => setExtendOpen(true)}
+                  className="w-full sm:w-auto bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
+                >
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Extend Loan
+                </Button>
+              </div>
+            )}
         </div>
       </div>
 
@@ -4616,6 +4745,94 @@ export default function LoanDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Extend Loan Dialog (Upon Maturity — Process 1: manual extension) */}
+      <AlertDialog open={extendOpen} onOpenChange={setExtendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5 text-muted-foreground" />
+              Extend Loan
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move the loan&apos;s due date forward by one cycle.
+              Any unpaid principal and interest will be carried over to the
+              new period. The loan stays active and no payment is recorded.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="extend-remarks" className="text-xs">
+              Remarks (optional)
+            </Label>
+            <Textarea
+              id="extend-remarks"
+              value={extendRemarks}
+              onChange={(e) => setExtendRemarks(e.target.value)}
+              placeholder="e.g. borrower requested extension"
+              rows={2}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleExtendLoan}
+              disabled={actionLoading}
+              className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Extending...
+                </>
+              ) : (
+                <>
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Confirm Extension
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Partial-Payment Extend Prompt (Upon Maturity — Process 2) */}
+      <AlertDialog open={partialExtendOpen} onOpenChange={setPartialExtendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Extend loan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Payment is not enough to fully settle this loan. Do you want to
+              extend the loan? The remaining principal and interest will be
+              carried over to the next cycle.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={actionLoading}
+              onClick={handlePartialExtendDecline}
+            >
+              No, thanks
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionLoading}
+              onClick={handlePartialExtendConfirm}
+              className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Extending...
+                </>
+              ) : (
+                <>
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Yes, extend
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create Adjustment Dialog */}
       <Dialog open={createAdjustmentOpen} onOpenChange={setCreateAdjustmentOpen}>
