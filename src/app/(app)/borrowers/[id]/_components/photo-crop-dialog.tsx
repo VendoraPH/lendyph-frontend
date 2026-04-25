@@ -118,8 +118,7 @@ export function PhotoCropDialog({
   }
 
   function handleZoomChange(value: number | readonly number[]) {
-    const v = typeof value === "number" ? value : value[0];
-    setZoom(v);
+    setZoom(typeof value === "number" ? value : value[0]);
   }
 
   function handleReset() {
