@@ -3107,7 +3107,29 @@ export default function LoanDetailPage({
                       </TableHeader>
                       <TableBody>
                         {storedSchedule.map((row) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
                           const isPaid = row.status === "paid";
+                          const isPartial = row.status === "partial";
+                          const isOverdue = row.status === "overdue" || (
+                            !isPaid && !isPartial && row.dueDate < today
+                          );
+                          const isUpcoming = !isPaid && !isPartial && !isOverdue;
+
+                          type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
+                          const displayStatus: DisplayStatus =
+                            isPaid ? "paid"
+                            : isPartial ? "partial"
+                            : isOverdue ? "overdue"
+                            : "upcoming";
+
+                          const statusStyles: Record<DisplayStatus, string> = {
+                            paid: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
+                            partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                            overdue: "border-destructive/40 bg-destructive/10 text-destructive",
+                            upcoming: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+                          };
+
                           return (
                             <TableRow
                               key={row.period}
@@ -3129,14 +3151,9 @@ export default function LoanDetailPage({
                               <TableCell className="text-center">
                                 <Badge
                                   variant="outline"
-                                  className={cn(
-                                    "text-[10px] px-1.5 py-0 capitalize",
-                                    isPaid && "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
-                                    row.status === "overdue" && "border-destructive/40 bg-destructive/10 text-destructive",
-                                    row.status === "partial" && "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                                  )}
+                                  className={cn("text-[10px] px-1.5 py-0 capitalize", statusStyles[displayStatus])}
                                 >
-                                  {row.status ?? "pending"}
+                                  {displayStatus}
                                 </Badge>
                               </TableCell>
                             </TableRow>
