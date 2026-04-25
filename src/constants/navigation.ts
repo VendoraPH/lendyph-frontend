@@ -36,23 +36,6 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "dashboard:view",
   },
   {
-    title: "User Management",
-    href: "/users",
-    icon: UserCog,
-    permission: "users:view",
-  },
-  {
-    title: "Share Capital",
-    href: "/share-capital",
-    icon: Landmark,
-    permission: "share_capital:view",
-    children: [
-      { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
-      { title: "Pledge Entry", href: "/share-capital/pledges" },
-      { title: "Auto-Credit", href: "/share-capital/auto-credit" },
-    ],
-  },
-  {
     title: "Members",
     href: "/borrowers",
     icon: Users,
@@ -82,6 +65,23 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "New Payment", href: "/payments" },
       { title: "Payment History", href: "/payments/history" },
     ],
+  },
+  {
+    title: "Share Capital",
+    href: "/share-capital",
+    icon: Landmark,
+    permission: "share_capital:view",
+    children: [
+      { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
+      { title: "Pledge Entry", href: "/share-capital/pledges" },
+      { title: "Auto-Credit", href: "/share-capital/auto-credit" },
+    ],
+  },
+  {
+    title: "User Management",
+    href: "/users",
+    icon: UserCog,
+    permission: "users:view",
   },
   {
     title: "Reports",
