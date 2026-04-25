@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/command";
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
+import { ShareCapitalCard } from "./_components/share-capital-card";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2907,6 +2908,9 @@ export default function LoanDetailPage({
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Share Capital — current balance for the loan's member */}
+        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
 
         {/* Card 4: Workflow History */}
         <Collapsible defaultOpen={false}>
