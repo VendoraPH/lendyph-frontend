@@ -69,19 +69,53 @@ interface MockPayment {
 
 function mapRepaymentToRow(r: Repayment): MockPayment {
   const p = r as Repayment & Record<string, unknown>;
+  const loanRel = p.loan as
+    | {
+        id?: number;
+        loan_account_number?: string;
+        application_number?: string;
+        borrower?: { id?: number; full_name?: string; name?: string };
+        borrower_id?: number;
+        borrower_name?: string;
+      }
+    | undefined;
+  const borrowerRel = p.borrower as
+    | { id?: number; full_name?: string; name?: string }
+    | undefined;
   return {
     id: p.id,
     receipt_number: (p.receipt_number as string) || `RCP-${String(p.id).padStart(8, "0")}`,
-    borrower_name: (p.borrower_name as string) || "—",
-    borrower_id: (p.borrower_id as number) || 0,
-    loan_account: (p.loan_account_number as string) || (p.loan_account as string) || "—",
-    loan_id: p.loan_id,
+    borrower_name:
+      loanRel?.borrower?.full_name ||
+      loanRel?.borrower?.name ||
+      loanRel?.borrower_name ||
+      borrowerRel?.full_name ||
+      borrowerRel?.name ||
+      (p.borrower_name as string) ||
+      "—",
+    borrower_id:
+      loanRel?.borrower?.id ??
+      loanRel?.borrower_id ??
+      borrowerRel?.id ??
+      (p.borrower_id as number) ??
+      0,
+    loan_account:
+      loanRel?.loan_account_number ||
+      loanRel?.application_number ||
+      (p.loan_account_number as string) ||
+      (p.loan_account as string) ||
+      "—",
+    loan_id: p.loan_id ?? loanRel?.id ?? 0,
     date: p.payment_date,
     amount:
       (p.amount as number) ||
       p.amount_paid ||
       0,
-    penalty_amount: (p.penalty_applied as number) || (p.penalty_amount as number) || 0,
+    penalty_amount:
+      (p.penalty_applied as number) ||
+      (p.penalty_paid as number) ||
+      (p.penalty_amount as number) ||
+      0,
     method: ((p.method as PaymentMethod) || "cash"),
     status: (p.status === "voided" ? "voided" : "completed") as PaymentStatus,
     collected_by: (p.collected_by as string) || "—",
@@ -423,9 +457,14 @@ export default function PaymentHistoryPage() {
     setLoading(true);
     try {
       const res = await repaymentService.listAll({ per_page: 100 });
-      const rows = Array.isArray(res?.data) ? res.data : [];
+      const rows = Array.isArray(res)
+        ? (res as unknown as Repayment[])
+        : Array.isArray(res?.data)
+        ? res.data
+        : [];
       setPayments(rows.map(mapRepaymentToRow));
-    } catch {
+    } catch (err) {
+      console.error("Failed to load payment history", err);
       setPayments([]);
       toast.error("Failed to load payment history");
     } finally {

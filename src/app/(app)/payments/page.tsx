@@ -260,10 +260,22 @@ export default function PaymentsPage() {
   const fetchLoans = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await loanService.list({ status: "ongoing", per_page: 100 });
-      const loans = Array.isArray(response?.data) ? response.data : [];
-      setApiLoans(loans.map(mapLoanToActiveLoan));
-    } catch {
+      const response = await loanService.list({ per_page: 500 });
+      const allLoans = Array.isArray(response)
+        ? (response as unknown as Loan[])
+        : Array.isArray(response?.data)
+        ? response.data
+        : [];
+      const ACTIVE_STATUSES = new Set([
+        "current",
+        "past_due",
+        "released",
+        "ongoing",
+      ]);
+      const activeLoans = allLoans.filter((l) => ACTIVE_STATUSES.has(l.status));
+      setApiLoans(activeLoans.map(mapLoanToActiveLoan));
+    } catch (err) {
+      console.error("Failed to load active loans", err);
       setApiLoans([]);
       toast.error("Failed to load active loans");
     } finally {
@@ -275,7 +287,7 @@ export default function PaymentsPage() {
     fetchLoans();
   }, [fetchLoans]);
 
-  // Filter loans by search
+// Filter loans by search
   const filteredLoans = useMemo(() => {
     if (!searchQuery.trim()) return apiLoans;
     const q = searchQuery.toLowerCase();
@@ -722,11 +734,12 @@ export default function PaymentsPage() {
           )}
         </CardContent>
       </Card>
+
     </div>
 
     {/* Payment Entry Dialog */}
     <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Banknote className="size-5" />
@@ -940,11 +953,11 @@ export default function PaymentsPage() {
             {displayAllocation && paymentType && (
               <>
                 <Separator />
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium flex items-center gap-2">
                       <CreditCard className="size-4" />
-                      Allocation Preview
+                      Payment Allocation
                       {previewLoading && (
                         <span className="text-[10px] font-normal text-muted-foreground">checking…</span>
                       )}
@@ -957,64 +970,215 @@ export default function PaymentsPage() {
                     <Badge variant={paymentType.variant}>{paymentType.label}</Badge>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  {/* Component allocation totals */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div className="rounded-lg border p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-1">Penalty</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.penaltyApplied)}</p>
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
+                      <p
+                        className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          displayAllocation.penaltyApplied > 0 && "text-destructive"
+                        )}
+                      >
+                        {formatCurrency(displayAllocation.penaltyApplied)}
+                      </p>
                     </div>
                     <div className="rounded-lg border p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-1">Interest</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.interestApplied)}</p>
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Interest</p>
+                      <p className="text-sm font-semibold tabular-nums">
+                        {formatCurrency(displayAllocation.interestApplied)}
+                      </p>
                     </div>
                     <div className="rounded-lg border p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-1">Principal</p>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(displayAllocation.principalApplied)}</p>
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Principal</p>
+                      <p className="text-sm font-semibold tabular-nums">
+                        {formatCurrency(displayAllocation.principalApplied)}
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-3 text-center",
+                        displayAllocation.scbApplied > 0 &&
+                          "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                      )}
+                    >
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">SCB</p>
+                      <p
+                        className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          displayAllocation.scbApplied > 0 && "text-amber-700 dark:text-amber-400"
+                        )}
+                      >
+                        {formatCurrency(displayAllocation.scbApplied)}
+                      </p>
                     </div>
                   </div>
 
+                  {/* Per-schedule allocation table — shows exactly which
+                      amortization periods this payment covers and how much
+                      goes to principal/interest/penalty for each. */}
+                  {Array.isArray(serverPreview?.allocations) && serverPreview.allocations.length > 0 && (
+                    <div className="rounded-lg border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
+                        <p className="text-xs font-medium flex items-center gap-1.5">
+                          <Receipt className="size-3.5" />
+                          Schedule Periods Covered
+                        </p>
+                        <span className="text-[10px] text-muted-foreground">
+                          {serverPreview.allocations.length} period{serverPreview.allocations.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12 text-center text-[10px] uppercase">#</TableHead>
+                              <TableHead className="text-[10px] uppercase">Due Date</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Principal</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Interest</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Penalty</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Applied</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Remaining</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {serverPreview.allocations.map((a, idx) => {
+                              const applied =
+                                a.amount_applied ??
+                                (a.principal ?? 0) + (a.interest ?? 0) + (a.penalty ?? 0);
+                              const remaining = a.remaining_balance ?? 0;
+                              const isFullySettled = remaining <= 0 && applied > 0;
+                              return (
+                                <TableRow key={`${a.schedule_id ?? idx}-${a.period ?? idx}`}>
+                                  <TableCell className="text-center text-xs font-medium">
+                                    {a.period ?? idx + 1}
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    {a.due_date ? formatDate(a.due_date) : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums">
+                                    {formatCurrency(a.principal ?? 0)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums">
+                                    {formatCurrency(a.interest ?? 0)}
+                                  </TableCell>
+                                  <TableCell
+                                    className={cn(
+                                      "text-right text-xs tabular-nums",
+                                      (a.penalty ?? 0) > 0 && "text-destructive"
+                                    )}
+                                  >
+                                    {formatCurrency(a.penalty ?? 0)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs font-semibold tabular-nums">
+                                    {formatCurrency(applied)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums">
+                                    {isFullySettled ? (
+                                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Settled
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        {formatCurrency(remaining)}
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Outcome summary */}
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-1">New Outstanding Balance</p>
-                      <p className="text-lg font-bold">
+                    <div className="rounded-lg border bg-background p-3">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                        New Outstanding Balance
+                      </p>
+                      <p className="text-lg font-bold tabular-nums">
                         {newOutstandingBalance !== null ? formatCurrency(newOutstandingBalance) : "—"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        was {formatCurrency(selectedLoan.outstanding_balance)}
                       </p>
                     </div>
 
-                    {typeof amountPaid === "number" && amountPaid < selectedLoan.current_due && (
-                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-center">
-                        <p className="text-[10px] text-muted-foreground mb-1">Remaining Due</p>
-                        <p className="text-lg font-bold text-destructive">
-                          {formatCurrency(selectedLoan.current_due - amountPaid)}
-                        </p>
-                      </div>
-                    )}
+                    {typeof amountPaid === "number" &&
+                      amountPaid <
+                        selectedLoan.current_due +
+                          selectedLoan.overdue_amount +
+                          selectedLoan.penalty_amount && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                            Remaining Due
+                          </p>
+                          <p className="text-lg font-bold text-destructive tabular-nums">
+                            {formatCurrency(
+                              selectedLoan.current_due +
+                                selectedLoan.overdue_amount +
+                                selectedLoan.penalty_amount -
+                                amountPaid
+                            )}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            short of full current dues
+                          </p>
+                        </div>
+                      )}
 
                     {displayAllocation.scbApplied > 0 && (
-                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-700 dark:bg-amber-900/20">
-                        <p className="text-[10px] text-muted-foreground mb-1">Excess → SCB</p>
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                          Excess → Share Capital
+                        </p>
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-400 tabular-nums">
                           {formatCurrency(displayAllocation.scbApplied)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          will credit borrower&apos;s SCB ledger
                         </p>
                       </div>
                     )}
 
                     {displayAllocation.nextInterestApplied > 0 && (
-                      <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
-                        <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Interest</p>
-                        <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                      <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-700 dark:bg-blue-900/20">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                          Excess → Next Interest
+                        </p>
+                        <p className="text-lg font-bold text-blue-700 dark:text-blue-400 tabular-nums">
                           {formatCurrency(displayAllocation.nextInterestApplied)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          advance toward upcoming amortization
                         </p>
                       </div>
                     )}
 
                     {displayAllocation.nextPrincipalApplied > 0 && (
-                      <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-center dark:border-green-700 dark:bg-green-900/20">
-                        <p className="text-[10px] text-muted-foreground mb-1">Excess → Next Principal</p>
-                        <p className="text-lg font-bold text-green-700 dark:text-green-400">
+                      <div className="rounded-lg border border-green-300 bg-green-50 p-3 dark:border-green-700 dark:bg-green-900/20">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                          Excess → Next Principal
+                        </p>
+                        <p className="text-lg font-bold text-green-700 dark:text-green-400 tabular-nums">
                           {formatCurrency(displayAllocation.nextPrincipalApplied)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          advance reduces future principal
                         </p>
                       </div>
                     )}
+                  </div>
+
+                  {/* Quick reconciliation footer */}
+                  <div className="flex items-center justify-between rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
+                    <span className="text-muted-foreground">Total Recorded</span>
+                    <span className="font-bold tabular-nums">
+                      {typeof amountPaid === "number" ? formatCurrency(amountPaid) : "—"}
+                    </span>
                   </div>
                 </div>
               </>

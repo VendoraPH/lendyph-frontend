@@ -88,18 +88,44 @@ const STATUS_STYLES: Record<
 /** Map API Repayment response to local ReceiptData shape */
 function mapPaymentToReceipt(payment: Repayment): ReceiptData {
   const p = payment as Repayment & Record<string, unknown>;
+  const loanRel = p.loan as
+    | {
+        loan_account_number?: string;
+        application_number?: string;
+        loan_product?: { name?: string };
+        loan_product_name?: string;
+        borrower?: { full_name?: string; name?: string };
+        borrower_name?: string;
+      }
+    | undefined;
+  const borrowerRel = p.borrower as { full_name?: string; name?: string } | undefined;
   return {
     id: p.id,
     receipt_number: (p.receipt_number as string) || `OR-${String(p.id).padStart(8, "0")}`,
-    borrower_name: (p.borrower_name as string) || "—",
-    loan_account_number: (p.loan_account_number as string) || "—",
-    loan_product_name: (p.loan_product_name as string) || "—",
+    borrower_name:
+      loanRel?.borrower?.full_name ||
+      loanRel?.borrower?.name ||
+      loanRel?.borrower_name ||
+      borrowerRel?.full_name ||
+      borrowerRel?.name ||
+      (p.borrower_name as string) ||
+      "—",
+    loan_account_number:
+      loanRel?.loan_account_number ||
+      loanRel?.application_number ||
+      (p.loan_account_number as string) ||
+      "—",
+    loan_product_name:
+      loanRel?.loan_product?.name ||
+      loanRel?.loan_product_name ||
+      (p.loan_product_name as string) ||
+      "—",
     payment_date: p.payment_date || p.created_at,
     method: (p.method as ReceiptData["method"]) || "cash",
     reference_number: p.reference_number as string | undefined,
-    penalty: (p.penalty_amount as number) || 0,
-    interest: (p.interest_amount as number) || 0,
-    principal: (p.principal_amount as number) || 0,
+    penalty: (p.penalty_amount as number) || (p.penalty_paid as number) || 0,
+    interest: (p.interest_amount as number) || (p.interest_paid as number) || 0,
+    principal: (p.principal_amount as number) || (p.principal_paid as number) || 0,
     total: p.amount_paid,
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
