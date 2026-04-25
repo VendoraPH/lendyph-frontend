@@ -976,7 +976,7 @@ export default function LoanDetailPage({
   }, []);
 
   useEffect(() => {
-    if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
+    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
       fetchSchedule(loan.id);
       fetchLoanSummary(loan.id);
     }
@@ -1038,7 +1038,7 @@ export default function LoanDetailPage({
   }, []);
 
   useEffect(() => {
-    if (loan && ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
+    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
       fetchRepayments(loan.id);
       fetchAdjustments(loan.id);
     }
@@ -1151,7 +1151,7 @@ export default function LoanDetailPage({
   const storedSchedule = useMemo(() => {
     if (!loan) return [];
     const scb = loan.scb_amount ?? 0;
-    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+    const isReleased = ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
     const isPreRelease = ["draft", "for_review", "approved"].includes(loan.status);
 
     if (isReleased) {
@@ -3215,8 +3215,7 @@ export default function LoanDetailPage({
                   const canAutoPay =
                     isUponMaturity &&
                     ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 &&
-                    storedSchedule.some((r) => r.status !== "paid");
+                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0;
                   if (!canAutoPay) return null;
                   return (
                     <Button
