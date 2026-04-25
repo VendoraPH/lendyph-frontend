@@ -95,6 +95,7 @@ import {
   Receipt,
   CreditCard,
   Loader2,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -141,7 +142,7 @@ const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
 
 // ── Amortization Schedule Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly";
+type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
 type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
 interface AmortizationRow {
@@ -153,10 +154,13 @@ interface AmortizationRow {
   totalPayment: number;
   balance: number;
   status?: "pending" | "paid" | "partial" | "overdue";
+  amountPaid?: number;
 }
 
 function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
   switch (frequency) {
+    case "upon_maturity":
+      return termMonths; // SCB accumulates monthly, paid as lump sum at maturity
     case "daily":
       return Math.round(termMonths * 30);
     case "weekly":
@@ -170,6 +174,8 @@ function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): 
 
 function getIntervalDays(frequency: PaymentFrequency): number {
   switch (frequency) {
+    case "upon_maturity":
+      return 30; // fallback, not used in upon_maturity path
     case "daily":
       return 1;
     case "weekly":
@@ -203,11 +209,10 @@ function generateSchedule(
   scbAmount: number = 0,
 ): AmortizationRow[] {
   // Upon Maturity = a single consolidated payment at the maturity date.
-  // Full principal + total interest for the whole term, regardless of
-  // term length or frequency.
-  if (interestType === "upon_maturity") {
+  // Triggered when payment_frequency OR interest_type is "upon_maturity".
+  if (frequency === "upon_maturity" || interestType === "upon_maturity") {
     const totalInterest = principal * (rate / 100) * termMonths;
-    const totalScb = scbAmount * getPeriodsFromMonths(termMonths, frequency);
+    const totalScb = scbAmount * termMonths; // SCB accumulates monthly, paid at maturity
     return [{
       period: 1,
       dueDate: addMonths(startDate, termMonths),
@@ -784,6 +789,7 @@ export default function LoanDetailPage({
   const [soaOpen, setSoaOpen] = useState(false);
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
@@ -1118,38 +1124,98 @@ export default function LoanDetailPage({
   // Post-release: prefer API schedule, fallback to client-side generation
   const storedSchedule = useMemo(() => {
     if (!loan) return [];
-    const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
-    if (!relDate) return [];
-    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-    if (!isReleased) return [];
-    // Use API schedule if available, map to display format
     const scb = loan.scb_amount ?? 0;
-    if (apiSchedule && apiSchedule.length > 0) {
-      return apiSchedule.map((row, idx) => ({
-        period: idx + 1,
-        dueDate: new Date(row.due_date),
-        principal: parseFloat(String(row.principal)) || 0,
-        interest: parseFloat(String(row.interest)) || 0,
-        shareCapitalBuildUp: scb,
-        totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-        balance: parseFloat(String(row.balance)) || 0,
-        status: row.status,
-      }));
+    const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+    const isPreRelease = ["draft", "for_review", "approved"].includes(loan.status);
+
+    if (isReleased) {
+      const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
+      if (!relDate) return [];
+      const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
+      const isUponMaturity = freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity";
+      // Use API schedule if available, map to display format
+      if (apiSchedule && apiSchedule.length > 0) {
+        if (isUponMaturity) {
+          // Backend may return one row per period; collapse everything into a single maturity payment
+          const lastRow = apiSchedule[apiSchedule.length - 1];
+          const totalPrincipal = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.principal)) || 0), 0);
+          const totalInterest = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.interest)) || 0), 0);
+          const totalAmountDue = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_due)) || 0), 0);
+          const totalAmountPaid = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_paid)) || 0), 0);
+          const totalScb = scb * apiSchedule.length;
+          return [{
+            period: 1,
+            dueDate: new Date(lastRow.due_date),
+            principal: totalPrincipal,
+            interest: totalInterest,
+            shareCapitalBuildUp: totalScb,
+            totalPayment: totalAmountDue + totalScb,
+            balance: parseFloat(String(lastRow.balance)) || 0,
+            status: lastRow.status,
+            amountPaid: totalAmountPaid,
+          }];
+        }
+        return apiSchedule.map((row, idx) => ({
+          period: idx + 1,
+          dueDate: new Date(row.due_date),
+          principal: parseFloat(String(row.principal)) || 0,
+          interest: parseFloat(String(row.interest)) || 0,
+          shareCapitalBuildUp: scb,
+          totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
+          balance: parseFloat(String(row.balance)) || 0,
+          status: row.status,
+          amountPaid: parseFloat(String(row.amount_paid)) || 0,
+        }));
+      }
+      // Fallback to client-side generation
+      const termVal = loan.term ?? loan.term_months ?? 0;
+      const freqVal = freq as Parameters<typeof generateSchedule>[3];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+      return generateSchedule(
+        loan.principal_amount,
+        loan.interest_rate,
+        termVal,
+        freqVal,
+        methodVal,
+        new Date(relDate),
+        scb,
+      );
     }
-    // Fallback to client-side generation
-    const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-    return generateSchedule(
-      loan.principal_amount,
-      loan.interest_rate,
-      termVal,
-      freqVal,
-      methodVal,
-      new Date(relDate),
-      scb,
-    );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule]);
+
+    if (isPreRelease) {
+      // Prefer server-computed preview schedule
+      if (previewSchedule && previewSchedule.length > 0) {
+        return previewSchedule.map((row, idx) => ({
+          period: idx + 1,
+          dueDate: new Date(row.due_date),
+          principal: parseFloat(String(row.principal)) || 0,
+          interest: parseFloat(String(row.interest)) || 0,
+          shareCapitalBuildUp: scb,
+          totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
+          balance: parseFloat(String(row.balance)) || 0,
+          status: row.status,
+          amountPaid: parseFloat(String(row.amount_paid)) || 0,
+        }));
+      }
+      // Fallback: client-side generation using today as the start date
+      const termVal = loan.term ?? loan.term_months ?? 0;
+      if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
+      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
+      return generateSchedule(
+        loan.principal_amount,
+        loan.interest_rate,
+        termVal,
+        freqVal,
+        methodVal,
+        startDate,
+        scb,
+      );
+    }
+
+    return [];
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -1201,6 +1267,25 @@ export default function LoanDetailPage({
       return { ...row, opening };
     });
   }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
+
+  // Ledger rows: repayments sorted by date with running principal/interest/scb balances.
+  const ledgerRows = useMemo(() => {
+    const principalStart = loan?.principal_amount ?? 0;
+    const interestStart = storedScheduleTotals.interest;
+    const scbStart = storedScheduleTotals.shareCapitalBuildUp;
+    const sorted = [...repayments].sort(
+      (a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime(),
+    );
+    let principalBal = principalStart;
+    let interestBal = interestStart;
+    let scbBal = scbStart;
+    return sorted.map((r) => {
+      principalBal = Math.max(0, principalBal - (r.principal_paid ?? 0));
+      interestBal = Math.max(0, interestBal - (r.interest_paid ?? 0));
+      scbBal = Math.max(0, scbBal - (r.scb_paid ?? 0));
+      return { ...r, principalBal, interestBal, scbBal };
+    });
+  }, [repayments, loan?.principal_amount, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
 
   // Seed/load multi-step approval state whenever the loan or chain config changes.
   // The chain is visible for every status except "rejected" (voided drafts).
@@ -2925,172 +3010,175 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Server-verified preview banner (pre-release) */}
-      {loan && ["draft", "for_review", "approved"].includes(loan.status) && previewSchedule && previewSchedule.length > 0 && (
-        <Card className="border-green-500/30 bg-green-500/5">
-          <CardContent className="py-3">
-            <div className="flex items-center gap-2 text-xs">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <span className="font-semibold text-green-700 dark:text-green-400">
-                Server-verified amortization preview loaded
-              </span>
-              <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
-                {previewSchedule.length} installments
-              </Badge>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              The backend computed {previewSchedule.length} periodic payments. This preview matches what will be persisted on release.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Amortization — released+ loans. Two tabs:
-          • Schedule: per-period Principal / Interest / SCB / Total / Balance
-            (what's DUE this period).
-          • Balances: running remaining balance of each component at the
-            start of each period (what's still OWED), not payment amounts. */}
+      {/* Amortization Schedule — collapsible, collapsed by default */}
       {storedSchedule.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Amortization
-            </CardTitle>
+          <CardHeader
+            className="cursor-pointer select-none"
+            onClick={() => setScheduleOpen((o) => !o)}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                Amortization Schedule
+                {["draft", "for_review", "approved"].includes(loan.status) && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
+                    Preview
+                  </Badge>
+                )}
+              </CardTitle>
+              {scheduleOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
           </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="schedule" className="gap-3">
-              <TabsList>
-                <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                <TabsTrigger value="balances">Balances</TabsTrigger>
-              </TabsList>
-              <TabsContent value="schedule">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12 text-center">#</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead className="text-right">Principal</TableHead>
-                        <TableHead className="text-right">Interest</TableHead>
-                        {storedScheduleTotals.shareCapitalBuildUp > 0 && (
-                          <TableHead className="text-right">Share Capital Build-Up</TableHead>
-                        )}
-                        <TableHead className="text-right">Total Payment</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {storedSchedule.map((row) => (
-                        <TableRow key={row.period}>
-                          <TableCell className="text-center">{row.period}</TableCell>
-                          <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
-                          {storedScheduleTotals.shareCapitalBuildUp > 0 && (
-                            <TableCell className="text-right text-brand-orange">
-                              {formatCurrency(row.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+          {scheduleOpen && (
+            <CardContent className="pt-0">
+              {(() => {
+                const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+                const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+
+                const scheduleTable = (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Interest</TableHead>
+                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                          <TableHead className="text-right">Total Payment</TableHead>
+                          <TableHead className="text-right">Balance</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow>
-                        <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
-                        {storedScheduleTotals.shareCapitalBuildUp > 0 && (
-                          <TableCell className="text-right font-semibold text-brand-orange">
-                            {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              </TabsContent>
-              <TabsContent value="balances">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12 text-center">#</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead className="text-right">Principal Balance</TableHead>
-                        <TableHead className="text-right">Interest Balance</TableHead>
-                        {storedScheduleTotals.shareCapitalBuildUp > 0 && (
-                          <TableHead className="text-right">SCB Balance</TableHead>
-                        )}
-                        <TableHead className="text-right">Total Balance</TableHead>
-                        <TableHead className="w-20 text-center">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {balancesRows.map((row, idx) => {
-                        const isLast = idx === balancesRows.length - 1;
-                        const isPaid = row.status === "paid";
-                        const isPartial = row.status === "partial";
-                        const isOverdue = row.status === "overdue";
-                        // Show opening (running) balance regardless of status —
-                        // the status badge already communicates whether this
-                        // period was settled. Zeroing the columns for "paid"
-                        // rows makes it look like the period had no obligation,
-                        // which is wrong when a single overpayment cascaded
-                        // across multiple periods.
-                        return (
-                          <TableRow key={row.period} className={isPaid ? "opacity-60" : undefined}>
+                      </TableHeader>
+                      <TableBody>
+                        {storedSchedule.map((row) => (
+                          <TableRow key={row.period}>
                             <TableCell className="text-center">{row.period}</TableCell>
                             <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {formatCurrency(row.opening.principal)}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {formatCurrency(row.opening.interest)}
-                            </TableCell>
-                            {storedScheduleTotals.shareCapitalBuildUp > 0 && (
-                              <TableCell className="text-right tabular-nums text-brand-orange">
-                                {formatCurrency(row.opening.scb)}
+                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                            {hasScb && (
+                              <TableCell className="text-right text-brand-orange">
+                                {formatCurrency(row.shareCapitalBuildUp)}
                               </TableCell>
                             )}
-                            <TableCell
-                              className={cn(
-                                "text-right font-medium tabular-nums",
-                                !isPaid && isLast && "text-green-600 dark:text-green-400"
-                              )}
-                            >
-                              {formatCurrency(row.opening.total)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {isPaid && (
-                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                  Paid
-                                </span>
-                              )}
-                              {isPartial && (
-                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                  Partial
-                                </span>
-                              )}
-                              {isOverdue && (
-                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                  Overdue
-                                </span>
-                              )}
-                            </TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
+                        ))}
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow>
+                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                          {hasScb && (
+                            <TableCell className="text-right font-semibold text-brand-orange">
+                              {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </div>
+                );
+
+                const balancesTable = (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Interest</TableHead>
+                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                          <TableHead className="text-right">Total Payment</TableHead>
+                          <TableHead className="text-right">Balance</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {storedSchedule.map((row) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const isPaid = row.status === "paid";
+                          const isPartial = row.status === "partial";
+                          const isOverdue = row.status === "overdue" || (
+                            !isPaid && !isPartial && row.dueDate < today
+                          );
+                          const isUpcoming = !isPaid && !isPartial && !isOverdue;
+
+                          type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
+                          const displayStatus: DisplayStatus =
+                            isPaid ? "paid"
+                            : isPartial ? "partial"
+                            : isOverdue ? "overdue"
+                            : "upcoming";
+
+                          const statusStyles: Record<DisplayStatus, string> = {
+                            paid: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
+                            partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                            overdue: "border-destructive/40 bg-destructive/10 text-destructive",
+                            upcoming: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+                          };
+
+                          return (
+                            <TableRow
+                              key={row.period}
+                              className={cn(isPaid && "text-muted-foreground/50")}
+                            >
+                              <TableCell className="text-center">{row.period}</TableCell>
+                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.principal)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.interest)}</TableCell>
+                              {hasScb && (
+                                <TableCell className="text-right tabular-nums">
+                                  {isPaid ? formatCurrency(0) : formatCurrency(row.shareCapitalBuildUp)}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-medium tabular-nums">
+                                {isPaid ? formatCurrency(0) : formatCurrency(row.totalPayment)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(row.balance)}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] px-1.5 py-0 capitalize", statusStyles[displayStatus])}
+                                >
+                                  {displayStatus}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                );
+
+                if (!isReleased) return scheduleTable;
+
+                return (
+                  <Tabs defaultValue="schedule" className="gap-3">
+                    <TabsList>
+                      <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                      <TabsTrigger value="balances">Balances</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="schedule">{scheduleTable}</TabsContent>
+                    <TabsContent value="balances">{balancesTable}</TabsContent>
+                  </Tabs>
+                );
+              })()}
+            </CardContent>
+          )}
         </Card>
       )}
 
@@ -3130,210 +3218,168 @@ export default function LoanDetailPage({
           the policy exception letter is reachable from the very first save. */}
       <LoanDocumentsCard loanId={loan.id} />
 
-      {/* Repayments — only for released+ loans */}
+      {/* Ledger — only for released+ loans */}
       {isLocked && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                Repayments
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                Ledger
               </CardTitle>
-              {["released", "ongoing"].includes(loan.status) && (
-                <Button
-                  size="sm"
-                  className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                  onClick={() => setRecordPaymentOpen(true)}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Record Payment
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {["released", "ongoing"].includes(loan.status) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCreateAdjustmentOpen(true)}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    New Adjustment
+                  </Button>
+                )}
+                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
+                  <Button
+                    size="sm"
+                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                    onClick={() => setRecordPaymentOpen(true)}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Record Payment
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {repaymentsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner className="size-5 text-muted-foreground" />
               </div>
-            ) : repayments.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No repayments recorded yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Principal</TableHead>
-                      <TableHead className="text-right">Interest</TableHead>
-                      <TableHead className="text-right">SCB</TableHead>
-                      <TableHead className="text-right">Penalty</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead>Remarks</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-20" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {repayments.map((r) => {
-                      const dash = <span className="text-muted-foreground/60">—</span>;
-                      const fmt = (n: number | undefined) =>
-                        n != null && n > 0 ? formatCurrency(n) : dash;
-                      return (
-                        <TableRow key={r.id}>
-                          <TableCell>{formatDate(r.payment_date)}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {fmt(r.principal_paid)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {fmt(r.interest_paid)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {fmt(r.scb_paid)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {r.penalty_paid != null && r.penalty_paid > 0 ? (
-                              <span className="text-destructive">
-                                {formatCurrency(r.penalty_paid)}
-                              </span>
-                            ) : (
-                              dash
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">
-                            {formatCurrency(r.amount_paid)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{r.remarks ?? "—"}</TableCell>
-                          <TableCell>
-                            <Badge variant={r.status === "voided" ? "destructive" : "default"} className="text-xs">
-                              {r.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {r.status !== "voided" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-600 hover:text-red-700 text-xs"
-                                onClick={() => handleVoidRepayment(r.id)}
-                                disabled={actionLoading}
-                              >
-                                Void
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Loan Adjustments — only for released+ loans */}
-      {isLocked && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Settings2 className="h-4 w-4 text-muted-foreground" />
-                Loan Adjustments
-              </CardTitle>
-              {["released", "ongoing"].includes(loan.status) && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setCreateAdjustmentOpen(true)}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  New Adjustment
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {adjustmentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
-              </div>
-            ) : adjustments.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No adjustments.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="w-32" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {adjustments.map((adj) => (
-                      <TableRow key={adj.id}>
-                        <TableCell className="capitalize text-sm">{adj.adjustment_type.replace(/_/g, " ")}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{adj.description ?? "—"}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              adj.status === "approved" ? "default" :
-                              adj.status === "rejected" ? "destructive" :
-                              adj.status === "applied" ? "secondary" :
-                              "outline"
-                            }
-                            className="text-xs"
-                          >
-                            {adj.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDate(adj.created_at)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {adj.status === "pending" && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-green-600 hover:text-green-700 text-xs"
-                                  onClick={() => handleAdjustmentAction(adj.id, "approve")}
-                                  disabled={actionLoading}
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700 text-xs"
-                                  onClick={() => handleAdjustmentAction(adj.id, "reject")}
-                                  disabled={actionLoading}
-                                >
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {adj.status === "approved" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-brand-orange hover:text-brand-orange-dark text-xs"
-                                onClick={() => handleAdjustmentAction(adj.id, "apply")}
-                                disabled={actionLoading}
-                              >
-                                Apply
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              (() => {
+                const hasScb = (loan.scb_amount ?? 0) > 0;
+                const dash = <span className="text-muted-foreground/40">—</span>;
+                const fmtN = (n: number | undefined) =>
+                  n != null && n > 0 ? formatCurrency(n) : dash;
+                const totalCols = hasScb ? 14 : 13;
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
+                          <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Date</th>
+                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Ref No</th>
+                          <th colSpan={3} className="border-r border-b px-3 py-1">Principal</th>
+                          <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
+                          <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
+                          {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
+                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
+                          <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
+                        </tr>
+                        <tr className="border-b bg-muted/30 text-center text-muted-foreground">
+                          <th className="border-r px-3 py-1">Debit</th>
+                          <th className="border-r px-3 py-1">Credit</th>
+                          <th className="border-r px-3 py-1">Balance</th>
+                          <th className="border-r px-3 py-1">Debit</th>
+                          <th className="border-r px-3 py-1">Credit</th>
+                          <th className="border-r px-3 py-1">Balance</th>
+                          <th className="border-r px-3 py-1">Penalty</th>
+                          <th className="border-r px-3 py-1">Interest</th>
+                          <th className="border-r px-3 py-1">Amount</th>
+                          <th className="px-3 py-1 text-left">Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Opening entry */}
+                        {loanReleaseDate && (
+                          <tr className="border-b bg-blue-50/40 dark:bg-blue-950/20">
+                            <td className="border-r px-3 py-2 text-left">{formatDate(loanReleaseDate)}</td>
+                            <td className="border-r px-3 py-2 text-center text-muted-foreground">—</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(loan.principal_amount)}</td>
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(loan.principal_amount)}</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
+                            {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
+                            <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
+                            <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
+                          </tr>
+                        )}
+                        {/* Repayment rows */}
+                        {ledgerRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={totalCols} className="px-3 py-6 text-center text-muted-foreground">
+                              No repayments recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          ledgerRows.map((r) => (
+                            <tr
+                              key={r.id}
+                              className={cn(
+                                "border-b transition-colors hover:bg-muted/30",
+                                r.status === "voided" && "opacity-50 line-through",
+                              )}
+                            >
+                              <td className="border-r px-3 py-2 text-left">{formatDate(r.payment_date)}</td>
+                              <td className="border-r px-3 py-2 text-center text-muted-foreground">
+                                {(r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`}
+                              </td>
+                              {/* Principal */}
+                              <td className="border-r px-3 py-2 text-center">{dash}</td>
+                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principal_paid)}</td>
+                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
+                              {/* Interest */}
+                              <td className="border-r px-3 py-2 text-center">{dash}</td>
+                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interest_paid)}</td>
+                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
+                              {/* Past Due */}
+                              <td className="border-r px-3 py-2 text-right tabular-nums">
+                                {r.penalty_paid != null && r.penalty_paid > 0 ? (
+                                  <span className="text-destructive">{formatCurrency(r.penalty_paid)}</span>
+                                ) : dash}
+                              </td>
+                              <td className="border-r px-3 py-2 text-center">{dash}</td>
+                              {/* SCB */}
+                              {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scb_paid)}</td>}
+                              {/* Others */}
+                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excess_amount)}</td>
+                              {/* Total Paid */}
+                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.amount_paid)}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-muted-foreground">{r.remarks || "payment"}</span>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    {r.status === "voided" && (
+                                      <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
+                                    )}
+                                    {r.status !== "voided" && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
+                                        onClick={() => handleVoidRepayment(r.id)}
+                                        disabled={actionLoading}
+                                      >
+                                        Void
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()
             )}
           </CardContent>
         </Card>
