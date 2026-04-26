@@ -73,9 +73,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 
 // Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
 function getProductField(product: LoanProduct, field: string): string {
@@ -771,7 +771,11 @@ function ProductFormDialog({
                     onValueChange={(v) => update("past_due_transfer_unit", v ?? "days")}
                   >
                     <SelectTrigger id="past-due-unit" className="w-full">
-                      <SelectValue />
+                      <SelectValue>
+                        {(v: string | null) =>
+                          PAST_DUE_TRANSFER_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? ""
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {PAST_DUE_TRANSFER_UNIT_OPTIONS.map((opt) => (
@@ -902,7 +906,14 @@ function ProductFormDialog({
                           onValueChange={(v) => updateFee(idx, "type", v as string)}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue />
+                            <SelectValue>
+                              {(v: string | null) =>
+                                v === "fixed" ? "Fixed (PHP)"
+                                : v === "percentage" ? "Percentage (%)"
+                                : v === "formula" ? "Formula (Soon)"
+                                : v ?? ""
+                              }
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="fixed">Fixed (PHP)</SelectItem>
