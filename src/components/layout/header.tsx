@@ -62,7 +62,7 @@ function getSubLabel(segment: string): string {
   const labels: Record<string, string> = {
     new: "New Application",
     products: "Loan Products",
-    amortization: "Amortization",
+    amortization: "Amortization Calculator",
     history: "History",
     profile: "Profile",
     "loan-products": "Loan Products",
