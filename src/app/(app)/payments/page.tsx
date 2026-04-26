@@ -535,7 +535,7 @@ export default function PaymentsPage() {
         }
       }
 
-      fetchLoans();
+      await fetchLoans();
       resetForm();
     } catch {
       toast.error("Failed to post payment", {
