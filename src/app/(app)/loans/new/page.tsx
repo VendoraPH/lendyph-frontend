@@ -367,7 +367,7 @@ function NewLoanApplicationInner() {
           setPrincipalAmount(String(loan.principal_amount ?? ""));
           setTermMonths(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-          setInterestRate(String(loan.interest_rate ?? ""));
+          setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
           const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
           setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
@@ -557,11 +557,8 @@ function NewLoanApplicationInner() {
       const product = products.find((p) => p.id === Number(value));
       if (product) {
         const apiProduct = product as unknown as Record<string, unknown>;
-        setInterestRate(
-          product.interest_rate != null
-            ? String(Math.round(Number(product.interest_rate)))
-            : ""
-        );
+        const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
+        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
         // Map API field names: interest_method/interest_type, "fixed" -> "straight"
         const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
         setInterestType(rawType === "fixed" ? "straight" : rawType);

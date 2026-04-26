@@ -1184,8 +1184,18 @@ export default function LoanDetailPage({
     }
 
     if (isPreRelease) {
-      // Prefer server-computed preview schedule
-      if (previewSchedule && previewSchedule.length > 0) {
+      const termVal = loan.term ?? loan.term_months ?? 0;
+      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
+
+      // Use server preview only when it includes a principal/interest breakdown.
+      // The preview endpoint sometimes returns amount_due only (principal=0, interest=0)
+      // for newly created draft loans — in that case fall back to client-side generation.
+      const hasBreakdown = previewSchedule && previewSchedule.length > 0 &&
+        previewSchedule.some(r => (parseFloat(String(r.principal)) || 0) > 0 || (parseFloat(String(r.interest)) || 0) > 0);
+
+      if (hasBreakdown && previewSchedule) {
         return previewSchedule.map((row, idx) => ({
           period: idx + 1,
           dueDate: new Date(row.due_date),
@@ -1198,12 +1208,8 @@ export default function LoanDetailPage({
           amountPaid: parseFloat(String(row.amount_paid)) || 0,
         }));
       }
-      // Fallback: client-side generation using today as the start date
-      const termVal = loan.term ?? loan.term_months ?? 0;
+      // Client-side generation as primary fallback
       if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
       return generateSchedule(
         loan.principal_amount,
         loan.interest_rate,
