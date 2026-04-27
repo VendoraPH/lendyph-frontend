@@ -47,4 +47,7 @@ export const loanService = {
   /** Alias — maps to amortization-schedule for backward compat */
   schedule: (id: number) =>
     api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
+
+  extend: (id: number, data?: { remarks?: string }) =>
+    api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
 };

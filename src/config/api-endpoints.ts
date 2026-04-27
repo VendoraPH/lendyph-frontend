@@ -59,6 +59,7 @@ export const API_ENDPOINTS = {
     AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
     AMORTIZATION_SCHEDULE: (id: number) => `/loans/${id}/amortization-schedule`,
     SUMMARY: (id: number) => `/loans/${id}/summary`,
+    EXTEND: (id: number) => `/loans/${id}/extend`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
