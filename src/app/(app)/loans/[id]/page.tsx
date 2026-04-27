@@ -29,6 +29,7 @@ import {
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
+import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2309,6 +2310,11 @@ export default function LoanDetailPage({
         </div>
       </div>
 
+
+      <LoanCollateralsCard
+        loanId={loan.id}
+        loanPrincipal={Number(loan.principal_amount ?? 0)}
+      />
 
       {loan.status !== "rejected" && approvalSteps.length > 0 && (
         <Collapsible defaultOpen={false}>

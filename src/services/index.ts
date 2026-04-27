@@ -18,3 +18,7 @@ export { dashboardService } from "./dashboard.service";
 export { approvalWorkflowService } from "./approval-workflow.service";
 export type { ApprovalChainStep, ChainStepKind } from "./approval-workflow.service";
 export { shareCapitalService } from "./share-capital.service";
+export { collateralService } from "./collateral.service";
+export type { CreateCollateralData, UpdateCollateralData } from "./collateral.service";
+export { collateralTypeService } from "./collateral-type.service";
+export type { CreateCollateralTypeData, UpdateCollateralTypeData } from "./collateral-type.service";

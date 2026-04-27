@@ -5,18 +5,33 @@ import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
   borrowerService,
   coMakerService,
+  collateralService,
+  collateralTypeService,
   documentService,
   loanProductService,
   loanService,
   userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
-import type { Borrower, CoMaker, Loan, User } from "@/types";
+import { loanCollateralStorage } from "@/lib/collateral-storage";
+import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  computeSecurityStatus,
+  securityStatusLabel,
+} from "@/types/collateral";
+import type {
+  Borrower,
+  CoMaker,
+  CollateralType,
+  CollateralWithMeta,
+  Loan,
+  User,
+} from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -41,6 +56,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -285,6 +309,21 @@ function NewLoanApplicationInner() {
   // product has scb_required === true; must fall within product min/max)
   const [scbAmount, setScbAmount] = useState<string>("");
 
+  // ── Collaterals State ──
+  // Collaterals already persisted to mock storage and registered against
+  // the chosen borrower. Re-fetched whenever the borrower changes.
+  const [availableCollaterals, setAvailableCollaterals] = useState<
+    CollateralWithMeta[]
+  >([]);
+  const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
+  // Collaterals the user has chosen to attach to THIS loan, with the
+  // value snapshotted at attach time so post-attach ledger drift doesn't
+  // silently move security status.
+  const [selectedCollaterals, setSelectedCollaterals] = useState<
+    { collateral: CollateralWithMeta; snapshot_value: number }[]
+  >([]);
+  const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
+
   // ── Policy Exception State ──
   const [policyException, setPolicyException] = useState(false);
   const [policyExceptionDetails, setPolicyExceptionDetails] = useState("");
@@ -387,6 +426,115 @@ function NewLoanApplicationInner() {
     fetchData();
     // Re-fetch if user switches between create and edit in the same tab
   }, [editLoanId, router]);
+
+  // ── Collateral types: load once on mount ──
+  useEffect(() => {
+    let cancelled = false;
+    collateralTypeService
+      .list()
+      .then((rows) => {
+        if (!cancelled) setCollateralTypes(rows);
+      })
+      .catch(() => {
+        // Non-blocking — picker will just lack type metadata.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ── Available collaterals: rebuild whenever the borrower changes ──
+  // Filters out collaterals already locked to a different active loan
+  // (in edit mode the loan being edited is excluded from the lock).
+  useEffect(() => {
+    if (borrowerId == null) {
+      setAvailableCollaterals([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [collateralRows, loanRes] = await Promise.all([
+          collateralService.list({ borrower_id: borrowerId }),
+          loanService.list(),
+        ]);
+        const loans: Loan[] = Array.isArray(loanRes)
+          ? (loanRes as Loan[])
+          : ((loanRes as { data?: Loan[] }).data ?? []);
+        const activeIndex = loanCollateralStorage.buildActiveLoanIndex(
+          loans.map((l) => ({
+            id: l.id,
+            status: String(l.status),
+            loan_account_number: l.loan_account_number,
+          })),
+        );
+        const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
+        const needsScBalance = collateralRows.some(
+          (c) =>
+            typeById.get(c.collateral_type_id)?.source === "share_capital",
+        );
+        const scBalance = needsScBalance
+          ? await getShareCapitalBalance(borrowerId)
+          : 0;
+        const enriched: CollateralWithMeta[] = collateralRows.map((c) => {
+          const t = typeById.get(c.collateral_type_id);
+          const isShareCapital = t?.source === "share_capital";
+          const active = activeIndex.get(c.id);
+          const lockedToOtherLoan =
+            active && active.loan_id !== editLoanId ? active : undefined;
+          return {
+            ...c,
+            type: t,
+            active_loan_id: lockedToOtherLoan?.loan_id,
+            active_loan_account_number: lockedToOtherLoan?.loan_account_number,
+            effective_value: isShareCapital ? scBalance : c.amount,
+          };
+        });
+        if (!cancelled) setAvailableCollaterals(enriched);
+      } catch {
+        if (!cancelled) setAvailableCollaterals([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [borrowerId, collateralTypes, editLoanId]);
+
+  // ── Edit mode: prefill selected collaterals from the loan ──
+  useEffect(() => {
+    if (!editLoanId) return;
+    if (collateralTypes.length === 0) return;
+    if (availableCollaterals.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const links = await collateralService.listForLoan(editLoanId);
+        if (cancelled) return;
+        const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
+        const prefilled = links
+          .map((link) => {
+            const c = byId.get(link.collateral_id);
+            return c
+              ? { collateral: c, snapshot_value: link.snapshot_value }
+              : null;
+          })
+          .filter(
+            (
+              v,
+            ): v is {
+              collateral: CollateralWithMeta;
+              snapshot_value: number;
+            } => v !== null,
+          );
+        setSelectedCollaterals(prefilled);
+      } catch {
+        // Non-blocking
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editLoanId, collateralTypes, availableCollaterals]);
 
   // Co-makers: all borrowers except the selected borrower and already-picked co-makers
   const availableCoMakersFor = useCallback(
@@ -541,6 +689,31 @@ function NewLoanApplicationInner() {
     );
   }, [amortizationSchedule]);
 
+  // ── Collaterals: total snapshot value + security status ──
+  const totalCollateralValue = useMemo(
+    () => selectedCollaterals.reduce((sum, c) => sum + c.snapshot_value, 0),
+    [selectedCollaterals],
+  );
+  const securityStatus = useMemo(
+    () =>
+      principal > 0
+        ? computeSecurityStatus(principal, totalCollateralValue)
+        : "unsecured",
+    [principal, totalCollateralValue],
+  );
+  // Picker rows: show all of the borrower's collaterals, but disable the
+  // ones already selected here or locked to a different active loan.
+  const pickerRows = useMemo(() => {
+    const selectedIds = new Set(
+      selectedCollaterals.map((c) => c.collateral.id),
+    );
+    return availableCollaterals.map((c) => ({
+      collateral: c,
+      isSelected: selectedIds.has(c.id),
+      isLocked: Boolean(c.active_loan_id),
+    }));
+  }, [availableCollaterals, selectedCollaterals]);
+
   // ── Product Selection Handler ──
   const handleProductChange = useCallback(
     (value: string | null) => {
@@ -586,6 +759,9 @@ function NewLoanApplicationInner() {
   const handleBorrowerChange = useCallback((id: number | null) => {
     setBorrowerId(id);
     setCoMakerIds([null]);
+    // Collaterals are per-borrower — drop any selections from the previous
+    // member so they don't get accidentally attached to the new loan.
+    setSelectedCollaterals([]);
   }, []);
 
   // ── Co-Maker Slot Handlers ──
@@ -656,6 +832,36 @@ function NewLoanApplicationInner() {
           }
         }
 
+        // Reconcile collaterals: detach what's no longer selected, attach
+        // the new picks. Snapshot value is captured at attach time so
+        // post-edit ledger drift doesn't move security status silently.
+        try {
+          const existingLinks = await collateralService.listForLoan(
+            updated.id,
+          );
+          const selectedIds = new Set(
+            selectedCollaterals.map((s) => s.collateral.id),
+          );
+          await Promise.all(
+            existingLinks
+              .filter((l) => !selectedIds.has(l.collateral_id))
+              .map((l) =>
+                collateralService.detachFromLoan(updated.id, l.collateral_id),
+              ),
+          );
+          await Promise.all(
+            selectedCollaterals.map((s) =>
+              collateralService.attachToLoan(
+                updated.id,
+                s.collateral.id,
+                s.snapshot_value,
+              ),
+            ),
+          );
+        } catch {
+          toast.warning("Loan updated but some collaterals failed to sync");
+        }
+
         toast.success("Loan application updated");
         router.push(`/loans/${updated.id}`);
         return;
@@ -663,6 +869,27 @@ function NewLoanApplicationInner() {
 
       // Create mode
       const loan = await loanService.create(payload);
+
+      // Attach selected collaterals. Snapshot value is captured here so
+      // a future change to the underlying balance / amount does not retro-
+      // actively change this loan's security status.
+      if (selectedCollaterals.length > 0 && loan.id) {
+        try {
+          await Promise.all(
+            selectedCollaterals.map((s) =>
+              collateralService.attachToLoan(
+                loan.id,
+                s.collateral.id,
+                s.snapshot_value,
+              ),
+            ),
+          );
+        } catch {
+          toast.warning(
+            "Loan created but some collaterals failed to attach — open the loan to retry.",
+          );
+        }
+      }
 
       // Upload policy exception letter if provided
       if (policyException && policyExceptionLetter && loan.id) {
@@ -1260,7 +1487,131 @@ function NewLoanApplicationInner() {
         </CardContent>
       </Card>
 
-      {/* ── Card 3: Dates ── */}
+      {/* ── Card 3: Collaterals ── */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="size-5 text-brand-blue" />
+                Collaterals
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Attach the member&rsquo;s registered collaterals to secure
+                this loan. Only collaterals not currently locked to another
+                active loan can be selected.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCollateralPickerOpen(true)}
+              disabled={borrowerId === null}
+            >
+              <Plus className="mr-2 size-4" />
+              Add Collateral
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {borrowerId === null ? (
+            <p className="text-sm text-muted-foreground">
+              Pick a member first to load their registered collaterals.
+            </p>
+          ) : selectedCollaterals.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center">
+              <ShieldCheck className="mx-auto size-8 text-muted-foreground/50" />
+              <p className="mt-2 text-sm font-medium text-muted-foreground">
+                No collaterals attached
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground/80">
+                {availableCollaterals.length === 0
+                  ? "This member has no registered collaterals yet."
+                  : "Click “Add Collateral” to attach one."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {selectedCollaterals.map(({ collateral: c, snapshot_value }) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
+                >
+                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                    <Badge variant="secondary">
+                      {c.type?.name ?? "Unknown"}
+                    </Badge>
+                    <span className="text-sm font-medium">
+                      {c.detail_value}
+                    </span>
+                    {c.type?.source === "share_capital" && (
+                      <span className="text-xs text-muted-foreground">
+                        (auto-derived)
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {formatCurrency(snapshot_value)}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() =>
+                      setSelectedCollaterals((prev) =>
+                        prev.filter((s) => s.collateral.id !== c.id),
+                      )
+                    }
+                    aria-label="Remove collateral"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedCollaterals.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Total Collateral Value
+                </p>
+                <p className="text-lg font-bold tabular-nums">
+                  {formatCurrency(totalCollateralValue)}
+                </p>
+              </div>
+              <div className="flex flex-col items-start gap-1 sm:items-end">
+                <Badge
+                  className={cn(
+                    securityStatus === "secured" &&
+                      "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                    securityStatus === "partially_secured" &&
+                      "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                    securityStatus === "unsecured" &&
+                      "bg-destructive/15 text-destructive hover:bg-destructive/15",
+                  )}
+                >
+                  {securityStatusLabel(securityStatus)}
+                </Badge>
+                {principal > 0 && securityStatus !== "secured" && (
+                  <p className="text-xs text-muted-foreground">
+                    Short by{" "}
+                    <span className="font-medium text-foreground">
+                      {formatCurrency(
+                        Math.max(0, principal - totalCollateralValue),
+                      )}
+                    </span>{" "}
+                    vs. principal
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Card 4: Dates ── */}
       <Card>
         <CardHeader>
           <CardTitle>Dates</CardTitle>
@@ -1582,6 +1933,106 @@ function NewLoanApplicationInner() {
             : isEditMode ? "Save Changes" : "Submit Loan Application"}
         </Button>
       </div>
+
+      {/* ── Collateral Picker Dialog ── */}
+      <Dialog
+        open={collateralPickerOpen}
+        onOpenChange={setCollateralPickerOpen}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Attach Collateral</DialogTitle>
+            <DialogDescription>
+              Pick from the registered collaterals for{" "}
+              <span className="font-medium">
+                {selectedBorrower?.full_name ?? "this member"}
+              </span>
+              . Collaterals already locked to another active loan are
+              disabled. Need a new one?{" "}
+              <Link
+                href={`/collaterals/new${
+                  borrowerId ? `?borrower_id=${borrowerId}` : ""
+                }`}
+                className="text-primary underline"
+              >
+                Register a collateral
+              </Link>
+              .
+            </DialogDescription>
+          </DialogHeader>
+          {pickerRows.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                This member hasn&rsquo;t registered any collaterals yet.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {pickerRows.map(({ collateral: c, isSelected, isLocked }) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={isSelected || isLocked}
+                  onClick={() => {
+                    setSelectedCollaterals((prev) => [
+                      ...prev,
+                      {
+                        collateral: c,
+                        snapshot_value: c.effective_value,
+                      },
+                    ]);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                    !isSelected &&
+                      !isLocked &&
+                      "hover:border-primary/40 hover:bg-muted/40",
+                    (isSelected || isLocked) && "opacity-60",
+                  )}
+                >
+                  <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">
+                        {c.type?.name ?? "Unknown"}
+                      </Badge>
+                      <span className="text-sm font-medium">
+                        {c.detail_value}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {isLocked && (
+                        <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+                          Tagged to loan{" "}
+                          {c.active_loan_account_number ??
+                            `#${c.active_loan_id}`}
+                        </Badge>
+                      )}
+                      {isSelected && !isLocked && (
+                        <Badge variant="outline">Already attached</Badge>
+                      )}
+                      {c.type?.source === "share_capital" && (
+                        <span>Live share-capital balance</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {formatCurrency(c.effective_value)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCollateralPickerOpen(false)}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
     </RouteGuard>
