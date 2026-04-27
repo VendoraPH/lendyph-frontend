@@ -6,11 +6,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
 import type { Payment, Loan } from "@/types";
-
-function formatCurrency(amount: number | string | undefined | null): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
