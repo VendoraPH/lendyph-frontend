@@ -22,7 +22,7 @@ function formatCurrency(amount: number): string {
     currency: "PHP",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(isNaN(amount) ? 0 : amount);
 }
 
 export function ShareCapitalCard({ borrowerId }: ShareCapitalCardProps) {
@@ -59,8 +59,9 @@ export function ShareCapitalCard({ borrowerId }: ShareCapitalCardProps) {
     let credits = 0;
     let debits = 0;
     for (const e of entries) {
-      if (e.type === "credit") credits += e.amount;
-      else debits += e.amount;
+      const amt = parseFloat(String(e.amount ?? 0)) || 0;
+      if (e.type === "credit") credits += amt;
+      else debits += amt;
     }
     return credits - debits;
   }, [entries]);

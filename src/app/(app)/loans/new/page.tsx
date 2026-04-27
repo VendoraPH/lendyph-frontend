@@ -94,9 +94,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 
 // ── Helpers ──
 
@@ -406,7 +406,7 @@ function NewLoanApplicationInner() {
           setPrincipalAmount(String(loan.principal_amount ?? ""));
           setTermMonths(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-          setInterestRate(String(loan.interest_rate ?? ""));
+          setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
           const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
           setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
@@ -556,6 +556,15 @@ function NewLoanApplicationInner() {
     () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
     [productId, products]
   );
+
+  // Frequencies allowed by the selected product (empty = no product selected = all)
+  const productFrequencies = useMemo<string[]>(() => {
+    if (!selectedProduct) return [];
+    const ap = selectedProduct as unknown as Record<string, unknown>;
+    const raw = ap.frequencies ?? ap.frequency ?? selectedProduct.payment_frequency;
+    if (Array.isArray(raw)) return raw as string[];
+    return raw ? [String(raw)] : [];
+  }, [selectedProduct]);
 
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termMonths) || 0;
@@ -721,16 +730,15 @@ function NewLoanApplicationInner() {
       const product = products.find((p) => p.id === Number(value));
       if (product) {
         const apiProduct = product as unknown as Record<string, unknown>;
-        setInterestRate(
-          product.interest_rate != null
-            ? String(Math.round(Number(product.interest_rate)))
-            : ""
-        );
+        const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
+        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
         // Map API field names: interest_method/interest_type, "fixed" -> "straight"
         const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
         setInterestType(rawType === "fixed" ? "straight" : rawType);
-        // Map API field names: frequency/payment_frequency
-        setPaymentFrequency(String(apiProduct.frequency ?? product.payment_frequency ?? "monthly"));
+        // Auto-select payment frequency from the product's frequencies array
+        const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
+        const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
+        setPaymentFrequency(String(freqArray[0] ?? "monthly"));
         // Seed fee percent with the product's default (max of the range if available,
         // else the legacy single fee field). Rounded to whole numbers.
         const rawProcessingPct =
@@ -1371,6 +1379,7 @@ function NewLoanApplicationInner() {
               <Select
                 value={paymentFrequency ?? null}
                 onValueChange={(value) => setPaymentFrequency(value ?? null)}
+                disabled={productFrequencies.length === 1}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select frequency">
@@ -1380,13 +1389,19 @@ function NewLoanApplicationInner() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                  {(productFrequencies.length > 0
+                    ? PAYMENT_FREQUENCY_OPTIONS.filter((o) => productFrequencies.includes(o.value))
+                    : PAYMENT_FREQUENCY_OPTIONS
+                  ).map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {productFrequencies.length === 1 && (
+                <p className="text-xs text-muted-foreground">Set by loan product</p>
+              )}
             </div>
 
             {/* Interest Rate */}

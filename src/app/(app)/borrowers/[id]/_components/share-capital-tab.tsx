@@ -10,7 +10,7 @@ import { shareCapitalService } from "@/services";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(isNaN(amount) ? 0 : amount);
 }
 
 function formatDate(dateStr: string): string {
@@ -46,8 +46,9 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     let credits = 0;
     let debits = 0;
     for (const e of entries) {
-      if (e.type === "credit") credits += e.amount;
-      else debits += e.amount;
+      const amt = parseFloat(String(e.amount ?? 0)) || 0;
+      if (e.type === "credit") credits += amt;
+      else debits += amt;
     }
     return { totalCredits: credits, totalDebits: debits, balance: credits - debits };
   }, [entries]);
@@ -59,7 +60,8 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     );
     let running = 0;
     return sorted.map((e) => {
-      running += e.type === "credit" ? e.amount : -e.amount;
+      const amt = parseFloat(String(e.amount ?? 0)) || 0;
+      running += e.type === "credit" ? amt : -amt;
       return { ...e, runningBalance: running };
     });
   }, [entries]);
@@ -131,10 +133,10 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
                     </TableCell>
                     <TableCell className="text-sm">{entry.description}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-red-600">
-                      {entry.type === "debit" ? formatCurrency(entry.amount) : ""}
+                      {entry.type === "debit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {entry.type === "credit" ? formatCurrency(entry.amount) : ""}
+                      {entry.type === "credit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums font-semibold">
                       {formatCurrency(entry.runningBalance)}

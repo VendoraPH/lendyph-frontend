@@ -73,9 +73,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 
 // Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
 function getProductField(product: LoanProduct, field: string): string {
@@ -234,9 +234,11 @@ function productToForm(p: LoanProduct): ProductForm {
     ? (rawFreq as string[])
     : [String(rawFreq)];
 
-  // Parse interest rate range
-  const minRate = String(apiProduct.min_interest_rate ?? p.interest_rate ?? "");
-  const maxRate = String(apiProduct.max_interest_rate ?? p.interest_rate ?? "");
+  // Parse interest rate range — round to whole numbers to strip API decimal noise
+  const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
+  const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
+  const minRate = minRateRaw != null ? String(Math.round(Number(minRateRaw))) : "";
+  const maxRate = maxRateRaw != null ? String(Math.round(Number(maxRateRaw))) : "";
 
   const rawFees = (apiProduct.custom_fees ?? []) as Array<Record<string, unknown>>;
 
@@ -256,7 +258,7 @@ function productToForm(p: LoanProduct): ProductForm {
     min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
     max_service_fee: String(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
     notarial_fee: String(apiProduct.notarial_fee ?? ""),
-    penalty_rate: String(apiProduct.penalty_rate ?? p.penalty_rate ?? ""),
+    penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? String(Math.round(Number(apiProduct.penalty_rate ?? p.penalty_rate))) : "",
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
     past_due_transfer_value:
@@ -771,7 +773,11 @@ function ProductFormDialog({
                     onValueChange={(v) => update("past_due_transfer_unit", v ?? "days")}
                   >
                     <SelectTrigger id="past-due-unit" className="w-full">
-                      <SelectValue />
+                      <SelectValue>
+                        {(v: string | null) =>
+                          PAST_DUE_TRANSFER_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? ""
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {PAST_DUE_TRANSFER_UNIT_OPTIONS.map((opt) => (
@@ -902,7 +908,14 @@ function ProductFormDialog({
                           onValueChange={(v) => updateFee(idx, "type", v as string)}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue />
+                            <SelectValue>
+                              {(v: string | null) =>
+                                v === "fixed" ? "Fixed (PHP)"
+                                : v === "percentage" ? "Percentage (%)"
+                                : v === "formula" ? "Formula (Soon)"
+                                : v ?? ""
+                              }
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="fixed">Fixed (PHP)</SelectItem>
