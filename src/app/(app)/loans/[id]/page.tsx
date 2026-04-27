@@ -1889,7 +1889,8 @@ export default function LoanDetailPage({
     try {
       const repayment = await repaymentService.create(loan.id, data);
       toast.success(
-        paymentMode === "advance" ? "Advance payment recorded" : "Payment recorded"
+        paymentMode === "advance" ? "Advance payment recorded" : "Payment recorded",
+        { action: { label: "View Receipt", onClick: () => router.push(`/payments/${repayment.id}`) } }
       );
       setRecordPaymentOpen(false);
       setPaymentAmount("");
@@ -1898,7 +1899,13 @@ export default function LoanDetailPage({
       setPaymentPreview(null);
       setPaymentMode("regular");
       setAdvancePeriods(1);
-      router.push(`/payments/${repayment.id}`);
+      // Refresh independently — don't let any single failure block the others
+      // or pollute the catch block (payment already succeeded at this point).
+      const loanId = loan.id;
+      fetchSchedule(loanId);
+      fetchLoanSummary(loanId);
+      fetchRepayments(loanId);
+      loanService.detail(loanId).then(setLoan).catch(() => {});
     } catch {
       toast.error("Failed to record payment");
     } finally {
@@ -3236,6 +3243,29 @@ export default function LoanDetailPage({
                 );
 
                 const balancesTable = (
+                  <div className="space-y-3">
+                    {loanSummary && (
+                      <div className="flex flex-wrap gap-4 px-1">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
+                          <p className="text-base font-bold text-brand-orange tabular-nums">
+                            {formatCurrency(loanSummary.outstanding_balance ?? 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
+                          <p className="text-base font-bold tabular-nums">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
+                        </div>
+                        {(loanSummary.overdue_amount ?? 0) > 0 && (
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
+                            <p className="text-base font-bold text-destructive tabular-nums">
+                              {formatCurrency(loanSummary.overdue_amount ?? 0)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -3306,6 +3336,7 @@ export default function LoanDetailPage({
                         })}
                       </TableBody>
                     </Table>
+                  </div>
                   </div>
                 );
 
