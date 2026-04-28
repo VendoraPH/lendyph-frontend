@@ -111,6 +111,12 @@ export function CollateralForm({ initial, mode }: Props) {
 
   const isShareCapital = selectedType?.source === "share_capital";
 
+  // Guard against NaN/undefined balances reaching the formatter (which
+  // produces the "-₱NaN" display bug).
+  const safeScBalance = Number.isFinite(scBalance)
+    ? (scBalance as number)
+    : 0;
+
   // When share-capital type is selected and borrower is known, fetch the balance.
   useEffect(() => {
     if (!isShareCapital || !borrowerId) {
@@ -121,8 +127,9 @@ export function CollateralForm({ initial, mode }: Props) {
     setScBalanceLoading(true);
     getShareCapitalBalance(borrowerId).then((bal) => {
       if (cancelled) return;
-      setScBalance(bal);
-      setAmount(String(bal));
+      const clean = Number.isFinite(bal) ? bal : 0;
+      setScBalance(clean);
+      setAmount(String(clean));
       setScBalanceLoading(false);
     });
     return () => {
@@ -138,10 +145,36 @@ export function CollateralForm({ initial, mode }: Props) {
     !Number.isNaN(numericAmount) &&
     numericAmount > 0;
 
+  // Normalize a detail value (cert no., title no., plate, etc.) for duplicate
+  // comparison: trim + collapse whitespace + uppercase. Different cashiers
+  // tend to enter the same reference with random spacing or case.
+  const normalizeDetail = (s: string) =>
+    s.trim().replace(/\s+/g, " ").toUpperCase();
+
   const handleSubmit = async () => {
     if (!canSubmit || !borrowerId || !typeId) return;
     setSubmitting(true);
     try {
+      // Duplicate guard — prevent registering the same (member, type, detail)
+      // pair twice. Skips the current record when editing.
+      const existing = await collateralService.list({ borrower_id: borrowerId });
+      const target = normalizeDetail(detailValue);
+      const dup = existing.find(
+        (c) =>
+          c.collateral_type_id === typeId &&
+          normalizeDetail(c.detail_value) === target &&
+          (mode !== "edit" || c.id !== initial?.id),
+      );
+      if (dup) {
+        const memberName = selectedBorrower?.full_name ?? "this member";
+        const typeName = selectedType?.name ?? "this type";
+        toast.error(
+          `${memberName} already has a ${typeName} registered with this ${selectedType?.detail_field_label?.toLowerCase() ?? "reference"}.`,
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
         borrower_id: borrowerId,
         collateral_type_id: typeId,
@@ -278,7 +311,16 @@ export function CollateralForm({ initial, mode }: Props) {
             onValueChange={(v) => setTypeId(Number(v))}
           >
             <SelectTrigger id="collateral-type" className="h-10">
-              <SelectValue placeholder="Select a type" />
+              {/* Base UI's <Select.Value> renders the raw selected `value`
+                  (the id) by default — pass a children render fn so we
+                  display the human-readable type name instead of "3". */}
+              <SelectValue placeholder="Select a type">
+                {(value) => {
+                  if (!value) return "Select a type";
+                  const t = types.find((x) => String(x.id) === String(value));
+                  return t?.name ?? String(value);
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {types.map((t) => (
@@ -342,7 +384,7 @@ export function CollateralForm({ initial, mode }: Props) {
                         Total share balance (auto-derived)
                       </p>
                       <p className="text-xl font-semibold text-brand-orange tabular-nums">
-                        {formatCurrency(scBalance ?? 0)}
+                        {formatCurrency(safeScBalance)}
                       </p>
                     </div>
                   )}
