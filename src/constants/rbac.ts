@@ -36,6 +36,10 @@ export const ROLES: Record<Role, RoleConfig> = {
       "share_capital:view",
       "share_capital:create",
       "share_capital:update",
+      "collaterals:view",
+      "collaterals:create",
+      "collaterals:update",
+      "collaterals:delete",
     ],
   },
   loan_officer: {
@@ -57,6 +61,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reports:view",
       "share_capital:view",
       "share_capital:create",
+      "collaterals:view",
+      "collaterals:create",
+      "collaterals:update",
     ],
   },
   cashier: {
@@ -70,6 +77,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "payments:create",
       "payments:update",
       "payments:void",
+      "collaterals:view",
     ],
   },
   general_bookkeeper: {
@@ -83,6 +91,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "payments:view",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   collector: {
@@ -93,12 +102,13 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:view",
       "collections:view",
       "collections:mark_collected",
+      "collaterals:view",
     ],
   },
   viewer: {
     label: "Viewer",
     description: "Read-only access to dashboard and reports",
-    permissions: ["dashboard:view", "reports:view"],
+    permissions: ["dashboard:view", "reports:view", "collaterals:view"],
   },
   loan_processor: {
     label: "Loan Processor",
@@ -113,6 +123,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:update",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
+      "collaterals:create",
+      "collaterals:update",
     ],
   },
   manager: {
@@ -129,6 +142,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "share_capital:view",
       "audit_logs:view",
       "users:view",
+      "collaterals:view",
     ],
   },
   bod1: {
@@ -142,6 +156,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod2: {
@@ -155,6 +170,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod3: {
@@ -168,6 +184,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod4: {
@@ -181,6 +198,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod5: {
@@ -194,6 +212,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod6: {
@@ -207,6 +226,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
   bod7: {
@@ -220,6 +240,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:reject",
       "reports:view",
       "share_capital:view",
+      "collaterals:view",
     ],
   },
 };

@@ -50,7 +50,6 @@ import {
   collateralService,
   collateralTypeService,
 } from "@/services";
-import { loanCollateralStorage } from "@/lib/collateral-storage";
 import { getShareCapitalBalance } from "@/utils/share-capital";
 import { formatCurrency } from "@/utils/format";
 import type {
@@ -89,7 +88,7 @@ export default function CollateralListingPage() {
 
       const typeById = new Map(typeRows.map((t) => [t.id, t]));
       const borrowerById = new Map(borrowers.map((b) => [b.id, b]));
-      const activeLoanIndex = loanCollateralStorage.buildActiveLoanIndex(
+      const activeLoanIndex = await collateralService.buildActiveLoanIndex(
         loans.map((l) => ({
           id: l.id,
           status: String(l.status),

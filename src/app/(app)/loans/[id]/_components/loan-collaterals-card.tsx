@@ -41,7 +41,9 @@ export function LoanCollateralsCard({
         ]);
         const typeById = new Map(types.map((t) => [t.id, t]));
         const collaterals = await Promise.all(
-          links.map((l) => collateralService.detail(l.collateral_id)),
+          links.map((l) =>
+            collateralService.detail(l.collateral_id).catch(() => null),
+          ),
         );
         if (cancelled) return;
         const enriched: AttachedRow[] = links.map((link, i) => {

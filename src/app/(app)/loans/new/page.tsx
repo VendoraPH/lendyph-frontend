@@ -18,7 +18,6 @@ import {
   userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
-import { loanCollateralStorage } from "@/lib/collateral-storage";
 import { getShareCapitalBalance } from "@/utils/share-capital";
 import {
   computeSecurityStatus,
@@ -461,7 +460,7 @@ function NewLoanApplicationInner() {
         const loans: Loan[] = Array.isArray(loanRes)
           ? (loanRes as Loan[])
           : ((loanRes as { data?: Loan[] }).data ?? []);
-        const activeIndex = loanCollateralStorage.buildActiveLoanIndex(
+        const activeIndex = await collateralService.buildActiveLoanIndex(
           loans.map((l) => ({
             id: l.id,
             status: String(l.status),
