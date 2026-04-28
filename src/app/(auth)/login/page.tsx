@@ -148,7 +148,7 @@ export default function LoginPage() {
 
           </div>
 
-          <p className="text-xs text-white/50">
+          <p className="text-xs text-white/50" suppressHydrationWarning>
             &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
           </p>
         </div>

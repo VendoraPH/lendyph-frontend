@@ -45,14 +45,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
+import { formatCurrency } from "@/lib/format";
 
 interface LocalPledge {
   id: number;

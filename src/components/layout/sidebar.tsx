@@ -208,20 +208,34 @@ function SidebarContent({
 
   useEffect(() => {
     let cancelled = false;
+    let failures = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
     const check = async () => {
       try {
         const res = await systemService.health();
         if (cancelled) return;
+        failures = 0;
         setApiStatus(res?.status === "ok" ? "ok" : "down");
       } catch {
-        if (!cancelled) setApiStatus("down");
+        if (cancelled) return;
+        failures += 1;
+        setApiStatus("down");
+        // Circuit breaker: after 3 consecutive failures, stop polling so we
+        // don't spam the network log when the backend health endpoint is down.
+        if (failures >= 3 && interval) {
+          clearInterval(interval);
+          interval = null;
+        }
       }
     };
+
     check();
-    const interval = setInterval(check, 60_000);
+    // 5 min — health is informational, no need to hammer the API.
+    interval = setInterval(check, 5 * 60_000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
   }, []);
 

@@ -34,6 +34,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 
 // ── Types ──
 
@@ -213,14 +214,6 @@ const DUMMY_PAST_DUE: PastDueLoan[] = [
 ];
 
 // ── Helpers ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return "—";
