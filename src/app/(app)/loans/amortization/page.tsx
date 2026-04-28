@@ -40,18 +40,6 @@ import { formatCurrency as formatPHP } from "@/lib/format";
 
 // ---------- Formatters ----------
 
-<<<<<<< Updated upstream
-function formatPHP(amount: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-=======
->>>>>>> Stashed changes
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
     month: "short",

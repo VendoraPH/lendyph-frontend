@@ -10,13 +10,6 @@ import { shareCapitalService } from "@/services";
 import { formatCurrency } from "@/lib/format";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
-<<<<<<< Updated upstream
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(isNaN(amount) ? 0 : amount);
-}
-
-=======
->>>>>>> Stashed changes
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }

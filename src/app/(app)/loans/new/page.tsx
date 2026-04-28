@@ -93,19 +93,6 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 
-<<<<<<< Updated upstream
-// ── Currency Formatter ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-
-=======
->>>>>>> Stashed changes
 // ── Helpers ──
 
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
