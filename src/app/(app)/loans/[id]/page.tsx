@@ -2648,6 +2648,7 @@ export default function LoanDetailPage({
                               size="sm"
                               className="w-full sm:w-auto"
                               disabled={stepActionLoading}
+                              nativeButton={false}
                               render={<Link href={`/loans/new?edit=${loan.id}`} />}
                             >
                               <Pencil className="mr-2 h-4 w-4" />

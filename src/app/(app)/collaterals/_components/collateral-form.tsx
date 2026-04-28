@@ -24,12 +24,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { borrowerService } from "@/services/borrower.service";
 import {
@@ -104,6 +111,12 @@ export function CollateralForm({ initial, mode }: Props) {
 
   const isShareCapital = selectedType?.source === "share_capital";
 
+  // Guard against NaN/undefined balances reaching the formatter (which
+  // produces the "-₱NaN" display bug).
+  const safeScBalance = Number.isFinite(scBalance)
+    ? (scBalance as number)
+    : 0;
+
   // When share-capital type is selected and borrower is known, fetch the balance.
   useEffect(() => {
     if (!isShareCapital || !borrowerId) {
@@ -114,8 +127,9 @@ export function CollateralForm({ initial, mode }: Props) {
     setScBalanceLoading(true);
     getShareCapitalBalance(borrowerId).then((bal) => {
       if (cancelled) return;
-      setScBalance(bal);
-      setAmount(String(bal));
+      const clean = Number.isFinite(bal) ? bal : 0;
+      setScBalance(clean);
+      setAmount(String(clean));
       setScBalanceLoading(false);
     });
     return () => {
@@ -131,10 +145,36 @@ export function CollateralForm({ initial, mode }: Props) {
     !Number.isNaN(numericAmount) &&
     numericAmount > 0;
 
+  // Normalize a detail value (cert no., title no., plate, etc.) for duplicate
+  // comparison: trim + collapse whitespace + uppercase. Different cashiers
+  // tend to enter the same reference with random spacing or case.
+  const normalizeDetail = (s: string) =>
+    s.trim().replace(/\s+/g, " ").toUpperCase();
+
   const handleSubmit = async () => {
     if (!canSubmit || !borrowerId || !typeId) return;
     setSubmitting(true);
     try {
+      // Duplicate guard — prevent registering the same (member, type, detail)
+      // pair twice. Skips the current record when editing.
+      const existing = await collateralService.list({ borrower_id: borrowerId });
+      const target = normalizeDetail(detailValue);
+      const dup = existing.find(
+        (c) =>
+          c.collateral_type_id === typeId &&
+          normalizeDetail(c.detail_value) === target &&
+          (mode !== "edit" || c.id !== initial?.id),
+      );
+      if (dup) {
+        const memberName = selectedBorrower?.full_name ?? "this member";
+        const typeName = selectedType?.name ?? "this type";
+        toast.error(
+          `${memberName} already has a ${typeName} registered with this ${selectedType?.detail_field_label?.toLowerCase() ?? "reference"}.`,
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
         borrower_id: borrowerId,
         collateral_type_id: typeId,
@@ -159,52 +199,70 @@ export function CollateralForm({ initial, mode }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
+      <Card>
+        <CardContent className="flex items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <Spinner className="size-6" />
+            <p className="text-sm">Loading form…</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          {mode === "create" ? "Register New Collateral" : "Edit Collateral"}
-        </CardTitle>
+      <CardHeader className="border-b border-border/60">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <CardTitle className="text-base">
+              {mode === "create" ? "Collateral details" : "Edit collateral"}
+            </CardTitle>
+            <CardDescription>
+              Fields marked <span className="text-destructive">*</span> are
+              required.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Borrower */}
+
+      <CardContent className="space-y-6 pt-6">
+        {/* ── Section: Member ─────────────────────────────────────── */}
         <div className="space-y-2">
-          <Label>
+          <Label htmlFor="collateral-member">
             Member <span className="text-destructive">*</span>
           </Label>
           <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
             <PopoverTrigger
               render={
                 <button
+                  id="collateral-member"
                   type="button"
                   role="combobox"
                   aria-expanded={borrowerOpen}
                   disabled={mode === "edit"}
-                  className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"
+                  className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"
                 />
               }
             >
               <span
                 className={cn(
-                  "truncate",
+                  "truncate text-left",
                   !selectedBorrower && "text-muted-foreground",
                 )}
               >
                 {selectedBorrower
                   ? selectedBorrower.full_name
-                  : "Search member..."}
+                  : "Search member…"}
               </span>
               <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
             </PopoverTrigger>
             <PopoverContent className="w-(--anchor-width) p-0" align="start">
               <Command>
-                <CommandInput placeholder="Type a name to search..." />
+                <CommandInput placeholder="Type a name to search…" />
                 <CommandList>
                   <CommandEmpty>No member found.</CommandEmpty>
                   <CommandGroup>
@@ -223,9 +281,11 @@ export function CollateralForm({ initial, mode }: Props) {
                             borrowerId === b.id ? "opacity-100" : "opacity-0",
                           )}
                         />
-                        {b.full_name}{" "}
-                        <span className="text-muted-foreground">
-                          ({b.borrower_code})
+                        <span>
+                          {b.full_name}{" "}
+                          <span className="text-muted-foreground">
+                            ({b.borrower_code})
+                          </span>
                         </span>
                       </CommandItem>
                     ))}
@@ -241,17 +301,26 @@ export function CollateralForm({ initial, mode }: Props) {
           )}
         </div>
 
-        {/* Type */}
+        {/* ── Section: Type ───────────────────────────────────────── */}
         <div className="space-y-2">
-          <Label>
+          <Label htmlFor="collateral-type">
             Collateral Type <span className="text-destructive">*</span>
           </Label>
           <Select
             value={typeId ? String(typeId) : ""}
             onValueChange={(v) => setTypeId(Number(v))}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select a type" />
+            <SelectTrigger id="collateral-type" className="h-10">
+              {/* Base UI's <Select.Value> renders the raw selected `value`
+                  (the id) by default — pass a children render fn so we
+                  display the human-readable type name instead of "3". */}
+              <SelectValue placeholder="Select a type">
+                {(value) => {
+                  if (!value) return "Select a type";
+                  const t = types.find((x) => String(x.id) === String(value));
+                  return t?.name ?? String(value);
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {types.map((t) => (
@@ -261,17 +330,29 @@ export function CollateralForm({ initial, mode }: Props) {
               ))}
             </SelectContent>
           </Select>
+          {!selectedType && (
+            <p className="text-xs text-muted-foreground">
+              Choose a type to see the relevant fields.
+            </p>
+          )}
         </div>
 
+        {/* ── Section: Type-specific details ──────────────────────── */}
         {selectedType && (
-          <>
+          <div className="space-y-6 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {selectedType.name} details
+            </p>
+
             {/* Detail value */}
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="collateral-detail">
                 {selectedType.detail_field_label}{" "}
                 <span className="text-destructive">*</span>
               </Label>
               <Input
+                id="collateral-detail"
+                className="h-10"
                 value={detailValue}
                 onChange={(e) => setDetailValue(e.target.value)}
                 placeholder={`Enter ${selectedType.detail_field_label.toLowerCase()}`}
@@ -280,14 +361,14 @@ export function CollateralForm({ initial, mode }: Props) {
 
             {/* Amount — manual or share-capital-derived */}
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="collateral-amount">
                 {selectedType.amount_field_label}{" "}
                 {!isShareCapital && (
                   <span className="text-destructive">*</span>
                 )}
               </Label>
               {isShareCapital ? (
-                <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                <div className="rounded-lg border bg-background px-3 py-2.5">
                   {!borrowerId ? (
                     <p className="text-sm text-muted-foreground">
                       Pick a member to see their share capital balance.
@@ -295,48 +376,55 @@ export function CollateralForm({ initial, mode }: Props) {
                   ) : scBalanceLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading balance...
+                      Loading balance…
                     </div>
                   ) : (
-                    <div>
+                    <div className="space-y-0.5">
                       <p className="text-xs text-muted-foreground">
-                        Total Share Balance (auto-derived)
+                        Total share balance (auto-derived)
                       </p>
-                      <p className="text-lg font-semibold text-brand-orange tabular-nums">
-                        {formatCurrency(scBalance ?? 0)}
+                      <p className="text-xl font-semibold text-brand-orange tabular-nums">
+                        {formatCurrency(safeScBalance)}
                       </p>
                     </div>
                   )}
                 </div>
               ) : (
                 <Input
+                  id="collateral-amount"
                   type="number"
                   inputMode="decimal"
                   min={0}
                   step="0.01"
+                  className="h-10 tabular-nums"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                 />
               )}
             </div>
-          </>
+          </div>
         )}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" render={<Link href="/collaterals" />}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-          >
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {mode === "create" ? "Register Collateral" : "Save Changes"}
-          </Button>
-        </div>
       </CardContent>
+
+      <CardFooter className="justify-end gap-2 border-t border-border/60 bg-muted/20 px-6 py-4">
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href="/collaterals" />}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!canSubmit || submitting}
+          className="min-w-[160px]"
+        >
+          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {mode === "create" ? "Register Collateral" : "Save Changes"}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }

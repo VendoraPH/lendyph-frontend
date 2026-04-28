@@ -198,6 +198,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          nativeButton={false}
                           render={<Link href={`/collaterals/${c.id}`} />}
                           aria-label="View collateral"
                         >

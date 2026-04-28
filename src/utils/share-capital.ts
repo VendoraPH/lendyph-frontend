@@ -23,10 +23,15 @@ export async function getShareCapitalBalance(
     let credits = 0;
     let debits = 0;
     for (const e of items) {
-      if (e.type === "credit") credits += e.amount;
-      else debits += e.amount;
+      // Defensive coercion — bad/missing amounts shouldn't poison the running
+      // total with NaN (which would propagate to "-₱NaN" in the UI).
+      const amount = Number(e.amount);
+      if (!Number.isFinite(amount)) continue;
+      if (e.type === "credit") credits += amount;
+      else debits += amount;
     }
-    return credits - debits;
+    const balance = credits - debits;
+    return Number.isFinite(balance) ? balance : 0;
   } catch {
     return 0;
   }
