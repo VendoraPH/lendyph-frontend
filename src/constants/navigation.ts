@@ -79,7 +79,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     ],
   },
   {
-    title: "Collateral Management",
+    title: "Collateral",
     href: "/collaterals",
     icon: ShieldCheck,
     permission: "collaterals:view",

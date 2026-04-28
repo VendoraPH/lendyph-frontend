@@ -191,7 +191,7 @@ export default function CollateralListingPage() {
             </p>
           </div>
           <PermissionGate permission="collaterals:create">
-            <Button render={<Link href="/collaterals/new" />}>
+            <Button nativeButton={false} render={<Link href="/collaterals/new" />}>
               <Plus className="mr-2 h-4 w-4" />
               New Collateral
             </Button>
@@ -331,6 +331,7 @@ export default function CollateralListingPage() {
                             <Button
                               variant="ghost"
                               size="icon-sm"
+                              nativeButton={false}
                               render={
                                 <Link href={`/collaterals/${c.id}`} />
                               }
