@@ -346,8 +346,8 @@ function buildFreshSteps(
 
 function canUserActOnStep(step: ApprovalStep, userRoles: string[] | undefined): boolean {
   if (!userRoles || userRoles.length === 0) return false;
-  // Admins can act on any step (useful for testing and for super-users)
-  if (userRoles.includes("admin")) return true;
+  // Admins (client) and super_admin (developer) can act on any step.
+  if (userRoles.includes("admin") || userRoles.includes("super_admin")) return true;
   return userRoles.includes(step.role);
 }
 
