@@ -10,10 +10,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lu
 import type { CoMaker, Loan, LoanSchedule } from "@/types";
 import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
 import { loanService } from "@/services";
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
-}
+import { formatCurrency } from "@/lib/format";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

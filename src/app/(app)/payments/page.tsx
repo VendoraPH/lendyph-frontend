@@ -50,6 +50,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -84,14 +85,6 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   maya: "Maya",
   online: "Online",
 };
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(amount));
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "—";

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "swagger-lendyph": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "swagger-mcp-server@latest",
+        "/home/augustin/Desktop/Dev/lendyph-web/.claude/swagger-config.json"
+      ],
+      "cwd": "/home/augustin/Desktop/Dev/lendyph-web"
+    }
+  }
+}

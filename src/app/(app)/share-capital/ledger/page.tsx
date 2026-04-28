@@ -43,25 +43,9 @@ import {
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, isWithinInterval, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { shareCapitalService } from "@/services";
+import { formatCurrency, formatDate } from "@/lib/format";
 import type { ShareCapitalLedgerEntry } from "@/types";
 import { toast } from "sonner";
-
-// ── Formatting ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 
 // ── Types ──
 

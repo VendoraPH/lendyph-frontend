@@ -1,0 +1,65 @@
+<h2>How should the Fee Amount Type work?</h2>
+<p class="subtitle">The task says fees can be Fixed, Percentage, or Formula-based. How should this look in the form?</p>
+
+<div class="section">
+  <h3>Fee Row Structure</h3>
+  <p class="subtitle">Each custom fee would have these fields in a row:</p>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Preview: Single Fee Row</div>
+  <div class="mockup-body" style="padding: 20px; background: #1a1a2e;">
+    <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 160px;">
+        <label style="display: block; font-size: 12px; color: #888; margin-bottom: 4px;">Fee Name</label>
+        <div style="background: #2a2a3e; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #ccc; font-size: 14px;">Notarial Fee</div>
+      </div>
+      <div style="min-width: 140px;">
+        <label style="display: block; font-size: 12px; color: #888; margin-bottom: 4px;">Type</label>
+        <div style="background: #2a2a3e; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #ccc; font-size: 14px;">
+          <select style="background: transparent; border: none; color: #ccc; font-size: 14px; width: 100%;">
+            <option>Fixed</option>
+            <option>Percentage</option>
+            <option>Formula</option>
+          </select>
+        </div>
+      </div>
+      <div style="min-width: 120px;">
+        <label style="display: block; font-size: 12px; color: #888; margin-bottom: 4px;">Amount / Value</label>
+        <div style="background: #2a2a3e; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #ccc; font-size: 14px;">500</div>
+      </div>
+      <div style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: #e74c3c; cursor: pointer; font-size: 18px;">✕</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>When "Formula" is selected, what should the input look like?</h3>
+  <p class="subtitle">The task gives an example: "A/B x 3%, where A is Loan Amount and B is Term in Days"</p>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Free-text Formula Input</h3>
+      <p>A text field where the user types the formula directly, e.g. <code>(loan_amount / term_days) * 0.03</code>. Flexible but error-prone.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Structured Formula Builder</h3>
+      <p>Dropdowns to pick variables (Loan Amount, Term in Days) and operator fields. Guided but limited to simple expressions like <code>A / B × rate%</code>.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Skip Formula for Now (Recommended)</h3>
+      <p>Implement Fixed and Percentage types first. Add a "Formula" option as disabled/coming soon. The task also marks "Tiered Charges" as coming soon — formula could follow the same pattern. Keeps scope manageable.</p>
+    </div>
+  </div>
+</div>

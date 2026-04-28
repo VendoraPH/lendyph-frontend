@@ -1,0 +1,209 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]: Lendy.PH
+          - generic [ref=e7]: Lending Management
+        - navigation [ref=e8]:
+          - link "Dashboard" [ref=e9] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "User Management" [ref=e16] [cursor=pointer]:
+            - /url: /users
+            - img [ref=e18]
+            - text: User Management
+          - link "Borrowers" [ref=e30] [cursor=pointer]:
+            - /url: /borrowers
+            - img [ref=e32]
+            - text: Borrowers
+          - button "Loans" [ref=e38]:
+            - img [ref=e40]
+            - generic [ref=e43]: Loans
+            - img [ref=e44]
+          - button "Payments" [ref=e47]:
+            - img [ref=e49]
+            - generic [ref=e51]: Payments
+            - img [ref=e52]
+          - link "Collections" [ref=e54] [cursor=pointer]:
+            - /url: /collections
+            - img [ref=e56]
+            - text: Collections
+          - link "Reports" [ref=e59] [cursor=pointer]:
+            - /url: /reports
+            - img [ref=e61]
+            - text: Reports
+          - link "Audit Trail" [ref=e63] [cursor=pointer]:
+            - /url: /audit-trail
+            - img [ref=e65]
+            - text: Audit Trail
+          - button "Settings" [ref=e70]:
+            - img [ref=e72]
+            - generic [ref=e75]: Settings
+            - img [ref=e76]
+        - button "Collapse" [ref=e79]:
+          - img [ref=e80]
+          - generic [ref=e83]: Collapse
+        - generic [ref=e84]: v1.0.0
+    - generic [ref=e85]:
+      - banner [ref=e86]:
+        - generic [ref=e88]: Dashboard
+        - generic [ref=e89]:
+          - button "Notifications" [ref=e90]:
+            - img
+            - generic [ref=e92]: Notifications
+          - button "AM" [ref=e93]:
+            - generic [ref=e95]: AM
+      - generic [ref=e96]:
+        - heading "Command Palette" [level=2] [ref=e97]
+        - paragraph [ref=e98]: Search for a command to run...
+      - main [ref=e99]:
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - img [ref=e107]
+                - generic [ref=e110]:
+                  - paragraph [ref=e111]: ₱15.2M
+                  - paragraph [ref=e112]: Total Portfolio
+              - application [ref=e114]
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - img [ref=e127]
+                - generic [ref=e130]:
+                  - paragraph [ref=e131]: "843"
+                  - paragraph [ref=e132]: Active Loans
+              - application [ref=e134]
+            - generic [ref=e144]:
+              - generic [ref=e145]:
+                - img [ref=e147]
+                - generic [ref=e149]:
+                  - paragraph [ref=e150]: ₱2.4M
+                  - paragraph [ref=e151]: Collected
+              - application [ref=e153]
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - img [ref=e166]
+                - generic [ref=e168]:
+                  - paragraph [ref=e169]: "47"
+                  - paragraph [ref=e170]: Overdue
+              - application [ref=e172]
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - generic [ref=e183]:
+                  - paragraph [ref=e184]: ₱2,456,890
+                  - paragraph [ref=e185]: Total Collections
+                  - paragraph [ref=e186]: +12.5%
+                - application [ref=e190]
+              - generic [ref=e198]:
+                - generic [ref=e200]:
+                  - button "1D" [ref=e201]
+                  - button "1W" [ref=e202]
+                  - button "1M" [ref=e203]
+                  - button "3M" [ref=e204]
+                  - button "1Y" [ref=e205]
+                - application [ref=e208]
+                - application [ref=e295]:
+                  - generic [ref=e361]:
+                    - generic [ref=e363]: "12"
+                    - generic [ref=e365]: "13"
+                    - generic [ref=e367]: "14"
+                    - generic [ref=e369]: "15"
+                    - generic [ref=e371]: "16"
+                    - generic [ref=e373]: "17"
+                    - generic [ref=e375]: "18"
+                    - generic [ref=e377]: "19"
+                    - generic [ref=e379]: "20"
+                    - generic [ref=e381]: "21"
+                    - generic [ref=e383]: "22"
+                    - generic [ref=e385]: "23"
+                    - generic [ref=e387]: "24"
+                    - generic [ref=e389]: "25"
+                    - generic [ref=e391]: "26"
+                    - generic [ref=e393]: "27"
+                    - generic [ref=e395]: "28"
+                    - generic [ref=e397]: "29"
+                    - generic [ref=e399]: "30"
+                    - generic [ref=e401]: "31"
+            - generic [ref=e402]:
+              - generic [ref=e403]: Jan
+              - generic [ref=e404]: Feb
+              - generic [ref=e405]: Mar
+              - generic [ref=e406]: Apr
+              - generic [ref=e407]: May
+              - generic [ref=e408]: Jun
+              - generic [ref=e409]: Jul
+              - generic [ref=e410]: Aug
+              - generic [ref=e411]: Sep
+              - generic [ref=e412]: Oct
+              - generic [ref=e413]: Nov
+              - generic [ref=e414]: Dec
+          - generic [ref=e415]:
+            - heading "Recent Transactions" [level=3] [ref=e417]
+            - table [ref=e421]:
+              - rowgroup [ref=e422]:
+                - row "Name Description Amount Date" [ref=e423]:
+                  - columnheader "Name" [ref=e424]
+                  - columnheader "Description" [ref=e425]
+                  - columnheader "Amount" [ref=e426]
+                  - columnheader "Date" [ref=e427]
+              - rowgroup [ref=e428]:
+                - row "RS Rosario D. Santos Payment via GCash ₱3,933 Mar 31, 9:42 AM" [ref=e429]:
+                  - cell "RS Rosario D. Santos" [ref=e430]:
+                    - generic [ref=e431]:
+                      - generic [ref=e432]: RS
+                      - generic [ref=e433]: Rosario D. Santos
+                  - cell "Payment via GCash" [ref=e434]
+                  - cell "₱3,933" [ref=e435]
+                  - cell "Mar 31, 9:42 AM" [ref=e436]
+                - row "RG Roberto Garcia Cash payment received ₱9,417 Mar 31, 9:15 AM" [ref=e437]:
+                  - cell "RG Roberto Garcia" [ref=e438]:
+                    - generic [ref=e439]:
+                      - generic [ref=e440]: RG
+                      - generic [ref=e441]: Roberto Garcia
+                  - cell "Cash payment received" [ref=e442]
+                  - cell "₱9,417" [ref=e443]
+                  - cell "Mar 31, 9:15 AM" [ref=e444]
+                - row "AS Ana Santos Loan released — Bank Transfer ₱15,000 Mar 30, 3:20 PM" [ref=e445]:
+                  - cell "AS Ana Santos" [ref=e446]:
+                    - generic [ref=e447]:
+                      - generic [ref=e448]: AS
+                      - generic [ref=e449]: Ana Santos
+                  - cell "Loan released — Bank Transfer" [ref=e450]
+                  - cell "₱15,000" [ref=e451]
+                  - cell "Mar 30, 3:20 PM" [ref=e452]
+                - row "EM Eduardo Mendoza Payment via Bank Transfer ₱4,708 Mar 30, 2:10 PM" [ref=e453]:
+                  - cell "EM Eduardo Mendoza" [ref=e454]:
+                    - generic [ref=e455]:
+                      - generic [ref=e456]: EM
+                      - generic [ref=e457]: Eduardo Mendoza
+                  - cell "Payment via Bank Transfer" [ref=e458]
+                  - cell "₱4,708" [ref=e459]
+                  - cell "Mar 30, 2:10 PM" [ref=e460]
+                - row "MR Maria L. Reyes Payment via Maya ₱958 Mar 29, 11:05 AM" [ref=e461]:
+                  - cell "MR Maria L. Reyes" [ref=e462]:
+                    - generic [ref=e463]:
+                      - generic [ref=e464]: MR
+                      - generic [ref=e465]: Maria L. Reyes
+                  - cell "Payment via Maya" [ref=e466]
+                  - cell "₱958" [ref=e467]
+                  - cell "Mar 29, 11:05 AM" [ref=e468]
+                - row "CT Carmen Torres Loan released — Bank Transfer ₱50,000 Mar 29, 10:30 AM" [ref=e469]:
+                  - cell "CT Carmen Torres" [ref=e470]:
+                    - generic [ref=e471]:
+                      - generic [ref=e472]: CT
+                      - generic [ref=e473]: Carmen Torres
+                  - cell "Loan released — Bank Transfer" [ref=e474]
+                  - cell "₱50,000" [ref=e475]
+                  - cell "Mar 29, 10:30 AM" [ref=e476]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e482] [cursor=pointer]:
+    - img [ref=e483]
+  - alert [ref=e486]
+  - generic [ref=e487]: "12"
+```

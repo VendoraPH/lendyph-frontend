@@ -65,10 +65,12 @@ import {
   PAYMENT_FREQUENCY_LABELS,
   PAST_DUE_TRANSFER_UNIT_OPTIONS,
 } from "@/constants";
+import { formatCurrency } from "@/lib/format";
 import type { LoanProduct } from "@/types/loan";
 
 // ── Helpers ──
 
+<<<<<<< Updated upstream
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
@@ -77,6 +79,8 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
+=======
+>>>>>>> Stashed changes
 // Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
 function getProductField(product: LoanProduct, field: string): string {
   const p = product as unknown as Record<string, unknown>;

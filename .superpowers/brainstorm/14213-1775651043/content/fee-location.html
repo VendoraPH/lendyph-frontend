@@ -1,0 +1,28 @@
+<h2>Where should "Add New Fee" live?</h2>
+<p class="subtitle">The task describes custom fees with formulas, conditions, and loan applicability. Where should this feature be managed?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Inside Loan Product Form</h3>
+      <p>Add an "Additional Fees" section below the current hardcoded fees (processing fee, service fee). Each product defines its own custom fees inline in the create/edit dialog.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Simple — everything in one place</li><li>No new pages needed</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Fees can't be reused across products</li><li>Dialog becomes very long</li><li>Doesn't match task description ("applicable to which loans")</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Separate Fee Management (Recommended)</h3>
+      <p>A dedicated section (Settings > Fees) where you create fee templates with all the rules. Each fee selects which loan products it applies to via checkboxes. The loan product form shows linked fees as read-only.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Matches the task description exactly</li><li>Fees are reusable across multiple products</li><li>Clean separation of concerns</li><li>"Applicable to Which Loans" checkbox makes sense here</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>New page/route to build</li><li>Slightly more navigation for the user</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

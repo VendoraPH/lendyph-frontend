@@ -213,15 +213,19 @@ export function Header({ onMenuClick }: HeaderProps) {
   );
 
   const handleLogout = async () => {
+    // Backend logout can fail (token already revoked, session expired, 500)
+    // but client-side logout must always succeed. Swallow the API error and
+    // proceed with local cleanup + redirect.
     try {
       await authService.logout();
-    } finally {
-      tokenManager.clearTokens();
-      localStorage.removeItem("lendy_remember_me");
-      clearAuth();
-      toast.success("Logged out successfully");
-      router.replace("/login");
+    } catch {
+      /* ignore — local cleanup runs unconditionally below */
     }
+    tokenManager.clearTokens();
+    localStorage.removeItem("lendy_remember_me");
+    clearAuth();
+    toast.success("Logged out successfully");
+    router.replace("/login");
   };
 
   const initials = user?.full_name

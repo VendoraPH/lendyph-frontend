@@ -9,11 +9,8 @@ import {
 import { Loader2, BookOpen, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService, reportService } from "@/services";
+import { formatCurrency } from "@/lib/format";
 import type { BorrowerLedgerEntry, PaginatedResponse } from "@/types";
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

@@ -11,33 +11,44 @@ import {
   loanDocumentService,
   repaymentService,
   coMakerService,
-  userService,
-  approvalWorkflowService,
   reportService,
-  type ApprovalChainStep,
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
+<<<<<<< Updated upstream
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
+=======
+import { BorrowerActiveLoans } from "./_components/borrower-active-loans";
+import { WorkflowHistory } from "./_components/workflow-history";
+import { StatementOfAccountDialog } from "./_components/dialogs/statement-of-account-dialog";
+import { SubmitForReviewDialog } from "./_components/dialogs/submit-for-review-dialog";
+import { ApproveDialog } from "./_components/dialogs/approve-dialog";
+import { RejectDialog } from "./_components/dialogs/reject-dialog";
+import { ReleaseDialog } from "./_components/dialogs/release-dialog";
+import { RecordPaymentDialog } from "./_components/dialogs/record-payment-dialog";
+import { CreateAdjustmentDialog } from "./_components/dialogs/create-adjustment-dialog";
+import { LoanInformationCard } from "./_components/loan-information-card";
+import { MemberCoMakerCard } from "./_components/member-co-maker-card";
+import { ReleaseDetailsCard } from "./_components/release-details-card";
+import { AmortizationScheduleCard } from "./_components/amortization-schedule-card";
+import { LedgerCard } from "./_components/ledger-card";
+import { ApprovalProcessCard } from "./_components/approval-process-card";
+import { useUsers } from "./_hooks/use-users";
+import { useLoanRepayments } from "./_hooks/use-loan-repayments";
+import { useLoanAdjustments } from "./_hooks/use-loan-adjustments";
+import { useApprovalChainConfig } from "./_hooks/use-approval-chain-config";
+>>>>>>> Stashed changes
 import type { LoanSchedule } from "@/types/loan";
-import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import type { LoanAdjustmentType } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+<<<<<<< Updated upstream
   Dialog,
   DialogContent,
   DialogDescription,
@@ -81,198 +92,52 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+=======
+>>>>>>> Stashed changes
   ArrowLeft,
-  Check,
-  X,
   Clock,
   FileText,
-  UserCheck,
   Ban,
-  Send,
-  Unlock,
-  Lock,
-  CheckCircle2,
-  XCircle,
   AlertCircle,
+<<<<<<< Updated upstream
   CalendarIcon,
   CalendarPlus,
+=======
+>>>>>>> Stashed changes
   Download,
-  Plus,
-  DollarSign,
-  Settings2,
-  ChevronsUpDown,
   ChevronDown,
-  ChevronUp,
-  Pencil,
   AlertTriangle,
+<<<<<<< Updated upstream
   Receipt,
   CreditCard,
   Loader2,
   BookOpen,
   Zap,
+=======
+>>>>>>> Stashed changes
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LOAN_STATUS_LABELS } from "@/constants";
+import type { Loan } from "@/types/loan";
 import {
-  LOAN_STATUS_LABELS,
-  PAYMENT_FREQUENCY_LABELS,
-  PAYMENT_FREQUENCY_OPTIONS,
-} from "@/constants";
-import type { Loan, LoanStatus } from "@/types/loan";
-
-// ── Currency & Date Formatters ──
-
-const formatCurrency = (amount: number | string | undefined | null) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
-
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
-const formatDateTime = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-const formatDateObj = (date: Date) =>
-  date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
-const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
-
-// ── Amortization Schedule Helpers ──
-
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
-type InterestType = "fixed" | "diminishing" | "upon_maturity";
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-  balance: number;
-  status?: "pending" | "paid" | "partial" | "overdue";
-  amountPaid?: number;
-}
-
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return termMonths; // SCB accumulates monthly, paid as lump sum at maturity
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-      return Math.round(termMonths * 2.17);
-    case "monthly":
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return 30; // fallback, not used in upon_maturity path
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-      return 14;
-    case "monthly":
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function generateSchedule(
-  principal: number,
-  rate: number,
-  termMonths: number,
-  frequency: PaymentFrequency,
-  interestType: InterestType,
-  startDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  // Upon Maturity = a single consolidated payment at the maturity date.
-  // Triggered when payment_frequency OR interest_type is "upon_maturity".
-  if (frequency === "upon_maturity" || interestType === "upon_maturity") {
-    const totalInterest = principal * (rate / 100) * termMonths;
-    const totalScb = scbAmount * termMonths; // SCB accumulates monthly, paid at maturity
-    return [{
-      period: 1,
-      dueDate: addMonths(startDate, termMonths),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: totalScb,
-      totalPayment: principal + totalInterest + totalScb,
-      balance: 0,
-    }];
-  }
-
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
-  const principalPerPeriod = principal / totalPeriods;
-  const rows: AmortizationRow[] = [];
-
-  let remainingBalance = principal;
-
-  for (let i = 1; i <= totalPeriods; i++) {
-    const dueDate =
-      frequency === "monthly"
-        ? addMonths(startDate, i)
-        : addDays(startDate, i * intervalDays);
-
-    let interest: number;
-    if (interestType === "fixed") {
-      interest = principal * (rate / 100);
-    } else {
-      interest = remainingBalance * (rate / 100);
-    }
-
-    remainingBalance -= principalPerPeriod;
-
-    rows.push({
-      period: i,
-      dueDate,
-      principal: principalPerPeriod,
-      interest,
-      shareCapitalBuildUp: scbAmount,
-      totalPayment: principalPerPeriod + interest + scbAmount,
-      balance: Math.max(0, remainingBalance),
-    });
-  }
-
-  return rows;
-}
+  formatDateTime,
+  formatDateISO,
+} from "@/lib/format";
+import {
+  addMonths,
+  generateSchedule,
+} from "./_lib/schedule";
+import type {
+  ApprovalStep,
+  ApprovalStepStatus,
+  RevisionRound,
+} from "./_lib/approval-types";
+import {
+  canUserActOnStep,
+  loadApprovalState,
+  saveApprovalState,
+  deriveStepsFromLoanStatus,
+} from "./_lib/approval";
 
 // ── Status Colors ──
 
@@ -288,483 +153,6 @@ const statusColors: Record<string, string> = {
   restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
   closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
 };
-
-// ── Multi-Step Approval Chain ──
-// Implements the LOAN RELEASE FLOWCHART. The chain is loaded from
-// approvalWorkflowService so admins can reconfigure it via
-// /settings/approval-workflow. Each loan snapshots the chain at seed time,
-// so changes to the config only affect NEW loans (in-flight loans keep
-// whatever chain they started with).
-//
-// On any "Approved? = No" the loan is sent back to Loan Processor for
-// revision (the chain does NOT support terminal rejection — "Void Loan"
-// is the escape hatch for drafts).
-
-type ChainStepKind = "submit" | "approve" | "release" | "confirmed";
-
-type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
-
-interface ApprovalStep {
-  index: number;
-  name: string;
-  role: string;
-  kind: ChainStepKind;
-  status: ApprovalStepStatus;
-  remarks?: string;
-  acted_at?: string; // ISO
-  acted_by?: string;
-}
-
-// A snapshot of a previous revision round, created whenever an approver sends
-// the loan back to the Loan Processor.
-interface RevisionRound {
-  round: number;
-  steps: ApprovalStep[];
-  sent_back_by: string;
-  sent_back_at: string;
-  sent_back_remarks: string;
-}
-
-interface ApprovalState {
-  current_steps: ApprovalStep[];
-  rounds: RevisionRound[];
-}
-
-function buildFreshSteps(
-  chain: ApprovalChainStep[],
-  pendingIndex: number = 0
-): ApprovalStep[] {
-  return chain.map((step, i) => ({
-    index: i,
-    name: step.name,
-    role: step.role,
-    kind: step.kind,
-    status: i === pendingIndex ? "pending" : "waiting",
-  }));
-}
-
-function canUserActOnStep(step: ApprovalStep, userRoles: string[] | undefined): boolean {
-  if (!userRoles || userRoles.length === 0) return false;
-  // Admins can act on any step (useful for testing and for super-users)
-  if (userRoles.includes("admin")) return true;
-  return userRoles.includes(step.role);
-}
-
-function approvalStorageKey(loanId: number | string): string {
-  return `loan-approval-${loanId}`;
-}
-
-// Back-compat migration: older stored approval states were saved before
-// the `kind` field existed on ApprovalStep. Without a kind, the action
-// panel's conditional buttons (`kind === "approve"`) silently render
-// nothing. Infer the kind from the step name so old loans still work.
-function migrateStep(step: ApprovalStep): ApprovalStep {
-  if (step.kind) return step;
-  const name = (step.name ?? "").toLowerCase();
-  const inferred: ChainStepKind = name.includes("loan processor") || name.includes("processor")
-    ? "submit"
-    : name.includes("cashier") || name.includes("release")
-      ? "release"
-      : "approve";
-  return { ...step, kind: inferred };
-}
-
-function migrateSteps(steps: ApprovalStep[]): ApprovalStep[] {
-  return steps.map(migrateStep);
-}
-
-function loadApprovalState(loanId: number | string): ApprovalState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(approvalStorageKey(loanId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ApprovalState | ApprovalStep[];
-    // Back-compat: earlier version stored a bare array
-    if (Array.isArray(parsed)) {
-      return { current_steps: migrateSteps(parsed), rounds: [] };
-    }
-    if (!parsed.current_steps || !Array.isArray(parsed.current_steps)) return null;
-    return {
-      current_steps: migrateSteps(parsed.current_steps),
-      rounds: (parsed.rounds ?? []).map((r) => ({
-        ...r,
-        steps: migrateSteps(r.steps),
-      })),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveApprovalState(loanId: number | string, state: ApprovalState) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(approvalStorageKey(loanId), JSON.stringify(state));
-  } catch {
-    /* ignore quota errors */
-  }
-}
-
-// Derive where the loan should be in the chain based on its server status.
-// Used to seed a fresh state when localStorage has nothing for this loan.
-// The chain is whatever the admin has configured via the settings page.
-function deriveStepsFromLoanStatus(
-  chain: ApprovalChainStep[],
-  status: string
-): ApprovalStep[] {
-  const steps = buildFreshSteps(chain);
-  if (steps.length === 0) return steps;
-
-  const firstApproveIdx = steps.findIndex((s) => s.kind === "approve");
-  const lastApproveIdx = (() => {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (steps[i].kind === "approve") return i;
-    }
-    return -1;
-  })();
-  const releaseIdx = steps.findIndex((s) => s.kind === "release");
-
-  if (status === "draft") {
-    // Loan Processor (submit step, index 0) is pending
-    return steps;
-  }
-  if (status === "for_review") {
-    // Submit done; first approve step is pending
-    steps[0] = { ...steps[0], status: "approved" };
-    if (firstApproveIdx >= 0) {
-      steps[firstApproveIdx] = { ...steps[firstApproveIdx], status: "pending" };
-    }
-    return steps;
-  }
-  if (status === "approved") {
-    // All approve steps done; release step is pending
-    for (let i = 0; i <= lastApproveIdx; i++) {
-      steps[i] = { ...steps[i], status: "approved" };
-    }
-    if (releaseIdx >= 0) {
-      steps[releaseIdx] = { ...steps[releaseIdx], status: "pending" };
-    }
-    return steps;
-  }
-  if (
-    status === "released" ||
-    status === "ongoing" ||
-    status === "completed" ||
-    status === "closed" ||
-    status === "defaulted" ||
-    status === "restructured"
-  ) {
-    // Full chain done
-    return steps.map((s) => ({ ...s, status: "approved" }));
-  }
-  // draft-like fallback
-  return steps;
-}
-
-// ── Borrower's Active Loans Component ──
-
-const VISIBLE_LOAN_COUNT = 3;
-
-function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
-  const hasMore = loans.length > VISIBLE_LOAN_COUNT;
-
-  const completedSteps = approvalSteps.filter(
-    (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
-  );
-
-  // Show remarks section if we have local approval steps OR server-side approval remarks
-  const hasServerRemarks = !!(loan?.approval_remarks || loan?.rejection_remarks);
-  const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
-
-  return (
-    <Collapsible defaultOpen={false}>
-      <Card>
-        <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-          <CollapsibleTrigger className="w-full text-left group/trigger">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Borrower&rsquo;s Active Loans
-              <Badge variant="outline" className="text-xs font-normal">
-                {loading ? "Loading..." : `${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
-              </Badge>
-              <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-            </CardTitle>
-          </CollapsibleTrigger>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="space-y-3">
-        {loading ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
-        ) : loans.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            No other active loans for this borrower.
-          </p>
-        ) : (
-          <>
-            {visibleLoans.map((bl) => {
-              const releaseDate = bl.released_at ?? bl.start_date ?? bl.release_date;
-              return (
-                <div
-                  key={bl.id}
-                  className="rounded-lg border p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">
-                      {bl.loan_product?.name ?? bl.loan_product_name ?? "—"}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4",
-                        bl.status === "released" || bl.status === "ongoing"
-                          ? "bg-green-500/10 text-green-700 border-green-500/30"
-                          : bl.status === "approved"
-                            ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                            : "bg-amber-500/10 text-amber-700 border-amber-500/30"
-                      )}
-                    >
-                      {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Loan Amount</p>
-                      <p className="text-xs font-medium tabular-nums">
-                        {formatCurrency(bl.principal_amount)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Outstanding Balance</p>
-                      <p className="text-xs font-medium tabular-nums">
-                        {bl.outstanding_balance != null
-                          ? formatCurrency(bl.outstanding_balance)
-                          : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  {releaseDate && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Released: {formatDate(releaseDate)}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-            {hasMore && (
-              <button
-                type="button"
-                onClick={() => setExpanded((prev) => !prev)}
-                className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-              >
-                {expanded ? (
-                  <>
-                    Show less <ChevronUp className="h-3.5 w-3.5" />
-                  </>
-                ) : (
-                  <>
-                    Show {loans.length - VISIBLE_LOAN_COUNT} more <ChevronDown className="h-3.5 w-3.5" />
-                  </>
-                )}
-              </button>
-            )}
-          </>
-        )}
-
-        {/* Previous Approval Remarks */}
-        {showRemarks && (
-          <>
-            <Separator />
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Previous Approval Remarks</p>
-            {completedSteps.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2 text-center">
-                No approval actions recorded yet.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {completedSteps.map((step) => (
-                  <div
-                    key={step.index}
-                    className={cn(
-                      "rounded-lg border p-3",
-                      step.status === "approved"
-                        ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
-                        : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div
-                        className={cn(
-                          "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
-                          step.status === "approved" ? "bg-green-600" : "bg-red-500"
-                        )}
-                      >
-                        {step.status === "approved" ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5" />
-                        )}
-                      </div>
-                      <span className="text-xs font-semibold">{step.name}</span>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px] px-1.5 py-0 h-4",
-                          step.status === "approved"
-                            ? "bg-green-500/10 text-green-700 border-green-500/30"
-                            : "bg-red-500/10 text-red-700 border-red-500/30"
-                        )}
-                      >
-                        {step.status === "approved" ? "Approved" : "Sent back"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
-                    </p>
-                    {step.remarks ? (
-                      <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
-                        &ldquo;{step.remarks}&rdquo;
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground/60 mt-1 italic">
-                        No remarks provided
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Server-side approval/rejection remarks (visible to all officers) */}
-        {hasServerRemarks && completedSteps.length === 0 && (
-          <>
-            <Separator />
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Approval Remarks</p>
-            {loan?.approval_remarks && (
-              <div className="rounded-lg border border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10 p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] bg-green-600">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  </div>
-                  <span className="text-xs font-semibold">
-                    {loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "Approver"}
-                  </span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-green-500/10 text-green-700 border-green-500/30">
-                    Approved
-                  </Badge>
-                </div>
-                {loan.approved_at && (
-                  <p className="text-xs text-muted-foreground">{formatDateTime(loan.approved_at)}</p>
-                )}
-                <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
-                  &ldquo;{loan.approval_remarks}&rdquo;
-                </p>
-              </div>
-            )}
-            {loan?.rejection_remarks && (
-              <div className="rounded-lg border border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10 p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] bg-red-500">
-                    <XCircle className="h-3.5 w-3.5" />
-                  </div>
-                  <span className="text-xs font-semibold">
-                    {loan.rejected_by ?? "Reviewer"}
-                  </span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-red-500/10 text-red-700 border-red-500/30">
-                    Rejected
-                  </Badge>
-                </div>
-                {loan.rejected_at && (
-                  <p className="text-xs text-muted-foreground">{formatDateTime(loan.rejected_at)}</p>
-                )}
-                <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
-                  &ldquo;{loan.rejection_remarks}&rdquo;
-                </p>
-              </div>
-            )}
-          </>
-        )}
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
-  );
-}
-
-// ── Workflow History Component ──
-
-function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events: { icon: React.ReactNode; label: string; date: string; detail?: string }[] = [];
-
-  events.push({
-    icon: <FileText className="h-4 w-4 text-gray-500" />,
-    label: "Application created",
-    date: loan.created_at,
-  });
-
-  if (
-    loan.status !== "draft" &&
-    loan.updated_at !== loan.created_at
-  ) {
-    events.push({
-      icon: <Send className="h-4 w-4 text-amber-600" />,
-      label: "Submitted for review",
-      date: loan.updated_at,
-    });
-  }
-
-  if (loan.approved_at) {
-    events.push({
-      icon: <UserCheck className="h-4 w-4 text-blue-600" />,
-      label: `Approved by ${loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "—"}`,
-      date: loan.approved_at,
-      detail: loan.approval_remarks ?? undefined,
-    });
-  }
-
-  if (loan.rejected_at) {
-    events.push({
-      icon: <Ban className="h-4 w-4 text-red-600" />,
-      label: `Rejected by ${loan.rejected_by ?? "—"}`,
-      date: loan.rejected_at,
-      detail: loan.rejection_remarks ?? undefined,
-    });
-  }
-
-  if (loan.released_at) {
-    events.push({
-      icon: <Unlock className="h-4 w-4 text-cyan-600" />,
-      label: `Released by ${loan.released_by_user?.full_name ?? loan.released_by_user?.name ?? loan.released_by ?? "—"}`,
-      date: loan.released_at,
-    });
-  }
-
-  return (
-    <div className="space-y-4">
-      {events.map((event, idx) => (
-        <div key={idx} className="flex items-start gap-3">
-          <div className="mt-0.5">{event.icon}</div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">{event.label}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatDateTime(event.date)}
-            </p>
-            {event.detail && (
-              <p className="mt-1 text-sm text-muted-foreground italic">
-                &ldquo;{event.detail}&rdquo;
-              </p>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Main Page ──
 
 export default function LoanDetailPage({
   params,
@@ -806,8 +194,6 @@ export default function LoanDetailPage({
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   // Repayments state
-  const [repayments, setRepayments] = useState<Repayment[]>([]);
-  const [repaymentsLoading, setRepaymentsLoading] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -831,8 +217,6 @@ export default function LoanDetailPage({
   } | null>(null);
 
   // Loan Adjustments state
-  const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
-  const [adjustmentsLoading, setAdjustmentsLoading] = useState(false);
   const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
@@ -849,10 +233,23 @@ export default function LoanDetailPage({
   const [docLoading, setDocLoading] = useState<string | null>(null);
 
   // Account Officer state
-  const [users, setUsers] = useState<User[]>([]);
+  const users = useUsers();
   const [aoEditing, setAoEditing] = useState(false);
   const [aoOpen, setAoOpen] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
+
+  // Repayments + adjustments fetched via dedicated hooks
+  const {
+    repayments,
+    loading: repaymentsLoading,
+    refetch: fetchRepayments,
+    setRepayments,
+  } = useLoanRepayments(loan?.id, loan?.status);
+  const {
+    adjustments,
+    loading: adjustmentsLoading,
+    refetch: fetchAdjustments,
+  } = useLoanAdjustments(loan?.id, loan?.status);
 
   // Fetch loan on mount
   useEffect(() => {
@@ -888,17 +285,6 @@ export default function LoanDetailPage({
     return () => { cancelled = true; };
   }, [loanId]);
 
-  // Fetch users for AO tagging
-  useEffect(() => {
-    async function fetchUsers() {
-      try {
-        const res = await userService.list();
-        const list = Array.isArray(res) ? res : (res as unknown as { data: User[] }).data ?? [];
-        setUsers(list.filter((u) => u.status === "active"));
-      } catch { /* non-critical */ }
-    }
-    fetchUsers();
-  }, []);
 
   // Save AO assignment
   const handleSaveAO = useCallback(async (userId: number) => {
@@ -989,6 +375,7 @@ export default function LoanDetailPage({
     }
   }, [loan?.id, loan?.status, fetchAmortizationPreview]);
 
+<<<<<<< Updated upstream
   // Fetch repayments for released+ loans, then enrich each with its detail
   // so that breakdown fields (principal_paid, interest_paid, scb_paid, penalty_paid)
   // are populated — the list endpoint omits them; the detail endpoint includes them.
@@ -1044,6 +431,8 @@ export default function LoanDetailPage({
     }
   }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments]);
 
+=======
+>>>>>>> Stashed changes
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -1080,29 +469,7 @@ export default function LoanDetailPage({
   const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
   const [borrowerLoansLoading, setBorrowerLoansLoading] = useState(false);
   // Chain configuration fetched from the approval-workflow service
-  const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
-
-  // Load the admin-configured chain based on policy_exception flag
-  useEffect(() => {
-    if (!loan) return;
-    let cancelled = false;
-    const isPolicyException = loan.policy_exception === true;
-    approvalWorkflowService
-      .listForLoan(isPolicyException)
-      .then((chain) => {
-        if (!cancelled) setChainConfig(chain);
-      })
-      .catch(() => {
-        if (!cancelled) setChainConfig(
-          isPolicyException
-            ? approvalWorkflowService.getDefault()
-            : approvalWorkflowService.getDefaultNormal()
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loan?.id, loan?.policy_exception]);
+  const chainConfig = useApprovalChainConfig(loan?.id, loan?.policy_exception);
 
   // Current logged-in user (used to gate approval actions by role)
   const currentUser = useAuthStore((s) => s.user);
@@ -2349,6 +1716,7 @@ export default function LoanDetailPage({
         </div>
       </div>
 
+<<<<<<< Updated upstream
 
       <LoanCollateralsCard
         loanId={loan.id}
@@ -2761,6 +2129,32 @@ export default function LoanDetailPage({
       {/* The "Release Loan" action has moved to the Approval Chain card
           (Cashier step). Kept here as a no-op placeholder block to document
           the migration — can be deleted once the chain is backend-wired. */}
+=======
+      <ApprovalProcessCard
+        loan={loan}
+        steps={approvalSteps}
+        rounds={approvalRounds}
+        currentStep={currentStep}
+        allStepsApproved={allStepsApproved}
+        canActOnCurrentStep={canActOnCurrentStep}
+        isConfirmationStep={isConfirmationStep}
+        currentUser={currentUser}
+        currentUserDisplayName={currentUserDisplayName}
+        canEditLoanApplication={canEditLoanApplication}
+        stepRemarks={stepRemarks}
+        onStepRemarksChange={setStepRemarks}
+        stepActionLoading={stepActionLoading}
+        actionLoading={actionLoading}
+        sendBackTargets={sendBackTargets}
+        sendBackTargetIndex={sendBackTargetIndex}
+        onSendBackTargetIndexChange={setSendBackTargetIndex}
+        onStepSubmit={handleStepSubmit}
+        onStepApprove={handleStepApprove}
+        onStepSendBack={handleStepSendBack}
+        onStepRelease={handleStepRelease}
+        onVoidLoan={handleVoidLoan}
+      />
+>>>>>>> Stashed changes
 
       {loan.status === "rejected" && (
         <Card>
@@ -2825,142 +2219,19 @@ export default function LoanDetailPage({
       {/* Loan Details Cards */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Card 1: Loan Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Loan Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Application Number
-                </p>
-                <p className="text-sm font-medium font-mono">
-                  {loan.application_number}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Loan Product</p>
-                <p className="text-sm font-medium">
-                  {loanProductName || "N/A"}
-                </p>
-              </div>
-              {loan.purpose && (
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">Purpose</p>
-                  <p className="text-sm font-medium">{loan.purpose}</p>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Principal Amount
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(loan.principal_amount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Rate
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">{loan.interest_rate}%</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Type
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium capitalize">
-                  {loanInterestType || "N/A"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Term
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">
-                  {loanTerm} months
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Payment Frequency
-                </p>
-                <p className="text-sm font-medium">
-                  {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Payable</p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(loanTotalPayable)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                <p className="text-sm font-semibold">
-                  {loan.net_proceeds != null
-                    ? formatCurrency(loan.net_proceeds)
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Deductions */}
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Processing Fee
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanProcessingFee)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Service Fee
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanServiceFee)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Other Deductions
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanOtherDeductions > 0 ? loanOtherDeductions : 0)}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">Total Deductions</span>
-                <span className="text-sm font-semibold">
-                  {formatCurrency(totalDeductions)}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <LoanInformationCard
+          loan={loan}
+          productName={loanProductName}
+          interestType={loanInterestType}
+          term={loanTerm}
+          frequency={loanFrequency}
+          totalPayable={loanTotalPayable}
+          processingFee={loanProcessingFee}
+          serviceFee={loanServiceFee}
+          otherDeductions={loanOtherDeductions}
+          totalDeductions={totalDeductions}
+          isLocked={isLocked}
+        />
 
         {/* Card 2: Borrower's Active Loans */}
         <BorrowerActiveLoans
@@ -2972,116 +2243,18 @@ export default function LoanDetailPage({
         />
 
         {/* Card 3: Member & Co-Maker */}
-        <Collapsible defaultOpen={false}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <UserCheck className="h-4 w-4 text-muted-foreground" />
-                  Member & Co-Maker
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Member</p>
-              <p className="text-sm font-medium">
-                {loanBorrowerName || "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Co-Maker</p>
-              <p className="text-sm font-medium">
-                {loanCoMakerName || "None"}
-              </p>
-            </div>
-            <Separator />
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && (
-                  <button
-                    type="button"
-                    onClick={() => setAoEditing(true)}
-                    className="text-xs text-brand-orange hover:underline flex items-center gap-1"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    {(loan as unknown as Record<string, unknown>).account_officer_id ? "Change" : "Assign"}
-                  </button>
-                )}
-              </div>
-              {aoEditing ? (
-                <div className="space-y-2">
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={
-                        <button
-                          type="button"
-                          role="combobox"
-                          disabled={aoSaving}
-                          className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                        />
-                      }
-                    >
-                      <span className="text-muted-foreground text-sm">Select account officer...</span>
-                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer..." />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((user) => (
-                              <CommandItem
-                                key={user.id}
-                                value={user.full_name}
-                                onSelect={() => {
-                                  handleSaveAO(user.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 size-4",
-                                    (loan as unknown as Record<string, unknown>).account_officer_id === user.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div>
-                                  <p className="text-sm">{user.full_name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAoEditing(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm font-medium">
-                  {(() => {
-                    const ao = (loan as unknown as Record<string, unknown>).account_officer as { id?: number; full_name?: string; name?: string } | undefined;
-                    return ao?.full_name ?? ao?.name ?? "Not assigned";
-                  })()}
-                </p>
-              )}
-            </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
+        <MemberCoMakerCard
+          loan={loan}
+          borrowerName={loanBorrowerName}
+          coMakerName={loanCoMakerName}
+          users={users}
+          aoEditing={aoEditing}
+          onAoEditingChange={setAoEditing}
+          aoOpen={aoOpen}
+          onAoOpenChange={setAoOpen}
+          aoSaving={aoSaving}
+          onSaveAo={handleSaveAO}
+        />
 
         {/* Share Capital — current balance for the loan's member */}
         <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
@@ -3109,88 +2282,16 @@ export default function LoanDetailPage({
 
       {/* Release Details — only for released+ loans */}
       {isLocked && loan.release_date && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Unlock className="h-4 w-4 text-cyan-600" />
-              Release Details
-              {loanSummary && (
-                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
-                  Server-verified
-                </Badge>
-              )}
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenStatementOfAccount}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Statement of Account
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Release Date</p>
-                <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
-              </div>
-              {loan.maturity_date && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Maturity Date</p>
-                  <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">Next Due Date</p>
-                <p className="text-sm font-medium">
-                  {loanSummary?.next_due_date
-                    ? formatDate(loanSummary.next_due_date)
-                    : loan.next_due_date
-                      ? formatDate(loan.next_due_date)
-                      : "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(
-                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                  )}
-                </p>
-              </div>
-            </div>
-            {loanSummary && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Principal Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.principal_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Interest Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Overdue + Penalty</p>
-                  <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(
-                      (loanSummary.overdue_amount ?? 0) + (loanSummary.penalty_amount ?? 0)
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ReleaseDetailsCard
+          loan={loan}
+          summary={loanSummary}
+          onOpenStatementOfAccount={handleOpenStatementOfAccount}
+        />
       )}
-
 
       {/* Amortization Schedule — collapsible, collapsed by default */}
       {storedSchedule.length > 0 && (
+<<<<<<< Updated upstream
         <Card>
           <CardHeader
             className="cursor-pointer select-none"
@@ -3408,6 +2509,15 @@ export default function LoanDetailPage({
             </CardContent>
           )}
         </Card>
+=======
+        <AmortizationScheduleCard
+          loan={loan}
+          schedule={storedSchedule}
+          totals={storedScheduleTotals}
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+        />
+>>>>>>> Stashed changes
       )}
 
       {/* Loan Documents — only for approved+ loans */}
@@ -3448,173 +2558,22 @@ export default function LoanDetailPage({
 
       {/* Ledger — only for released+ loans */}
       {isLocked && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                Ledger
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                {["released", "ongoing"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setCreateAdjustmentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    New Adjustment
-                  </Button>
-                )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    onClick={() => setRecordPaymentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Record Payment
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {repaymentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
-              </div>
-            ) : (
-              (() => {
-                const hasScb = (loan.scb_amount ?? 0) > 0;
-                const dash = <span className="text-muted-foreground/40">—</span>;
-                const fmtN = (n: number | undefined) =>
-                  n != null && n > 0 ? formatCurrency(n) : dash;
-                const totalCols = hasScb ? 14 : 13;
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
-                          <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Date</th>
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Ref No</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Principal</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
-                          <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
-                          {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
-                          <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
-                        </tr>
-                        <tr className="border-b bg-muted/30 text-center text-muted-foreground">
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Penalty</th>
-                          <th className="border-r px-3 py-1">Interest</th>
-                          <th className="border-r px-3 py-1">Amount</th>
-                          <th className="px-3 py-1 text-left">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* Opening entry */}
-                        {loanReleaseDate && (
-                          <tr className="border-b bg-blue-50/40 dark:bg-blue-950/20">
-                            <td className="border-r px-3 py-2 text-left">{formatDate(loanReleaseDate)}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">—</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
-                            <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
-                          </tr>
-                        )}
-                        {/* Repayment rows */}
-                        {ledgerRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={totalCols} className="px-3 py-6 text-center text-muted-foreground">
-                              No repayments recorded yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          ledgerRows.map((r) => (
-                            <tr
-                              key={r.id}
-                              className={cn(
-                                "border-b transition-colors hover:bg-muted/30",
-                                r.status === "voided" && "opacity-50 line-through",
-                              )}
-                            >
-                              <td className="border-r px-3 py-2 text-left">{formatDate(r.payment_date)}</td>
-                              <td className="border-r px-3 py-2 text-center text-muted-foreground">
-                                {(r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`}
-                              </td>
-                              {/* Principal */}
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principal_paid)}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
-                              {/* Interest */}
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interest_paid)}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
-                              {/* Past Due */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums">
-                                {r.penalty_paid != null && r.penalty_paid > 0 ? (
-                                  <span className="text-destructive">{formatCurrency(r.penalty_paid)}</span>
-                                ) : dash}
-                              </td>
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              {/* SCB */}
-                              {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scb_paid)}</td>}
-                              {/* Others */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excess_amount)}</td>
-                              {/* Total Paid */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.amount_paid)}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-muted-foreground">{r.remarks || "payment"}</span>
-                                  <div className="flex shrink-0 items-center gap-1">
-                                    {r.status === "voided" && (
-                                      <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
-                                    )}
-                                    {r.status !== "voided" && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
-                                        onClick={() => handleVoidRepayment(r.id)}
-                                        disabled={actionLoading}
-                                      >
-                                        Void
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()
-            )}
-          </CardContent>
-        </Card>
+        <LedgerCard
+          loan={loan}
+          rows={ledgerRows}
+          loanReleaseDate={loanReleaseDate}
+          loading={repaymentsLoading}
+          scheduleTotals={storedScheduleTotals}
+          actionLoading={actionLoading}
+          onCreateAdjustment={() => setCreateAdjustmentOpen(true)}
+          onRecordPayment={() => setRecordPaymentOpen(true)}
+          onVoidRepayment={handleVoidRepayment}
+        />
       )}
 
       {/* ── Dialogs ── */}
 
+<<<<<<< Updated upstream
       {/* Auto Pay Confirmation Dialog */}
       <Dialog open={autoPayConfirmOpen} onOpenChange={setAutoPayConfirmOpen}>
         <DialogContent size="sm">
@@ -3695,143 +2654,93 @@ export default function LoanDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+=======
+      <StatementOfAccountDialog
+        open={soaOpen}
+        onOpenChange={setSoaOpen}
+        applicationNumber={loan.application_number ?? ""}
+        loading={soaLoading}
+        data={soaData}
+      />
+>>>>>>> Stashed changes
 
-      {/* Submit for Review Dialog */}
-      <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Submit for Review</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to submit this loan application for review?
-              Once submitted, it will be queued for approval.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={handleSubmitForReview}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Submit
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SubmitForReviewDialog
+        open={submitOpen}
+        onOpenChange={setSubmitOpen}
+        onSubmit={handleSubmitForReview}
+      />
 
-      {/* Approve Dialog */}
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to approve{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="approval-remarks">Remarks (optional)</Label>
-              <Textarea
-                id="approval-remarks"
-                placeholder="Add any notes about this approval..."
-                value={approvalRemarks}
-                onChange={(e) => setApprovalRemarks(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-green-600 text-white hover:bg-green-700"
-              onClick={handleApprove}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ApproveDialog
+        open={approveOpen}
+        onOpenChange={setApproveOpen}
+        applicationNumber={loan.application_number ?? ""}
+        borrowerName={loanBorrowerName}
+        remarks={approvalRemarks}
+        onRemarksChange={setApprovalRemarks}
+        onApprove={handleApprove}
+      />
 
-      {/* Reject Dialog */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to reject{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>. Please
-              provide a reason.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="rejection-remarks">
-                Reason for Rejection{" "}
-                <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="rejection-remarks"
-                placeholder="Explain why this application is being rejected..."
-                value={rejectionRemarks}
-                onChange={(e) => setRejectionRemarks(e.target.value)}
-                className="mt-1.5"
-                required
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={!rejectionRemarks.trim()}
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Reject
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RejectDialog
+        open={rejectOpen}
+        onOpenChange={setRejectOpen}
+        applicationNumber={loan.application_number ?? ""}
+        borrowerName={loanBorrowerName}
+        remarks={rejectionRemarks}
+        onRemarksChange={setRejectionRemarks}
+        onReject={handleReject}
+      />
 
-      {/* Release Dialog */}
-      <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
-        <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Release Loan</DialogTitle>
-            <DialogDescription>
-              Review the release details below before confirming. This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
+      <ReleaseDialog
+        open={releaseOpen}
+        onOpenChange={setReleaseOpen}
+        loan={loan}
+        borrowerName={loanBorrowerName}
+        productName={loanProductName}
+        interestType={loanInterestType}
+        term={loanTerm}
+        frequency={loanFrequency}
+        releaseDate={releaseDate}
+        onReleaseDateChange={setReleaseDate}
+        releaseDatePickerOpen={releaseDatePickerOpen}
+        onReleaseDatePickerOpenChange={setReleaseDatePickerOpen}
+        releaseSchedule={releaseSchedule}
+        scheduleTotals={scheduleTotals}
+        computedMaturityDate={computedMaturityDate}
+        addCoMakerOpen={addCoMakerOpen}
+        onAddCoMakerOpenChange={setAddCoMakerOpen}
+        newCoMaker={newCoMaker}
+        onNewCoMakerChange={setNewCoMaker}
+        addingCoMaker={addingCoMaker}
+        onAddCoMaker={handleAddSecondCoMaker}
+        onConfirm={handleRelease}
+      />
 
-          <div className="space-y-5 pt-2">
-            {/* Summary Grid */}
-            <div className="rounded-lg border bg-muted/50 p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Application Number</p>
-                  <p className="text-sm font-medium font-mono">{loan.application_number}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Member</p>
-                  <p className="text-sm font-medium">{loanBorrowerName}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Loan Product</p>
-                  <p className="text-sm font-medium">{loanProductName || "N/A"}</p>
-                </div>
-              </div>
+      <RecordPaymentDialog
+        open={recordPaymentOpen}
+        onOpenChange={setRecordPaymentOpen}
+        loan={loan}
+        loanSummary={loanSummary}
+        schedule={storedSchedule}
+        scheduleTotals={storedScheduleTotals}
+        preview={paymentPreview}
+        previewLoading={paymentPreviewLoading}
+        paymentDate={paymentDate}
+        onPaymentDateChange={setPaymentDate}
+        paymentDatePickerOpen={paymentDatePickerOpen}
+        onPaymentDatePickerOpenChange={setPaymentDatePickerOpen}
+        paymentAmount={paymentAmount}
+        onPaymentAmountChange={setPaymentAmount}
+        paymentRemarks={paymentRemarks}
+        onPaymentRemarksChange={setPaymentRemarks}
+        paymentMode={paymentMode}
+        onPaymentModeChange={setPaymentMode}
+        advancePeriods={advancePeriods}
+        onAdvancePeriodsChange={setAdvancePeriods}
+        actionLoading={actionLoading}
+        onSubmit={handleRecordPayment}
+      />
 
+<<<<<<< Updated upstream
               <Separator />
 
               <div className="grid grid-cols-2 gap-4">
@@ -5116,6 +4025,33 @@ export default function LoanDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+=======
+      <CreateAdjustmentDialog
+        open={createAdjustmentOpen}
+        onOpenChange={setCreateAdjustmentOpen}
+        loanRef={loan.loan_account_number || loan.application_number || ""}
+        defaultInterestRate={loan.interest_rate}
+        defaultTermMonths={loanTerm}
+        actionLoading={actionLoading}
+        type={adjType}
+        onTypeChange={setAdjType}
+        description={adjDescription}
+        onDescriptionChange={setAdjDescription}
+        newBalance={adjNewBalance}
+        onNewBalanceChange={setAdjNewBalance}
+        newInterestRate={adjNewInterestRate}
+        onNewInterestRateChange={setAdjNewInterestRate}
+        newTerm={adjNewTerm}
+        onNewTermChange={setAdjNewTerm}
+        newFrequency={adjNewFrequency}
+        onNewFrequencyChange={setAdjNewFrequency}
+        penaltyAmount={adjPenaltyAmount}
+        onPenaltyAmountChange={setAdjPenaltyAmount}
+        remarks={adjRemarks}
+        onRemarksChange={setAdjRemarks}
+        onSubmit={handleCreateAdjustment}
+      />
+>>>>>>> Stashed changes
     </div>
   );
 }

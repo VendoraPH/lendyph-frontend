@@ -1,0 +1,37 @@
+#!/bin/sh
+
+# post-checkout receives 3 args: previous HEAD, new HEAD, branch flag
+# $3 = 1 means branch checkout (not file checkout)
+PREV_HEAD="$1"
+NEW_HEAD="$2"
+BRANCH_FLAG="$3"
+
+# Only proceed if this is a branch checkout
+if [ "$BRANCH_FLAG" != "1" ]; then
+  exit 0
+fi
+
+# Detect new branch creation
+BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# Check if this branch exists on remote — if not, it's a new branch
+git rev-parse --verify "origin/$BRANCH_NAME" >/dev/null 2>&1
+IS_NEW_BRANCH=$?
+
+if [ $IS_NEW_BRANCH -ne 0 ]; then
+  PREFIX=$(echo "$BRANCH_NAME" | cut -d'/' -f1)
+  DESCRIPTION=$(echo "$BRANCH_NAME" | cut -d'/' -f2-)
+  REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+
+  echo "🔔 New branch detected: $BRANCH_NAME"
+  echo "   Notifying n8n..."
+
+  curl -s -X POST http://localhost:5678/webhook/branch-created \
+    -H "Content-Type: application/json" \
+    -d "{\"repo\": \"$REPO_NAME\", \"branch\": \"$BRANCH_NAME\", \"prefix\": \"$PREFIX\", \"description\": \"$DESCRIPTION\"}" \
+    --connect-timeout 2 \
+    --max-time 5 \
+    >/dev/null 2>&1 &
+
+  echo "   ✅ Notification sent."
+fi

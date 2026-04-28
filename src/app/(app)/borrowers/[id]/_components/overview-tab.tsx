@@ -2,12 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
 import type { Borrower, Loan, CoMaker } from "@/types";
 // Constants removed — valid_id_type not in API response
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

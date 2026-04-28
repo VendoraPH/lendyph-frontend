@@ -1,0 +1,8 @@
+{
+  "endpoints": [
+    {
+      "name": "lendyph-api",
+      "url": "https://api-lendyph.abedubas.dev/docs?api-docs.json"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "swagger-lendyph": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "swagger-mcp-server@latest",
+        "/home/augustin/Desktop/Dev/lendyph-web/.claude/swagger-config.json"
+      ],
+      "cwd": "/home/augustin/Desktop/Dev/lendyph-web"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "shadcn@latest",
+        "mcp"
+      ]
+    }
+  }
+}

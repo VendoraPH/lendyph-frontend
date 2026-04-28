@@ -25,6 +25,7 @@ import { UserPlus, Upload, AlertTriangle, Loader2 } from "lucide-react";
 import { RELATIONSHIP_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { CoMaker, CoMakerRelationship, Loan, ValidIdType } from "@/types";
 import { coMakerService, type CreateCoMakerData } from "@/services/co-maker.service";
+import { formatCurrency } from "@/lib/format";
 
 interface CoMakerFormData {
   first_name: string;
@@ -312,10 +313,6 @@ export function EditCoMakerDialog({
 }
 
 // ── Shared Form Fields ──
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(amount));
-}
 
 function CoMakerFormFields({
   form,

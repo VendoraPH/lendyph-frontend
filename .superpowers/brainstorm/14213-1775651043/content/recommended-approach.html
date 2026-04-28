@@ -1,0 +1,295 @@
+<h2>Recommended UI/UX Approach — Aligned with Existing Patterns</h2>
+<p class="subtitle">Based on your current Loan Products page, sidebar navigation, and component patterns</p>
+
+<div class="section">
+  <h3>What your codebase already does</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+    <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+      <p class="label">Page Layout</p>
+      <ul style="margin: 8px 0 0; padding-left: 16px; font-size: 13px; line-height: 1.8; color: #bbb;">
+        <li>Header with title + description + primary action button</li>
+        <li>3 summary Cards in a row</li>
+        <li>Mobile: Card list / Desktop: Table in a Card</li>
+        <li>DropdownMenu for row actions (Edit, Delete, Toggle)</li>
+      </ul>
+    </div>
+    <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+      <p class="label">Form Pattern</p>
+      <ul style="margin: 8px 0 0; padding-left: 16px; font-size: 13px; line-height: 1.8; color: #bbb;">
+        <li>Dialog-based forms (not separate pages)</li>
+        <li>DialogContent size="lg"</li>
+        <li>Sections with uppercase tracking-wider headings</li>
+        <li>2-column grid for fields (sm:grid-cols-2)</li>
+        <li>brand-orange primary buttons</li>
+        <li>Local useState, no form library</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Recommendation: Follow the exact same patterns</h3>
+  <p class="subtitle">New page at <code>/settings/fees</code> (sidebar: Settings > Fees)</p>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Fee Management Page — Following Loan Products Layout</div>
+  <div class="mockup-body" style="padding: 20px; background: #111827; font-family: system-ui, -apple-system, sans-serif;">
+    <!-- Header — same pattern as Loan Products -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+      <div>
+        <h2 style="color: #f9fafb; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.025em;">Fee Management</h2>
+        <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 0;">Create and manage fees applied to loan products</p>
+      </div>
+      <div style="background: #ea580c; color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+        <span style="font-size: 16px;">+</span> Add New Fee
+      </div>
+    </div>
+
+    <!-- Summary Cards — same 3-card grid -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+      <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px; color: #9ca3af;">
+            <span style="font-size: 14px;">📋</span>
+            <span style="font-size: 13px; font-weight: 500;">Total Fees</span>
+          </div>
+          <span style="font-size: 22px; font-weight: 700; color: #f9fafb;">4</span>
+        </div>
+      </div>
+      <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px; color: #22c55e;">
+            <span style="font-size: 14px;">💲</span>
+            <span style="font-size: 13px; font-weight: 500;">Fixed</span>
+          </div>
+          <span style="font-size: 22px; font-weight: 700; color: #22c55e;">2</span>
+        </div>
+      </div>
+      <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px; color: #3b82f6;">
+            <span style="font-size: 14px;">%</span>
+            <span style="font-size: 13px; font-weight: 500;">Percentage</span>
+          </div>
+          <span style="font-size: 22px; font-weight: 700; color: #3b82f6;">2</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table — same Card > Table pattern -->
+    <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; overflow: hidden;">
+      <div style="padding: 16px; border-bottom: 1px solid #374151;">
+        <span style="font-size: 13px; font-weight: 500; color: #9ca3af;">All Fees (4)</span>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid #374151;">
+            <th style="text-align: left; padding: 10px 16px; color: #6b7280; font-weight: 500; font-size: 12px;">Name</th>
+            <th style="text-align: left; padding: 10px 16px; color: #6b7280; font-weight: 500; font-size: 12px;">Type</th>
+            <th style="text-align: left; padding: 10px 16px; color: #6b7280; font-weight: 500; font-size: 12px;">Value</th>
+            <th style="text-align: left; padding: 10px 16px; color: #6b7280; font-weight: 500; font-size: 12px;">Applies To</th>
+            <th style="text-align: left; padding: 10px 16px; color: #6b7280; font-weight: 500; font-size: 12px;">Conditions</th>
+            <th style="padding: 10px 16px; width: 40px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #374151;">
+            <td style="padding: 12px 16px;">
+              <p style="color: #f9fafb; font-weight: 500; margin: 0;">Processing Fee</p>
+            </td>
+            <td style="padding: 12px 16px;">
+              <span style="background: #1e3a5f; color: #60a5fa; padding: 2px 10px; border-radius: 12px; font-size: 11px; border: 1px solid #2563eb33;">Percentage</span>
+            </td>
+            <td style="padding: 12px 16px; color: #d1d5db;">2%</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">All Products (4)</td>
+            <td style="padding: 12px 16px; color: #6b7280;">—</td>
+            <td style="padding: 12px 16px; color: #6b7280; cursor: pointer;">⋯</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #374151;">
+            <td style="padding: 12px 16px;">
+              <p style="color: #f9fafb; font-weight: 500; margin: 0;">Service Fee</p>
+            </td>
+            <td style="padding: 12px 16px;">
+              <span style="background: #1e3a5f; color: #60a5fa; padding: 2px 10px; border-radius: 12px; font-size: 11px; border: 1px solid #2563eb33;">Percentage</span>
+            </td>
+            <td style="padding: 12px 16px; color: #d1d5db;">1%</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">All Products (4)</td>
+            <td style="padding: 12px 16px; color: #6b7280;">—</td>
+            <td style="padding: 12px 16px; color: #6b7280; cursor: pointer;">⋯</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #374151;">
+            <td style="padding: 12px 16px;">
+              <p style="color: #f9fafb; font-weight: 500; margin: 0;">Notarial Fee</p>
+            </td>
+            <td style="padding: 12px 16px;">
+              <span style="background: #14332a; color: #4ade80; padding: 2px 10px; border-radius: 12px; font-size: 11px; border: 1px solid #22c55e33;">Fixed</span>
+            </td>
+            <td style="padding: 12px 16px; color: #d1d5db;">₱500.00</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">Personal, Business</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">Amount > ₱50,000</td>
+            <td style="padding: 12px 16px; color: #6b7280; cursor: pointer;">⋯</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px;">
+              <p style="color: #f9fafb; font-weight: 500; margin: 0;">Insurance Fee</p>
+            </td>
+            <td style="padding: 12px 16px;">
+              <span style="background: #14332a; color: #4ade80; padding: 2px 10px; border-radius: 12px; font-size: 11px; border: 1px solid #22c55e33;">Fixed</span>
+            </td>
+            <td style="padding: 12px 16px; color: #d1d5db;">₱200.00</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">All Products (4)</td>
+            <td style="padding: 12px 16px; color: #9ca3af; font-size: 12px;">Term > 90 days</td>
+            <td style="padding: 12px 16px; color: #6b7280; cursor: pointer;">⋯</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Add New Fee — Dialog (same pattern as Product Form)</div>
+  <div class="mockup-body" style="padding: 24px; background: #111827; font-family: system-ui, -apple-system, sans-serif;">
+
+    <!-- Section: Basic Info — same uppercase heading pattern -->
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px;">Basic Info</h3>
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 13px; color: #d1d5db; margin-bottom: 4px;">Fee Name <span style="color: #ef4444;">*</span></label>
+        <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 8px 12px; color: #9ca3af; font-size: 14px;">e.g. Notarial Fee</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="display: block; font-size: 13px; color: #d1d5db; margin-bottom: 4px;">Type <span style="color: #ef4444;">*</span></label>
+          <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 8px 12px; color: #d1d5db; font-size: 14px; display: flex; justify-content: space-between;">
+            <span>Fixed</span>
+            <span style="color: #6b7280;">▾</span>
+          </div>
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: #d1d5db; margin-bottom: 4px;">Amount (PHP) <span style="color: #ef4444;">*</span></label>
+          <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 8px 12px; color: #d1d5db; font-size: 14px;">500</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Applicable Loan Products -->
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px;">Applicable Loan Products</h3>
+      <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <label style="display: flex; align-items: center; gap: 10px; color: #d1d5db; font-size: 13px; cursor: pointer;">
+            <span style="width: 16px; height: 16px; border-radius: 3px; background: #ea580c; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff;">✓</span>
+            Personal Loan
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; color: #d1d5db; font-size: 13px; cursor: pointer;">
+            <span style="width: 16px; height: 16px; border-radius: 3px; background: #ea580c; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff;">✓</span>
+            Business Loan
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; color: #9ca3af; font-size: 13px; cursor: pointer;">
+            <span style="width: 16px; height: 16px; border-radius: 3px; border: 1px solid #4b5563; display: inline-block;"></span>
+            Salary Loan
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; color: #9ca3af; font-size: 13px; cursor: pointer;">
+            <span style="width: 16px; height: 16px; border-radius: 3px; border: 1px solid #4b5563; display: inline-block;"></span>
+            Emergency Loan
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Additional Conditions -->
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px;">Additional Conditions</h3>
+      <p style="font-size: 12px; color: #6b7280; margin: 0 0 12px;">Optional — leave blank if the fee applies unconditionally</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <!-- Term -->
+        <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px;">
+          <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; font-weight: 600;">Term (Days)</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Greater than</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #6b7280; font-size: 13px; flex: 1;">—</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Less than</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #6b7280; font-size: 13px; flex: 1;">—</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Equal to</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #6b7280; font-size: 13px; flex: 1;">—</div>
+            </div>
+          </div>
+        </div>
+        <!-- Loan Amount -->
+        <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px;">
+          <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; font-weight: 600;">Loan Amount</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Greater than</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #d1d5db; font-size: 13px; flex: 1;">50,000</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Less than</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #6b7280; font-size: 13px; flex: 1;">—</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #6b7280; width: 85px;">Equal to</span>
+              <div style="background: #111827; border: 1px solid #374151; border-radius: 4px; padding: 6px 10px; color: #6b7280; font-size: 13px; flex: 1;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tiered Charges — coming soon -->
+    <div style="margin-bottom: 20px;">
+      <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px; opacity: 0.5;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Tiered Charges</span>
+          <span style="background: #374151; color: #9ca3af; padding: 2px 8px; border-radius: 10px; font-size: 10px;">Coming Soon</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons — same pattern -->
+    <div style="display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px;">
+      <div style="padding: 8px 16px; border: 1px solid #374151; border-radius: 6px; color: #9ca3af; font-size: 13px;">Cancel</div>
+      <div style="background: #ea580c; color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;">Create Fee</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>What stays consistent with your existing UI</h3>
+  <ul style="margin: 8px 0 0; padding-left: 16px; font-size: 13px; line-height: 2; color: #bbb;">
+    <li><strong>Page layout:</strong> Header (title + desc + orange button) → 3 summary cards → Card with table</li>
+    <li><strong>Dialog form:</strong> DialogContent size="lg" with scrollable content, section headings in uppercase</li>
+    <li><strong>Fields:</strong> 2-column grid (sm:grid-cols-2), same Input/Select/Label components</li>
+    <li><strong>Actions:</strong> DropdownMenu (⋯) per row for Edit / Delete</li>
+    <li><strong>Colors:</strong> brand-orange buttons, green/blue Badge variants for type</li>
+    <li><strong>Mobile:</strong> Card list view on small screens, table on desktop</li>
+    <li><strong>Navigation:</strong> Settings > Fees in sidebar (alongside Loan Products & Branches)</li>
+    <li><strong>State:</strong> Local useState pattern, same toast notifications</li>
+  </ul>
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>Looks Good — Proceed</h3>
+      <p>This follows our existing patterns. Let's go with this design.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="changes" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content">
+      <h3>Needs Changes</h3>
+      <p>Tell me what to adjust in the terminal.</p>
+    </div>
+  </div>
+</div>

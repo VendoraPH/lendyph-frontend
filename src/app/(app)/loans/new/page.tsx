@@ -80,6 +80,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDateObj as formatDate,
+  formatDateISO,
+} from "@/lib/format";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -88,6 +93,7 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 
+<<<<<<< Updated upstream
 // ── Currency Formatter ──
 
 const formatCurrency = (amount: number) =>
@@ -98,6 +104,8 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
+=======
+>>>>>>> Stashed changes
 // ── Helpers ──
 
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
@@ -146,18 +154,6 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatDateISO(date: Date): string {
-  return date.toISOString().split("T")[0];
 }
 
 interface AmortizationRow {

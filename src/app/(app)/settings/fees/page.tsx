@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, CreateFeeData, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -342,12 +343,7 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 
 function formatFeeValue(fee: Fee): string {
   if (fee.type === "percentage") return `${fee.value}%`;
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(fee.value);
+  return formatCurrency(fee.value);
 }
 
 function formatConditions(c: FeeConditions | undefined): string {
