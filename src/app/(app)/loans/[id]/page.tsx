@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
@@ -1954,6 +1955,37 @@ export default function LoanDetailPage({
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
+  // Surface the actual backend error message from /loans/{id}/extend so the
+  // user sees the real reason (e.g. wrong status, no open period) instead of
+  // a generic "Failed to extend loan" toast. Maps documented status codes
+  // (401/403/404/422) to friendly text and falls back to the server's
+  // `message` / first `errors[*]` entry for unexpected statuses.
+  const extendErrorMessage = (err: unknown): string => {
+    if (err instanceof AxiosError) {
+      const status = err.response?.status;
+      const data = err.response?.data as
+        | { message?: string; errors?: Record<string, string[]> }
+        | undefined;
+      const firstFieldError = data?.errors
+        ? Object.values(data.errors).flat()[0]
+        : undefined;
+      const serverMsg = firstFieldError || data?.message;
+      if (status === 401)
+        return "Your session has expired. Please sign in again.";
+      if (status === 403)
+        return "You don't have permission to extend loans. Contact your administrator.";
+      if (status === 404)
+        return "Loan not found.";
+      if (status === 422)
+        return (
+          serverMsg ||
+          "This loan cannot be extended (must be an upon-maturity loan in released or ongoing status with an open period)."
+        );
+      if (serverMsg) return serverMsg;
+    }
+    return "Failed to extend loan. Please try again.";
+  };
+
   const handleExtendLoan = async () => {
     setActionLoading(true);
     try {
@@ -1970,8 +2002,8 @@ export default function LoanDetailPage({
       fetchSchedule(loan.id);
       fetchLoanSummary(loan.id);
       fetchRepayments(loan.id);
-    } catch {
-      toast.error("Failed to extend loan");
+    } catch (err) {
+      toast.error(extendErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -1985,8 +2017,8 @@ export default function LoanDetailPage({
         remarks: `Auto-extend on partial payment of ${pendingPayment.amount_paid}`,
       });
       toast.success("Loan extended");
-    } catch {
-      toast.error("Failed to extend loan");
+    } catch (err) {
+      toast.error(extendErrorMessage(err));
       setActionLoading(false);
       return;
     }
