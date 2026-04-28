@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
@@ -26,15 +26,18 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowUpDown,
+  Loader2,
+  RefreshCw,
   Search,
   Users,
   Banknote,
   Wallet,
-  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { reportService } from "@/services";
 
 // ── Types ──
 
@@ -51,167 +54,6 @@ interface PastDueLoan {
   lastPaymentDate: string | null;
   branch: string;
 }
-
-// ── Dummy Data — replace with API once /api/reports/due-past-due is wired ──
-
-const DUMMY_PAST_DUE: PastDueLoan[] = [
-  {
-    loanId: 1001,
-    loanNumber: "LN-2026-0142",
-    memberId: "M-00482",
-    memberName: "Maria Clara Santos",
-    daysPastDue: 5,
-    pastDuePrincipal: 4200,
-    pastDueInterest: 350,
-    pastDuePenalty: 80,
-    outstandingBalance: 38400,
-    lastPaymentDate: "2026-04-12",
-    branch: "Main",
-  },
-  {
-    loanId: 1002,
-    loanNumber: "LN-2026-0118",
-    memberId: "M-00133",
-    memberName: "Juan Dela Cruz",
-    daysPastDue: 12,
-    pastDuePrincipal: 6500,
-    pastDueInterest: 540,
-    pastDuePenalty: 195,
-    outstandingBalance: 72200,
-    lastPaymentDate: "2026-04-05",
-    branch: "Main",
-  },
-  {
-    loanId: 1003,
-    loanNumber: "LN-2025-0987",
-    memberId: "M-00729",
-    memberName: "Ana Reyes-Villanueva",
-    daysPastDue: 28,
-    pastDuePrincipal: 8200,
-    pastDueInterest: 720,
-    pastDuePenalty: 410,
-    outstandingBalance: 110500,
-    lastPaymentDate: "2026-03-20",
-    branch: "Cebu",
-  },
-  {
-    loanId: 1004,
-    loanNumber: "LN-2026-0033",
-    memberId: "M-00211",
-    memberName: "Roberto Garcia",
-    daysPastDue: 35,
-    pastDuePrincipal: 12500,
-    pastDueInterest: 1100,
-    pastDuePenalty: 875,
-    outstandingBalance: 145000,
-    lastPaymentDate: "2026-03-12",
-    branch: "Davao",
-  },
-  {
-    loanId: 1005,
-    loanNumber: "LN-2025-0741",
-    memberId: "M-00059",
-    memberName: "Lourdes Mendoza",
-    daysPastDue: 47,
-    pastDuePrincipal: 5800,
-    pastDueInterest: 510,
-    pastDuePenalty: 545,
-    outstandingBalance: 64200,
-    lastPaymentDate: "2026-03-01",
-    branch: "Main",
-  },
-  {
-    loanId: 1006,
-    loanNumber: "LN-2025-0612",
-    memberId: "M-00388",
-    memberName: "Andres Bonifacio",
-    daysPastDue: 58,
-    pastDuePrincipal: 9700,
-    pastDueInterest: 880,
-    pastDuePenalty: 1125,
-    outstandingBalance: 132500,
-    lastPaymentDate: "2026-02-18",
-    branch: "Cebu",
-  },
-  {
-    loanId: 1007,
-    loanNumber: "LN-2025-0509",
-    memberId: "M-00012",
-    memberName: "Imelda Domingo",
-    daysPastDue: 67,
-    pastDuePrincipal: 3400,
-    pastDueInterest: 290,
-    pastDuePenalty: 455,
-    outstandingBalance: 28900,
-    lastPaymentDate: "2026-02-09",
-    branch: "Main",
-  },
-  {
-    loanId: 1008,
-    loanNumber: "LN-2025-0444",
-    memberId: "M-00674",
-    memberName: "Carlos Aquino",
-    daysPastDue: 79,
-    pastDuePrincipal: 14200,
-    pastDueInterest: 1320,
-    pastDuePenalty: 1880,
-    outstandingBalance: 198000,
-    lastPaymentDate: "2026-01-28",
-    branch: "Davao",
-  },
-  {
-    loanId: 1009,
-    loanNumber: "LN-2025-0301",
-    memberId: "M-00540",
-    memberName: "Pilar Magsaysay",
-    daysPastDue: 88,
-    pastDuePrincipal: 7100,
-    pastDueInterest: 660,
-    pastDuePenalty: 1050,
-    outstandingBalance: 81500,
-    lastPaymentDate: "2026-01-19",
-    branch: "Cebu",
-  },
-  {
-    loanId: 1010,
-    loanNumber: "LN-2025-0228",
-    memberId: "M-00097",
-    memberName: "Felipe Ramos",
-    daysPastDue: 102,
-    pastDuePrincipal: 11800,
-    pastDueInterest: 1080,
-    pastDuePenalty: 2120,
-    outstandingBalance: 156000,
-    lastPaymentDate: "2026-01-05",
-    branch: "Main",
-  },
-  {
-    loanId: 1011,
-    loanNumber: "LN-2024-1187",
-    memberId: "M-00316",
-    memberName: "Teresita Bautista",
-    daysPastDue: 124,
-    pastDuePrincipal: 6300,
-    pastDueInterest: 590,
-    pastDuePenalty: 1450,
-    outstandingBalance: 71400,
-    lastPaymentDate: "2025-12-14",
-    branch: "Davao",
-  },
-  {
-    loanId: 1012,
-    loanNumber: "LN-2024-0982",
-    memberId: "M-00805",
-    memberName: "Mateo Hernandez",
-    daysPastDue: 156,
-    pastDuePrincipal: 18500,
-    pastDueInterest: 1640,
-    pastDuePenalty: 4280,
-    outstandingBalance: 245000,
-    lastPaymentDate: "2025-11-12",
-    branch: "Cebu",
-  },
-];
 
 // ── Helpers ──
 
@@ -250,17 +92,209 @@ const severityClass = (days: number): string => {
 type SortKey = "memberName" | "daysPastDue" | "pastDue" | "outstanding";
 type SortDir = "asc" | "desc";
 
+// ── Response mapping ──
+//
+// /api/reports/due-past-due is documented in swagger as a paginated list of
+// "schedules that are due or overdue as of today" — but the response body
+// shape isn't pinned down there. Map defensively against the most likely
+// snake_case field names so this works whether the row represents a loan
+// summary or an individual schedule period, with sensible fallbacks.
+
+interface RawPastDueRow {
+  [key: string]: unknown;
+  loan?: { loan_account_number?: string; outstanding_balance?: number | string } | null;
+  borrower?: {
+    full_name?: string;
+    name?: string;
+    borrower_code?: string;
+  } | null;
+  branch?: { name?: string } | string | null;
+}
+
+const num = (v: unknown): number => {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const str = (v: unknown, fallback = ""): string => {
+  if (v === null || v === undefined) return fallback;
+  return String(v);
+};
+
+const computeDaysPastDue = (raw: RawPastDueRow): number => {
+  const direct = num(raw.days_past_due ?? raw.days_overdue ?? raw.daysPastDue);
+  if (direct > 0) return direct;
+  const dueDate = raw.due_date ?? raw.dueDate;
+  if (typeof dueDate === "string") {
+    const ms = Date.now() - new Date(dueDate).getTime();
+    if (Number.isFinite(ms) && ms > 0) {
+      return Math.floor(ms / 86_400_000);
+    }
+  }
+  return 0;
+};
+
+const mapRow = (raw: RawPastDueRow): PastDueLoan => {
+  const loanId = num(raw.loan_id ?? raw.loanId ?? raw.id);
+  const loanNumber = str(
+    raw.loan_account_number ??
+      raw.loan_number ??
+      raw.loanNumber ??
+      raw.loan?.loan_account_number,
+    loanId ? `#${loanId}` : "—",
+  );
+  const memberId = str(
+    raw.borrower_code ??
+      raw.member_id ??
+      raw.memberId ??
+      raw.borrower?.borrower_code ??
+      raw.borrower_id,
+    "—",
+  );
+  const memberName = str(
+    raw.borrower_name ??
+      raw.member_name ??
+      raw.memberName ??
+      raw.borrower?.full_name ??
+      raw.borrower?.name,
+    "—",
+  );
+  const branchValue = raw.branch_name ?? raw.branchName ?? raw.branch;
+  const branch =
+    typeof branchValue === "object" && branchValue !== null
+      ? str((branchValue as { name?: string }).name, "—")
+      : str(branchValue, "—");
+  const lastPaymentRaw =
+    raw.last_payment_date ??
+    raw.last_payment_at ??
+    raw.lastPaymentDate ??
+    null;
+  const lastPaymentDate =
+    typeof lastPaymentRaw === "string" ? lastPaymentRaw : null;
+
+  return {
+    loanId,
+    loanNumber,
+    memberId,
+    memberName,
+    daysPastDue: computeDaysPastDue(raw),
+    pastDuePrincipal: num(
+      raw.past_due_principal ??
+        raw.pastDuePrincipal ??
+        raw.principal_due ??
+        raw.principal_remaining,
+    ),
+    pastDueInterest: num(
+      raw.past_due_interest ??
+        raw.pastDueInterest ??
+        raw.interest_due ??
+        raw.interest_remaining,
+    ),
+    pastDuePenalty: num(
+      raw.past_due_penalty ??
+        raw.pastDuePenalty ??
+        raw.penalty_amount ??
+        raw.penalty,
+    ),
+    outstandingBalance: num(
+      raw.outstanding_balance ??
+        raw.outstandingBalance ??
+        raw.remaining_balance ??
+        raw.loan?.outstanding_balance,
+    ),
+    lastPaymentDate,
+    branch,
+  };
+};
+
+// Some Laravel reports return rows directly; others wrap them in a paginated
+// envelope with `{ data: [...] }`. Handle both transparently.
+const extractRows = (resp: unknown): RawPastDueRow[] => {
+  if (Array.isArray(resp)) return resp as RawPastDueRow[];
+  if (resp && typeof resp === "object") {
+    const r = resp as { data?: unknown };
+    if (Array.isArray(r.data)) return r.data as RawPastDueRow[];
+    // Double-wrapped: { data: { data: [...] } } — defensive
+    if (r.data && typeof r.data === "object") {
+      const inner = (r.data as { data?: unknown }).data;
+      if (Array.isArray(inner)) return inner as RawPastDueRow[];
+    }
+  }
+  return [];
+};
+
+// If the backend returns one row per overdue *schedule period* instead of
+// one row per loan, multiple rows can share the same loan_id. Aggregate
+// into per-loan summaries so the UI shows each member's loan once.
+const aggregateByLoan = (rows: PastDueLoan[]): PastDueLoan[] => {
+  const map = new Map<number, PastDueLoan>();
+  for (const r of rows) {
+    if (!r.loanId) continue;
+    const existing = map.get(r.loanId);
+    if (existing) {
+      existing.pastDuePrincipal += r.pastDuePrincipal;
+      existing.pastDueInterest += r.pastDueInterest;
+      existing.pastDuePenalty += r.pastDuePenalty;
+      // Keep the largest daysPastDue (oldest unpaid period defines the loan's age)
+      if (r.daysPastDue > existing.daysPastDue) {
+        existing.daysPastDue = r.daysPastDue;
+      }
+      // Outstanding should be the loan's running balance — same across periods
+      // but take the max defensively in case some rows omit it.
+      if (r.outstandingBalance > existing.outstandingBalance) {
+        existing.outstandingBalance = r.outstandingBalance;
+      }
+      // Latest last-payment date wins
+      if (
+        r.lastPaymentDate &&
+        (!existing.lastPaymentDate ||
+          new Date(r.lastPaymentDate) > new Date(existing.lastPaymentDate))
+      ) {
+        existing.lastPaymentDate = r.lastPaymentDate;
+      }
+    } else {
+      map.set(r.loanId, { ...r });
+    }
+  }
+  return Array.from(map.values());
+};
+
 // ── Page ──
 
 export default function PastDueLoansPage() {
+  const [loans, setLoans] = useState<PastDueLoan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [bucket, setBucket] = useState<AgingBucket>("all");
   const [sortKey, setSortKey] = useState<SortKey>("daysPastDue");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
+    try {
+      const res = await reportService.duePastDue({ per_page: 9999 });
+      const mapped = extractRows(res).map(mapRow);
+      setLoans(aggregateByLoan(mapped));
+    } catch (err) {
+      console.error("Failed to load past-due loans:", err);
+      toast.error("Failed to load past due loans");
+      setLoans([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return DUMMY_PAST_DUE.filter((l) => {
+    return loans.filter((l) => {
       if (!inBucket(l.daysPastDue, bucket)) return false;
       if (!q) return true;
       return (
@@ -269,7 +303,7 @@ export default function PastDueLoansPage() {
         l.loanNumber.toLowerCase().includes(q)
       );
     });
-  }, [search, bucket]);
+  }, [loans, search, bucket]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -338,10 +372,23 @@ export default function PastDueLoansPage() {
               Past Due Loans
             </h1>
             <p className="text-sm text-muted-foreground">
-              Members with overdue loan payments — sample data shown until
-              the API is wired.
+              Members with overdue loan payments as of today.
             </p>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => load(true)}
+            disabled={loading || refreshing}
+          >
+            <RefreshCw
+              className={cn(
+                "mr-2 h-3.5 w-3.5",
+                refreshing && "animate-spin",
+              )}
+            />
+            Refresh
+          </Button>
         </div>
 
         {/* Summary Cards */}
@@ -357,7 +404,7 @@ export default function PastDueLoansPage() {
                     Members Past Due
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {totals.memberCount}
+                    {loading ? "—" : totals.memberCount}
                   </p>
                 </div>
               </div>
@@ -374,7 +421,7 @@ export default function PastDueLoansPage() {
                     Past Due Loans
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {totals.loanCount}
+                    {loading ? "—" : totals.loanCount}
                   </p>
                 </div>
               </div>
@@ -391,7 +438,7 @@ export default function PastDueLoansPage() {
                     Total Past Due
                   </p>
                   <p className="text-xl font-bold tabular-nums text-red-600">
-                    {formatCurrency(totals.pastDueSum)}
+                    {loading ? "—" : formatCurrency(totals.pastDueSum)}
                   </p>
                 </div>
               </div>
@@ -408,7 +455,7 @@ export default function PastDueLoansPage() {
                     Outstanding Balance
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {formatCurrency(totals.outstandingSum)}
+                    {loading ? "—" : formatCurrency(totals.outstandingSum)}
                   </p>
                 </div>
               </div>
@@ -427,11 +474,13 @@ export default function PastDueLoansPage() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search member name, member ID, or loan number…"
                   className="pl-8"
+                  disabled={loading}
                 />
               </div>
               <Select
                 value={bucket}
                 onValueChange={(v) => setBucket(v as AgingBucket)}
+                disabled={loading}
               >
                 <SelectTrigger className="sm:w-52">
                   <SelectValue placeholder="Aging bucket" />
@@ -451,10 +500,19 @@ export default function PastDueLoansPage() {
         {/* Table */}
         <Card>
           <CardContent className="p-0">
-            {sorted.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <p className="text-sm">Loading past due loans…</p>
+              </div>
+            ) : sorted.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
                 <AlertTriangle className="h-8 w-8 opacity-40" />
-                <p className="text-sm">No past due loans match your filter.</p>
+                <p className="text-sm">
+                  {loans.length === 0
+                    ? "No past due loans — all members are current."
+                    : "No past due loans match your filter."}
+                </p>
               </div>
             ) : (
               <Table>
@@ -522,7 +580,7 @@ export default function PastDueLoansPage() {
                         <Badge
                           className={cn(
                             "border tabular-nums",
-                            severityClass(l.daysPastDue)
+                            severityClass(l.daysPastDue),
                           )}
                         >
                           {l.daysPastDue} {l.daysPastDue === 1 ? "day" : "days"}
@@ -542,15 +600,12 @@ export default function PastDueLoansPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-muted-foreground"
-                          onClick={() =>
-                            toast.info(
-                              "This is sample data — the loan link will work once the past-due API is wired."
-                            )
-                          }
+                          nativeButton={false}
+                          render={<Link href={`/loans/${l.loanId}`} />}
+                          aria-label="Open loan"
                         >
-                          <Info className="mr-1 h-3 w-3" />
-                          Demo
+                          Open
+                          <ArrowRight className="ml-1 h-3 w-3" />
                         </Button>
                       </TableCell>
                     </TableRow>
