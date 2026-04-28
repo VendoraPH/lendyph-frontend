@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -11,6 +11,8 @@ import {
   PencilLine,
   Trash2,
   ArrowRight,
+  ChevronDown,
+  ChevronRight,
   Loader2,
 } from "lucide-react";
 import { RouteGuard, PermissionGate } from "@/components/common";
@@ -68,6 +70,19 @@ export default function CollateralListingPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [deleting, setDeleting] = useState<CollateralWithMeta | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  // Members whose nested collateral rows are expanded in the table.
+  const [expandedMembers, setExpandedMembers] = useState<Set<number>>(
+    new Set(),
+  );
+
+  const toggleMember = (borrowerId: number) => {
+    setExpandedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(borrowerId)) next.delete(borrowerId);
+      else next.add(borrowerId);
+      return next;
+    });
+  };
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -160,6 +175,43 @@ export default function CollateralListingPage() {
     () => filtered.reduce((sum, c) => sum + c.effective_value, 0),
     [filtered],
   );
+
+  // Group filtered collaterals by member so the listing collapses N
+  // rows-per-member into one summary row that expands to show details.
+  // Each member group exposes precomputed summary stats (count, total
+  // value, tagged count) so the parent row renders without re-summing.
+  const groupedByMember = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        borrowerId: number;
+        borrowerName: string;
+        items: CollateralWithMeta[];
+        total: number;
+        taggedCount: number;
+      }
+    >();
+    for (const c of filtered) {
+      const existing = map.get(c.borrower_id);
+      if (existing) {
+        existing.items.push(c);
+        existing.total += c.effective_value;
+        if (c.active_loan_id) existing.taggedCount += 1;
+      } else {
+        map.set(c.borrower_id, {
+          borrowerId: c.borrower_id,
+          borrowerName: c.borrower_name ?? `Member #${c.borrower_id}`,
+          items: [c],
+          total: c.effective_value,
+          taggedCount: c.active_loan_id ? 1 : 0,
+        });
+      }
+    }
+    // Sort alphabetically by member name for predictable ordering.
+    return Array.from(map.values()).sort((a, b) =>
+      a.borrowerName.localeCompare(b.borrowerName),
+    );
+  }, [filtered]);
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -289,91 +341,150 @@ export default function CollateralListingPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8"></TableHead>
                     <TableHead>Member</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Detail</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
+                    <TableHead className="text-center">Collaterals</TableHead>
+                    <TableHead className="text-right">Total Value</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-1"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">
-                        {c.borrower_name ?? `Member #${c.borrower_id}`}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {c.type?.name ?? "Unknown"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {c.detail_value}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(c.effective_value)}
-                      </TableCell>
-                      <TableCell>
-                        {c.active_loan_id ? (
-                          <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
-                            Tagged to loan{" "}
-                            {c.active_loan_account_number ??
-                              `#${c.active_loan_id}`}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">Available</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <PermissionGate permission="collaterals:update">
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              nativeButton={false}
-                              render={
-                                <Link href={`/collaterals/${c.id}`} />
-                              }
-                              aria-label="Edit"
+                  {groupedByMember.map((group) => {
+                    const isExpanded = expandedMembers.has(group.borrowerId);
+                    const allTagged =
+                      group.taggedCount === group.items.length &&
+                      group.items.length > 0;
+                    return (
+                      <Fragment key={group.borrowerId}>
+                        {/* Member summary row */}
+                        <TableRow
+                          className="cursor-pointer transition-colors hover:bg-muted/40"
+                          onClick={() => toggleMember(group.borrowerId)}
+                        >
+                          <TableCell className="w-8 text-muted-foreground">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {group.borrowerName}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="font-mono">
+                              {group.items.length}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">
+                            {formatCurrency(group.total)}
+                          </TableCell>
+                          <TableCell>
+                            {group.taggedCount === 0 ? (
+                              <Badge variant="outline">All available</Badge>
+                            ) : allTagged ? (
+                              <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+                                All tagged ({group.taggedCount})
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+                                {group.taggedCount} of {group.items.length} tagged
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+
+                        {/* Per-collateral nested rows (visible when expanded) */}
+                        {isExpanded &&
+                          group.items.map((c) => (
+                            <TableRow
+                              key={c.id}
+                              className="bg-muted/20 hover:bg-muted/30"
                             >
-                              <PencilLine className="h-4 w-4" />
-                            </Button>
-                          </PermissionGate>
-                          <PermissionGate permission="collaterals:delete">
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setDeleting(c)}
-                              disabled={Boolean(c.active_loan_id)}
-                              title={
-                                c.active_loan_id
-                                  ? "Cannot delete — currently tagged to an active loan"
-                                  : "Delete"
-                              }
-                              aria-label="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </PermissionGate>
-                          {c.active_loan_id && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              render={
-                                <Link
-                                  href={`/loans/${c.active_loan_id}`}
-                                />
-                              }
-                              aria-label="Go to loan"
-                            >
-                              <ArrowRight className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              <TableCell />
+                              <TableCell className="pl-6">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {c.type?.name ?? "Unknown"}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {c.detail_value}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell />
+                              <TableCell className="text-right text-xs tabular-nums">
+                                {formatCurrency(c.effective_value)}
+                              </TableCell>
+                              <TableCell>
+                                {c.active_loan_id ? (
+                                  <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+                                    Tagged to loan{" "}
+                                    {c.active_loan_account_number ??
+                                      `#${c.active_loan_id}`}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">Available</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <PermissionGate permission="collaterals:update">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      nativeButton={false}
+                                      render={
+                                        <Link href={`/collaterals/${c.id}`} />
+                                      }
+                                      aria-label="Edit"
+                                    >
+                                      <PencilLine className="h-4 w-4" />
+                                    </Button>
+                                  </PermissionGate>
+                                  <PermissionGate permission="collaterals:delete">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleting(c);
+                                      }}
+                                      disabled={Boolean(c.active_loan_id)}
+                                      title={
+                                        c.active_loan_id
+                                          ? "Cannot delete — currently tagged to an active loan"
+                                          : "Delete"
+                                      }
+                                      aria-label="Delete"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </PermissionGate>
+                                  {c.active_loan_id && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      nativeButton={false}
+                                      render={
+                                        <Link
+                                          href={`/loans/${c.active_loan_id}`}
+                                        />
+                                      }
+                                      aria-label="Go to loan"
+                                    >
+                                      <ArrowRight className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
