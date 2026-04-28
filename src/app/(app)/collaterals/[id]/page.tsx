@@ -24,6 +24,9 @@ export default function EditCollateralPage() {
       .then((c) => {
         if (!cancelled) setCollateral(c);
       })
+      .catch(() => {
+        if (!cancelled) setCollateral(null);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
