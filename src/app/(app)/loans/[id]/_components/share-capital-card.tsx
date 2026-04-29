@@ -14,6 +14,7 @@ import type { ShareCapitalLedgerEntry } from "@/types";
 
 interface ShareCapitalCardProps {
   borrowerId: number | null | undefined;
+  defaultOpen?: boolean;
 }
 
 function formatCurrency(amount: number): string {
@@ -25,7 +26,7 @@ function formatCurrency(amount: number): string {
   }).format(isNaN(amount) ? 0 : amount);
 }
 
-export function ShareCapitalCard({ borrowerId }: ShareCapitalCardProps) {
+export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapitalCardProps) {
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -67,7 +68,7 @@ export function ShareCapitalCard({ borrowerId }: ShareCapitalCardProps) {
   }, [entries]);
 
   return (
-    <Collapsible defaultOpen={false}>
+    <Collapsible defaultOpen={defaultOpen}>
       <Card>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <CollapsibleTrigger className="w-full text-left group/trigger">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, use } from "react";
+import { useState, useMemo, useEffect, useCallback, use, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -480,7 +480,7 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
   const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
 
   return (
-    <Collapsible defaultOpen={false}>
+    <Collapsible defaultOpen={loanStatus !== "released"}>
       <Card>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -805,6 +805,7 @@ export default function LoanDetailPage({
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const scheduleOpenInitialized = useRef(false);
 
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
@@ -888,6 +889,14 @@ export default function LoanDetailPage({
     fetchLoan();
     return () => { cancelled = true; };
   }, [loanId]);
+
+  // Initialize scheduleOpen once when loan first loads — collapsed only for "released" status
+  useEffect(() => {
+    if (loan && !scheduleOpenInitialized.current) {
+      scheduleOpenInitialized.current = true;
+      setScheduleOpen(loan.status !== "released");
+    }
+  }, [loan?.status]);
 
   // Fetch users for AO tagging
   useEffect(() => {
@@ -2388,7 +2397,7 @@ export default function LoanDetailPage({
       />
 
       {loan.status !== "rejected" && approvalSteps.length > 0 && (
-        <Collapsible defaultOpen={false}>
+        <Collapsible defaultOpen={loan.status !== "released"}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -3005,7 +3014,7 @@ export default function LoanDetailPage({
         />
 
         {/* Card 3: Member & Co-Maker */}
-        <Collapsible defaultOpen={false}>
+        <Collapsible defaultOpen={loan.status !== "released"}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -3117,10 +3126,10 @@ export default function LoanDetailPage({
         </Collapsible>
 
         {/* Share Capital — current balance for the loan's member */}
-        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
+        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} defaultOpen={loan.status !== "released"} />
 
         {/* Card 4: Workflow History */}
-        <Collapsible defaultOpen={false}>
+        <Collapsible defaultOpen={loan.status !== "released"}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
