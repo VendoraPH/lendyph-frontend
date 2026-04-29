@@ -65,6 +65,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "New Payment", href: "/payments" },
       { title: "Payment History", href: "/payments/history" },
+      { title: "Auto-Pay", href: "/payments/auto-pay" },
     ],
   },
   {
