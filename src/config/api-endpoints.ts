@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
     UPLOAD_PHOTO: (id: number) => `/borrowers/${id}/photo`,
     DELETE_PHOTO: (id: number) => `/borrowers/${id}/photo`,
     UPLOAD_VALID_ID: (id: number) => `/borrowers/${id}/valid-ids`,
+    LIST_VALID_IDS: (id: number) => `/borrowers/${id}/valid-ids`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
   CO_MAKERS: {
@@ -60,6 +61,7 @@ export const API_ENDPOINTS = {
     AMORTIZATION_SCHEDULE: (id: number) => `/loans/${id}/amortization-schedule`,
     SUMMARY: (id: number) => `/loans/${id}/summary`,
     EXTEND: (id: number) => `/loans/${id}/extend`,
+    TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
@@ -179,6 +181,10 @@ export const API_ENDPOINTS = {
   AUTO_CREDIT: {
     STATUS: "/auto-credit/status",
     PROCESS: "/auto-credit/process",
+  },
+  AUTO_PAY: {
+    PREVIEW: "/auto-pay/preview",
+    PROCESS: "/auto-pay/process",
   },
   SETTINGS: {
     APPROVAL_WORKFLOW: "/settings/approval-workflow",
