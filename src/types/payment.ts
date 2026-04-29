@@ -4,7 +4,7 @@ export interface Payment {
   borrower_id: number;
   amount: number;
   penalty_amount?: number;
-  method: "cash" | "bank_transfer" | "gcash" | "maya" | "online";
+  method: "cash" | "bank_transfer" | "gcash" | "maya" | "online" | "auto_pay";
   status: "pending" | "completed" | "voided";
   reference_number?: string;
   remarks?: string;
