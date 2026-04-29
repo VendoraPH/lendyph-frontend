@@ -1,6 +1,6 @@
 export type { User, UserStatus, UserBranch } from "./user";
 export type { Loan, LoanStatus, InterestType, LoanSchedule, LoanProduct } from "./loan";
-export type { Borrower, BorrowerLedgerEntry, CivilStatus, Gender, BorrowerStatus, ValidIdType, ValidId, EmploymentType } from "./borrower";
+export type { Borrower, BorrowerLedgerEntry, CivilStatus, Gender, BorrowerStatus, ValidIdType, EmploymentType } from "./borrower";
 export type { CoMaker, CoMakerRelationship } from "./co-maker";
 export type { Payment } from "./payment";
 export type { Collection } from "./collection";
