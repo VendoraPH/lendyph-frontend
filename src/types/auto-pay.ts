@@ -52,7 +52,7 @@ export interface AutoPayResult {
 
 export interface AutoPayToggleData {
   enabled: boolean;
-  cbs_reference?: string;
+  cbs_reference?: string | null;
 }
 
 export interface AutoPaySettings {
