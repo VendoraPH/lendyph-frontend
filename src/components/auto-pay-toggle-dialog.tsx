@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AxiosError } from "axios";
 import { loanService } from "@/services/loan.service";
+import type { AutoPaySettings } from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -23,10 +24,7 @@ interface AutoPayToggleDialogProps {
   currentCbsReference?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (settings: {
-    auto_pay_enabled: boolean;
-    auto_pay_cbs_reference: string | null;
-  }) => void;
+  onSuccess: (settings: AutoPaySettings) => void;
   /** When true, shows "Skip for Now" instead of "Cancel" and adjusts dialog copy */
   isPostRelease?: boolean;
 }
@@ -45,6 +43,13 @@ export function AutoPayToggleDialog({
   const [cbsReference, setCbsReference] = useState(currentCbsReference ?? "");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setEnabled(currentEnabled);
+      setCbsReference(currentCbsReference ?? "");
+    }
+  }, [open, currentEnabled, currentCbsReference]);
+
   async function handleSave() {
     if (enabled && !cbsReference.trim()) {
       toast.error("CBS Reference No. is required when enabling Auto-Pay.");
@@ -57,10 +62,7 @@ export function AutoPayToggleDialog({
         cbs_reference: enabled ? cbsReference.trim() : undefined,
       });
       toast.success(enabled ? "Auto-Pay enabled." : "Auto-Pay disabled.");
-      onSuccess({
-        auto_pay_enabled: result.auto_pay_enabled,
-        auto_pay_cbs_reference: result.cbs_reference,
-      });
+      onSuccess(result);
       onOpenChange(false);
     } catch (err) {
       const msg =
@@ -95,7 +97,7 @@ export function AutoPayToggleDialog({
                 Include in batch auto-pay runs
               </p>
             </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
+            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Auto-Pay" />
           </div>
 
           {enabled && (
