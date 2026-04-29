@@ -5210,7 +5210,10 @@ export default function LoanDetailPage({
           currentEnabled={loan.auto_pay_enabled ?? false}
           currentCbsReference={loan.auto_pay_cbs_reference}
           open={autoPayDialogOpen}
-          onOpenChange={setAutoPayDialogOpen}
+          onOpenChange={(open) => {
+            setAutoPayDialogOpen(open);
+            if (!open) setAutoPayIsPostRelease(false);
+          }}
           isPostRelease={autoPayIsPostRelease}
           onSuccess={(settings) => {
             setLoan((prev) =>
