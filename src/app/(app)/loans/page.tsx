@@ -431,9 +431,10 @@ export default function LoansPage() {
             if (!open) setAutoPayTarget(null);
           }}
           onSuccess={(settings) => {
+            const targetId = autoPayTarget.loanId;
             setLoans((prev) =>
               prev.map((l) =>
-                l.id === autoPayTarget.loanId
+                l.id === targetId
                   ? {
                       ...l,
                       auto_pay_enabled: settings.auto_pay_enabled,
