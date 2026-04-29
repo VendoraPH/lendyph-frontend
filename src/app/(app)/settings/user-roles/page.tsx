@@ -48,6 +48,7 @@ import {
   Trash2,
   Power,
   PowerOff,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -172,6 +173,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Export audit logs",
     ],
   },
+  auto_pay: {
+    label: "Auto-Pay",
+    description: "Batch loan repayment processing via CBS integration.",
+    icon: Zap,
+    features: [
+      "Preview batch auto-pay totals and partial rows",
+      "Run auto-pay batch to process dues",
+      "Enable or disable auto-pay per loan with CBS reference",
+    ],
+  },
 };
 
 // Applicable actions per module — only the actions that make sense for each area
@@ -186,6 +197,7 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   users: ["view", "create", "update", "delete"],
   settings: ["view", "update"],
   audit_logs: ["view", "export"],
+  auto_pay: ["view", "process", "toggle"],
 };
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
@@ -199,6 +211,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  process: { label: "Process", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  toggle: { label: "Toggle", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
 };
 
 // ---------------------------------------------------------------------------

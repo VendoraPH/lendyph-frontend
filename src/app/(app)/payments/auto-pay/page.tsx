@@ -81,7 +81,7 @@ export default function AutoPayPage() {
   }, [filter, preview, includedPartialIds]);
 
   return (
-    <RouteGuard permission="payments:view">
+    <RouteGuard permission="auto_pay:view">
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Auto-Pay</h1>
