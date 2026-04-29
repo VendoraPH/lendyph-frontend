@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Spinner } from "@/components/ui/spinner";
+import { formatDateObj, formatDateISO } from "@/lib/format";
 import type { LoanProduct } from "@/types/loan";
 import type { AutoPayFilter } from "@/types";
 
@@ -35,6 +36,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
     loanProductService
       .list()
       .then((res) => setProducts(res as LoanProduct[]))
+      .catch(() => {})
       .finally(() => setProductsLoading(false));
   }, []);
 
@@ -50,25 +52,12 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
     if (checked) setSelectedProductIds([]);
   }
 
-  function formatDateDisplay(date: Date | undefined) {
-    if (!date) return "Select date";
-    return date.toLocaleDateString("en-PH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  function toISODate(date: Date) {
-    return date.toISOString().split("T")[0];
-  }
-
   function handlePreview() {
     if (!dateFrom || !dateTo) return;
     onPreview({
       product_ids: allProducts ? [] : selectedProductIds,
-      date_from: toISODate(dateFrom),
-      date_to: toISODate(dateTo),
+      date_from: formatDateISO(dateFrom),
+      date_to: formatDateISO(dateTo),
     });
   }
 
@@ -134,7 +123,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
               >
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                 <span className={dateFrom ? "" : "text-muted-foreground"}>
-                  {formatDateDisplay(dateFrom)}
+                  {dateFrom ? formatDateObj(dateFrom) : "Select date"}
                 </span>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -165,7 +154,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
               >
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                 <span className={dateTo ? "" : "text-muted-foreground"}>
-                  {formatDateDisplay(dateTo)}
+                  {dateTo ? formatDateObj(dateTo) : "Select date"}
                 </span>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
