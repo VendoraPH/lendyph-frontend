@@ -31,6 +31,7 @@ import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-d
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
+import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1051,6 +1052,8 @@ export default function LoanDetailPage({
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [releaseDatePickerOpen, setReleaseDatePickerOpen] = useState(false);
+  const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
+  const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
   const [approvalRemarks, setApprovalRemarks] = useState("");
   const [rejectionRemarks, setRejectionRemarks] = useState("");
@@ -1564,6 +1567,8 @@ export default function LoanDetailPage({
       setLoan(updated);
       toast.success("Loan released successfully");
       setReleaseOpen(false);
+      setAutoPayIsPostRelease(true);
+      setAutoPayDialogOpen(true);
       // Fetch the server-generated schedule
       fetchSchedule(loan.id);
       // Mark the Cashier step approved in the local approval chain
@@ -3118,6 +3123,53 @@ export default function LoanDetailPage({
 
         {/* Share Capital — current balance for the loan's member */}
         <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
+
+        {/* Auto-Pay Status Card */}
+        {["released", "current"].includes(loan.status) && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Auto-Pay</CardTitle>
+              {loan.auto_pay_enabled ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
+                  ● Enabled
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
+                  ○ Disabled
+                </span>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {loan.auto_pay_enabled && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CBS Reference</span>
+                    <span className="font-mono font-medium">
+                      {loan.auto_pay_cbs_reference ?? "—"}
+                    </span>
+                  </div>
+                  {loan.auto_pay_enabled_at && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Enabled on</span>
+                      <span>{formatDate(loan.auto_pay_enabled_at)}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setAutoPayIsPostRelease(false);
+                  setAutoPayDialogOpen(true);
+                }}
+              >
+                {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Card 4: Workflow History */}
         <Collapsible defaultOpen={false}>
@@ -5149,6 +5201,31 @@ export default function LoanDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Auto-Pay Dialog */}
+      {loan && (
+        <AutoPayToggleDialog
+          loanId={loan.id}
+          loanAccountNumber={loan.loan_account_number}
+          currentEnabled={loan.auto_pay_enabled ?? false}
+          currentCbsReference={loan.auto_pay_cbs_reference}
+          open={autoPayDialogOpen}
+          onOpenChange={setAutoPayDialogOpen}
+          isPostRelease={autoPayIsPostRelease}
+          onSuccess={(settings) => {
+            setLoan((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    auto_pay_enabled: settings.auto_pay_enabled,
+                    auto_pay_cbs_reference: settings.cbs_reference,
+                  }
+                : prev
+            );
+            setAutoPayIsPostRelease(false);
+          }}
+        />
+      )}
     </div>
   );
 }
