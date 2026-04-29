@@ -31,11 +31,12 @@ export function ReviewStep({
     );
     const addPrincipal = included.reduce((s, r) => s + r.principal_remaining, 0);
     const addInterest = included.reduce((s, r) => s + r.interest_remaining, 0);
+    const addAmount = included.reduce((s, r) => s + r.remaining_balance, 0);
     const partialLoanIds = new Set(included.map((r) => r.loan_id));
     return {
       total_principal: preview.summary.total_principal + addPrincipal,
       total_interest: preview.summary.total_interest + addInterest,
-      total_amount: preview.summary.total_amount + addPrincipal + addInterest,
+      total_amount: preview.summary.total_amount + addAmount,
       loans_count: preview.summary.loans_count + partialLoanIds.size,
     };
   }, [preview, includedPartialIds]);

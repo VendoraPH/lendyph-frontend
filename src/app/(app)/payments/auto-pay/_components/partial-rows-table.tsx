@@ -55,6 +55,7 @@ export function PartialRowsTable({
                     onCheckedChange={(v) =>
                       onToggle(row.schedule_id, Boolean(v))
                     }
+                    aria-label={`Include ${row.borrower_name} – ${row.loan_account}`}
                   />
                 </TableCell>
                 <TableCell className="font-medium">
