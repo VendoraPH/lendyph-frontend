@@ -292,6 +292,16 @@ function CandlestickTooltip({
 const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 
 // ---------------------------------------------------------------------------
+// Section visibility flags
+// ---------------------------------------------------------------------------
+// These dashboard sections are hidden temporarily — the underlying numbers
+// are placeholder/demo data and we don't want to show them to users until
+// they're driven by real backend metrics. Flip to `true` to bring them back.
+
+const SHOW_DAILY_COLLECTION_VS_ACTUAL = false;
+const SHOW_TOTAL_COLLECTIONS_HERO = false;
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -472,7 +482,9 @@ export default function DashboardPage() {
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 2: Expected vs Actual Daily Collection                        */}
+      {/* Hidden via SHOW_DAILY_COLLECTION_VS_ACTUAL — flip flag to restore. */}
       {/* ----------------------------------------------------------------- */}
+      {SHOW_DAILY_COLLECTION_VS_ACTUAL && (
       <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
@@ -587,10 +599,13 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Main Chart Card — full width single column                 */}
+      {/* Hidden via SHOW_TOTAL_COLLECTIONS_HERO — flip flag to restore.    */}
       {/* ----------------------------------------------------------------- */}
+      {SHOW_TOTAL_COLLECTIONS_HERO && (
       <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="flex flex-col lg:flex-row">
           {/* Left column: value + area chart */}
@@ -701,6 +716,7 @@ export default function DashboardPage() {
           ))}
         </div>
       </Card>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Recent Transactions Table                                   */}
