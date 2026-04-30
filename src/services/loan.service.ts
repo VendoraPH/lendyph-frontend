@@ -1,6 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { Loan, LoanSchedule, PaginatedResponse } from "@/types";
+import type { Loan, LoanSchedule, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 
 export const loanService = {
@@ -50,4 +50,7 @@ export const loanService = {
 
   extend: (id: number, data?: { remarks?: string }) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
+
+  toggleAutoPay: (id: number, data: AutoPayToggleData) =>
+    api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),
 };

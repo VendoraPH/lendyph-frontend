@@ -83,6 +83,14 @@ const KIND_META: Record<
   },
 };
 
+function titleCase(s: string): string {
+  return s.split("_").filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+function roleLabel(roleName: string): string {
+  return ROLES[roleName as Role]?.label ?? titleCase(roleName);
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -190,18 +198,14 @@ function StepFormDialog({
             <Select
               value={role || null}
               onValueChange={(v) => setRole(v ?? "")}
-              items={roles.map((r) => ({
-                value: r.name,
-                label: ROLES[r.name as Role]?.label ?? r.description ?? r.name,
-              }))}
             >
-              <SelectTrigger id="step-role">
+              <SelectTrigger id="step-role" className="w-full">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {roles.map((r) => (
+                {roles.filter((r) => r.is_active !== false).map((r) => (
                   <SelectItem key={r.id} value={r.name}>
-                    {ROLES[r.name as Role]?.label ?? r.description ?? r.name}
+                    {roleLabel(r.name)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -217,12 +221,8 @@ function StepFormDialog({
             <Select
               value={kind}
               onValueChange={(v) => setKind(v as ChainStepKind)}
-              items={(Object.keys(KIND_META) as ChainStepKind[]).map((k) => ({
-                value: k,
-                label: KIND_META[k].label,
-              }))}
             >
-              <SelectTrigger id="step-kind">
+              <SelectTrigger id="step-kind" className="w-full">
                 <SelectValue placeholder="Select kind" />
               </SelectTrigger>
               <SelectContent className="min-w-[28rem]">
@@ -304,23 +304,32 @@ export default function ApprovalWorkflowPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [normalData, peData, rolesData] = await Promise.all([
+        const [normalResult, peResult, rolesResult] = await Promise.allSettled([
           approvalWorkflowService.listNormal(),
           approvalWorkflowService.list(),
           roleService.list(),
         ]);
-        if (!cancelled) {
-          setNormalSteps(normalData);
-          setSavedNormalSteps(normalData);
-          setPeSteps(peData);
-          setSavedPeSteps(peData);
-          const list = Array.isArray(rolesData)
-            ? rolesData
-            : (rolesData as { data: ApiRole[] })?.data ?? [];
+        if (cancelled) return;
+
+        if (normalResult.status === "fulfilled") {
+          setNormalSteps(normalResult.value);
+          setSavedNormalSteps(normalResult.value);
+        }
+        if (peResult.status === "fulfilled") {
+          setPeSteps(peResult.value);
+          setSavedPeSteps(peResult.value);
+        }
+        if (rolesResult.status === "fulfilled") {
+          const raw = rolesResult.value;
+          const list = Array.isArray(raw)
+            ? raw
+            : (raw as { data: ApiRole[] })?.data ?? [];
           setRoles(list);
         }
-      } catch {
-        toast.error("Failed to load approval workflow");
+
+        if (normalResult.status === "rejected" || peResult.status === "rejected") {
+          toast.error("Failed to load approval workflow");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -648,7 +657,7 @@ export default function ApprovalWorkflowPage() {
             {steps.map((step, i) => {
               const meta = KIND_META[step.kind];
               const Icon = meta.icon;
-              const roleConfig = ROLES[step.role as Role];
+              const apiRole = roles.find((r) => r.name === step.role);
               return (
                 <div
                   key={step.id}
@@ -707,11 +716,11 @@ export default function ApprovalWorkflowPage() {
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       Role:{" "}
                       <span className="font-mono">
-                        {roleConfig?.label ?? step.role}
+                        {apiRole ? roleLabel(step.role) : step.role}
                       </span>
-                      {!roleConfig && (
-                        <span className="ml-1 text-red-600">
-                          (role not found)
+                      {!apiRole && (
+                        <span className="ml-1 text-amber-600">
+                          (role removed)
                         </span>
                       )}
                       {step.status && (

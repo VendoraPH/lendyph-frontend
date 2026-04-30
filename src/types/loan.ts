@@ -65,6 +65,11 @@ export interface Loan {
   amortization_schedules?: ApiScheduleRow[];
   created_at: string;
   updated_at: string;
+  // Auto-Pay
+  auto_pay_enabled?: boolean;
+  auto_pay_cbs_reference?: string | null;
+  auto_pay_enabled_at?: string | null;
+  auto_pay_enabled_by?: number | null;
 
   // Legacy aliases — kept for backward compat with components that use old field names
   borrower_id?: number;

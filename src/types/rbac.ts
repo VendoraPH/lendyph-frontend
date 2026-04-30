@@ -26,7 +26,8 @@ export type Module =
   | "users"
   | "audit_logs"
   | "share_capital"
-  | "collaterals";
+  | "collaterals"
+  | "auto_pay";
 
 export type Action =
   | "view"
@@ -38,7 +39,9 @@ export type Action =
   | "release"
   | "void"
   | "mark_collected"
-  | "export";
+  | "export"
+  | "process"
+  | "toggle";
 
 export type Permission = `${Module}:${Action}`;
 

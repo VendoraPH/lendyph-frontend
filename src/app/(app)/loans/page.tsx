@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionGate } from "@/components/common";
+import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import {
   XCircle,
   Banknote,
   AlertTriangle,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -126,6 +128,12 @@ export default function LoansPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [autoPayTarget, setAutoPayTarget] = useState<{
+    loanId: number;
+    loanAccountNumber?: string | null;
+    enabled: boolean;
+    cbsReference?: string | null;
+  } | null>(null);
 
   const fetchLoans = useCallback(async () => {
     try {
@@ -319,6 +327,7 @@ export default function LoansPage() {
                     <TableHead>Term</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Auto-Pay</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -356,12 +365,49 @@ export default function LoansPage() {
                       <TableCell className="text-muted-foreground">
                         {formatDate(loan.created_at)}
                       </TableCell>
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {["released", "current"].includes(loan.status) ? (
+                          <button
+                            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+                            onClick={() =>
+                              setAutoPayTarget({
+                                loanId: loan.id,
+                                loanAccountNumber: loan.loan_account_number,
+                                enabled: loan.auto_pay_enabled ?? false,
+                                cbsReference: loan.auto_pay_cbs_reference,
+                              })
+                            }
+                          >
+                            <Zap
+                              className={cn(
+                                "h-3 w-3",
+                                loan.auto_pay_enabled
+                                  ? "text-blue-600"
+                                  : "text-muted-foreground"
+                              )}
+                            />
+                            <span
+                              className={
+                                loan.auto_pay_enabled
+                                  ? "text-blue-700 dark:text-blue-300"
+                                  : "text-muted-foreground"
+                              }
+                            >
+                              {loan.auto_pay_enabled ? "Enabled" : "Enable"}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filteredLoans.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         className="h-24 text-center text-muted-foreground"
                       >
                         No loan applications found.
@@ -374,6 +420,32 @@ export default function LoansPage() {
           )}
         </CardContent>
       </Card>
+      {autoPayTarget && (
+        <AutoPayToggleDialog
+          loanId={autoPayTarget.loanId}
+          loanAccountNumber={autoPayTarget.loanAccountNumber}
+          currentEnabled={autoPayTarget.enabled}
+          currentCbsReference={autoPayTarget.cbsReference}
+          open={!!autoPayTarget}
+          onOpenChange={(open) => {
+            if (!open) setAutoPayTarget(null);
+          }}
+          onSuccess={(settings) => {
+            const targetId = autoPayTarget.loanId;
+            setLoans((prev) =>
+              prev.map((l) =>
+                l.id === targetId
+                  ? {
+                      ...l,
+                      auto_pay_enabled: settings.auto_pay_enabled,
+                      auto_pay_cbs_reference: settings.cbs_reference,
+                    }
+                  : l
+              )
+            );
+          }}
+        />
+      )}
     </div>
     </RouteGuard>
   );

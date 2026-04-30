@@ -15,3 +15,4 @@ export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "
 export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";
+export type { AutoPayFilter, AutoPayPartialRow, AutoPaySummary, AutoPayPreview, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";

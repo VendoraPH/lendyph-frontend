@@ -22,3 +22,4 @@ export { collateralService } from "./collateral.service";
 export type { CreateCollateralData, UpdateCollateralData } from "./collateral.service";
 export { collateralTypeService } from "./collateral-type.service";
 export type { CreateCollateralTypeData, UpdateCollateralTypeData } from "./collateral-type.service";
+export { autoPayService } from "./auto-pay.service";
