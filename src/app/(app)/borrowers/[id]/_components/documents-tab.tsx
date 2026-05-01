@@ -41,6 +41,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [deletingValidId, setDeletingValidId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -88,6 +89,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       await documentService.delete(id);
       toast.success("Document deleted");
       setDocuments((prev) => prev.filter((d) => d.id !== id));
+      setSelectedDoc(null);
     } catch {
       toast.error("Failed to delete document");
     } finally {
