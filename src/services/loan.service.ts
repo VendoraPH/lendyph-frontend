@@ -51,6 +51,9 @@ export const loanService = {
   extend: (id: number, data?: { remarks?: string }) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
 
+  restructure: (id: number, data: Record<string, unknown>) =>
+    api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
+
   toggleAutoPay: (id: number, data: AutoPayToggleData) =>
     api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),
 };

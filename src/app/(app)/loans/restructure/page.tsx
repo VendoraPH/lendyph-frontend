@@ -1,0 +1,1460 @@
+"use client";
+
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  CalendarIcon,
+  ChevronsUpDown,
+  Check,
+  Plus,
+  X,
+} from "lucide-react";
+
+import { RouteGuard } from "@/components/common";
+import { Spinner } from "@/components/ui/spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
+import {
+  borrowerService,
+  collateralService,
+  collateralTypeService,
+  loanProductService,
+  loanService,
+  userService,
+} from "@/services";
+import { getShareCapitalBalance } from "@/utils/share-capital";
+import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
+import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { INTEREST_TYPE_OPTIONS, PAYMENT_FREQUENCY_OPTIONS, LOAN_STATUS_LABELS } from "@/constants";
+
+import type { Borrower, CollateralType, CollateralWithMeta, Loan, User } from "@/types";
+import type { LoanProduct } from "@/types/loan";
+
+// ── Local types ──────────────────────────────────────────────────────────────
+
+type PaymentFrequency =
+  | "daily"
+  | "weekly"
+  | "bi_weekly"
+  | "semi_monthly"
+  | "monthly"
+  | "upon_maturity";
+
+type InterestType = "straight" | "fixed" | "diminishing";
+
+interface AmortizationRow {
+  period: number;
+  dueDate: Date;
+  principal: number;
+  interest: number;
+  shareCapitalBuildUp: number;
+  totalPayment: number;
+}
+
+// ── Amortization helpers (mirrors new/page.tsx) ───────────────────────────────
+
+function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
+  switch (frequency) {
+    case "daily": return Math.round(termMonths * 30);
+    case "weekly": return Math.round(termMonths * 4.33);
+    case "bi_weekly":
+    case "semi_monthly": return Math.round(termMonths * 2);
+    case "monthly":
+    default: return termMonths;
+  }
+}
+
+function getIntervalDays(frequency: PaymentFrequency): number {
+  switch (frequency) {
+    case "daily": return 1;
+    case "weekly": return 7;
+    case "bi_weekly":
+    case "semi_monthly": return 15;
+    case "monthly":
+    default: return 30;
+  }
+}
+
+function addMonthsToDate(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function addDaysToDate(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function computeAmortization(
+  principal: number,
+  interestRate: number,
+  interestType: InterestType,
+  termMonths: number,
+  frequency: PaymentFrequency,
+  startDate: Date,
+  scbAmount = 0,
+): AmortizationRow[] {
+  const r = interestRate / 100;
+  const scb = Math.round(scbAmount);
+
+  if (frequency === "upon_maturity") {
+    const totalInterest = Math.round(principal * r * termMonths);
+    return [{
+      period: 1,
+      dueDate: addMonthsToDate(startDate, termMonths),
+      principal,
+      interest: totalInterest,
+      shareCapitalBuildUp: scb,
+      totalPayment: principal + totalInterest + scb,
+    }];
+  }
+
+  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
+  const intervalDays = getIntervalDays(frequency);
+  const rows: AmortizationRow[] = [];
+  let remaining = principal;
+
+  if (interestType === "straight" || interestType === "fixed") {
+    const principalPerPeriod = Math.round(principal / totalPeriods);
+    const interestPerPeriod = Math.round(principal * r);
+    for (let i = 1; i <= totalPeriods; i++) {
+      const dueDate = frequency === "monthly"
+        ? addMonthsToDate(startDate, i)
+        : addDaysToDate(startDate, i * intervalDays);
+      const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
+      rows.push({ period: i, dueDate, principal: periodPrincipal, interest: interestPerPeriod, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interestPerPeriod + scb });
+      remaining -= periodPrincipal;
+    }
+  } else if (interestType === "diminishing") {
+    const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
+    for (let i = 1; i <= totalPeriods; i++) {
+      const dueDate = frequency === "monthly"
+        ? addMonthsToDate(startDate, i)
+        : addDaysToDate(startDate, i * intervalDays);
+      const isLast = i === totalPeriods;
+      const interest = Math.round(remaining * r);
+      const periodPrincipal = isLast ? remaining : Math.round(pmt - interest);
+      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
+      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
+      remaining -= periodPrincipal;
+    }
+  }
+
+  return rows;
+}
+
+// ── Active statuses eligible for restructure ─────────────────────────────────
+
+const ELIGIBLE_STATUSES = ["current", "past_due", "released", "ongoing"];
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+function RestructureLoanInner() {
+  const router = useRouter();
+
+  // ── Seed data ──
+  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const [products, setProducts] = useState<LoanProduct[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // ── Source loan selection ──
+  const [borrowerId, setBorrowerId] = useState<number | null>(null);
+  const [borrowerOpen, setBorrowerOpen] = useState(false);
+  const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
+  const [loadingLoans, setLoadingLoans] = useState(false);
+  const [sourceLoanId, setSourceLoanId] = useState<number | null>(null);
+  const [loanOpen, setLoanOpen] = useState(false);
+  const [loadingLoanDetail, setLoadingLoanDetail] = useState(false);
+
+  // ── Form state ──
+  const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
+  const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
+  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
+  const [aoOpen, setAoOpen] = useState(false);
+  const [purpose, setPurpose] = useState("");
+  const [productId, setProductId] = useState<string | null>(null);
+  const [principalAmount, setPrincipalAmount] = useState<string>("");
+  const [termMonths, setTermMonths] = useState<string>("");
+  const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
+  const [interestRate, setInterestRate] = useState<string>("");
+  const [interestType, setInterestType] = useState<string | null>(null);
+  const [scbAmount, setScbAmount] = useState<string>("");
+  const [restructureDate, setRestructureDate] = useState<Date | undefined>(new Date());
+  const [restructureDateOpen, setRestructureDateOpen] = useState(false);
+  const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
+  const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
+  const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
+  const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
+
+  // ── Collaterals ──
+  const [availableCollaterals, setAvailableCollaterals] = useState<CollateralWithMeta[]>([]);
+  const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
+  const [selectedCollaterals, setSelectedCollaterals] = useState<
+    { collateral: CollateralWithMeta; snapshot_value: number }[]
+  >([]);
+  const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
+
+  // ── Load seed data on mount ──
+  useEffect(() => {
+    async function fetchData() {
+      const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
+        borrowerService.list({ per_page: 200 }),
+        loanProductService.list(),
+        userService.list(),
+      ]);
+
+      if (borrowersRes.status === "fulfilled") {
+        const raw = borrowersRes.value;
+        setBorrowers(Array.isArray(raw) ? raw : (raw as { data: Borrower[] }).data ?? []);
+      }
+      if (productsRes.status === "fulfilled") {
+        const raw = productsRes.value;
+        setProducts(Array.isArray(raw) ? raw : (raw as { data: LoanProduct[] }).data ?? []);
+      }
+      if (usersRes.status === "fulfilled") {
+        const raw = usersRes.value;
+        const list = Array.isArray(raw) ? raw : (raw as { data: User[] }).data ?? [];
+        setUsers(list.filter((u) => u.status === "active"));
+      }
+
+      setLoadingData(false);
+    }
+    fetchData();
+  }, []);
+
+  // ── Load borrower's eligible loans when borrower changes ──
+  useEffect(() => {
+    if (!borrowerId) {
+      setBorrowerLoans([]);
+      setSourceLoanId(null);
+      setFormVisible(false);
+      return;
+    }
+    setLoadingLoans(true);
+    loanService
+      .list({ borrower_id: borrowerId, per_page: 200 })
+      .then((res) => {
+        const all: Loan[] = Array.isArray(res) ? res : (res as { data: Loan[] }).data ?? [];
+        setBorrowerLoans(all.filter((l) => ELIGIBLE_STATUSES.includes(l.status)));
+      })
+      .catch(() => setBorrowerLoans([]))
+      .finally(() => setLoadingLoans(false));
+  }, [borrowerId]);
+
+  // ── Pre-fill form when source loan is selected ──
+  useEffect(() => {
+    if (!sourceLoanId) {
+      setFormVisible(false);
+      return;
+    }
+    setLoadingLoanDetail(true);
+    Promise.allSettled([
+      loanService.detail(sourceLoanId),
+      loanService.summary(sourceLoanId),
+    ]).then(([loanRes, summaryRes]) => {
+      if (loanRes.status !== "fulfilled") {
+        toast.error("Failed to load loan details");
+        setLoadingLoanDetail(false);
+        return;
+      }
+      const loan = loanRes.value;
+      const summary = summaryRes.status === "fulfilled"
+        ? (summaryRes.value as { outstanding_balance?: number })
+        : null;
+
+      // Pre-fill co-makers
+      const cmIds = Array.isArray(loan.co_makers)
+        ? loan.co_makers.map((c) => c.id).filter((id): id is number => typeof id === "number")
+        : [];
+      setCoMakerIds(cmIds.length > 0 ? cmIds : [null]);
+
+      // Pre-fill AO + purpose
+      const l = loan as unknown as Record<string, unknown>;
+      setAccountOfficerId((l.account_officer_id as number | undefined) ?? null);
+      setPurpose(loan.purpose ?? "");
+
+      // Pre-fill product
+      const pid = loan.loan_product?.id ?? loan.loan_product_id ?? null;
+      setProductId(pid ? String(pid) : null);
+
+      // Principal = outstanding balance
+      const outstanding = summary?.outstanding_balance ?? loan.outstanding_balance ?? loan.principal_amount;
+      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding))) : "");
+
+      // Terms
+      setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+      setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
+      setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
+      const rawMethod = String(loan.interest_method ?? loan.interest_type ?? "straight");
+      setInterestType(rawMethod === "fixed" ? "straight" : rawMethod);
+      setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
+
+      // Restructure date defaults to today
+      setRestructureDate(new Date());
+
+      // Recalculate deductions from the selected product
+      const prod = products.find((p) => p.id === Number(pid));
+      if (prod) {
+        const ap = prod as unknown as Record<string, unknown>;
+        const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
+        const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
+        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
+        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+      } else {
+        setProcessingFeeRate("");
+        setServiceFeeRate("");
+      }
+      setOtherDeductions([]);
+
+      setFormVisible(true);
+      setLoadingLoanDetail(false);
+    });
+  }, [sourceLoanId, products]);
+
+  // ── Collateral types: load once ──
+  useEffect(() => {
+    collateralTypeService.list().then(setCollateralTypes).catch(() => {});
+  }, []);
+
+  // ── Available collaterals: rebuild when borrower changes ──
+  useEffect(() => {
+    if (!borrowerId) {
+      setAvailableCollaterals([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [collRows, loanRes] = await Promise.all([
+          collateralService.list({ borrower_id: borrowerId }),
+          loanService.list(),
+        ]);
+        const loans: Loan[] = Array.isArray(loanRes)
+          ? (loanRes as Loan[])
+          : ((loanRes as { data?: Loan[] }).data ?? []);
+        const activeIndex = await collateralService.buildActiveLoanIndex(
+          loans.map((l) => ({
+            id: l.id,
+            status: String(l.status),
+            loan_account_number: l.loan_account_number,
+          })),
+        );
+        const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
+        const needsSc = collRows.some(
+          (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
+        );
+        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId) : 0;
+        const enriched: CollateralWithMeta[] = collRows.map((c) => {
+          const t = typeById.get(c.collateral_type_id);
+          const isShare = t?.source === "share_capital";
+          const active = activeIndex.get(c.id);
+          const lockedToOther = active && active.loan_id !== sourceLoanId ? active : undefined;
+          return {
+            ...c,
+            type: t,
+            active_loan_id: lockedToOther?.loan_id,
+            active_loan_account_number: lockedToOther?.loan_account_number,
+            effective_value: isShare ? scBalance : c.amount,
+          };
+        });
+        if (!cancelled) setAvailableCollaterals(enriched);
+      } catch {
+        if (!cancelled) setAvailableCollaterals([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [borrowerId, collateralTypes, sourceLoanId]);
+
+  // ── Pre-fill collaterals from source loan ──
+  useEffect(() => {
+    if (!sourceLoanId || collateralTypes.length === 0 || availableCollaterals.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const links = await collateralService.listForLoan(sourceLoanId);
+        if (cancelled) return;
+        const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
+        const prefilled = links
+          .map((link) => {
+            const c = byId.get(link.collateral_id);
+            return c ? { collateral: c, snapshot_value: link.snapshot_value } : null;
+          })
+          .filter((v): v is { collateral: CollateralWithMeta; snapshot_value: number } => v !== null);
+        if (!cancelled) setSelectedCollaterals(prefilled);
+      } catch {
+        // Non-blocking
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sourceLoanId, collateralTypes, availableCollaterals]);
+
+  // ── Derived values ──
+  const selectedBorrower = useMemo(
+    () => borrowers.find((b) => b.id === borrowerId) ?? null,
+    [borrowers, borrowerId],
+  );
+
+  const selectedProduct = useMemo(
+    () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
+    [productId, products],
+  );
+
+  const selectedSourceLoan = useMemo(
+    () => borrowerLoans.find((l) => l.id === sourceLoanId) ?? null,
+    [borrowerLoans, sourceLoanId],
+  );
+
+  const principal = parseFloat(principalAmount) || 0;
+  const term = parseInt(termMonths) || 0;
+  const rate = parseFloat(interestRate) || 0;
+  const scb = parseFloat(scbAmount) || 0;
+  const processingFeePercent = parseFloat(processingFeeRate) || 0;
+  const serviceFeePercent = parseFloat(serviceFeeRate) || 0;
+
+  const processingFeeAmount = Math.round((processingFeePercent / 100) * principal);
+  const serviceFeeAmount = Math.round((serviceFeePercent / 100) * principal);
+  const otherDeductionsTotal = otherDeductions.reduce(
+    (s, d) => s + (parseFloat(d.amount) || 0), 0,
+  );
+  const totalDeductions = processingFeeAmount + serviceFeeAmount + otherDeductionsTotal;
+  const netProceeds = principal - totalDeductions;
+
+  const totalCollateralValue = useMemo(
+    () => selectedCollaterals.reduce((s, c) => s + c.snapshot_value, 0),
+    [selectedCollaterals],
+  );
+  const securityStatus = useMemo(
+    () => principal > 0 ? computeSecurityStatus(principal, totalCollateralValue) : "unsecured",
+    [principal, totalCollateralValue],
+  );
+
+  const productFrequencies = useMemo<string[]>(() => {
+    if (!selectedProduct) return [];
+    const ap = selectedProduct as unknown as Record<string, unknown>;
+    const raw = ap.frequencies ?? ap.frequency ?? selectedProduct.payment_frequency;
+    if (Array.isArray(raw)) return raw as string[];
+    return raw ? [String(raw)] : [];
+  }, [selectedProduct]);
+
+  // Picker rows for collateral dialog
+  const pickerRows = useMemo(() => {
+    const selectedIds = new Set(selectedCollaterals.map((c) => c.collateral.id));
+    return availableCollaterals.map((c) => ({
+      collateral: c,
+      isSelected: selectedIds.has(c.id),
+      isLocked: Boolean(c.active_loan_id),
+    }));
+  }, [availableCollaterals, selectedCollaterals]);
+
+  // Amortization preview
+  const amortizationRows = useMemo<AmortizationRow[]>(() => {
+    if (
+      principal <= 0 ||
+      term <= 0 ||
+      rate <= 0 ||
+      !paymentFrequency ||
+      !interestType ||
+      !restructureDate
+    )
+      return [];
+    return computeAmortization(
+      principal,
+      rate,
+      interestType as InterestType,
+      term,
+      paymentFrequency as PaymentFrequency,
+      restructureDate,
+      scb,
+    );
+  }, [principal, rate, term, paymentFrequency, interestType, restructureDate, scb]);
+
+  const amortTotals = useMemo(
+    () =>
+      amortizationRows.reduce(
+        (acc, r) => ({
+          principal: acc.principal + r.principal,
+          interest: acc.interest + r.interest,
+          scb: acc.scb + r.shareCapitalBuildUp,
+          total: acc.total + r.totalPayment,
+        }),
+        { principal: 0, interest: 0, scb: 0, total: 0 },
+      ),
+    [amortizationRows],
+  );
+
+  // ── Validation ──
+  const principalError = useMemo(() => {
+    if (!principalAmount) return null;
+    if (principal <= 0) return "Amount must be greater than 0";
+    if (selectedProduct) {
+      if (principal < selectedProduct.min_amount) return `Minimum is ${formatCurrency(selectedProduct.min_amount)}`;
+      if (principal > selectedProduct.max_amount) return `Maximum is ${formatCurrency(selectedProduct.max_amount)}`;
+    }
+    return null;
+  }, [principalAmount, principal, selectedProduct]);
+
+  const termError = useMemo(() => {
+    if (!termMonths) return null;
+    if (term <= 0) return "Term must be greater than 0";
+    if (selectedProduct) {
+      if (term < selectedProduct.min_term) return `Minimum is ${selectedProduct.min_term} months`;
+      if (selectedProduct.max_term && term > selectedProduct.max_term) return `Maximum is ${selectedProduct.max_term} months`;
+    }
+    return null;
+  }, [termMonths, term, selectedProduct]);
+
+  const canSubmit =
+    formVisible &&
+    borrowerId !== null &&
+    sourceLoanId !== null &&
+    productId !== null &&
+    principal > 0 &&
+    !principalError &&
+    term > 0 &&
+    !termError &&
+    paymentFrequency !== null &&
+    interestType !== null &&
+    rate > 0 &&
+    restructureDate !== undefined;
+
+  // ── Handlers ──
+  const handleBorrowerChange = useCallback((id: number | null) => {
+    setBorrowerId(id);
+    setSourceLoanId(null);
+    setSelectedCollaterals([]);
+    setFormVisible(false);
+  }, []);
+
+  const handleProductChange = useCallback(
+    (value: string | null) => {
+      setProductId(value);
+      const prod = products.find((p) => p.id === Number(value));
+      if (prod) {
+        const ap = prod as unknown as Record<string, unknown>;
+        const rawRate = ap.min_interest_rate ?? ap.interest_rate ?? prod.interest_rate;
+        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
+        const rawType = String(ap.interest_method ?? prod.interest_type ?? "straight");
+        setInterestType(rawType === "fixed" ? "straight" : rawType);
+        const rawFreqs = ap.frequencies ?? ap.frequency ?? prod.payment_frequency;
+        const freqArr = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
+        setPaymentFrequency(String(freqArr[0] ?? "monthly"));
+        const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
+        const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
+        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
+        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+        if (prod.scb_required) setScbAmount(String(prod.min_scb ?? ""));
+        else setScbAmount("");
+      }
+    },
+    [products],
+  );
+
+  const availableCoMakersFor = useCallback(
+    (currentIndex: number) => {
+      const pickedElsewhere = new Set(
+        coMakerIds.filter((id, i) => id !== null && i !== currentIndex) as number[],
+      );
+      return borrowers.filter((b) => b.id !== borrowerId && !pickedElsewhere.has(b.id));
+    },
+    [borrowers, borrowerId, coMakerIds],
+  );
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !restructureDate || !sourceLoanId || !borrowerId) return;
+    setSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = {
+        borrower_id: borrowerId,
+        co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
+        loan_product_id: Number(productId),
+        principal_amount: principal,
+        interest_rate: rate,
+        start_date: formatDateISO(restructureDate),
+        ...(scb > 0 && { scb_amount: scb }),
+        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        ...(purpose.trim() && { purpose: purpose.trim() }),
+      };
+
+      const newLoan = await loanService.restructure(sourceLoanId, payload);
+
+      // Attach collaterals to the new loan
+      if (selectedCollaterals.length > 0 && newLoan.id) {
+        try {
+          await Promise.all(
+            selectedCollaterals.map((s) =>
+              collateralService.attachToLoan(newLoan.id, s.collateral.id, s.snapshot_value),
+            ),
+          );
+        } catch {
+          toast.warning("Restructure created but some collaterals failed to attach.");
+        }
+      }
+
+      // Auto-forward for review
+      try {
+        await loanService.submit(newLoan.id);
+      } catch {
+        toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
+      }
+
+      toast.success("Restructure Application Submitted", {
+        description: "Forwarded to Manager for approval.",
+      });
+      router.push(`/loans/${newLoan.id}`);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } };
+      if (axiosErr?.response?.status === 422) {
+        toast.error(axiosErr.response?.data?.message ?? "Validation error. Please check your inputs.");
+      } else {
+        toast.error("Failed to submit restructure application.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Loading state ──
+  if (loadingData) {
+    return (
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <RouteGuard permission="loans:create" pageName="Restructure Loan">
+      <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
+
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Restructure Loan</h1>
+            <p className="text-sm text-muted-foreground">
+              Select a borrower and an active loan to restructure. All fields are pre-filled from the existing loan.
+            </p>
+          </div>
+        </div>
+
+        {/* ── Step 1: Source Loan Selection ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Source Loan</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {/* Borrower combobox */}
+            <div className="space-y-1.5">
+              <Label>Borrower</Label>
+              <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
+                <PopoverTrigger
+                  render={<Button variant="outline" role="combobox" className="w-full justify-between font-normal" />}
+                >
+                  {selectedBorrower
+                    ? `${selectedBorrower.full_name} (${selectedBorrower.borrower_code})`
+                    : "Select borrower…"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search borrower…" />
+                    <CommandList>
+                      <CommandEmpty>No borrower found.</CommandEmpty>
+                      <CommandGroup>
+                        {borrowers.map((b) => (
+                          <CommandItem
+                            key={b.id}
+                            value={`${b.full_name} ${b.borrower_code}`}
+                            onSelect={() => {
+                              handleBorrowerChange(b.id === borrowerId ? null : b.id);
+                              setBorrowerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn("mr-2 h-4 w-4", borrowerId === b.id ? "opacity-100" : "opacity-0")}
+                            />
+                            {b.full_name}
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              ({b.borrower_code})
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Active loan combobox */}
+            <div className="space-y-1.5">
+              <Label>Active Loan to Restructure</Label>
+              {loadingLoans ? (
+                <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
+                  <Spinner className="size-4" /> Loading loans…
+                </div>
+              ) : (
+                <Popover open={loanOpen} onOpenChange={setLoanOpen}>
+                  <PopoverTrigger
+                    render={<Button variant="outline" role="combobox" disabled={!borrowerId} className="w-full justify-between font-normal" />}
+                  >
+                    {selectedSourceLoan
+                      ? `${selectedSourceLoan.loan_account_number ?? selectedSourceLoan.application_number} — ${formatCurrency(selectedSourceLoan.outstanding_balance ?? selectedSourceLoan.principal_amount)}`
+                      : borrowerId
+                      ? borrowerLoans.length === 0
+                        ? "No eligible loans"
+                        : "Select loan…"
+                      : "Select a borrower first"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search loan…" />
+                      <CommandList>
+                        <CommandEmpty>No eligible loans found.</CommandEmpty>
+                        <CommandGroup>
+                          {borrowerLoans.map((l) => (
+                            <CommandItem
+                              key={l.id}
+                              value={`${l.loan_account_number ?? l.application_number} ${l.principal_amount}`}
+                              onSelect={() => {
+                                setSourceLoanId(l.id === sourceLoanId ? null : l.id);
+                                setLoanOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn("mr-2 h-4 w-4", sourceLoanId === l.id ? "opacity-100" : "opacity-0")}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-mono text-sm">
+                                  {l.loan_account_number ?? l.application_number}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatCurrency(l.principal_amount)} ·{" "}
+                                  <Badge variant="outline" className="text-[10px] py-0 px-1">
+                                    {LOAN_STATUS_LABELS[l.status] ?? l.status}
+                                  </Badge>
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Loading loan detail spinner */}
+        {loadingLoanDetail && (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="size-6 text-brand-orange" />
+            <span className="ml-2 text-sm text-muted-foreground">Loading loan details…</span>
+          </div>
+        )}
+
+        {/* ── Form (shown after loan is selected + loaded) ── */}
+        {formVisible && (
+          <>
+            {/* Member & Co-Maker */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Member & Co-Maker</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Borrower (locked) */}
+                <div className="space-y-1.5">
+                  <Label>Borrower</Label>
+                  <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                    {selectedBorrower?.full_name ?? "—"}
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      {selectedBorrower?.borrower_code}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Co-makers */}
+                <div className="space-y-2">
+                  <Label>Co-Maker(s)</Label>
+                  {coMakerIds.map((cmId, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Popover
+                        open={openCoMakerIndex === idx}
+                        onOpenChange={(open) => setOpenCoMakerIndex(open ? idx : null)}
+                      >
+                        <PopoverTrigger
+                          render={<Button variant="outline" role="combobox" className="flex-1 justify-between font-normal" />}
+                        >
+                          {cmId
+                            ? (() => {
+                                const b = borrowers.find((b) => b.id === cmId);
+                                return b ? `${b.full_name} (${b.borrower_code})` : "Unknown";
+                              })()
+                            : "Select co-maker (optional)"}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search co-maker…" />
+                            <CommandList>
+                              <CommandEmpty>No members found.</CommandEmpty>
+                              <CommandGroup>
+                                {availableCoMakersFor(idx).map((b) => (
+                                  <CommandItem
+                                    key={b.id}
+                                    value={`${b.full_name} ${b.borrower_code}`}
+                                    onSelect={() => {
+                                      setCoMakerIds((prev) =>
+                                        prev.map((v, i) => (i === idx ? (v === b.id ? null : b.id) : v)),
+                                      );
+                                      setOpenCoMakerIndex(null);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn("mr-2 h-4 w-4", cmId === b.id ? "opacity-100" : "opacity-0")}
+                                    />
+                                    {b.full_name}
+                                    <span className="ml-1 text-xs text-muted-foreground">({b.borrower_code})</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      {coMakerIds.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() =>
+                            setCoMakerIds((prev) => {
+                              const next = prev.filter((_, i) => i !== idx);
+                              return next.length === 0 ? [null] : next;
+                            })
+                          }
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCoMakerIds((prev) => [...prev, null])}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Add Co-Maker
+                  </Button>
+                </div>
+
+                {/* Account Officer */}
+                <div className="space-y-1.5">
+                  <Label>Account Officer <span className="text-muted-foreground">(optional)</span></Label>
+                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
+                    <PopoverTrigger
+                      render={<Button variant="outline" role="combobox" className="w-full justify-between font-normal" />}
+                    >
+                      {accountOfficerId
+                        ? (() => {
+                            const u = users.find((u) => u.id === accountOfficerId);
+                            return u?.full_name ?? "Unknown";
+                          })()
+                        : "Select account officer…"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search officer…" />
+                        <CommandList>
+                          <CommandEmpty>No users found.</CommandEmpty>
+                          <CommandGroup>
+                            {users.map((u) => (
+                              <CommandItem
+                                key={u.id}
+                                value={u.full_name}
+                                onSelect={() => {
+                                  setAccountOfficerId(u.id === accountOfficerId ? null : u.id);
+                                  setAoOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", accountOfficerId === u.id ? "opacity-100" : "opacity-0")} />
+                                {u.full_name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Purpose */}
+                <div className="space-y-1.5">
+                  <Label>Purpose <span className="text-muted-foreground">(optional)</span></Label>
+                  <Textarea
+                    placeholder="Loan purpose…"
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Loan Product & Terms */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Loan Product & Terms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Product */}
+                  <div className="space-y-1.5">
+                    <Label>Loan Product</Label>
+                    <Select value={productId ?? ""} onValueChange={(v) => handleProductChange(v || null)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select product…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Loan Amount */}
+                  <div className="space-y-1.5">
+                    <Label>
+                      Loan Amount
+                      <span className="ml-1 text-xs text-muted-foreground">(outstanding balance)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={principalAmount}
+                      onChange={(e) => setPrincipalAmount(e.target.value)}
+                    />
+                    {principalError && (
+                      <p className="text-xs text-red-500">{principalError}</p>
+                    )}
+                  </div>
+
+                  {/* Term */}
+                  <div className="space-y-1.5">
+                    <Label>Term (months)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="e.g. 12"
+                      value={termMonths}
+                      onChange={(e) => setTermMonths(e.target.value)}
+                    />
+                    {termError && <p className="text-xs text-red-500">{termError}</p>}
+                  </div>
+
+                  {/* Payment Frequency */}
+                  <div className="space-y-1.5">
+                    <Label>Payment Frequency</Label>
+                    <Select
+                      value={paymentFrequency ?? ""}
+                      onValueChange={(v) => setPaymentFrequency(v || null)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select frequency…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_FREQUENCY_OPTIONS.filter(
+                          (o) => productFrequencies.length === 0 || productFrequencies.includes(o.value),
+                        ).map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Interest Rate */}
+                  <div className="space-y-1.5">
+                    <Label>Interest Rate (%)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 2"
+                      value={interestRate}
+                      onChange={(e) => setInterestRate(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Interest Type */}
+                  <div className="space-y-1.5">
+                    <Label>Interest Type</Label>
+                    <Select
+                      value={interestType ?? ""}
+                      onValueChange={(v) => setInterestType(v || null)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INTEREST_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* SCB Amount */}
+                  {selectedProduct?.scb_required && (
+                    <div className="space-y-1.5">
+                      <Label>
+                        Share Capital Build-Up
+                        {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({formatCurrency(selectedProduct.min_scb)} – {formatCurrency(selectedProduct.max_scb)})
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        min={selectedProduct.min_scb ?? 0}
+                        max={selectedProduct.max_scb ?? undefined}
+                        step="1"
+                        placeholder="0"
+                        value={scbAmount}
+                        onChange={(e) => setScbAmount(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Collaterals */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">
+                  Collaterals
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    {securityStatusLabel(securityStatus)}
+                  </Badge>
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCollateralPickerOpen(true)}
+                  disabled={!borrowerId}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Manage
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {selectedCollaterals.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No collaterals attached.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedCollaterals.map(({ collateral, snapshot_value }) => (
+                      <div
+                        key={collateral.id}
+                        className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                      >
+                        <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{formatCurrency(snapshot_value)}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() =>
+                              setSelectedCollaterals((prev) =>
+                                prev.filter((c) => c.collateral.id !== collateral.id),
+                              )
+                            }
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-end pt-1 text-sm font-medium">
+                      Total: {formatCurrency(totalCollateralValue)}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Collateral Picker Dialog */}
+            <Dialog open={collateralPickerOpen} onOpenChange={setCollateralPickerOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Select Collaterals</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {pickerRows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No collaterals found for this borrower.
+                    </p>
+                  ) : (
+                    pickerRows.map(({ collateral, isSelected, isLocked }) => (
+                      <button
+                        key={collateral.id}
+                        disabled={isLocked && !isSelected}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedCollaterals((prev) =>
+                              prev.filter((c) => c.collateral.id !== collateral.id),
+                            );
+                          } else {
+                            setSelectedCollaterals((prev) => [
+                              ...prev,
+                              { collateral, snapshot_value: collateral.effective_value ?? collateral.amount },
+                            ]);
+                          }
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors",
+                          isSelected
+                            ? "border-brand-orange bg-brand-orange/5"
+                            : "hover:bg-muted/50",
+                          isLocked && !isSelected && "opacity-50 cursor-not-allowed",
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "h-4 w-4 rounded border flex items-center justify-center",
+                              isSelected && "bg-brand-orange border-brand-orange",
+                            )}
+                          >
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
+                          {isLocked && !isSelected && (
+                            <Badge variant="outline" className="text-[10px]">Locked</Badge>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">
+                          {formatCurrency(collateral.effective_value ?? collateral.amount)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Restructure Date */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Restructure Date</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Date Restructured (new release date)</Label>
+                  <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
+                    <PopoverTrigger
+                      render={<Button variant="outline" className="w-full justify-start font-normal" />}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {restructureDate ? formatDateObj(restructureDate) : "Pick a date"}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={restructureDate}
+                        onSelect={(date) => {
+                          setRestructureDate(date);
+                          setRestructureDateOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                {restructureDate && term > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Projected Maturity Date</Label>
+                    <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                      {formatDateObj(addMonthsToDate(restructureDate, term))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Deductions & Net Proceeds */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Deductions & Net Proceeds</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Processing Fee */}
+                  <div className="space-y-1.5">
+                    <Label>Processing Fee (%)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={editingFeeRate === "processing" ? processingFeeRate : processingFeeRate}
+                        onChange={(e) => {
+                          setEditingFeeRate("processing");
+                          setProcessingFeeRate(e.target.value);
+                        }}
+                        onBlur={() => setEditingFeeRate(null)}
+                        className="w-24"
+                      />
+                      <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        {formatCurrency(processingFeeAmount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Service Fee */}
+                  <div className="space-y-1.5">
+                    <Label>Service Fee (%)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={serviceFeeRate}
+                        onChange={(e) => {
+                          setEditingFeeRate("service");
+                          setServiceFeeRate(e.target.value);
+                        }}
+                        onBlur={() => setEditingFeeRate(null)}
+                        className="w-24"
+                      />
+                      <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        {formatCurrency(serviceFeeAmount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Other deductions */}
+                <div className="space-y-2">
+                  <Label>Other Deductions</Label>
+                  {otherDeductions.map((d, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Input
+                        placeholder="Label"
+                        value={d.name}
+                        onChange={(e) =>
+                          setOtherDeductions((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x)),
+                          )
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={d.amount}
+                        onChange={(e) =>
+                          setOtherDeductions((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)),
+                          )
+                        }
+                        className="w-32"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() =>
+                          setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Add Deduction
+                  </Button>
+                </div>
+
+                <Separator />
+
+                {/* Totals */}
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Loan Amount</span>
+                    <span>{formatCurrency(principal)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600 dark:text-red-400">
+                    <span>Total Deductions</span>
+                    <span>- {formatCurrency(totalDeductions)}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between font-semibold">
+                    <span>Net Proceeds</span>
+                    <span>{formatCurrency(netProceeds)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Amortization Preview */}
+            {amortizationRows.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Amortization Preview
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({amortizationRows.length} periods)
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-64 overflow-y-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Interest</TableHead>
+                          {scb > 0 && <TableHead className="text-right">SCB</TableHead>}
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {amortizationRows.map((row) => (
+                          <TableRow key={row.period}>
+                            <TableCell className="text-muted-foreground">{row.period}</TableCell>
+                            <TableCell>{formatDate(row.dueDate.toISOString())}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                            {scb > 0 && <TableCell className="text-right">{formatCurrency(row.shareCapitalBuildUp)}</TableCell>}
+                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow>
+                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.principal)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.interest)}</TableCell>
+                          {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.scb)}</TableCell>}
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.total)}</TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Submit */}
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => router.back()}>
+                Cancel
+              </Button>
+              <Button
+                disabled={!canSubmit || submitting}
+                onClick={handleSubmit}
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              >
+                {submitting && <Spinner className="mr-2 size-4" />}
+                Submit Restructure Application
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </RouteGuard>
+  );
+}
+
+export default function RestructureLoanPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      }
+    >
+      <RestructureLoanInner />
+    </Suspense>
+  );
+}
