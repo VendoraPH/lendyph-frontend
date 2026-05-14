@@ -29,6 +29,14 @@ export const API_ENDPOINTS = {
     LIST_VALID_IDS: (id: number) => `/borrowers/${id}/valid-ids`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
+  REGISTRATIONS: {
+    LIST: "/registrations",
+    DETAIL: (id: number) => `/registrations/${id}`,
+    SUBMIT: "/registrations",
+    UPDATE: (id: number) => `/registrations/${id}`,
+    APPROVE: (id: number) => `/registrations/${id}/approve`,
+    REJECT: (id: number) => `/registrations/${id}/reject`,
+  },
   CO_MAKERS: {
     LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
     CREATE: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
