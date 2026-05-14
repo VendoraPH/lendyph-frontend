@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,8 +31,88 @@ import {
   type StatusFilter,
 } from "./_components/borrower-filters";
 import { BorrowerTable } from "./_components/borrower-table";
+import { useRegistrations } from "@/hooks/use-registrations";
+import type { Registration } from "@/services/registration.service";
+import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50] as const;
+
+function PendingRegistrationsTab() {
+  const { registrations, loading, error } = useRegistrations({ status: "pending" });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
+        <p className="text-sm text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  if (registrations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <ClipboardList className="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p className="text-sm font-medium text-muted-foreground">No pending registrations</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          New applications will appear here for review.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/40">
+            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Applicant</th>
+            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</th>
+            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden md:table-cell">Address</th>
+            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Submitted</th>
+            <th className="py-3 px-4" />
+          </tr>
+        </thead>
+        <tbody>
+          {registrations.map((reg: Registration) => (
+            <tr key={reg.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+              <td className="py-3 px-4">
+                <p className="font-semibold text-foreground">
+                  {reg.first_name} {reg.last_name}
+                </p>
+                <p className="text-xs text-muted-foreground">{reg.middle_name}</p>
+              </td>
+              <td className="py-3 px-4 text-muted-foreground">{reg.contact_number}</td>
+              <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">
+                {[reg.barangay, reg.city, reg.province].filter(Boolean).join(", ")}
+              </td>
+              <td className="py-3 px-4 text-muted-foreground text-xs hidden sm:table-cell">
+                {reg.submitted_at ? formatDate(reg.submitted_at) : "—"}
+              </td>
+              <td className="py-3 px-4 text-right">
+                <Link
+                  href={`/borrowers/registrations/${reg.id}`}
+                  className="inline-flex items-center rounded-md border border-brand-orange/50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange/5 transition-colors"
+                >
+                  Review
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function BorrowersPage() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -42,6 +123,10 @@ export default function BorrowersPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
+
+  type MainTab = "members" | "registrations";
+  const [mainTab, setMainTab] = useState<MainTab>("members");
+  const { total: pendingCount } = useRegistrations({ status: "pending" });
 
   const fetchBorrowers = useCallback(async () => {
     try {
@@ -238,7 +323,44 @@ export default function BorrowersPage() {
         </Card>
       </div>
 
+      {/* Main tab switcher */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setMainTab("members")}
+          className={cn(
+            "px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+            mainTab === "members"
+              ? "border-brand-orange text-brand-orange"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Active Members
+        </button>
+        <button
+          onClick={() => setMainTab("registrations")}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+            mainTab === "registrations"
+              ? "border-brand-orange text-brand-orange"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Pending Registrations
+          {pendingCount > 0 && (
+            <span className={cn(
+              "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold",
+              mainTab === "registrations"
+                ? "bg-brand-orange text-white"
+                : "bg-amber-100 text-amber-700"
+            )}>
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Filters + Table */}
+      {mainTab === "members" && (
       <Card>
         <div className="p-6 pb-0">
           <BorrowerFilters
@@ -334,6 +456,15 @@ export default function BorrowersPage() {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {mainTab === "registrations" && (
+        <Card>
+          <CardContent className="pt-0">
+            <PendingRegistrationsTab />
+          </CardContent>
+        </Card>
+      )}
     </div>
     </RouteGuard>
   );
