@@ -10,36 +10,28 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (reason: string) => Promise<void>;
+  onConfirm: () => Promise<void>;
 }
 
 export function RejectDialog({ open, onOpenChange, onConfirm }: Props) {
-  const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
-    if (reason.trim().length < 10) return;
     setSubmitting(true);
     try {
-      await onConfirm(reason.trim());
-      setReason("");
+      await onConfirm();
     } finally {
       setSubmitting(false);
     }
   }
 
   function handleOpenChange(open: boolean) {
-    if (!submitting) {
-      if (!open) setReason("");
-      onOpenChange(open);
-    }
+    if (!submitting) onOpenChange(open);
   }
 
   return (
@@ -48,26 +40,10 @@ export function RejectDialog({ open, onOpenChange, onConfirm }: Props) {
         <DialogHeader>
           <DialogTitle className="text-destructive">Reject Registration</DialogTitle>
           <DialogDescription>
-            Provide a reason for rejecting this application. This will be logged for record-keeping.
+            Are you sure you want to reject this application? The registration record will be removed.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 py-2">
-          <Label htmlFor="rejection_reason">
-            Reason <span className="text-destructive">*</span>
-          </Label>
-          <Textarea
-            id="rejection_reason"
-            placeholder="e.g. Incomplete or incorrect information provided..."
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={4}
-            className={reason.trim().length > 0 && reason.trim().length < 10 ? "border-destructive" : ""}
-          />
-          {reason.trim().length > 0 && reason.trim().length < 10 && (
-            <p className="text-xs text-destructive">Reason must be at least 10 characters.</p>
-          )}
-        </div>
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
           <Button
             variant="outline"
             onClick={() => handleOpenChange(false)}
@@ -78,7 +54,7 @@ export function RejectDialog({ open, onOpenChange, onConfirm }: Props) {
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            disabled={submitting || reason.trim().length < 10}
+            disabled={submitting}
           >
             {submitting ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Rejecting...</>

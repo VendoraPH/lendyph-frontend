@@ -2,7 +2,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 
-export type RegistrationStatus = "pending" | "approved" | "rejected";
+export type RegistrationStatus = "pending" | "active" | "inactive" | "blacklisted";
 
 export interface RegistrationPayload {
   first_name: string;
@@ -18,6 +18,7 @@ export interface RegistrationPayload {
   barangay?: string;
   city: string;
   province: string;
+  status?: string;
 }
 
 export interface Registration {
@@ -58,11 +59,11 @@ export const registrationService = {
     api.get<Registration>(API_ENDPOINTS.REGISTRATIONS.DETAIL(id)),
 
   update: (id: number, data: Partial<RegistrationPayload>) =>
-    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
+    api.put<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
 
   approve: (id: number) =>
-    api.post<{ borrower_id: number }>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
+    api.patch<void>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
 
-  reject: (id: number, reason: string) =>
-    api.post<void>(API_ENDPOINTS.REGISTRATIONS.REJECT(id), { reason }),
+  reject: (id: number) =>
+    api.delete<void>(API_ENDPOINTS.REGISTRATIONS.REJECT(id)),
 };

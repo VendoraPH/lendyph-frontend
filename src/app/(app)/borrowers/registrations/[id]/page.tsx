@@ -58,9 +58,9 @@ export default function RegistrationReviewPage() {
   async function handleApprove() {
     setApproving(true);
     try {
-      const result = await registrationService.approve(registrationId);
-      toast.success("Registration approved. Member profile created.");
-      router.push(`/borrowers/${result.borrower_id}`);
+      await registrationService.approve(registrationId);
+      toast.success("Registration approved. Member profile activated.");
+      router.push(`/borrowers/${registrationId}`);
     } catch {
       toast.error("Failed to approve registration. Please try again.");
     } finally {
@@ -72,9 +72,9 @@ export default function RegistrationReviewPage() {
     setSavingEdit(true);
     try {
       await registrationService.update(registrationId, draft);
-      const result = await registrationService.approve(registrationId);
-      toast.success("Registration updated and approved. Member profile created.");
-      router.push(`/borrowers/${result.borrower_id}`);
+      await registrationService.approve(registrationId);
+      toast.success("Registration updated and approved. Member profile activated.");
+      router.push(`/borrowers/${registrationId}`);
     } catch {
       toast.error("Failed to save and approve. Please try again.");
     } finally {
@@ -82,8 +82,8 @@ export default function RegistrationReviewPage() {
     }
   }
 
-  async function handleReject(reason: string) {
-    await registrationService.reject(registrationId, reason);
+  async function handleReject() {
+    await registrationService.reject(registrationId);
     toast.success("Registration rejected.");
     setRejectOpen(false);
     router.push("/borrowers");

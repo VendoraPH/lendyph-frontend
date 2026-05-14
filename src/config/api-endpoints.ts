@@ -30,12 +30,12 @@ export const API_ENDPOINTS = {
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
   REGISTRATIONS: {
-    LIST: "/registrations",
-    DETAIL: (id: number) => `/registrations/${id}`,
-    SUBMIT: "/registrations",
-    UPDATE: (id: number) => `/registrations/${id}`,
-    APPROVE: (id: number) => `/registrations/${id}/approve`,
-    REJECT: (id: number) => `/registrations/${id}/reject`,
+    LIST: "/borrowers",
+    DETAIL: (id: number) => `/borrowers/${id}`,
+    SUBMIT: "/borrowers",
+    UPDATE: (id: number) => `/borrowers/${id}`,
+    APPROVE: (id: number) => `/borrowers/${id}/reactivate`,
+    REJECT: (id: number) => `/borrowers/${id}`,
   },
   CO_MAKERS: {
     LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,

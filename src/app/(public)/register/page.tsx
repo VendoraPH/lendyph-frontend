@@ -99,6 +99,7 @@ export default function RegisterPage() {
         barangay: form.barangay.trim() || undefined,
         city: form.city.trim(),
         province: form.province.trim(),
+        status: "pending",
       });
       router.push("/register/success");
     } catch {
