@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
+import { useRegistrations } from "@/hooks/use-registrations";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -52,11 +53,13 @@ function NavLink({
   pathname,
   collapsed,
   onNavigate,
+  badge,
 }: {
   item: NavItem;
   pathname: string;
   collapsed?: boolean;
   onNavigate?: () => void;
+  badge?: number;
 }) {
   const hasChildren = item.children && item.children.length > 0;
   const isExactMatch = pathname === item.href;
@@ -140,9 +143,13 @@ function NavLink({
           <item.icon className="h-3.5 w-3.5" />
         </span>
         <span className="truncate">{item.title}</span>
-        {isActive && (
+        {badge && badge > 0 ? (
+          <span className="ml-auto inline-flex items-center justify-center rounded-full bg-brand-orange px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+            {badge}
+          </span>
+        ) : isActive ? (
           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-orange animate-pulse" />
-        )}
+        ) : null}
       </Link>
     );
   }
@@ -204,6 +211,7 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const { can } = usePermission();
+  const { total: pendingRegistrationsCount } = useRegistrations({ status: "pending" });
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -294,6 +302,7 @@ function SidebarContent({
               pathname={pathname}
               collapsed={collapsed}
               onNavigate={onNavigate}
+              badge={item.href === "/borrowers" ? pendingRegistrationsCount : undefined}
             />
           ))}
         </nav>
