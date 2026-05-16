@@ -9,14 +9,31 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StepIndicator } from "./_components/step-indicator";
 import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
-import { StepReview } from "./_components/step-review";
+import { StepSpouse, type StepSpouseData } from "./_components/step-spouse";
+import { StepPhotoIds, type ValidIdEntry } from "./_components/step-photo-ids";
+import {
+  StepEmploymentReview,
+  type StepEmploymentData,
+} from "./_components/step-employment-review";
 import { registrationService } from "@/services/registration.service";
+import { usePublicBranches } from "@/hooks/use-public-branches";
 
-const STEP_LABELS = ["Personal Info", "Contact & Address", "Review & Submit"];
+const STEP_LABELS = [
+  "Personal Info",
+  "Contact & Address",
+  "Spouse",
+  "Photo & IDs",
+  "Employment & Review",
+];
 
-type FormData = StepOneData & StepTwoData;
+type FullErrors = Partial<
+  Record<
+    keyof StepOneData | keyof StepTwoData | keyof StepSpouseData | keyof StepEmploymentData,
+    string
+  >
+>;
 
-function emptyForm(): FormData {
+function emptyPersonal(): StepOneData {
   return {
     first_name: "",
     middle_name: "",
@@ -25,6 +42,12 @@ function emptyForm(): FormData {
     birthdate: "",
     gender: "",
     civil_status: "",
+    branch_id: "",
+  };
+}
+
+function emptyContact(): StepTwoData {
+  return {
     contact_number: "",
     email: "",
     address: "",
@@ -34,73 +57,250 @@ function emptyForm(): FormData {
   };
 }
 
-function validateStep1(data: StepOneData): Partial<Record<keyof StepOneData, string>> {
+function emptySpouse(): StepSpouseData {
+  return {
+    spouse_first_name: "",
+    spouse_middle_name: "",
+    spouse_last_name: "",
+    spouse_contact_number: "",
+    spouse_occupation: "",
+  };
+}
+
+function emptyEmployment(): StepEmploymentData {
+  return {
+    employer_or_business: "",
+    monthly_income: "",
+    pledge_amount: "",
+  };
+}
+
+function validatePersonal(d: StepOneData): Partial<Record<keyof StepOneData, string>> {
   const errs: Partial<Record<keyof StepOneData, string>> = {};
-  if (!data.first_name.trim()) errs.first_name = "First name is required";
-  if (!data.middle_name.trim()) errs.middle_name = "Middle name is required";
-  if (!data.last_name.trim()) errs.last_name = "Last name is required";
-  if (!data.birthdate) errs.birthdate = "Date of birth is required";
-  if (!data.civil_status) errs.civil_status = "Civil status is required";
-  if (!data.gender) errs.gender = "Gender is required";
+  if (!d.first_name.trim()) errs.first_name = "First name is required";
+  if (!d.middle_name.trim()) errs.middle_name = "Middle name is required";
+  if (!d.last_name.trim()) errs.last_name = "Last name is required";
+  if (!d.birthdate) errs.birthdate = "Date of birth is required";
+  if (!d.civil_status) errs.civil_status = "Civil status is required";
+  if (!d.gender) errs.gender = "Gender is required";
+  // branch_id is intentionally not enforced here: if the public /branches
+  // endpoint is down or branch list is empty, admin will assign during
+  // review. The submit payload only includes branch_id when a value is set.
   return errs;
 }
 
-function validateStep2(data: StepTwoData): Partial<Record<keyof StepTwoData, string>> {
+function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, string>> {
   const errs: Partial<Record<keyof StepTwoData, string>> = {};
-  if (!data.contact_number.trim()) errs.contact_number = "Contact number is required";
-  if (!data.address.trim()) errs.address = "Street address is required";
-  if (!data.city.trim()) errs.city = "City / Municipality is required";
-  if (!data.province.trim()) errs.province = "Province is required";
+  if (!d.contact_number.trim()) errs.contact_number = "Contact number is required";
+  if (!d.address.trim()) errs.address = "Street address is required";
+  if (!d.city.trim()) errs.city = "City / Municipality is required";
+  if (!d.province.trim()) errs.province = "Province is required";
+  return errs;
+}
+
+function validateSpouse(d: StepSpouseData): Partial<Record<keyof StepSpouseData, string>> {
+  const errs: Partial<Record<keyof StepSpouseData, string>> = {};
+  if (!d.spouse_first_name.trim()) errs.spouse_first_name = "Spouse first name is required";
+  if (!d.spouse_last_name.trim()) errs.spouse_last_name = "Spouse last name is required";
+  return errs;
+}
+
+function validateEmployment(
+  d: StepEmploymentData
+): Partial<Record<keyof StepEmploymentData, string>> {
+  const errs: Partial<Record<keyof StepEmploymentData, string>> = {};
+  if (d.monthly_income && Number(d.monthly_income) < 0) {
+    errs.monthly_income = "Monthly income cannot be negative";
+  }
+  if (d.pledge_amount && Number(d.pledge_amount) < 0) {
+    errs.pledge_amount = "Pledge amount cannot be negative";
+  }
   return errs;
 }
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { branches } = usePublicBranches();
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState<FormData>(emptyForm());
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+
+  const [personal, setPersonal] = useState<StepOneData>(emptyPersonal());
+  const [contact, setContact] = useState<StepTwoData>(emptyContact());
+  const [spouse, setSpouse] = useState<StepSpouseData>(emptySpouse());
+  const [employment, setEmployment] = useState<StepEmploymentData>(emptyEmployment());
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+
+  const [errors, setErrors] = useState<FullErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
-  function update<K extends keyof FormData>(field: K, value: FormData[K]) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const isMarried = personal.civil_status === "married";
+
+  function clearError<K extends keyof FullErrors>(field: K) {
     if (errors[field]) {
-      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
     }
   }
 
-  function handleNextStep1() {
-    const errs = validateStep1(form);
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    setErrors({});
-    setStep(2);
+  function updatePersonal<K extends keyof StepOneData>(field: K, value: StepOneData[K]) {
+    setPersonal((prev) => ({ ...prev, [field]: value }));
+    clearError(field);
   }
 
-  function handleNextStep2() {
-    const errs = validateStep2(form);
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    setErrors({});
-    setStep(3);
+  function updateContact<K extends keyof StepTwoData>(field: K, value: StepTwoData[K]) {
+    setContact((prev) => ({ ...prev, [field]: value }));
+    clearError(field);
+  }
+
+  function updateSpouse<K extends keyof StepSpouseData>(field: K, value: StepSpouseData[K]) {
+    setSpouse((prev) => ({ ...prev, [field]: value }));
+    clearError(field);
+  }
+
+  function updateEmployment<K extends keyof StepEmploymentData>(
+    field: K,
+    value: StepEmploymentData[K]
+  ) {
+    setEmployment((prev) => ({ ...prev, [field]: value }));
+    clearError(field);
+  }
+
+  function handlePhotoChange(file: File | null, preview: string | null) {
+    setPhotoFile(file);
+    setPhotoPreview(preview);
+  }
+
+  function goToStep(target: number) {
+    // Skip spouse step (3) when not married — walk forward or backward
+    // until we land on a visible step.
+    let next = target;
+    while (next === 3 && !isMarried) {
+      next = target > step ? next + 1 : next - 1;
+    }
+    setStep(Math.max(1, Math.min(STEP_LABELS.length, next)));
+  }
+
+  function handleNextPersonal() {
+    const errs = validatePersonal(personal);
+    if (Object.keys(errs).length) {
+      setErrors((prev) => ({ ...prev, ...errs }));
+      return;
+    }
+    goToStep(2);
+  }
+
+  function handleNextContact() {
+    const errs = validateContact(contact);
+    if (Object.keys(errs).length) {
+      setErrors((prev) => ({ ...prev, ...errs }));
+      return;
+    }
+    goToStep(3);
+  }
+
+  function handleNextSpouse() {
+    const errs = validateSpouse(spouse);
+    if (Object.keys(errs).length) {
+      setErrors((prev) => ({ ...prev, ...errs }));
+      return;
+    }
+    goToStep(4);
+  }
+
+  function handleNextPhotoIds() {
+    goToStep(5);
   }
 
   async function handleSubmit() {
+    const errs = validateEmployment(employment);
+    if (Object.keys(errs).length) {
+      setErrors((prev) => ({ ...prev, ...errs }));
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await registrationService.submit({
-        first_name: form.first_name.trim(),
-        middle_name: form.middle_name.trim(),
-        last_name: form.last_name.trim(),
-        suffix: form.suffix && form.suffix !== "none" ? form.suffix : undefined,
-        birthdate: form.birthdate,
-        gender: form.gender,
-        civil_status: form.civil_status,
-        contact_number: form.contact_number.trim(),
-        email: form.email.trim() || undefined,
-        address: form.address.trim(),
-        barangay: form.barangay.trim() || undefined,
-        city: form.city.trim(),
-        province: form.province.trim(),
+      const created = await registrationService.submit({
+        first_name: personal.first_name.trim(),
+        middle_name: personal.middle_name.trim(),
+        last_name: personal.last_name.trim(),
+        suffix:
+          personal.suffix && personal.suffix !== "none" ? personal.suffix : undefined,
+        birthdate: personal.birthdate,
+        gender: personal.gender,
+        civil_status: personal.civil_status,
+        contact_number: contact.contact_number.trim(),
+        email: contact.email.trim() || undefined,
+        address: contact.address.trim(),
+        barangay: contact.barangay.trim() || undefined,
+        city: contact.city.trim(),
+        province: contact.province.trim(),
+        branch_id: personal.branch_id ? Number(personal.branch_id) : undefined,
+        employer_or_business: employment.employer_or_business.trim() || undefined,
+        monthly_income: employment.monthly_income
+          ? Number(employment.monthly_income)
+          : undefined,
+        pledge_amount: employment.pledge_amount ? Number(employment.pledge_amount) : 0,
+        spouse_first_name: isMarried
+          ? spouse.spouse_first_name.trim() || undefined
+          : undefined,
+        spouse_middle_name: isMarried
+          ? spouse.spouse_middle_name.trim() || undefined
+          : undefined,
+        spouse_last_name: isMarried
+          ? spouse.spouse_last_name.trim() || undefined
+          : undefined,
+        spouse_contact_number: isMarried
+          ? spouse.spouse_contact_number.trim() || undefined
+          : undefined,
+        spouse_occupation: isMarried
+          ? spouse.spouse_occupation.trim() || undefined
+          : undefined,
         status: "pending",
       });
+
+      const borrowerId = created.id;
+      const token = created.submission_token;
+
+      // Upload profile photo (best-effort — don't fail the whole flow).
+      if (photoFile && borrowerId) {
+        try {
+          const fd = new FormData();
+          fd.append("photo", photoFile);
+          await registrationService.uploadPhoto(borrowerId, fd, token);
+        } catch {
+          toast.error("Application saved but photo upload failed.");
+        }
+      }
+
+      // Upload valid IDs — same filter rules as admin /borrowers/new.
+      const idsToUpload = validIds.filter(
+        (v) =>
+          v.type &&
+          (v.front_file || v.back_file) &&
+          (v.type !== "others" || v.custom_type_name.trim())
+      );
+      for (const entry of idsToUpload) {
+        try {
+          const fd = new FormData();
+          fd.append("type", entry.type);
+          if (entry.type === "others" && entry.custom_type_name.trim()) {
+            fd.append("custom_type_name", entry.custom_type_name.trim());
+          }
+          if (entry.id_number.trim()) fd.append("id_number", entry.id_number.trim());
+          if (entry.front_file) fd.append("front_file", entry.front_file);
+          if (entry.back_file) fd.append("back_file", entry.back_file);
+          await registrationService.uploadValidId(borrowerId, fd, token);
+        } catch {
+          toast.error(`Failed to upload ${entry.type} ID`);
+        }
+      }
+
       router.push("/register/success");
     } catch {
       toast.error("Submission failed. Please check your connection and try again.");
@@ -109,10 +309,16 @@ export default function RegisterPage() {
     }
   }
 
+  // The step indicator only shows visible (non-skipped) labels.
+  const visibleLabels = isMarried
+    ? STEP_LABELS
+    : STEP_LABELS.filter((_, i) => i !== 2);
+  const visibleStep = isMarried ? step : step > 3 ? step - 1 : step;
+
   return (
-    <div className="px-4 py-10 sm:py-14">
+    <div className="px-4 py-6 sm:py-8">
       {/* Logo bar */}
-      <div className="flex justify-center mb-8">
+      <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/Logo/Lendy_logo.png" alt="Lendy.PH" className="h-8 w-auto" />
@@ -120,19 +326,19 @@ export default function RegisterPage() {
       </div>
 
       {/* Page heading */}
-      <div className="text-center mb-6">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2">
+      <div className="text-center mb-4">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-foreground mb-1.5">
           Online Membership Application
         </h1>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed">
           Complete the form below to apply for membership. Our team will review your
           application and contact you.
         </p>
       </div>
 
       {/* Info banner */}
-      <div className="max-w-lg mx-auto mb-6">
-        <div className="flex gap-3 items-start rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-4 py-3">
+      <div className="max-w-3xl mx-auto mb-4">
+        <div className="flex gap-3 items-start rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 px-4 py-2.5">
           <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
             Make sure to enter your details accurately. Our staff will verify your
@@ -143,38 +349,66 @@ export default function RegisterPage() {
       </div>
 
       {/* Step indicator */}
-      <StepIndicator current={step} labels={STEP_LABELS} />
+      <StepIndicator current={visibleStep} labels={visibleLabels} />
 
       {/* Form card */}
-      <Card className="max-w-lg mx-auto shadow-md">
-        <CardContent className="pt-6">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-brand-orange mb-5">
-            Step {step} of {STEP_LABELS.length} — {STEP_LABELS[step - 1]}
+      <Card className="max-w-3xl mx-auto shadow-md">
+        <CardContent className="pt-5">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-brand-orange mb-4">
+            Step {visibleStep} of {visibleLabels.length} —{" "}
+            {visibleLabels[visibleStep - 1]}
           </p>
 
           {step === 1 && (
             <StepPersonal
-              data={form}
-              errors={errors}
-              onChange={update}
-              onNext={handleNextStep1}
+              data={personal}
+              errors={errors as Partial<Record<keyof StepOneData, string>>}
+              onChange={updatePersonal}
+              onNext={handleNextPersonal}
             />
           )}
           {step === 2 && (
             <StepContact
-              data={form}
-              errors={errors}
-              onChange={update}
-              onNext={handleNextStep2}
-              onBack={() => setStep(1)}
+              data={contact}
+              errors={errors as Partial<Record<keyof StepTwoData, string>>}
+              onChange={updateContact}
+              onNext={handleNextContact}
+              onBack={() => goToStep(1)}
             />
           )}
-          {step === 3 && (
-            <StepReview
-              data={form}
-              submitting={submitting}
+          {step === 3 && isMarried && (
+            <StepSpouse
+              data={spouse}
+              errors={errors as Partial<Record<keyof StepSpouseData, string>>}
+              onChange={updateSpouse}
+              onNext={handleNextSpouse}
+              onBack={() => goToStep(2)}
+            />
+          )}
+          {step === 4 && (
+            <StepPhotoIds
+              photoPreview={photoPreview}
+              validIds={validIds}
+              onPhotoChange={handlePhotoChange}
+              onValidIdsChange={setValidIds}
+              onNext={handleNextPhotoIds}
+              onBack={() => goToStep(3)}
+            />
+          )}
+          {step === 5 && (
+            <StepEmploymentReview
+              personal={personal}
+              contact={contact}
+              spouse={spouse}
+              employment={employment}
+              errors={errors as Partial<Record<keyof StepEmploymentData, string>>}
+              photoPreview={photoPreview}
+              validIds={validIds}
+              branches={branches}
+              onEmploymentChange={updateEmployment}
               onSubmit={handleSubmit}
-              onBack={() => setStep(2)}
+              onBack={() => goToStep(4)}
+              submitting={submitting}
             />
           )}
         </CardContent>

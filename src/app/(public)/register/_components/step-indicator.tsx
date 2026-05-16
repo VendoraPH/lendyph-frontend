@@ -10,7 +10,7 @@ export function StepIndicator({ current, labels }: StepIndicatorProps) {
   const total = labels.length;
 
   return (
-    <div className="relative flex items-start justify-between max-w-lg mx-auto mb-8">
+    <div className="relative flex items-start justify-between max-w-md mx-auto mb-5">
       {/* background connector */}
       <div className="absolute top-[18px] left-9 right-9 h-0.5 bg-border" />
       {/* progress fill */}

@@ -46,9 +46,17 @@ export const api = {
     return response.data.data;
   },
 
-  upload: async <T>(url: string, formData: FormData): Promise<T> => {
+  upload: async <T>(
+    url: string,
+    formData: FormData,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await axiosClient.post<ApiResponse<T>>(url, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      ...config,
+      headers: {
+        ...(config?.headers ?? {}),
+        "Content-Type": "multipart/form-data",
+      },
     });
     return response.data.data;
   },

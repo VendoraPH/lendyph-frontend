@@ -171,6 +171,7 @@ export const API_ENDPOINTS = {
   },
   BRANCHES: {
     LIST: "/branches",
+    PUBLIC_LIST: "/branches/public",
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,

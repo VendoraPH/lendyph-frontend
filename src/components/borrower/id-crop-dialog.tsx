@@ -26,7 +26,7 @@ interface IdCropDialogProps {
   onCropComplete: (croppedBlob: Blob, dataUrl: string) => void;
 }
 
-const ASPECT = 1.586; // standard ID card aspect ratio (85.6mm / 54mm)
+const ASPECT = 1.586;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.1;

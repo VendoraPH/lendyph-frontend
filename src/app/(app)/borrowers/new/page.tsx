@@ -30,10 +30,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
 import { borrowerService } from "@/services/borrower.service";
-import { IdCropDialog } from "./_components/id-crop-dialog";
+import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { PhotoCropDialog } from "@/app/(app)/borrowers/[id]/_components/photo-crop-dialog";
+import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
 interface ValidIdEntry {

@@ -39,8 +39,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { branchService, type ApiBranch } from "@/services/branch.service";
-import { IdCropDialog } from "@/app/(app)/borrowers/new/_components/id-crop-dialog";
-import { PhotoCropDialog } from "@/app/(app)/borrowers/[id]/_components/photo-crop-dialog";
+import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
+import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { Borrower } from "@/types";
 

@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS } from "@/constants";
+import { usePublicBranches } from "@/hooks/use-public-branches";
 
 export interface StepOneData {
   first_name: string;
@@ -21,6 +22,7 @@ export interface StepOneData {
   birthdate: string;
   gender: string;
   civil_status: string;
+  branch_id: string;
 }
 
 interface Props {
@@ -31,6 +33,8 @@ interface Props {
 }
 
 export function StepPersonal({ data, errors, onChange, onNext }: Props) {
+  const { branches, loading: branchesLoading, error: branchesError } = usePublicBranches();
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -155,27 +159,81 @@ export function StepPersonal({ data, errors, onChange, onNext }: Props) {
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>
-          Gender <span className="text-destructive">*</span>
-        </Label>
-        <RadioGroup
-          className="flex gap-6 pt-1"
-          value={data.gender || null}
-          onValueChange={(v) => onChange("gender", v ?? "")}
-        >
-          <label className="flex items-center gap-2 cursor-pointer">
-            <RadioGroupItem value="male" />
-            <span className="text-sm">Male</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <RadioGroupItem value="female" />
-            <span className="text-sm">Female</span>
-          </label>
-        </RadioGroup>
-        {errors.gender && (
-          <p className="text-xs text-destructive">{errors.gender}</p>
-        )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>
+            Gender <span className="text-destructive">*</span>
+          </Label>
+          <RadioGroup
+            className="flex gap-6 pt-1"
+            value={data.gender || null}
+            onValueChange={(v) => onChange("gender", v ?? "")}
+          >
+            <label className="flex items-center gap-2 cursor-pointer">
+              <RadioGroupItem value="male" />
+              <span className="text-sm">Male</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <RadioGroupItem value="female" />
+              <span className="text-sm">Female</span>
+            </label>
+          </RadioGroup>
+          {errors.gender && (
+            <p className="text-xs text-destructive">{errors.gender}</p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label>
+            Preferred Branch
+            {!branchesError && <span className="text-destructive"> *</span>}
+          </Label>
+          <Select
+            value={data.branch_id || null}
+            onValueChange={(v) => onChange("branch_id", v ?? "")}
+            disabled={branchesLoading || !!branchesError}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue
+                placeholder={
+                  branchesLoading
+                    ? "Loading branches…"
+                    : branchesError
+                    ? "Branches unavailable — admin will assign"
+                    : "Select a branch"
+                }
+              >
+                {(value: string | null) => {
+                  const selected = branches.find((b) => String(b.id) === value);
+                  return selected
+                    ? selected.city
+                      ? `${selected.name} — ${selected.city}`
+                      : selected.name
+                    : branchesLoading
+                    ? "Loading branches…"
+                    : branchesError
+                    ? "Branches unavailable — admin will assign"
+                    : "Select a branch";
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  {b.city ? `${b.name} — ${b.city}` : b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.branch_id && !branchesError && (
+            <p className="text-xs text-destructive">{errors.branch_id}</p>
+          )}
+          {branchesError && (
+            <p className="text-xs text-muted-foreground">
+              Branch list is temporarily unavailable. You can continue — an admin
+              will assign your branch during review.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end pt-4 border-t border-border">
