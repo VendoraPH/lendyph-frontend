@@ -27,7 +27,8 @@ export type Module =
   | "audit_logs"
   | "share_capital"
   | "collaterals"
-  | "auto_pay";
+  | "auto_pay"
+  | "gcash";
 
 export type Action =
   | "view"
@@ -41,7 +42,9 @@ export type Action =
   | "mark_collected"
   | "export"
   | "process"
-  | "toggle";
+  | "toggle"
+  | "transact"
+  | "settings";
 
 export type Permission = `${Module}:${Action}`;
 
