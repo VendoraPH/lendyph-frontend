@@ -97,7 +97,13 @@ export default function GCashSettingsPage() {
     setSaving(true);
     try {
       const payload: GCashTierInput[] = rows
-        .map(({ tempId: _t, ...rest }) => rest)
+        .map((r): GCashTierInput => ({
+          min_amount: r.min_amount,
+          max_amount: r.max_amount,
+          cash_in_rate: r.cash_in_rate,
+          cash_out_rate: r.cash_out_rate,
+          display_order: r.display_order,
+        }))
         .sort((a, b) => a.display_order - b.display_order);
       const saved = await gcashService.upsertTiers(payload);
       const safe = Array.isArray(saved) ? [...saved] : [];
