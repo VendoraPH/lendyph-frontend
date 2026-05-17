@@ -31,6 +31,14 @@ import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-d
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
+import {
+  InsurancePremiumSection,
+  computeInsurancePremium,
+} from "./_components/insurance-premium-section";
+import {
+  INSURANCE_PREMIUM_INITIAL,
+  type InsurancePremiumValue,
+} from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule } from "@/types/loan";
 import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
@@ -1067,6 +1075,9 @@ export default function LoanDetailPage({
   const [approvalRemarks, setApprovalRemarks] = useState("");
   const [rejectionRemarks, setRejectionRemarks] = useState("");
   const [releaseDate, setReleaseDate] = useState<Date>(new Date());
+  const [insurancePremium, setInsurancePremium] = useState<InsurancePremiumValue>(
+    INSURANCE_PREMIUM_INITIAL,
+  );
 
   // Add-second-co-maker state (used inside Release Dialog)
   const [addCoMakerOpen, setAddCoMakerOpen] = useState(false);
@@ -1572,10 +1583,24 @@ export default function LoanDetailPage({
   const handleRelease = async () => {
     try {
       setActionLoading(true);
-      const updated = await loanService.release(loan.id);
+      const { totalPremium, upfrontDeduction, remainingBalance } =
+        computeInsurancePremium(
+          Number(loan.principal_amount) || 0,
+          insurancePremium,
+        );
+      const releasePayload = {
+        insurance_premium_percentage: Number(insurancePremium.percentage) || 0,
+        insurance_premium_amount: totalPremium,
+        insurance_payment_type: insurancePremium.paymentType,
+        insurance_partial_amount:
+          insurancePremium.paymentType === "partial" ? upfrontDeduction : null,
+        insurance_remaining_balance: remainingBalance,
+      };
+      const updated = await loanService.release(loan.id, releasePayload);
       setLoan(updated);
       toast.success("Loan released successfully");
       setReleaseOpen(false);
+      setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
       setAutoPayIsPostRelease(true);
       setAutoPayDialogOpen(true);
       // Fetch the server-generated schedule
@@ -4168,6 +4193,13 @@ export default function LoanDetailPage({
               </div>
             </div>
 
+            <InsurancePremiumSection
+              principalAmount={Number(loan.principal_amount) || 0}
+              value={insurancePremium}
+              onChange={setInsurancePremium}
+              disabled={actionLoading}
+            />
+
             {/* Amortization Preview */}
             {releaseSchedule.length > 0 && (
               <div className="space-y-2">
@@ -4224,21 +4256,49 @@ export default function LoanDetailPage({
             )}
 
             {/* Warning */}
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-              <p className="text-sm text-amber-700">
-                Releasing this loan will lock the principal, interest rate, and term.
-                The borrower will receive{" "}
-                <span className="font-semibold">
-                  {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : formatCurrency(loan.principal_amount)}
-                </span>{" "}
-                as net proceeds.
-              </p>
-            </div>
+            {(() => {
+              const baseNetProceeds =
+                loan.net_proceeds != null
+                  ? Number(loan.net_proceeds)
+                  : Number(loan.principal_amount) || 0;
+              const { upfrontDeduction } = computeInsurancePremium(
+                Number(loan.principal_amount) || 0,
+                insurancePremium,
+              );
+              const adjustedNetProceeds = Math.max(
+                0,
+                baseNetProceeds - upfrontDeduction,
+              );
+              return (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-700">
+                    Releasing this loan will lock the principal, interest rate, and term.
+                    The borrower will receive{" "}
+                    <span className="font-semibold">
+                      {formatCurrency(adjustedNetProceeds)}
+                    </span>{" "}
+                    as net proceeds
+                    {upfrontDeduction > 0 && (
+                      <>
+                        {" "}(after {formatCurrency(upfrontDeduction)} insurance premium)
+                      </>
+                    )}
+                    .
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setReleaseOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReleaseOpen(false);
+                setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
+              }}
+            >
               Cancel
             </Button>
             <Button
