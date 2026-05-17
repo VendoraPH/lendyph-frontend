@@ -98,9 +98,18 @@ function getProductField(product: LoanProduct, field: string): string {
   }
 }
 
+// Format a numeric rate/percentage with up to 2 decimals, trimming trailing zeros.
+// Examples: "0.0000" → "0", "5.50" → "5.5", "5.25" → "5.25", "" → "".
+function formatRate(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toFixed(2).replace(/\.?0+$/, "");
+}
+
 function getFeeRange(product: LoanProduct, feeKey: "processing_fee" | "service_fee"): string {
-  const min = Math.round(Number(getProductField(product, `min_${feeKey}`)));
-  const max = Math.round(Number(getProductField(product, `max_${feeKey}`)));
+  const min = formatRate(getProductField(product, `min_${feeKey}`));
+  const max = formatRate(getProductField(product, `max_${feeKey}`));
   if (min === max) return `${min}%`;
   return `${min}–${max}%`;
 }
@@ -113,12 +122,10 @@ function getProductFrequencies(product: LoanProduct): string {
 }
 
 function getInterestRateDisplay(product: LoanProduct): string {
-  const min = getProductField(product, "min_interest_rate");
-  const max = getProductField(product, "max_interest_rate");
-  const minRound = min ? Math.round(Number(min)) : "";
-  const maxRound = max ? Math.round(Number(max)) : "";
-  if (minRound && maxRound && minRound !== maxRound) return `${minRound}% – ${maxRound}%`;
-  return `${minRound || maxRound}%`;
+  const min = formatRate(getProductField(product, "min_interest_rate"));
+  const max = formatRate(getProductField(product, "max_interest_rate"));
+  if (min && max && min !== max) return `${min}% – ${max}%`;
+  return `${min || max}%`;
 }
 
 function getTermDisplay(product: LoanProduct): string {
@@ -234,11 +241,11 @@ function productToForm(p: LoanProduct): ProductForm {
     ? (rawFreq as string[])
     : [String(rawFreq)];
 
-  // Parse interest rate range — round to whole numbers to strip API decimal noise
+  // Parse interest rate range — keep up to 2 decimals, strip trailing zeros from API
   const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
   const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
-  const minRate = minRateRaw != null ? String(Math.round(Number(minRateRaw))) : "";
-  const maxRate = maxRateRaw != null ? String(Math.round(Number(maxRateRaw))) : "";
+  const minRate = minRateRaw != null ? formatRate(minRateRaw) : "";
+  const maxRate = maxRateRaw != null ? formatRate(maxRateRaw) : "";
 
   const rawFees = (apiProduct.custom_fees ?? []) as Array<Record<string, unknown>>;
 
@@ -258,7 +265,7 @@ function productToForm(p: LoanProduct): ProductForm {
     min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
     max_service_fee: String(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
     notarial_fee: String(apiProduct.notarial_fee ?? ""),
-    penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? String(Math.round(Number(apiProduct.penalty_rate ?? p.penalty_rate))) : "",
+    penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
     past_due_transfer_value:
@@ -506,7 +513,7 @@ function ProductFormDialog({
                   id="min-interest-rate"
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.01"
                   placeholder="1"
                   value={form.min_interest_rate}
                   onChange={(e) => update("min_interest_rate", e.target.value)}
@@ -519,7 +526,7 @@ function ProductFormDialog({
                   id="max-interest-rate"
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.01"
                   placeholder="5"
                   value={form.max_interest_rate}
                   onChange={(e) => update("max_interest_rate", e.target.value)}
@@ -642,7 +649,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="1"
+                    step="0.01"
                     placeholder="Min"
                     value={form.min_processing_fee}
                     onChange={(e) => update("min_processing_fee", e.target.value)}
@@ -651,7 +658,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="1"
+                    step="0.01"
                     placeholder="Max"
                     value={form.max_processing_fee}
                     onChange={(e) => update("max_processing_fee", e.target.value)}
@@ -664,7 +671,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="1"
+                    step="0.01"
                     placeholder="Min"
                     value={form.min_service_fee}
                     onChange={(e) => update("min_service_fee", e.target.value)}
@@ -673,7 +680,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="1"
+                    step="0.01"
                     placeholder="Max"
                     value={form.max_service_fee}
                     onChange={(e) => update("max_service_fee", e.target.value)}
@@ -688,7 +695,7 @@ function ProductFormDialog({
                   id="notarial-fee"
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.01"
                   placeholder="1"
                   value={form.notarial_fee}
                   onChange={(e) => update("notarial_fee", e.target.value)}
@@ -700,7 +707,7 @@ function ProductFormDialog({
                   id="penalty-rate"
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.01"
                   placeholder="3"
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
@@ -1453,13 +1460,13 @@ export default function LoanProductsPage() {
                   <p className="text-xs text-muted-foreground">Fees</p>
                   <p className="text-xs">
                     Processing {getFeeRange(product, "processing_fee")} · Service {getFeeRange(product, "service_fee")}
-                    {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${Math.round(Number(getProductField(product, "notarial_fee")))}%`}
+                    {Number(getProductField(product, "notarial_fee")) > 0 && ` · Notarial ${formatRate(getProductField(product, "notarial_fee"))}%`}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Penalty</p>
                   <p className="text-xs">
-                    {Math.round(product.penalty_rate)}%/mo
+                    {formatRate(product.penalty_rate)}%/mo
                     {Number(getProductField(product, "grace_period_days")) > 0 && ` · ${getProductField(product, "grace_period_days")}d grace`}
                   </p>
                 </div>

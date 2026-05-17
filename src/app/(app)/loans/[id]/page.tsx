@@ -469,6 +469,7 @@ const VISIBLE_LOAN_COUNT = 3;
 
 function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
+  const [activeLoansOpen, setActiveLoansOpen] = useState(loanStatus !== "released");
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
 
@@ -481,7 +482,7 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
   const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
 
   return (
-    <Collapsible defaultOpen={loanStatus !== "released"}>
+    <Collapsible open={activeLoansOpen} onOpenChange={setActiveLoansOpen}>
       <Card>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -807,6 +808,10 @@ export default function LoanDetailPage({
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleOpenInitialized = useRef(false);
+  const [approvalStepsOpen, setApprovalStepsOpen] = useState(false);
+  const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(false);
+  const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(false);
+  const sectionsOpenInitialized = useRef(false);
 
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
@@ -896,6 +901,17 @@ export default function LoanDetailPage({
     if (loan && !scheduleOpenInitialized.current) {
       scheduleOpenInitialized.current = true;
       setScheduleOpen(loan.status !== "released");
+    }
+  }, [loan?.status]);
+
+  // Initialize sidebar/section collapsibles once when loan first loads — collapsed only for "released" status
+  useEffect(() => {
+    if (loan && !sectionsOpenInitialized.current) {
+      sectionsOpenInitialized.current = true;
+      const open = loan.status !== "released";
+      setApprovalStepsOpen(open);
+      setMemberCoMakerOpen(open);
+      setWorkflowHistoryOpen(open);
     }
   }, [loan?.status]);
 
@@ -1194,17 +1210,26 @@ export default function LoanDetailPage({
             amountPaid: totalAmountPaid,
           }];
         }
-        return apiSchedule.map((row, idx) => ({
-          period: idx + 1,
-          dueDate: new Date(row.due_date),
-          principal: parseFloat(String(row.principal)) || 0,
-          interest: parseFloat(String(row.interest)) || 0,
-          shareCapitalBuildUp: scb,
-          totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-          balance: parseFloat(String(row.balance)) || 0,
-          status: row.status,
-          amountPaid: parseFloat(String(row.amount_paid)) || 0,
-        }));
+        // Compute running principal balance ourselves; backend often returns 0
+        // for `remaining_balance`, which leaves the Balance column blank.
+        // Starts at the full loan principal and decreases by each row's principal portion.
+        let runningBalance = Number(loan.principal_amount ?? 0);
+        return apiSchedule.map((row, idx) => {
+          const rowPrincipal = parseFloat(String(row.principal)) || 0;
+          const apiBalance = parseFloat(String(row.balance)) || 0;
+          runningBalance = Math.max(0, runningBalance - rowPrincipal);
+          return {
+            period: idx + 1,
+            dueDate: new Date(row.due_date),
+            principal: rowPrincipal,
+            interest: parseFloat(String(row.interest)) || 0,
+            shareCapitalBuildUp: scb,
+            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
+            balance: apiBalance > 0 ? apiBalance : runningBalance,
+            status: row.status,
+            amountPaid: parseFloat(String(row.amount_paid)) || 0,
+          };
+        });
       }
       // Fallback to client-side generation
       const termVal = loan.term ?? loan.term_months ?? 0;
@@ -1234,17 +1259,23 @@ export default function LoanDetailPage({
         previewSchedule.some(r => (parseFloat(String(r.principal)) || 0) > 0 || (parseFloat(String(r.interest)) || 0) > 0);
 
       if (hasBreakdown && previewSchedule) {
-        return previewSchedule.map((row, idx) => ({
-          period: idx + 1,
-          dueDate: new Date(row.due_date),
-          principal: parseFloat(String(row.principal)) || 0,
-          interest: parseFloat(String(row.interest)) || 0,
-          shareCapitalBuildUp: scb,
-          totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-          balance: parseFloat(String(row.balance)) || 0,
-          status: row.status,
-          amountPaid: parseFloat(String(row.amount_paid)) || 0,
-        }));
+        let runningBalance = Number(loan.principal_amount ?? 0);
+        return previewSchedule.map((row, idx) => {
+          const rowPrincipal = parseFloat(String(row.principal)) || 0;
+          const apiBalance = parseFloat(String(row.balance)) || 0;
+          runningBalance = Math.max(0, runningBalance - rowPrincipal);
+          return {
+            period: idx + 1,
+            dueDate: new Date(row.due_date),
+            principal: rowPrincipal,
+            interest: parseFloat(String(row.interest)) || 0,
+            shareCapitalBuildUp: scb,
+            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
+            balance: apiBalance > 0 ? apiBalance : runningBalance,
+            status: row.status,
+            amountPaid: parseFloat(String(row.amount_paid)) || 0,
+          };
+        });
       }
       // Client-side generation as primary fallback
       if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
@@ -2381,7 +2412,8 @@ export default function LoanDetailPage({
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           {isUponMaturityLoan &&
-            ["released", "ongoing", "current", "past_due"].includes(loan.status) && (
+            ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+            (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
               <div className="sm:self-start">
                 <Button
                   onClick={() => setExtendOpen(true)}
@@ -2402,7 +2434,7 @@ export default function LoanDetailPage({
       />
 
       {loan.status !== "rejected" && approvalSteps.length > 0 && (
-        <Collapsible defaultOpen={loan.status !== "released"}>
+        <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -3019,7 +3051,7 @@ export default function LoanDetailPage({
         />
 
         {/* Card 3: Member & Co-Maker */}
-        <Collapsible defaultOpen={loan.status !== "released"}>
+        <Collapsible open={memberCoMakerOpen} onOpenChange={setMemberCoMakerOpen}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -3181,7 +3213,7 @@ export default function LoanDetailPage({
         )}
 
         {/* Card 4: Workflow History */}
-        <Collapsible defaultOpen={loan.status !== "released"}>
+        <Collapsible open={workflowHistoryOpen} onOpenChange={setWorkflowHistoryOpen}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
               <CollapsibleTrigger className="w-full text-left group/trigger">
@@ -3346,7 +3378,7 @@ export default function LoanDetailPage({
                         <TableRow>
                           <TableHead className="w-12 text-center">#</TableHead>
                           <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Principal Due</TableHead>
                           <TableHead className="text-right">Interest</TableHead>
                           {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
                           <TableHead className="text-right">Total Payment</TableHead>
@@ -3418,7 +3450,7 @@ export default function LoanDetailPage({
                         <TableRow>
                           <TableHead className="w-12 text-center">#</TableHead>
                           <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Principal Due</TableHead>
                           <TableHead className="text-right">Interest</TableHead>
                           {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
                           <TableHead className="text-right">Total Payment</TableHead>
