@@ -14,6 +14,7 @@ import {
   Package,
   Landmark,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 
 export interface NavSubItem {
@@ -90,6 +91,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     ],
   },
   {
+    title: "GCash",
+    href: "/gcash",
+    icon: Smartphone,
+    permission: "gcash:view",
+  },
+  {
     title: "User Management",
     href: "/users",
     icon: UserCog,
@@ -120,6 +127,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Collateral Types", href: "/settings/collateral-types" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
+      { title: "GCash", href: "/settings/gcash" },
     ],
   },
 ];
