@@ -186,6 +186,15 @@ export const API_ENDPOINTS = {
     PREVIEW: "/auto-pay/preview",
     PROCESS: "/auto-pay/process",
   },
+  GCASH: {
+    TRANSACTIONS_LIST: "/gcash/transactions",
+    TRANSACTIONS_CREATE: "/gcash/transactions",
+    TRANSACTIONS_MARK_PAID: (id: number) => `/gcash/transactions/${id}/paid`,
+    TIERS_LIST: "/gcash/tiers",
+    TIERS_UPSERT: "/gcash/tiers",
+    REPORTS_INCOME: "/gcash/reports/income",
+    REPORTS_PENDING: "/gcash/reports/pending",
+  },
   SETTINGS: {
     APPROVAL_WORKFLOW: "/settings/approval-workflow",
   },
