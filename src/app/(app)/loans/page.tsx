@@ -359,7 +359,9 @@ export default function LoansPage() {
                           variant="outline"
                           className={statusColors[loan.status]}
                         >
-                          {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                          {loan.is_restructure && loan.status !== "restructured"
+                            ? `Restructured — ${LOAN_STATUS_LABELS[loan.status] ?? loan.status}`
+                            : (LOAN_STATUS_LABELS[loan.status] ?? loan.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

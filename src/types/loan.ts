@@ -65,6 +65,10 @@ export interface Loan {
   amortization_schedules?: ApiScheduleRow[];
   created_at: string;
   updated_at: string;
+  // Restructure — set on the new loan that was created from a restructure
+  is_restructure?: boolean;
+  source_loan_id?: number;
+
   // Auto-Pay
   auto_pay_enabled?: boolean;
   auto_pay_cbs_reference?: string | null;

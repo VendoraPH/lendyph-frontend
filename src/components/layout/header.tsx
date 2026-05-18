@@ -63,6 +63,7 @@ function getSubLabel(segment: string): string {
     new: "New Application",
     products: "Loan Products",
     amortization: "Amortization Calculator",
+    restructure: "Restructure",
     history: "History",
     profile: "Profile",
     "loan-products": "Loan Products",
