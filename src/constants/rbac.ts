@@ -40,6 +40,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "collaterals:create",
       "collaterals:update",
       "collaterals:delete",
+      "gcash:view",
+      "gcash:transact",
+      "gcash:settings",
     ],
   },
   loan_officer: {
@@ -78,6 +81,8 @@ export const ROLES: Record<Role, RoleConfig> = {
       "payments:update",
       "payments:void",
       "collaterals:view",
+      "gcash:view",
+      "gcash:transact",
     ],
   },
   general_bookkeeper: {

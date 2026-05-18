@@ -49,6 +49,7 @@ import {
   Power,
   PowerOff,
   Zap,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -183,6 +184,17 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Enable or disable auto-pay per loan with CBS reference",
     ],
   },
+  gcash: {
+    label: "GCash",
+    description: "GCash Cash In / Cash Out transactions and tiered charges.",
+    icon: Smartphone,
+    features: [
+      "View GCash transactions and reports",
+      "Record Cash In and Cash Out on behalf of members",
+      "Mark pending Cash Ins as paid",
+      "Configure tiered charge rates",
+    ],
+  },
 };
 
 // Applicable actions per module — only the actions that make sense for each area
@@ -198,6 +210,7 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   settings: ["view", "update"],
   audit_logs: ["view", "export"],
   auto_pay: ["view", "process", "toggle"],
+  gcash: ["view", "transact", "settings"],
 };
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
@@ -213,6 +226,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
   process: { label: "Process", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
   toggle: { label: "Toggle", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  transact: { label: "Transact", colorClass: "bg-fuchsia-500/10 text-fuchsia-700 border-fuchsia-500/30" },
+  settings: { label: "Configure", colorClass: "bg-zinc-500/10 text-zinc-700 border-zinc-500/30" },
 };
 
 // ---------------------------------------------------------------------------

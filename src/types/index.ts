@@ -16,3 +16,14 @@ export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMembe
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";
 export type { AutoPayFilter, AutoPayPartialRow, AutoPaySummary, AutoPayPreview, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";
+export type {
+  GCashTransaction,
+  GCashTransactionType,
+  GCashTransactionStatus,
+  GCashTier,
+  GCashTierInput,
+  GCashIncomeReport,
+  GCashPendingItem,
+  CreateGCashTransactionData,
+  GCashListFilters,
+} from "./gcash";
