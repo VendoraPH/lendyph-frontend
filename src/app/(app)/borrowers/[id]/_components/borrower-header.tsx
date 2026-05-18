@@ -9,7 +9,7 @@ import { ArrowLeft, Pencil, Camera, X } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
-import { PhotoCropDialog } from "./photo-crop-dialog";
+import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import {
   Dialog,
   DialogContent,

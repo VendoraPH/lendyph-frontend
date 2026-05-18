@@ -29,6 +29,14 @@ export const API_ENDPOINTS = {
     LIST_VALID_IDS: (id: number) => `/borrowers/${id}/valid-ids`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
+  REGISTRATIONS: {
+    LIST: "/borrowers",
+    DETAIL: (id: number) => `/borrowers/${id}`,
+    SUBMIT: "/borrowers",
+    UPDATE: (id: number) => `/borrowers/${id}`,
+    APPROVE: (id: number) => `/borrowers/${id}/reactivate`,
+    REJECT: (id: number) => `/borrowers/${id}`,
+  },
   CO_MAKERS: {
     LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
     CREATE: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
@@ -164,6 +172,7 @@ export const API_ENDPOINTS = {
   },
   BRANCHES: {
     LIST: "/branches",
+    PUBLIC_LIST: "/branches/public",
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,

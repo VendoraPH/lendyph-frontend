@@ -26,7 +26,7 @@ interface PhotoCropDialogProps {
   onCropComplete: (croppedBlob: Blob) => void;
 }
 
-const ASPECT = 1; // square crop for profile photo
+const ASPECT = 1;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.1;
@@ -39,24 +39,16 @@ function getCroppedCanvas(
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
 
-  // Output a 400x400 square
   const outputSize = 400;
   canvas.width = outputSize;
   canvas.height = outputSize;
 
-  // The displayed image dimensions (what react-image-crop sees)
   const displayW = image.naturalWidth / zoom;
   const displayH = image.naturalHeight / zoom;
-
-  // Offset into the natural image caused by zoom (centered zoom)
   const zoomOffsetX = (image.naturalWidth - displayW) / 2;
   const zoomOffsetY = (image.naturalHeight - displayH) / 2;
-
-  // Scale from displayed pixels to natural pixels
   const scaleX = image.naturalWidth / (image.width * zoom);
   const scaleY = image.naturalHeight / (image.height * zoom);
-
-  // Source rectangle in natural image coordinates
   const sx = zoomOffsetX + crop.x * scaleX;
   const sy = zoomOffsetY + crop.y * scaleY;
   const sw = crop.width * scaleX;
@@ -81,7 +73,6 @@ export function PhotoCropDialog({
   const [saving, setSaving] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // Load image when file changes
   const loadImage = useCallback(() => {
     if (!imageFile) return;
     const reader = new FileReader();
@@ -94,7 +85,6 @@ export function PhotoCropDialog({
     reader.readAsDataURL(imageFile);
   }, [imageFile]);
 
-  // When dialog opens with a new file
   if (open && imageFile && !imgSrc) {
     loadImage();
   }
@@ -102,15 +92,8 @@ export function PhotoCropDialog({
   function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const { naturalWidth, naturalHeight, width, height } = e.currentTarget;
     if (!naturalWidth || !naturalHeight) return;
-
-    // Create a centered square crop
     const initialCrop = centerCrop(
-      makeAspectCrop(
-        { unit: "%", width: 80 },
-        ASPECT,
-        width,
-        height
-      ),
+      makeAspectCrop({ unit: "%", width: 80 }, ASPECT, width, height),
       width,
       height
     );
@@ -172,7 +155,6 @@ export function PhotoCropDialog({
 
         {imgSrc && (
           <div className="space-y-4">
-            {/* Crop area */}
             <div className="relative overflow-hidden rounded-lg border bg-muted/30 flex items-center justify-center max-h-[400px]">
               <ReactCrop
                 crop={crop}
@@ -198,7 +180,6 @@ export function PhotoCropDialog({
               </ReactCrop>
             </div>
 
-            {/* Zoom controls */}
             <div className="flex items-center gap-3 px-1">
               <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
               <Slider

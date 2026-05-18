@@ -25,9 +25,20 @@ export interface UpdateBranchData {
   is_active?: boolean;
 }
 
+export interface PublicBranch {
+  id: number;
+  name: string;
+  city?: string;
+}
+
 export const branchService = {
   list: (params?: Record<string, unknown>) =>
     api.get<ApiBranch[]>(API_ENDPOINTS.BRANCHES.LIST, { params }),
+
+  // Unauthenticated read for the public registration branch picker.
+  // Backend returns a slim shape — no internal fields.
+  publicList: () =>
+    api.get<PublicBranch[]>(API_ENDPOINTS.BRANCHES.PUBLIC_LIST),
 
   detail: (id: number) =>
     api.get<ApiBranch>(API_ENDPOINTS.BRANCHES.DETAIL(id)),
