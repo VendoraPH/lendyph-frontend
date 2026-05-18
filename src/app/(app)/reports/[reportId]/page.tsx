@@ -33,6 +33,7 @@ import {
   RefreshCw,
   Table as TableIcon,
 } from "lucide-react";
+import { reportService } from "@/services";
 import { REPORT_CATALOG } from "../_lib/report-catalog";
 import { CATEGORY_META } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
@@ -41,6 +42,14 @@ import { exportReportToPdf } from "../_lib/report-pdf";
 import { exportReportToDocx } from "../_lib/report-docx";
 import { exportReportToCsv } from "../_lib/report-csv";
 import { ReportPreview } from "../_components/report-preview";
+
+type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
+
+const BACKEND_CSV_EXPORTERS: Partial<Record<ReportId, BackendExporter>> = {
+  releases_list: reportService.exportReleases,
+  repayments_list: reportService.exportRepayments,
+  due_past_due_list: reportService.exportDuePastDue,
+};
 
 type ExportFormat = "excel" | "pdf" | "docx" | "csv" | "print";
 
@@ -222,10 +231,22 @@ export default function ReportDetailPage() {
           await exportReportToDocx(doc);
           toast.success("Word document downloaded.");
           break;
-        case "csv":
-          exportReportToCsv(doc);
+        case "csv": {
+          const backendExporter = reportId ? BACKEND_CSV_EXPORTERS[reportId as ReportId] : undefined;
+          if (backendExporter) {
+            const blob = await backendExporter({ date_from: activeRange.from, date_to: activeRange.to });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${reportId}-${activeRange.from}-${activeRange.to}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+          } else {
+            exportReportToCsv(doc);
+          }
           toast.success("CSV downloaded.");
           break;
+        }
         case "print":
           window.print();
           break;
