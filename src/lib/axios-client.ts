@@ -79,7 +79,18 @@ axiosClient.interceptors.response.use(
     const isAuthRoute = originalRequest?.url?.includes("/auth/login") ||
       originalRequest?.url?.includes("/auth/refresh");
 
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
+    // If there is no access token in storage, the caller is anonymous (e.g. the
+    // public /register page). A 401 here means the endpoint required auth or
+    // doesn't allow anonymous access — refreshing a non-existent token would
+    // just produce another 401 and a spurious "session expired" event.
+    const hasAccessToken = tokenManager.getAccessToken() !== null;
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthRoute &&
+      hasAccessToken
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
