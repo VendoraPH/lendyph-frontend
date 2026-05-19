@@ -25,7 +25,6 @@ import {
   Search,
   Plus,
   Clock,
-  CheckCircle2,
   XCircle,
   Banknote,
   AlertTriangle,
