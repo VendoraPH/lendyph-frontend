@@ -1625,7 +1625,7 @@ export default function LoanDetailPage({
         insurance_premium_amount: totalPremium,
         insurance_payment_type: insurancePremium.paymentType,
         insurance_partial_amount:
-          insurancePremium.paymentType === "partial" ? upfrontDeduction : null,
+          insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
         insurance_remaining_balance: remainingBalance,
       };
       const updated = await loanService.release(loan.id, releasePayload);
