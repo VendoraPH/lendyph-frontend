@@ -21,9 +21,27 @@ export function useRegistrations(options: Options = {}) {
     setLoading(true);
     setError(null);
     try {
-      const res = await registrationService.list(options);
-      setRegistrations(res.data ?? []);
-      setTotal(res.total ?? 0);
+      // The shared `/borrowers` endpoint sometimes returns a paginated
+      // envelope `{ data: [...], total, ... }` and sometimes the array
+      // directly — `BorrowersPage` has the same defensive parsing.
+      // Without this, pending registrations silently disappear because
+      // `res.data` is undefined when the backend returns an array.
+      const res = (await registrationService.list(options)) as unknown;
+      const list: Registration[] = Array.isArray(res)
+        ? (res as Registration[])
+        : ((res as { data?: Registration[] })?.data ?? []);
+      // Client-side guard: the shared /borrowers endpoint has been
+      // observed to ignore the `status` query param. Filter here so the
+      // "Pending Registrations" tab actually only shows pending records,
+      // regardless of what the backend returned.
+      const filtered = options.status
+        ? list.filter((r) => r.status === options.status)
+        : list;
+      const totalCount = Array.isArray(res)
+        ? filtered.length
+        : ((res as { total?: number })?.total ?? filtered.length);
+      setRegistrations(filtered);
+      setTotal(totalCount);
     } catch {
       setError("Failed to load registrations");
     } finally {

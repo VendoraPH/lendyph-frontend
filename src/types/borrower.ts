@@ -47,7 +47,12 @@ export interface Borrower {
   employer_or_business?: string | null;
   monthly_income?: number | string | null;
   photo_url?: string | null;
-  status: BorrowerStatus;
+  // The backend can also return "pending" for unapproved registrants on the
+  // shared `/borrowers` list. UI code that consumes the members list should
+  // filter pending records out — they belong on the Pending Registrations
+  // tab. BorrowerStatus itself stays narrow so badge/filter maps that key
+  // off it don't have to grow.
+  status: BorrowerStatus | "pending";
   branch?: BorrowerBranch | null;
   // Legacy fields (kept for compatibility with existing components)
   phone?: string;

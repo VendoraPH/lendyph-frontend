@@ -1,6 +1,7 @@
 // src/app/(app)/borrowers/registrations/[id]/_components/registration-info-cards.tsx
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS } from "@/constants";
 import type { Registration, RegistrationPayload } from "@/services/registration.service";
+import { usePublicBranches } from "@/hooks/use-public-branches";
+import { formatCurrency } from "@/app/(app)/borrowers/_components/utils";
 
 interface Props {
   registration: Registration;
@@ -16,13 +19,13 @@ interface Props {
   onDraftChange: <K extends keyof RegistrationPayload>(field: K, value: RegistrationPayload[K]) => void;
 }
 
-function ReadRow({ label, value }: { label: string; value?: string | null }) {
+function ReadField({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="flex flex-col py-2.5 border-b border-border last:border-0">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">
+    <div className="min-w-0">
+      <span className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">
         {label}
       </span>
-      <span className="text-sm font-semibold text-foreground">
+      <span className="block text-sm font-semibold text-foreground truncate" title={value ?? undefined}>
         {value || <span className="text-muted-foreground italic font-normal">—</span>}
       </span>
     </div>
@@ -31,6 +34,20 @@ function ReadRow({ label, value }: { label: string; value?: string | null }) {
 
 export function RegistrationInfoCards({ registration: r, editMode, draft, onDraftChange }: Props) {
   const d = { ...r, ...draft };
+  const { branches } = usePublicBranches();
+  const branchName = useMemo(
+    () =>
+      r.branch_id != null
+        ? branches.find((b) => b.id === r.branch_id)?.name ?? `Branch #${r.branch_id}`
+        : undefined,
+    [branches, r.branch_id]
+  );
+  const isMarried = r.civil_status === "married";
+  const hasEmploymentInfo =
+    branchName ||
+    r.employer_or_business ||
+    r.monthly_income != null ||
+    r.pledge_amount != null;
 
   return (
     <div className="space-y-4">
@@ -90,14 +107,14 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               </div>
             </div>
           ) : (
-            <div>
-              <ReadRow label="First Name" value={r.first_name} />
-              <ReadRow label="Middle Name" value={r.middle_name} />
-              <ReadRow label="Last Name" value={r.last_name} />
-              <ReadRow label="Suffix" value={r.suffix} />
-              <ReadRow label="Date of Birth" value={r.birthdate} />
-              <ReadRow label="Gender" value={r.gender ? r.gender.charAt(0).toUpperCase() + r.gender.slice(1) : undefined} />
-              <ReadRow label="Civil Status" value={r.civil_status ? r.civil_status.charAt(0).toUpperCase() + r.civil_status.slice(1) : undefined} />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+              <ReadField label="First Name" value={r.first_name} />
+              <ReadField label="Middle Name" value={r.middle_name} />
+              <ReadField label="Last Name" value={r.last_name} />
+              <ReadField label="Suffix" value={r.suffix} />
+              <ReadField label="Date of Birth" value={r.birthdate} />
+              <ReadField label="Gender" value={r.gender ? r.gender.charAt(0).toUpperCase() + r.gender.slice(1) : undefined} />
+              <ReadField label="Civil Status" value={r.civil_status ? r.civil_status.charAt(0).toUpperCase() + r.civil_status.slice(1) : undefined} />
             </div>
           )}
         </CardContent>
@@ -140,17 +157,64 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               </div>
             </div>
           ) : (
-            <div>
-              <ReadRow label="Contact Number" value={r.contact_number} />
-              <ReadRow label="Email" value={r.email} />
-              <ReadRow label="Street Address" value={r.address} />
-              <ReadRow label="Barangay" value={r.barangay} />
-              <ReadRow label="City / Municipality" value={r.city} />
-              <ReadRow label="Province" value={r.province} />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+              <ReadField label="Contact Number" value={r.contact_number} />
+              <ReadField label="Email" value={r.email} />
+              <ReadField label="Street Address" value={r.address} />
+              <ReadField label="Barangay" value={r.barangay} />
+              <ReadField label="City / Municipality" value={r.city} />
+              <ReadField label="Province" value={r.province} />
             </div>
           )}
         </CardContent>
       </Card>
+
+      {isMarried && (
+        <Card>
+          <CardContent className="pt-5 space-y-0">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
+              Spouse Information
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+              <ReadField label="First Name" value={r.spouse_first_name} />
+              <ReadField label="Middle Name" value={r.spouse_middle_name} />
+              <ReadField label="Last Name" value={r.spouse_last_name} />
+              <ReadField label="Contact Number" value={r.spouse_contact_number} />
+              <ReadField label="Occupation" value={r.spouse_occupation} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasEmploymentInfo && (
+        <Card>
+          <CardContent className="pt-5 space-y-0">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
+              Employment &amp; Membership
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+              <ReadField label="Preferred Branch" value={branchName} />
+              <ReadField label="Employer / Business" value={r.employer_or_business} />
+              <ReadField
+                label="Monthly Income"
+                value={
+                  r.monthly_income != null
+                    ? formatCurrency(Number(r.monthly_income))
+                    : undefined
+                }
+              />
+              <ReadField
+                label="Pledge Amount"
+                value={
+                  r.pledge_amount != null
+                    ? formatCurrency(Number(r.pledge_amount))
+                    : undefined
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
