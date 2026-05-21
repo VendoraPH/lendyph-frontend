@@ -42,8 +42,23 @@ export const tokenManager = {
 };
 
 // Request interceptor — attach token
+// Public-registration uploads identify themselves with X-Submission-Token.
+// In that case we must NOT attach a Bearer token, otherwise a stale admin
+// session in localStorage gets forwarded and the backend rejects the
+// request with 401.
+const SUBMISSION_TOKEN_HEADER = "X-Submission-Token";
+
+function hasSubmissionToken(config: { headers?: unknown }): boolean {
+  const headers = config.headers as Record<string, unknown> | undefined;
+  if (!headers) return false;
+  return Boolean(headers[SUBMISSION_TOKEN_HEADER] ?? headers[SUBMISSION_TOKEN_HEADER.toLowerCase()]);
+}
+
 axiosClient.interceptors.request.use(
   (config) => {
+    if (hasSubmissionToken(config)) {
+      return config;
+    }
     const token = tokenManager.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -78,6 +93,7 @@ axiosClient.interceptors.response.use(
 
     const isAuthRoute = originalRequest?.url?.includes("/auth/login") ||
       originalRequest?.url?.includes("/auth/refresh");
+    const isPublicSubmission = hasSubmissionToken(originalRequest ?? {});
 
     // If there is no access token in storage, the caller is anonymous (e.g. the
     // public /register page). A 401 here means the endpoint required auth or
@@ -89,7 +105,8 @@ axiosClient.interceptors.response.use(
       error.response?.status === 401 &&
       !originalRequest._retry &&
       !isAuthRoute &&
-      hasAccessToken
+      hasAccessToken &&
+      !isPublicSubmission
     ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

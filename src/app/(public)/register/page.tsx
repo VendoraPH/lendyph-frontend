@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StepIndicator } from "./_components/step-indicator";
 import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
-import { StepSpouse, type StepSpouseData } from "./_components/step-spouse";
+import type { StepSpouseData } from "./_components/step-spouse";
 import { StepPhotoIds, type ValidIdEntry } from "./_components/step-photo-ids";
 import {
   StepEmploymentReview,
@@ -21,7 +21,6 @@ import { usePublicBranches } from "@/hooks/use-public-branches";
 const STEP_LABELS = [
   "Personal Info",
   "Contact & Address",
-  "Spouse",
   "Photo & IDs",
   "Employment & Review",
 ];
@@ -78,11 +77,11 @@ function emptyEmployment(): StepEmploymentData {
 function validatePersonal(d: StepOneData): Partial<Record<keyof StepOneData, string>> {
   const errs: Partial<Record<keyof StepOneData, string>> = {};
   if (!d.first_name.trim()) errs.first_name = "First name is required";
-  if (!d.middle_name.trim()) errs.middle_name = "Middle name is required";
   if (!d.last_name.trim()) errs.last_name = "Last name is required";
   if (!d.birthdate) errs.birthdate = "Date of birth is required";
   if (!d.civil_status) errs.civil_status = "Civil status is required";
   if (!d.gender) errs.gender = "Gender is required";
+  // middle_name is optional — many applicants don't have one.
   // branch_id is intentionally not enforced here: if the public /branches
   // endpoint is down or branch list is empty, admin will assign during
   // review. The submit payload only includes branch_id when a value is set.
@@ -95,13 +94,6 @@ function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, stri
   if (!d.address.trim()) errs.address = "Street address is required";
   if (!d.city.trim()) errs.city = "City / Municipality is required";
   if (!d.province.trim()) errs.province = "Province is required";
-  return errs;
-}
-
-function validateSpouse(d: StepSpouseData): Partial<Record<keyof StepSpouseData, string>> {
-  const errs: Partial<Record<keyof StepSpouseData, string>> = {};
-  if (!d.spouse_first_name.trim()) errs.spouse_first_name = "Spouse first name is required";
-  if (!d.spouse_last_name.trim()) errs.spouse_last_name = "Spouse last name is required";
   return errs;
 }
 
@@ -176,13 +168,7 @@ export default function RegisterPage() {
   }
 
   function goToStep(target: number) {
-    // Skip spouse step (3) when not married — walk forward or backward
-    // until we land on a visible step.
-    let next = target;
-    while (next === 3 && !isMarried) {
-      next = target > step ? next + 1 : next - 1;
-    }
-    setStep(Math.max(1, Math.min(STEP_LABELS.length, next)));
+    setStep(Math.max(1, Math.min(STEP_LABELS.length, target)));
   }
 
   function handleNextPersonal() {
@@ -203,17 +189,8 @@ export default function RegisterPage() {
     goToStep(3);
   }
 
-  function handleNextSpouse() {
-    const errs = validateSpouse(spouse);
-    if (Object.keys(errs).length) {
-      setErrors((prev) => ({ ...prev, ...errs }));
-      return;
-    }
-    goToStep(4);
-  }
-
   function handleNextPhotoIds() {
-    goToStep(5);
+    goToStep(4);
   }
 
   async function handleSubmit() {
@@ -227,7 +204,7 @@ export default function RegisterPage() {
     try {
       const created = await registrationService.submit({
         first_name: personal.first_name.trim(),
-        middle_name: personal.middle_name.trim(),
+        middle_name: personal.middle_name.trim() || undefined,
         last_name: personal.last_name.trim(),
         suffix:
           personal.suffix && personal.suffix !== "none" ? personal.suffix : undefined,
@@ -309,11 +286,10 @@ export default function RegisterPage() {
     }
   }
 
-  // The step indicator only shows visible (non-skipped) labels.
-  const visibleLabels = isMarried
-    ? STEP_LABELS
-    : STEP_LABELS.filter((_, i) => i !== 2);
-  const visibleStep = isMarried ? step : step > 3 ? step - 1 : step;
+  // Spouse fields render inline inside step 1 when married, so the step
+  // indicator stays at 4 fixed steps regardless of civil status.
+  const visibleLabels = STEP_LABELS;
+  const visibleStep = step;
 
   return (
     <div className="px-4 py-6 sm:py-8">
@@ -364,6 +340,8 @@ export default function RegisterPage() {
               data={personal}
               errors={errors as Partial<Record<keyof StepOneData, string>>}
               onChange={updatePersonal}
+              spouse={spouse}
+              onSpouseChange={updateSpouse}
               onNext={handleNextPersonal}
             />
           )}
@@ -376,26 +354,17 @@ export default function RegisterPage() {
               onBack={() => goToStep(1)}
             />
           )}
-          {step === 3 && isMarried && (
-            <StepSpouse
-              data={spouse}
-              errors={errors as Partial<Record<keyof StepSpouseData, string>>}
-              onChange={updateSpouse}
-              onNext={handleNextSpouse}
-              onBack={() => goToStep(2)}
-            />
-          )}
-          {step === 4 && (
+          {step === 3 && (
             <StepPhotoIds
               photoPreview={photoPreview}
               validIds={validIds}
               onPhotoChange={handlePhotoChange}
               onValidIdsChange={setValidIds}
               onNext={handleNextPhotoIds}
-              onBack={() => goToStep(3)}
+              onBack={() => goToStep(2)}
             />
           )}
-          {step === 5 && (
+          {step === 4 && (
             <StepEmploymentReview
               personal={personal}
               contact={contact}
@@ -407,7 +376,7 @@ export default function RegisterPage() {
               branches={branches}
               onEmploymentChange={updateEmployment}
               onSubmit={handleSubmit}
-              onBack={() => goToStep(4)}
+              onBack={() => goToStep(3)}
               submitting={submitting}
             />
           )}
