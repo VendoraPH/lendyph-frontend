@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 import { Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StepIndicator } from "./_components/step-indicator";
@@ -95,6 +96,37 @@ function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, stri
   if (!d.city.trim()) errs.city = "City / Municipality is required";
   if (!d.province.trim()) errs.province = "Province is required";
   return errs;
+}
+
+// Extract a human-readable reason from an Axios error so the user sees
+// the real backend complaint (e.g. "The branch id field is required.")
+// instead of a generic "check your connection" message that hides the
+// actual cause. Falls back to the caller-supplied fallback string when
+// the error didn't come from the server.
+function submissionErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof AxiosError) {
+    const status = err.response?.status;
+    const data = err.response?.data as
+      | { message?: string; errors?: Record<string, string[]> }
+      | undefined;
+    const firstFieldError = data?.errors
+      ? Object.values(data.errors).flat()[0]
+      : undefined;
+    const serverMsg = firstFieldError || data?.message;
+    if (status === 401) return "Your session has expired. Please refresh the page.";
+    if (status === 403) return "You don't have permission to submit this form.";
+    if (status === 413) return "Uploaded file is too large.";
+    if (status === 429) {
+      const retryAfter = Number(err.response?.headers?.["retry-after"]);
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0
+        ? ` Please try again in about ${Math.ceil(retryAfter / 10) * 10} seconds.`
+        : " Please try again in a minute.";
+      return `Too many submission attempts.${wait}`;
+    }
+    if (status === 422 && serverMsg) return serverMsg;
+    if (serverMsg) return serverMsg;
+  }
+  return fallback;
 }
 
 function validateEmployment(
@@ -250,8 +282,10 @@ export default function RegisterPage() {
           const fd = new FormData();
           fd.append("photo", photoFile);
           await registrationService.uploadPhoto(borrowerId, fd, token);
-        } catch {
-          toast.error("Application saved but photo upload failed.");
+        } catch (err) {
+          toast.error(
+            submissionErrorMessage(err, "Application saved but photo upload failed.")
+          );
         }
       }
 
@@ -273,14 +307,19 @@ export default function RegisterPage() {
           if (entry.front_file) fd.append("front_file", entry.front_file);
           if (entry.back_file) fd.append("back_file", entry.back_file);
           await registrationService.uploadValidId(borrowerId, fd, token);
-        } catch {
-          toast.error(`Failed to upload ${entry.type} ID`);
+        } catch (err) {
+          toast.error(submissionErrorMessage(err, `Failed to upload ${entry.type} ID`));
         }
       }
 
       router.push("/register/success");
-    } catch {
-      toast.error("Submission failed. Please check your connection and try again.");
+    } catch (err) {
+      toast.error(
+        submissionErrorMessage(
+          err,
+          "Submission failed. Please check your connection and try again."
+        )
+      );
     } finally {
       setSubmitting(false);
     }
