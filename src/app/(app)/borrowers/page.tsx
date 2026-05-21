@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { RouteGuard, PermissionGate } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,13 +33,29 @@ import {
 import { BorrowerTable } from "./_components/borrower-table";
 import { useRegistrations } from "@/hooks/use-registrations";
 import type { Registration } from "@/services/registration.service";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatCurrency, getInitials, statusBadgeColor } from "./_components/utils";
+import { usePublicBranches } from "@/hooks/use-public-branches";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50] as const;
 
 function PendingRegistrationsTab() {
   const { registrations, loading, error } = useRegistrations({ status: "pending" });
+  const { branches } = usePublicBranches();
+  const branchNameById = useMemo(
+    () => new Map(branches.map((b) => [b.id, b.name])),
+    [branches]
+  );
 
   if (loading) {
     return (
@@ -72,44 +88,74 @@ function PendingRegistrationsTab() {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted/40">
-            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Applicant</th>
-            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</th>
-            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden md:table-cell">Address</th>
-            <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Submitted</th>
-            <th className="py-3 px-4" />
-          </tr>
-        </thead>
-        <tbody>
-          {registrations.map((reg: Registration) => (
-            <tr key={reg.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-              <td className="py-3 px-4">
-                <p className="font-semibold text-foreground">
-                  {reg.first_name} {reg.last_name}
-                </p>
-                <p className="text-xs text-muted-foreground">{reg.middle_name}</p>
-              </td>
-              <td className="py-3 px-4 text-muted-foreground">{reg.contact_number}</td>
-              <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">
-                {[reg.barangay, reg.city, reg.province].filter(Boolean).join(", ")}
-              </td>
-              <td className="py-3 px-4 text-muted-foreground text-xs hidden sm:table-cell">
-                {reg.submitted_at ? formatDate(reg.submitted_at) : "—"}
-              </td>
-              <td className="py-3 px-4 text-right">
-                <Link
-                  href={`/borrowers/registrations/${reg.id}`}
-                  className="inline-flex items-center rounded-md border border-brand-orange/50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange/5 transition-colors"
-                >
-                  Review
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Contact</TableHead>
+            <TableHead>Branch</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead className="text-right">Income</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-24" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {registrations.map((reg: Registration) => {
+            const fullName = [reg.first_name, reg.middle_name, reg.last_name]
+              .filter(Boolean)
+              .join(" ");
+            const branchName =
+              reg.branch_id != null ? branchNameById.get(reg.branch_id) : undefined;
+            return (
+              <TableRow key={reg.id} className="hover:bg-muted/50">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar size="sm">
+                      <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xs font-semibold">
+                        {getInitials(fullName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{fullName}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        PEND-{String(reg.id).padStart(4, "0")}
+                      </p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {reg.contact_number || "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {branchName || "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {reg.email || "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-brand-orange font-medium">
+                  {reg.monthly_income
+                    ? formatCurrency(Number(reg.monthly_income))
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={statusBadgeColor.pending}>
+                    pending
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/borrowers/registrations/${reg.id}`}
+                    className="inline-flex items-center rounded-md border border-brand-orange/50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange/5 transition-colors"
+                  >
+                    Review
+                  </Link>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -144,15 +190,22 @@ export default function BorrowersPage() {
     fetchBorrowers();
   }, [fetchBorrowers]);
 
+  // Pending applicants belong on the Pending Registrations tab — they
+  // must not leak into the Members list or its "All" count.
+  const members = useMemo(
+    () => borrowers.filter((b) => b.status !== "pending"),
+    [borrowers]
+  );
+
   // Counts for filter tabs
-  const activeCount = borrowers.filter((b) => b.status === "active").length;
-  const inactiveCount = borrowers.filter((b) => b.status === "inactive").length;
-  const blacklistedCount = borrowers.filter(
+  const activeCount = members.filter((b) => b.status === "active").length;
+  const inactiveCount = members.filter((b) => b.status === "inactive").length;
+  const blacklistedCount = members.filter(
     (b) => b.status === "blacklisted"
   ).length;
 
   // Filtering logic
-  const filteredBorrowers = borrowers.filter((b) => {
+  const filteredBorrowers = members.filter((b) => {
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -270,7 +323,7 @@ export default function BorrowersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Total Members</p>
-                <p className="text-2xl font-bold">{borrowers.length}</p>
+                <p className="text-2xl font-bold">{members.length}</p>
               </div>
               <div className="rounded-full bg-brand-blue/10 p-2.5">
                 <Users className="h-5 w-5 text-brand-blue" />
@@ -369,7 +422,7 @@ export default function BorrowersPage() {
             statusFilter={statusFilter}
             onStatusFilterChange={handleStatusFilterChange}
             counts={{
-              all: borrowers.length,
+              all: members.length,
               active: activeCount,
               inactive: inactiveCount,
               blacklisted: blacklistedCount,
@@ -381,7 +434,7 @@ export default function BorrowersPage() {
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
-          ) : borrowers.length === 0 ? (
+          ) : members.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">

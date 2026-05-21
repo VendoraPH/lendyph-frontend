@@ -1,9 +1,10 @@
 import type { BorrowerStatus } from "@/types";
 
-export const statusBadgeColor: Record<BorrowerStatus, string> = {
+export const statusBadgeColor: Record<BorrowerStatus | "pending", string> = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
   blacklisted: "bg-gray-900 text-white border-gray-700",
+  pending: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
 export function generateBorrowerCode(count: number): string {

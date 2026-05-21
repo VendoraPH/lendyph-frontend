@@ -73,9 +73,23 @@ export interface Registration {
   spouse_last_name?: string | null;
   spouse_contact_number?: string | null;
   spouse_occupation?: string | null;
+  // Surfaced from /borrowers/{id} so the admin can see the applicant's
+  // uploaded headshot directly on the review page.
+  photo_url?: string | null;
   status: RegistrationStatus;
   rejection_reason?: string | null;
   submitted_at: string;
+}
+
+export interface RegistrationValidId {
+  id: number;
+  label: string;
+  custom_type_name?: string | null;
+  id_number?: string | null;
+  side: "front" | "back";
+  url: string;
+  original_filename?: string | null;
+  mime_type?: string | null;
 }
 
 export interface RegistrationListResponse {
@@ -119,6 +133,9 @@ export const registrationService = {
 
   get: (id: number) =>
     api.get<Registration>(API_ENDPOINTS.REGISTRATIONS.DETAIL(id)),
+
+  listValidIds: (id: number) =>
+    api.get<RegistrationValidId[]>(API_ENDPOINTS.BORROWERS.LIST_VALID_IDS(id)),
 
   update: (id: number, data: Partial<RegistrationPayload>) =>
     api.put<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
