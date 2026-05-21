@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS } from "@/constants";
 import { usePublicBranches } from "@/hooks/use-public-branches";
+import type { StepSpouseData } from "./step-spouse";
 
 export interface StepOneData {
   first_name: string;
@@ -29,10 +30,22 @@ interface Props {
   data: StepOneData;
   errors: Partial<Record<keyof StepOneData, string>>;
   onChange: <K extends keyof StepOneData>(field: K, value: StepOneData[K]) => void;
+  spouse: StepSpouseData;
+  onSpouseChange: <K extends keyof StepSpouseData>(
+    field: K,
+    value: StepSpouseData[K]
+  ) => void;
   onNext: () => void;
 }
 
-export function StepPersonal({ data, errors, onChange, onNext }: Props) {
+export function StepPersonal({
+  data,
+  errors,
+  onChange,
+  spouse,
+  onSpouseChange,
+  onNext,
+}: Props) {
   const { branches, loading: branchesLoading, error: branchesError } = usePublicBranches();
 
   return (
@@ -69,19 +82,13 @@ export function StepPersonal({ data, errors, onChange, onNext }: Props) {
           )}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="middle_name">
-            Middle Name <span className="text-destructive">*</span>
-          </Label>
+          <Label htmlFor="middle_name">Middle Name</Label>
           <Input
             id="middle_name"
             placeholder="Dela Cruz"
             value={data.middle_name}
             onChange={(e) => onChange("middle_name", e.target.value)}
-            className={errors.middle_name ? "border-destructive" : ""}
           />
-          {errors.middle_name && (
-            <p className="text-xs text-destructive">{errors.middle_name}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label>Suffix</Label>
@@ -235,6 +242,64 @@ export function StepPersonal({ data, errors, onChange, onNext }: Props) {
           )}
         </div>
       </div>
+
+      {data.civil_status === "married" && (
+        <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+          <h3 className="text-sm font-semibold">Spouse Information</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="spouse_first_name">First Name</Label>
+              <Input
+                id="spouse_first_name"
+                placeholder="First name"
+                value={spouse.spouse_first_name}
+                onChange={(e) => onSpouseChange("spouse_first_name", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="spouse_middle_name">Middle Name</Label>
+              <Input
+                id="spouse_middle_name"
+                placeholder="Middle name"
+                value={spouse.spouse_middle_name}
+                onChange={(e) => onSpouseChange("spouse_middle_name", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="spouse_last_name">Last Name</Label>
+              <Input
+                id="spouse_last_name"
+                placeholder="Last name"
+                value={spouse.spouse_last_name}
+                onChange={(e) => onSpouseChange("spouse_last_name", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="spouse_contact_number">Contact Number</Label>
+              <Input
+                id="spouse_contact_number"
+                type="tel"
+                placeholder="09XXXXXXXXX"
+                value={spouse.spouse_contact_number}
+                onChange={(e) =>
+                  onSpouseChange("spouse_contact_number", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="spouse_occupation">Occupation</Label>
+              <Input
+                id="spouse_occupation"
+                placeholder="Occupation or employer"
+                value={spouse.spouse_occupation}
+                onChange={(e) => onSpouseChange("spouse_occupation", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end pt-4 border-t border-border">
         <Button

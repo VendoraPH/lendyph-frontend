@@ -7,7 +7,8 @@ export type RegistrationStatus = "pending" | "active" | "inactive" | "blackliste
 export interface RegistrationPayload {
   // Required identity
   first_name: string;
-  middle_name: string;
+  // Optional — many Filipino applicants don't have a middle name on file.
+  middle_name?: string;
   last_name: string;
   suffix?: string;
   birthdate: string;
@@ -86,7 +87,9 @@ export interface RegistrationListResponse {
 
 // Header recognised by the backend when the caller is an unauthenticated
 // public registrant uploading media tied to the borrower row they just
-// created. Token is opaque and short-lived (~15 min).
+// created. Token is opaque and short-lived (~15 min). The axios request
+// interceptor also keys off this header to avoid attaching a stale
+// admin Bearer token from localStorage.
 const SUBMISSION_TOKEN_HEADER = "X-Submission-Token";
 
 export const registrationService = {
