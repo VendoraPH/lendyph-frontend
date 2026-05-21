@@ -1587,8 +1587,8 @@ export default function LoanDetailPage({
       toast.success("Loan approved");
       setApprovalRemarks("");
       setApproveOpen(false);
-    } catch {
-      toast.error("Failed to approve loan");
+    } catch (err) {
+      toast.error(approvalErrorMessage(err, "Failed to approve loan"));
     } finally {
       setActionLoading(false);
     }
@@ -1605,8 +1605,8 @@ export default function LoanDetailPage({
       toast.success("Loan rejected");
       setRejectionRemarks("");
       setRejectOpen(false);
-    } catch {
-      toast.error("Failed to reject loan");
+    } catch (err) {
+      toast.error(approvalErrorMessage(err, "Failed to reject loan"));
     } finally {
       setActionLoading(false);
     }
@@ -1779,8 +1779,8 @@ export default function LoanDetailPage({
       toast.success(
         `Approved by ${currentStep.name}. Forwarded to ${nextStep?.name ?? "next step"}.`
       );
-    } catch {
-      toast.error("Failed to record approval");
+    } catch (err) {
+      toast.error(approvalErrorMessage(err, "Failed to record approval"));
     } finally {
       setStepActionLoading(false);
     }
@@ -2055,6 +2055,24 @@ export default function LoanDetailPage({
       if (serverMsg) return serverMsg;
     }
     return "Failed to extend loan. Please try again.";
+  };
+
+  const approvalErrorMessage = (err: unknown, fallback: string): string => {
+    if (err instanceof AxiosError) {
+      const status = err.response?.status;
+      const data = err.response?.data as
+        | { message?: string; errors?: Record<string, string[]> }
+        | undefined;
+      const firstFieldError = data?.errors
+        ? Object.values(data.errors).flat()[0]
+        : undefined;
+      const serverMsg = firstFieldError || data?.message;
+      if (status === 401) return "Your session has expired. Please sign in again.";
+      if (status === 403) return "You don't have permission to perform this action.";
+      if (status === 404) return "Loan not found.";
+      if (serverMsg) return serverMsg;
+    }
+    return fallback;
   };
 
   const handleExtendLoan = async () => {
