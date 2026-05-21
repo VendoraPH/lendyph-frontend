@@ -46,7 +46,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -106,7 +106,6 @@ import {
   AlertCircle,
   CalendarIcon,
   CalendarPlus,
-  Calculator,
   Download,
   Plus,
   DollarSign,
@@ -2438,16 +2437,6 @@ export default function LoanDetailPage({
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
-            <Link
-              href={`/loans/amortization-binhs?loan_id=${loan.id}`}
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "w-full sm:w-auto",
-              )}
-            >
-              <Calculator className="mr-2 h-4 w-4" />
-              View BINHS Schedule
-            </Link>
             {isUponMaturityLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
