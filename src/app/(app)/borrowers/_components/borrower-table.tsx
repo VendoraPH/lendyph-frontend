@@ -41,6 +41,8 @@ interface BorrowerTableProps {
   onDelete: (id: number) => void;
   onBulkDeactivate: (ids: number[]) => void;
   onBulkDelete: (ids: number[]) => void;
+  /** Resolves a branch name when the list payload omits the nested relation. */
+  branchNameById?: Map<number, string>;
 }
 
 type SortKey =
@@ -76,6 +78,7 @@ export function BorrowerTable({
   onDelete,
   onBulkDeactivate,
   onBulkDelete,
+  branchNameById,
 }: BorrowerTableProps) {
   const router = useRouter();
 
@@ -91,8 +94,8 @@ export function BorrowerTable({
   >({
     contact: true,
     branch: true,
-    email: false,
-    income: false,
+    email: true,
+    income: true,
   });
 
   // Handle sort toggle: asc -> desc -> none
@@ -315,7 +318,11 @@ export function BorrowerTable({
                 )}
                 {visibleColumns.branch && (
                   <TableCell className="text-muted-foreground">
-                    {borrower.branch?.name || "\u2014"}
+                    {borrower.branch?.name ||
+                      (borrower.branch_id != null
+                        ? branchNameById?.get(borrower.branch_id)
+                        : undefined) ||
+                      "\u2014"}
                   </TableCell>
                 )}
                 {visibleColumns.email && (

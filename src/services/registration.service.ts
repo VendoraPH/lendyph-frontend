@@ -81,15 +81,17 @@ export interface Registration {
   submitted_at: string;
 }
 
+// The /borrowers/{id}/valid-ids endpoint returns one grouped row per ID with
+// front/back URLs (same shape the borrower documents tab consumes) — NOT one
+// row per side. Keep this aligned with BorrowerValidId.
 export interface RegistrationValidId {
   id: number;
-  label: string;
+  type: string;
   custom_type_name?: string | null;
   id_number?: string | null;
-  side: "front" | "back";
-  url: string;
-  original_filename?: string | null;
-  mime_type?: string | null;
+  front_url?: string | null;
+  back_url?: string | null;
+  created_at?: string;
 }
 
 export interface RegistrationListResponse {

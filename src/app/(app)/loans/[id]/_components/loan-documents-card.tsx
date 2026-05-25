@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
-import { env } from "@/config/env";
+import { fileUrl } from "@/lib/file-url";
 import { cn } from "@/lib/utils";
 
 interface LoanDocumentsCardProps {
@@ -207,7 +207,7 @@ export function LoanDocumentsCard({
                           aria-label="Open document"
                           onClick={() =>
                             window.open(
-                              `${env.storage.url || ""}${doc.url}`,
+                              fileUrl(doc.url),
                               "_blank"
                             )
                           }

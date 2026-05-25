@@ -162,6 +162,11 @@ function PendingRegistrationsTab() {
 
 export default function BorrowersPage() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const { branches } = usePublicBranches();
+  const branchNameById = useMemo(
+    () => new Map(branches.map((b) => [b.id, b.name])),
+    [branches]
+  );
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -447,6 +452,7 @@ export default function BorrowersPage() {
           ) : (
             <BorrowerTable
               borrowers={paginatedBorrowers}
+              branchNameById={branchNameById}
               onToggleStatus={handleToggleStatus}
               onDelete={handleDelete}
               onBulkDeactivate={handleBulkDeactivate}

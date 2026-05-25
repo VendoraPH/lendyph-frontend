@@ -28,7 +28,7 @@ import {
 import { toast } from "sonner";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
-import { env } from "@/config/env";
+import { fileUrl } from "@/lib/file-url";
 
 interface CoMakerDocumentsDialogProps {
   coMakerId: number | null;
@@ -217,7 +217,7 @@ export function CoMakerDocumentsDialog({
                             aria-label="Open document"
                             onClick={() =>
                               window.open(
-                                `${env.storage.url || ""}${doc.url}`,
+                                fileUrl(doc.url),
                                 "_blank"
                               )
                             }

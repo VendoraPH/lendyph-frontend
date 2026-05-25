@@ -246,21 +246,39 @@ export function StepEmploymentReview({
                   None provided
                 </p>
               ) : (
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-3 text-sm">
                   {validIds.map((entry, i) => {
-                    const sides: string[] = [];
-                    if (entry.front_preview) sides.push("Front");
-                    if (entry.back_preview) sides.push("Back");
-                    const sidesText = sides.length ? sides.join(" + ") : "No images";
+                    const previews = [
+                      { label: "Front", src: entry.front_preview },
+                      { label: "Back", src: entry.back_preview },
+                    ].filter((p) => p.src);
                     return (
-                      <li key={i} className="flex items-center justify-between">
+                      <li key={i} className="space-y-1.5">
                         <span className="font-medium">
                           {validIdTypeLabel(entry)}
                           {entry.id_number ? ` · ${entry.id_number}` : ""}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {sidesText}
-                        </span>
+                        {previews.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">
+                            No images
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {previews.map((p) => (
+                              <div key={p.label} className="space-y-1">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={p.src as string}
+                                  alt={`${validIdTypeLabel(entry)} ${p.label}`}
+                                  className="h-24 w-36 rounded-md border object-cover bg-background"
+                                />
+                                <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70 text-center">
+                                  {p.label}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </li>
                     );
                   })}

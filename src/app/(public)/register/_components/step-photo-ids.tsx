@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction } from "react";
 import { Camera, FileText, ImageIcon, Plus, SwitchCamera, X, Crop as CropIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,7 +38,7 @@ interface Props {
   photoPreview: string | null;
   validIds: ValidIdEntry[];
   onPhotoChange: (file: File | null, preview: string | null) => void;
-  onValidIdsChange: (next: ValidIdEntry[]) => void;
+  onValidIdsChange: Dispatch<SetStateAction<ValidIdEntry[]>>;
   onNext: () => void;
   onBack: () => void;
 }
@@ -159,8 +159,8 @@ export function StepPhotoIds({
   }
 
   function addValidId() {
-    onValidIdsChange([
-      ...validIds,
+    onValidIdsChange((prev) => [
+      ...prev,
       {
         type: "",
         custom_type_name: "",
@@ -174,8 +174,8 @@ export function StepPhotoIds({
   }
 
   function updateValidId(index: number, field: keyof ValidIdEntry, value: unknown) {
-    onValidIdsChange(
-      validIds.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry))
+    onValidIdsChange((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry))
     );
   }
 
@@ -188,19 +188,20 @@ export function StepPhotoIds({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const next = validIds.map((entry, i) => {
-        if (i !== index) return entry;
-        return side === "front"
-          ? { ...entry, front_file: file, front_preview: reader.result as string }
-          : { ...entry, back_file: file, back_preview: reader.result as string };
-      });
-      onValidIdsChange(next);
+      onValidIdsChange((prev) =>
+        prev.map((entry, i) => {
+          if (i !== index) return entry;
+          return side === "front"
+            ? { ...entry, front_file: file, front_preview: reader.result as string }
+            : { ...entry, back_file: file, back_preview: reader.result as string };
+        })
+      );
     };
     reader.readAsDataURL(file);
   }
 
   function removeValidId(index: number) {
-    onValidIdsChange(validIds.filter((_, i) => i !== index));
+    onValidIdsChange((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
@@ -505,13 +506,14 @@ export function StepPhotoIds({
           const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
             type: "image/jpeg",
           });
-          const next = validIds.map((entry, i) => {
-            if (i !== index) return entry;
-            return side === "front"
-              ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
-              : { ...entry, back_file: croppedFile, back_preview: dataUrl };
-          });
-          onValidIdsChange(next);
+          onValidIdsChange((prev) =>
+            prev.map((entry, i) => {
+              if (i !== index) return entry;
+              return side === "front"
+                ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
+                : { ...entry, back_file: croppedFile, back_preview: dataUrl };
+            })
+          );
           setCropTarget(null);
           toast.success("ID cropped");
         }}

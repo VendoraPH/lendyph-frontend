@@ -7,13 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Upload, FileText, Trash2, Loader2, ExternalLink, IdCard } from "lucide-react";
+import {
+  Upload, FileText, Trash2, Loader2, IdCard,
+} from "lucide-react";
 import { toast } from "sonner";
 import { documentService } from "@/services";
 import { borrowerService, type BorrowerValidId } from "@/services/borrower.service";
 import type { Document } from "@/services/document.service";
 import { VALID_ID_OPTIONS } from "@/constants";
-import { env } from "@/config/env";
+import { fileUrl } from "@/lib/file-url";
+import { ImagePreviewDialog, type PreviewImage } from "@/components/common";
 
 interface DocumentsTabProps {
   borrowerId: number;
@@ -28,18 +31,15 @@ function validIdLabel(entry: BorrowerValidId): string {
   return VALID_ID_OPTIONS.find((o) => o.value === entry.type)?.label ?? entry.custom_type_name ?? entry.type;
 }
 
-function fileUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${env.storage.url || ""}${url}`;
-}
 
 export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [validIds, setValidIds] = useState<BorrowerValidId[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [deleting, setDeleting] = useState<number | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<number | null>(null);
   const [deletingValidId, setDeletingValidId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = useCallback(async () => {
@@ -48,7 +48,11 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       documentService.borrowerList(borrowerId),
       borrowerService.listValidIds(borrowerId),
     ]);
-    setDocuments(docsRes.status === "fulfilled" && Array.isArray(docsRes.value) ? docsRes.value : []);
+    setDocuments(
+      docsRes.status === "fulfilled" && Array.isArray(docsRes.value)
+        ? docsRes.value.filter((d) => d.type?.toLowerCase() !== "valid_id")
+        : []
+    );
     setValidIds(idsRes.status === "fulfilled" && Array.isArray(idsRes.value) ? idsRes.value : []);
     setLoading(false);
   }, [borrowerId]);
@@ -78,8 +82,8 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
     }
   }
 
-  async function handleDelete(id: number) {
-    setDeleting(id);
+  async function handleDeleteDocument(id: number) {
+    setDeletingDoc(id);
     try {
       await documentService.delete(id);
       toast.success("Document deleted");
@@ -87,7 +91,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
     } catch {
       toast.error("Failed to delete document");
     } finally {
-      setDeleting(null);
+      setDeletingDoc(null);
     }
   }
 
@@ -104,6 +108,19 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
     }
   }
 
+  function openValidId(entry: BorrowerValidId) {
+    const images: PreviewImage[] = [];
+    if (entry.front_url) images.push({ url: fileUrl(entry.front_url), caption: "Front" });
+    if (entry.back_url) images.push({ url: fileUrl(entry.back_url), caption: "Back" });
+    if (images.length === 0) {
+      toast.info("No images attached to this ID");
+      return;
+    }
+    setPreview({ title: validIdLabel(entry), images });
+  }
+
+  const totalCount = validIds.length + documents.length;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -117,88 +134,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       <Card>
         <CardContent className="p-0">
           <div className="flex items-center justify-between px-4 py-3 border-b">
-            <p className="text-sm font-medium">Valid IDs ({validIds.length})</p>
-          </div>
-
-          {validIds.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
-              <IdCard className="h-8 w-8 opacity-40" />
-              <p className="text-sm">No valid IDs uploaded yet</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID Type</TableHead>
-                  <TableHead>ID Number</TableHead>
-                  <TableHead>Images</TableHead>
-                  <TableHead>Uploaded</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {validIds.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <IdCard className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-medium">{validIdLabel(entry)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {entry.id_number || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {entry.front_url ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={() => window.open(fileUrl(entry.front_url!), "_blank")}
-                          >
-                            <ExternalLink className="h-3 w-3" /> Front
-                          </Button>
-                        ) : null}
-                        {entry.back_url ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={() => window.open(fileUrl(entry.back_url!), "_blank")}
-                          >
-                            <ExternalLink className="h-3 w-3" /> Back
-                          </Button>
-                        ) : null}
-                        {!entry.front_url && !entry.back_url ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{formatDate(entry.created_at)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                        disabled={deletingValidId === entry.id}
-                        onClick={() => handleDeleteValidId(entry.id)}
-                      >
-                        {deletingValidId === entry.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <p className="text-sm font-medium">Documents ({documents.length})</p>
+            <p className="text-sm font-medium">Documents &amp; IDs ({totalCount})</p>
             <div>
               <input
                 ref={fileInputRef}
@@ -219,24 +155,65 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
             </div>
           </div>
 
-          {documents.length === 0 ? (
+          {totalCount === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
               <FileText className="h-8 w-8 opacity-40" />
-              <p className="text-sm">No documents uploaded yet</p>
+              <p className="text-sm">No documents or valid IDs yet</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Document</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Uploaded</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {validIds.map((entry) => (
+                  <TableRow
+                    key={`vid-${entry.id}`}
+                    className="cursor-pointer"
+                    onClick={() => openValidId(entry)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <IdCard className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{validIdLabel(entry)}</p>
+                          {entry.id_number ? (
+                            <p className="text-xs text-muted-foreground truncate">{entry.id_number}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">Valid ID</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatDate(entry.created_at)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        disabled={deletingValidId === entry.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteValidId(entry.id);
+                        }}
+                      >
+                        {deletingValidId === entry.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
                 {documents.map((doc) => (
-                  <TableRow key={doc.id}>
+                  <TableRow
+                    key={`doc-${doc.id}`}
+                    className="cursor-pointer"
+                    onClick={() => window.open(fileUrl(doc.url), "_blank")}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -248,25 +225,18 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(doc.created_at)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => window.open(`${env.storage.url || ""}${doc.url}`, "_blank")}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                          disabled={deleting === doc.id}
-                          onClick={() => handleDelete(doc.id)}
-                        >
-                          {deleting === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        disabled={deletingDoc === doc.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDocument(doc.id);
+                        }}
+                      >
+                        {deletingDoc === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -275,6 +245,13 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
           )}
         </CardContent>
       </Card>
+
+      <ImagePreviewDialog
+        open={!!preview}
+        onOpenChange={(o) => !o && setPreview(null)}
+        title={preview?.title}
+        images={preview?.images ?? []}
+      />
     </div>
   );
 }

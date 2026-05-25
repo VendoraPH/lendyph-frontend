@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Camera, X } from "lucide-react";
+import { ArrowLeft, Pencil, Camera, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
@@ -41,6 +41,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   async function handleRemovePhoto() {
     setRemoving(true);
@@ -97,37 +98,54 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         Back to Borrowers
       </Link>
 
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="relative group cursor-pointer" onClick={() => photoInputRef.current?.click()}>
-              <Avatar size="lg">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-5">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              aria-label={borrower.photo ? "View profile photo" : "Upload profile photo"}
+              onClick={() => (borrower.photo ? setViewerOpen(true) : photoInputRef.current?.click())}
+              className="group relative block rounded-full"
+            >
+              <Avatar className="size-24 sm:size-28">
                 {borrower.photo ? (
                   <AvatarImage src={borrower.photo} alt={borrower.full_name} />
                 ) : null}
-                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xl font-semibold">
+                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-3xl font-semibold">
                   {getInitials(borrower.full_name)}
                 </AvatarFallback>
               </Avatar>
               <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Camera className="h-5 w-5 text-white" />
+                {borrower.photo ? (
+                  <Maximize2 className="h-6 w-6 text-white" />
+                ) : (
+                  <Camera className="h-6 w-6 text-white" />
+                )}
               </div>
-              <input
-                ref={photoInputRef}
-                type="file"
-                className="hidden"
-                accept="image/*"
-                onChange={handleFileSelect}
-              />
-            </div>
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handleFileSelect}
+            />
+            <button
+              type="button"
+              aria-label="Change photo"
+              onClick={() => photoInputRef.current?.click()}
+              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange text-brand-orange-foreground shadow-sm ring-2 ring-background hover:bg-brand-orange-dark transition-colors"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
             {borrower.photo ? (
               <button
                 type="button"
                 aria-label="Remove photo"
                 onClick={() => setRemoveConfirmOpen(true)}
-                className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 transition-colors"
+                className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm ring-2 ring-background hover:bg-destructive/90 transition-colors"
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
             ) : null}
           </div>
@@ -155,7 +173,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         </div>
         <Button
           onClick={onEdit}
-          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark self-start sm:self-auto"
         >
           <Pencil className="mr-2 h-4 w-4" />
           Edit Profile
@@ -168,6 +186,24 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         imageFile={selectedFile}
         onCropComplete={handleCroppedPhoto}
       />
+
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent size="lg" className="p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle>{borrower.full_name}</DialogTitle>
+          </DialogHeader>
+          {borrower.photo ? (
+            <div className="flex items-center justify-center p-4 pt-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={borrower.photo}
+                alt={borrower.full_name}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
         <DialogContent>
