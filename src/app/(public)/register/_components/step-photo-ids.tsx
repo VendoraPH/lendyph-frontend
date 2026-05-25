@@ -23,6 +23,11 @@ import {
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { VALID_ID_OPTIONS } from "@/constants";
+import {
+  validateUploadFile,
+  IMAGE_MIME_TYPES,
+  ID_MIME_TYPES,
+} from "@/lib/file-validation";
 
 export interface ValidIdEntry {
   type: string;
@@ -67,6 +72,9 @@ export function StepPhotoIds({
     src: string;
   } | null>(null);
 
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [idErrors, setIdErrors] = useState<Record<string, string>>({});
+
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -102,9 +110,15 @@ export function StepPhotoIds({
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    const result = validateUploadFile(file, IMAGE_MIME_TYPES);
+    if (!result.ok) {
+      setPhotoError(result.error ?? "Invalid file.");
+      return;
+    }
+    setPhotoError(null);
     setPendingPhotoFile(file);
     setPhotoCropOpen(true);
-    if (photoInputRef.current) photoInputRef.current.value = "";
   }
 
   function handlePhotoCropComplete(blob: Blob) {
@@ -186,6 +200,18 @@ export function StepPhotoIds({
   ) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    const key = `${index}-${side}`;
+    const result = validateUploadFile(file, ID_MIME_TYPES);
+    if (!result.ok) {
+      setIdErrors((prev) => ({ ...prev, [key]: result.error ?? "Invalid file." }));
+      return;
+    }
+    setIdErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     const reader = new FileReader();
     reader.onload = () => {
       onValidIdsChange((prev) =>
@@ -202,6 +228,7 @@ export function StepPhotoIds({
 
   function removeValidId(index: number) {
     onValidIdsChange((prev) => prev.filter((_, i) => i !== index));
+    setIdErrors({});
   }
 
   return (
@@ -244,6 +271,7 @@ export function StepPhotoIds({
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground">JPG or PNG, up to 5MB. Optional.</p>
+            {photoError && <p className="text-xs text-destructive">{photoError}</p>}
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -460,6 +488,11 @@ export function StepPhotoIds({
                               className="hidden"
                             />
                           </label>
+                        )}
+                        {idErrors[`${index}-${side}`] && (
+                          <p className="text-xs text-destructive">
+                            {idErrors[`${index}-${side}`]}
+                          </p>
                         )}
                       </div>
                     );
