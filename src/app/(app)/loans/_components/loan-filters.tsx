@@ -99,6 +99,7 @@ export function LoanFilters({
           render={
             <button
               type="button"
+              aria-label={dateFrom ? `From date: ${formatDateObj(dateFrom)}` : "From date"}
               className={cn(
                 "flex h-9 w-full sm:w-40 items-center gap-1.5 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
                 !dateFrom && "text-muted-foreground",
@@ -114,7 +115,10 @@ export function LoanFilters({
             mode="single"
             selected={dateFrom ?? undefined}
             onSelect={(d) => {
-              onDateRangeChange(d ?? null, dateTo);
+              const newFrom = d ?? null;
+              const nextTo =
+                newFrom && dateTo && dateTo < newFrom ? null : dateTo;
+              onDateRangeChange(newFrom, nextTo);
               setFromOpen(false);
             }}
           />
@@ -126,6 +130,7 @@ export function LoanFilters({
           render={
             <button
               type="button"
+              aria-label={dateTo ? `To date: ${formatDateObj(dateTo)}` : "To date"}
               className={cn(
                 "flex h-9 w-full sm:w-40 items-center gap-1.5 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
                 !dateTo && "text-muted-foreground",
