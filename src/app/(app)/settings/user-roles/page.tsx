@@ -200,7 +200,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
 // Applicable actions per module — only the actions that make sense for each area
 const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   dashboard: ["view"],
-  borrowers: ["view", "create", "update", "delete"],
+  borrowers: ["view", "create", "update", "delete", "approve"],
   loans: ["view", "create", "update", "delete", "approve", "reject", "release"],
   payments: ["view", "create", "update", "void"],
   share_capital: ["view", "create", "update"],

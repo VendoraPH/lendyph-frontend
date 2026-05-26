@@ -54,6 +54,9 @@ export interface Borrower {
   // off it don't have to grow.
   status: BorrowerStatus | "pending";
   branch?: BorrowerBranch | null;
+  // The list endpoint may return only the FK without the nested relation;
+  // keep it so the table can resolve the branch name from the branches list.
+  branch_id?: number | null;
   // Legacy fields (kept for compatibility with existing components)
   phone?: string;
   photo?: string;

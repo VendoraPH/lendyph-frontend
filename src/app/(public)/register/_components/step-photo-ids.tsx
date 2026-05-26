@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction } from "react";
 import { Camera, FileText, ImageIcon, Plus, SwitchCamera, X, Crop as CropIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +23,11 @@ import {
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { VALID_ID_OPTIONS } from "@/constants";
+import {
+  validateUploadFile,
+  IMAGE_MIME_TYPES,
+  ID_MIME_TYPES,
+} from "@/lib/file-validation";
 
 export interface ValidIdEntry {
   type: string;
@@ -38,7 +43,7 @@ interface Props {
   photoPreview: string | null;
   validIds: ValidIdEntry[];
   onPhotoChange: (file: File | null, preview: string | null) => void;
-  onValidIdsChange: (next: ValidIdEntry[]) => void;
+  onValidIdsChange: Dispatch<SetStateAction<ValidIdEntry[]>>;
   onNext: () => void;
   onBack: () => void;
 }
@@ -66,6 +71,9 @@ export function StepPhotoIds({
     side: "front" | "back";
     src: string;
   } | null>(null);
+
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [idErrors, setIdErrors] = useState<Record<string, string>>({});
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     if (streamRef.current) {
@@ -102,9 +110,15 @@ export function StepPhotoIds({
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    const result = validateUploadFile(file, IMAGE_MIME_TYPES);
+    if (!result.ok) {
+      setPhotoError(result.error ?? "Invalid file.");
+      return;
+    }
+    setPhotoError(null);
     setPendingPhotoFile(file);
     setPhotoCropOpen(true);
-    if (photoInputRef.current) photoInputRef.current.value = "";
   }
 
   function handlePhotoCropComplete(blob: Blob) {
@@ -159,8 +173,8 @@ export function StepPhotoIds({
   }
 
   function addValidId() {
-    onValidIdsChange([
-      ...validIds,
+    onValidIdsChange((prev) => [
+      ...prev,
       {
         type: "",
         custom_type_name: "",
@@ -174,8 +188,8 @@ export function StepPhotoIds({
   }
 
   function updateValidId(index: number, field: keyof ValidIdEntry, value: unknown) {
-    onValidIdsChange(
-      validIds.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry))
+    onValidIdsChange((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry))
     );
   }
 
@@ -186,21 +200,35 @@ export function StepPhotoIds({
   ) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    const key = `${index}-${side}`;
+    const result = validateUploadFile(file, ID_MIME_TYPES);
+    if (!result.ok) {
+      setIdErrors((prev) => ({ ...prev, [key]: result.error ?? "Invalid file." }));
+      return;
+    }
+    setIdErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     const reader = new FileReader();
     reader.onload = () => {
-      const next = validIds.map((entry, i) => {
-        if (i !== index) return entry;
-        return side === "front"
-          ? { ...entry, front_file: file, front_preview: reader.result as string }
-          : { ...entry, back_file: file, back_preview: reader.result as string };
-      });
-      onValidIdsChange(next);
+      onValidIdsChange((prev) =>
+        prev.map((entry, i) => {
+          if (i !== index) return entry;
+          return side === "front"
+            ? { ...entry, front_file: file, front_preview: reader.result as string }
+            : { ...entry, back_file: file, back_preview: reader.result as string };
+        })
+      );
     };
     reader.readAsDataURL(file);
   }
 
   function removeValidId(index: number) {
-    onValidIdsChange(validIds.filter((_, i) => i !== index));
+    onValidIdsChange((prev) => prev.filter((_, i) => i !== index));
+    setIdErrors({});
   }
 
   return (
@@ -243,6 +271,7 @@ export function StepPhotoIds({
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground">JPG or PNG, up to 5MB. Optional.</p>
+            {photoError && <p className="text-xs text-destructive">{photoError}</p>}
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -460,6 +489,11 @@ export function StepPhotoIds({
                             />
                           </label>
                         )}
+                        {idErrors[`${index}-${side}`] && (
+                          <p className="text-xs text-destructive">
+                            {idErrors[`${index}-${side}`]}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -505,13 +539,14 @@ export function StepPhotoIds({
           const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
             type: "image/jpeg",
           });
-          const next = validIds.map((entry, i) => {
-            if (i !== index) return entry;
-            return side === "front"
-              ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
-              : { ...entry, back_file: croppedFile, back_preview: dataUrl };
-          });
-          onValidIdsChange(next);
+          onValidIdsChange((prev) =>
+            prev.map((entry, i) => {
+              if (i !== index) return entry;
+              return side === "front"
+                ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
+                : { ...entry, back_file: croppedFile, back_preview: dataUrl };
+            })
+          );
           setCropTarget(null);
           toast.success("ID cropped");
         }}

@@ -5,8 +5,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
-import { RouteGuard } from "@/components/common";
+import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
+import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import {
   registrationService,
@@ -16,7 +16,10 @@ import {
 } from "@/services/registration.service";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getInitials } from "@/app/(app)/borrowers/_components/utils";
+import { fileUrl } from "@/lib/file-url";
+import { VALID_ID_OPTIONS } from "@/constants";
 import { RegistrationInfoCards } from "./_components/registration-info-cards";
 import { ReviewActionPanel } from "./_components/review-action-panel";
 import { RejectDialog } from "./_components/reject-dialog";
@@ -36,6 +39,8 @@ export default function RegistrationReviewPage() {
   const [approving, setApproving] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const [idPreview, setIdPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -103,6 +108,14 @@ export default function RegistrationReviewPage() {
     router.push("/borrowers");
   }
 
+  function openValidId(item: RegistrationValidId, label: string) {
+    const images: PreviewImage[] = [];
+    if (item.front_url) images.push({ url: fileUrl(item.front_url), caption: "Front" });
+    if (item.back_url) images.push({ url: fileUrl(item.back_url), caption: "Back" });
+    if (images.length === 0) return;
+    setIdPreview({ title: label, images });
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -124,37 +137,42 @@ export default function RegistrationReviewPage() {
   }
 
   const fullName = `${registration.first_name} ${registration.last_name}`;
-  const validIdsByLabel = validIds.reduce<Record<string, RegistrationValidId[]>>(
-    (acc, v) => {
-      const key = v.custom_type_name?.trim() || v.label;
-      (acc[key] ??= []).push(v);
-      return acc;
-    },
-    {}
-  );
 
   return (
-    <RouteGuard permission="borrowers:create" pageName="Review Registration">
+    <RouteGuard permission="borrowers:approve" pageName="Review Registration">
       <>
         <div className="space-y-4 max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex items-start gap-4">
-            <Avatar size="lg" className="hidden sm:flex h-16 w-16">
+          <Link
+            href="/borrowers"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Members
+          </Link>
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}
+              onClick={() => registration.photo_url && setPhotoViewerOpen(true)}
+              disabled={!registration.photo_url}
+              className="group relative block shrink-0 rounded-full"
+            >
+              <Avatar className="size-20 sm:size-24">
+                {registration.photo_url ? (
+                  <AvatarImage src={fileUrl(registration.photo_url)} alt={fullName} />
+                ) : null}
+                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-2xl font-semibold">
+                  {getInitials(fullName)}
+                </AvatarFallback>
+              </Avatar>
               {registration.photo_url ? (
-                <AvatarImage src={registration.photo_url} alt={fullName} />
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Maximize2 className="h-5 w-5 text-white" />
+                </div>
               ) : null}
-              <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-base font-semibold">
-                {getInitials(fullName)}
-              </AvatarFallback>
-            </Avatar>
+            </button>
             <div className="flex-1 min-w-0">
-              <Link
-                href="/borrowers"
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Members
-              </Link>
               <h1 className="text-2xl font-bold tracking-tight truncate">
                 Review Registration — {fullName}
               </h1>
@@ -181,43 +199,55 @@ export default function RegistrationReviewPage() {
                       Valid IDs
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      {Object.entries(validIdsByLabel).map(([label, items]) => {
-                        const idNumber = items.find((i) => i.id_number)?.id_number;
+                      {validIds.map((item) => {
+                        const label =
+                          item.custom_type_name?.trim() ||
+                          VALID_ID_OPTIONS.find((o) => o.value === item.type)?.label ||
+                          item.type;
+                        const sides = [
+                          { side: "Front", src: fileUrl(item.front_url) },
+                          { side: "Back", src: fileUrl(item.back_url) },
+                        ].filter((s) => s.src);
                         return (
-                          <div key={label} className="space-y-2">
+                          <div key={item.id} className="space-y-2">
                             <div>
                               <p className="text-sm font-semibold capitalize">
-                                {label.replaceAll("_", " ")}
+                                {label}
                               </p>
-                              {idNumber && (
+                              {item.id_number && (
                                 <p className="text-xs text-muted-foreground font-mono">
-                                  {idNumber}
+                                  {item.id_number}
                                 </p>
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {items
-                                .sort((a, b) => (a.side === "front" ? -1 : 1))
-                                .map((item) => (
-                                  <a
-                                    key={item.id}
-                                    href={item.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="group block aspect-[3/2] overflow-hidden rounded-md border border-border bg-muted/30 hover:border-brand-orange/50 transition-colors"
+                            {sides.length === 0 ? (
+                              <p className="text-xs text-muted-foreground italic">
+                                No images uploaded
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2">
+                                {sides.map((s) => (
+                                  <button
+                                    key={s.side}
+                                    type="button"
+                                    onClick={() => openValidId(item, label)}
+                                    className="group relative block aspect-[3/2] overflow-hidden rounded-md border border-border bg-muted/30 hover:border-brand-orange/50 transition-colors"
                                   >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
-                                      src={item.url}
-                                      alt={`${label} ${item.side}`}
+                                      src={s.src}
+                                      alt={`${label} ${s.side}`}
                                       className="h-full w-full object-cover group-hover:scale-105 transition-transform"
                                     />
-                                    <p className="sr-only">{item.side}</p>
-                                  </a>
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Maximize2 className="h-5 w-5 text-white" />
+                                    </div>
+                                  </button>
                                 ))}
-                            </div>
+                              </div>
+                            )}
                             <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                              {items.map((i) => i.side).join(" · ")}
+                              {sides.map((s) => s.side).join(" · ")}
                             </p>
                           </div>
                         );
@@ -245,6 +275,31 @@ export default function RegistrationReviewPage() {
           onOpenChange={setRejectOpen}
           onConfirm={handleReject}
         />
+
+        <ImagePreviewDialog
+          open={!!idPreview}
+          onOpenChange={(o) => !o && setIdPreview(null)}
+          title={idPreview?.title}
+          images={idPreview?.images ?? []}
+        />
+
+        <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
+          <DialogContent size="lg" className="p-0">
+            <DialogHeader className="p-4 pb-2">
+              <DialogTitle>{fullName}</DialogTitle>
+            </DialogHeader>
+            {registration.photo_url ? (
+              <div className="flex items-center justify-center p-4 pt-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fileUrl(registration.photo_url)}
+                  alt={fullName}
+                  className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+                />
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </>
     </RouteGuard>
   );

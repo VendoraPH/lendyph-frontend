@@ -27,6 +27,8 @@ export const API_ENDPOINTS = {
     DELETE_PHOTO: (id: number) => `/borrowers/${id}/photo`,
     UPLOAD_VALID_ID: (id: number) => `/borrowers/${id}/valid-ids`,
     LIST_VALID_IDS: (id: number) => `/borrowers/${id}/valid-ids`,
+    DELETE_VALID_ID: (id: number, validIdId: number) =>
+      `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
   },
   REGISTRATIONS: {

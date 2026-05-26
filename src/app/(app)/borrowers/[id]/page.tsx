@@ -152,7 +152,7 @@ export default function BorrowerDetailPage() {
           <TabsTrigger value="loans">Loans ({loans.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
           <TabsTrigger value="co-makers">Co-Makers ({coMakers.length})</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="documents">Documents &amp; IDs</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
           <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
