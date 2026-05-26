@@ -44,7 +44,6 @@ export interface LoanTableProps {
 interface ColumnDef {
   key: LoanSortKey;
   label: string;
-  className?: string;
   align?: "left" | "right";
 }
 
@@ -81,6 +80,7 @@ export function LoanTable({
                 <TableHead
                   key={col.key}
                   className={cn(col.align === "right" && "text-right")}
+                  aria-sort={isActive ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
                 >
                   <button
                     type="button"
@@ -145,6 +145,7 @@ export function LoanTable({
               <TableCell onClick={(e) => e.stopPropagation()}>
                 {["released", "current"].includes(loan.status) ? (
                   <button
+                    type="button"
                     className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
                     onClick={() => onAutoPayClick(loan)}
                   >
