@@ -44,7 +44,9 @@ export function TablePagination({
         <span>Rows per page</span>
         <Select
           value={String(perPage)}
-          onValueChange={(val) => onPerPageChange(Number(val))}
+          onValueChange={(val) => {
+            if (val != null) onPerPageChange(Number(val));
+          }}
         >
           <SelectTrigger size="sm" className="w-16">
             <SelectValue />
