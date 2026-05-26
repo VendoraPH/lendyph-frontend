@@ -1,24 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { RouteGuard, PermissionGate } from "@/components/common";
+import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import {
   Users,
   UserPlus,
   UserCheck,
   UserX,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
@@ -46,8 +36,6 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency, getInitials, statusBadgeColor } from "./_components/utils";
 import { usePublicBranches } from "@/hooks/use-public-branches";
-
-const ROWS_PER_PAGE_OPTIONS = [10, 20, 50] as const;
 
 function PendingRegistrationsTab() {
   const { registrations, loading, error } = useRegistrations({ status: "pending" });
@@ -460,59 +448,13 @@ export default function BorrowersPage() {
             />
           )}
 
-          {/* Pagination Controls */}
-          <div className="flex items-center justify-between pt-4 border-t mt-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>Rows per page</span>
-              <Select
-                value={String(rowsPerPage)}
-                onValueChange={(val) => handleRowsPerPageChange(Number(val))}
-              >
-                <SelectTrigger size="sm" className="w-16">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROWS_PER_PAGE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={String(opt)}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground tabular-nums">
-                {totalResults > 0
-                  ? `Showing ${startIndex + 1} to ${endIndex} of ${totalResults} results`
-                  : "No results"}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.max(1, p - 1))
-                  }
-                  disabled={safeCurrentPage <= 1}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
-                  disabled={safeCurrentPage >= totalPages}
-                  aria-label="Next page"
-                >
-                  <ChevronRight />
-                </Button>
-              </div>
-            </div>
-          </div>
+          <TablePagination
+            page={safeCurrentPage}
+            perPage={rowsPerPage}
+            total={totalResults}
+            onPageChange={setCurrentPage}
+            onPerPageChange={handleRowsPerPageChange}
+          />
         </CardContent>
       </Card>
       )}

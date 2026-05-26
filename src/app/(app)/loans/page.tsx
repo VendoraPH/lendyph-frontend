@@ -1,79 +1,55 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { RouteGuard, PermissionGate } from "@/components/common";
+import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
+import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { loanService } from "@/services/loan.service";
+import { loanProductService } from "@/services/loan-product.service";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   FileText,
-  Search,
   Plus,
   Clock,
   XCircle,
   Banknote,
   AlertTriangle,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
-import type { Loan, LoanStatus } from "@/types/loan";
+import { formatDateISO } from "@/lib/format";
+import type { Loan, LoanProduct } from "@/types/loan";
+import { LoanTable } from "./_components/loan-table";
+import { LoanFilters } from "./_components/loan-filters";
+import {
+  FILTER_TABS,
+  ACTIVE_STATUSES,
+  matchesTab,
+  matchesSearch,
+  matchesDateRange,
+  loanProductId,
+  compareLoans,
+  numOrNull,
+  dateOrNull,
+  clampOneOf,
+  type FilterTab,
+  type LoanSortKey,
+  type SortDir,
+} from "./_components/utils";
 
-// ── Status Colors ──
-
-const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
-  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
-  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
-  current: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  past_due: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  // Legacy — older data may still return "ongoing"; keep it visually
-  // identical to "current" until backend migration.
-  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
-  closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-};
-
-// ── Filter Tabs ──
-
-// "active" is a virtual tab value (not a real status) used when the Active
-// Loans KPI card is clicked — it matches any post-release, not-yet-completed
-// status so the table reflects what's still in the portfolio.
-type FilterTab = "all" | "active" | LoanStatus;
-
-const FILTER_TABS: { value: FilterTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "draft", label: "Draft" },
-  { value: "for_review", label: "For Review" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "released", label: "Released" },
-  { value: "current", label: "Current" },
-  { value: "past_due", label: "Past Due" },
-  { value: "completed", label: "Completed" },
+const PER_PAGE_OPTIONS = [10, 20, 50] as const;
+const SORT_KEYS: LoanSortKey[] = [
+  "application_number",
+  "borrower",
+  "product",
+  "amount",
+  "term",
+  "status",
+  "created_at",
 ];
-
-const ACTIVE_STATUSES: LoanStatus[] = ["released", "current", "ongoing", "past_due"];
 
 // Clickable KPI card. When `active` is true the card is visually "pressed"
 // so it's obvious that it drives the filter below.
@@ -103,7 +79,7 @@ function StatCard({
         "text-left rounded-lg border bg-card transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
         active
           ? "border-brand-orange ring-1 ring-brand-orange/40 shadow-sm"
-          : "hover:border-brand-orange/40 hover:shadow-sm"
+          : "hover:border-brand-orange/40 hover:shadow-sm",
       )}
     >
       <div className="py-4 px-6">
@@ -119,14 +95,43 @@ function StatCard({
   );
 }
 
-// ── Main Page ──
-
 export default function LoansPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ── URL → state (derived every render, cheap) ──
+  const tab = clampOneOf<FilterTab>(
+    (searchParams.get("tab") as FilterTab) ?? "all",
+    ["all", "active", ...FILTER_TABS.filter((t) => t.value !== "all").map((t) => t.value)] as FilterTab[],
+    "all",
+  );
+  const q = searchParams.get("q") ?? "";
+  const productId = numOrNull(searchParams.get("product_id"));
+  const dateFrom = dateOrNull(searchParams.get("from"));
+  const dateTo = dateOrNull(searchParams.get("to"));
+  const sortKey = clampOneOf<LoanSortKey>(
+    (searchParams.get("sort") as LoanSortKey) ?? "created_at",
+    SORT_KEYS,
+    "created_at",
+  );
+  const sortDir = clampOneOf<SortDir>(
+    (searchParams.get("dir") as SortDir) ?? "desc",
+    ["asc", "desc"],
+    "desc",
+  );
+  const page = Math.max(1, numOrNull(searchParams.get("page")) ?? 1);
+  const perPage = clampOneOf<number>(
+    numOrNull(searchParams.get("per_page")) ?? 10,
+    PER_PAGE_OPTIONS,
+    10,
+  );
+
+  // ── Local-only state (not in URL) ──
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [products, setProducts] = useState<LoanProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [searchDraft, setSearchDraft] = useState(q);
   const [autoPayTarget, setAutoPayTarget] = useState<{
     loanId: number;
     loanAccountNumber?: string | null;
@@ -134,320 +139,341 @@ export default function LoansPage() {
     cbsReference?: string | null;
   } | null>(null);
 
-  const fetchLoans = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await loanService.list();
-      const data = Array.isArray(res) ? res : res.data ?? [];
-      setLoans(data);
-    } catch {
-      toast.error("Failed to load loans");
-    } finally {
-      setLoading(false);
-    }
+  // Keep searchParams in a ref so updateParams always reads the latest URL,
+  // even when called multiple times within a single render or inside a
+  // debounced callback. Capturing searchParams in a closure would cause the
+  // "last call wins" race that broke the Clear button and the search debounce.
+  const searchParamsRef = useRef(searchParams);
+  useLayoutEffect(() => {
+    searchParamsRef.current = searchParams;
+  });
+
+  // ── URL-update helper. Resets page=1 unless only `page` is being updated. ──
+  const updateParams = useCallback(
+    (next: Partial<Record<string, string | null>>) => {
+      const p = new URLSearchParams(searchParamsRef.current.toString());
+      const keys = Object.keys(next);
+      const resetsPage = keys.some((k) => k !== "page");
+      if (resetsPage) p.delete("page");
+      for (const [k, v] of Object.entries(next)) {
+        if (v == null || v === "") p.delete(k);
+        else p.set(k, v);
+      }
+      const qs = p.toString();
+      router.replace(qs ? `?${qs}` : "", { scroll: false });
+    },
+    [router],
+  );
+
+  // ── Fetch loans + products in parallel on mount ──
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await loanService.list();
+        if (cancelled) return;
+        const data = Array.isArray(res) ? res : (res.data ?? []);
+        setLoans(data);
+      } catch {
+        if (!cancelled) toast.error("Failed to load loans");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    (async () => {
+      try {
+        setProductsLoading(true);
+        const res = await loanProductService.list();
+        if (cancelled) return;
+        setProducts(Array.isArray(res) ? res : []);
+      } catch {
+        // Soft-fail: filter just shows empty product list, page still works.
+      } finally {
+        if (!cancelled) setProductsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // ── Debounce searchDraft → URL ──
   useEffect(() => {
-    fetchLoans();
-  }, [fetchLoans]);
+    if (searchDraft === q) return;
+    const t = setTimeout(() => {
+      updateParams({ q: searchDraft });
+    }, 250);
+    return () => clearTimeout(t);
+    // `q` and `updateParams` are intentionally excluded — we only fire when
+    // the local draft changes. `updateParams` is now closure-safe via the
+    // searchParamsRef pattern above, so omitting it cannot cause stale URL
+    // writes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDraft]);
 
-  // Compute counts per status
+  // ── URL q → draft (browser back/forward, external nav) ──
+  useEffect(() => {
+    setSearchDraft((current) => (current === q ? current : q));
+  }, [q]);
+
+  // ── Counts from unfiltered loans (KPI cards + tab badges) ──
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: loans.length };
     for (const loan of loans) {
       counts[loan.status] = (counts[loan.status] ?? 0) + 1;
     }
+    counts.active = loans.filter((l) => ACTIVE_STATUSES.includes(l.status)).length;
     return counts;
   }, [loans]);
 
-  // Summary stats
-  const summaryStats = useMemo(() => {
-    const forReview = loans.filter((l) => l.status === "for_review").length;
-    const active = loans.filter((l) =>
-      ACTIVE_STATUSES.includes(l.status)
-    ).length;
-    const rejected = loans.filter((l) => l.status === "rejected").length;
-    return { total: loans.length, forReview, active, rejected };
-  }, [loans]);
+  const summaryStats = useMemo(
+    () => ({
+      total: loans.length,
+      forReview: loans.filter((l) => l.status === "for_review").length,
+      active: statusCounts.active ?? 0,
+      rejected: loans.filter((l) => l.status === "rejected").length,
+    }),
+    [loans, statusCounts.active],
+  );
 
-  // Filtered loans
-  const filteredLoans = useMemo(() => {
-    let filtered = loans;
+  // ── Filter → sort → slice pipeline ──
+  const filtered = useMemo(() => {
+    return loans.filter(
+      (l) =>
+        matchesTab(l, tab) &&
+        (productId == null || loanProductId(l) === productId) &&
+        matchesDateRange(l, dateFrom, dateTo) &&
+        matchesSearch(l, q),
+    );
+  }, [loans, tab, productId, dateFrom, dateTo, q]);
 
-    if (activeTab === "active") {
-      filtered = filtered.filter((l) => ACTIVE_STATUSES.includes(l.status));
-    } else if (activeTab !== "all") {
-      filtered = filtered.filter((l) => l.status === activeTab);
-    }
+  const sorted = useMemo(
+    () => [...filtered].sort((a, b) => compareLoans(a, b, sortKey, sortDir)),
+    [filtered, sortKey, sortDir],
+  );
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(
-        (l) =>
-          (l.application_number ?? "").toLowerCase().includes(q) ||
-          (l.borrower_name ?? "").toLowerCase().includes(q) ||
-          (l.loan_product_name ?? "").toLowerCase().includes(q) ||
-          (l.purpose ?? "").toLowerCase().includes(q)
-      );
-    }
+  const total = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * perPage;
+  const pageRows = sorted.slice(startIndex, startIndex + perPage);
 
-    return filtered;
-  }, [loans, activeTab, search]);
+  // ── Handlers ──
+  function handleTabChange(next: FilterTab) {
+    updateParams({ tab: next === "all" ? null : next });
+  }
+
+  function handleProductChange(id: number | null) {
+    updateParams({ product_id: id == null ? null : String(id) });
+  }
+
+  function handleDateRangeChange(from: Date | null, to: Date | null) {
+    updateParams({
+      from: from ? formatDateISO(from) : null,
+      to: to ? formatDateISO(to) : null,
+    });
+  }
+
+  function handleSortChange(key: LoanSortKey) {
+    const sameKey = key === sortKey;
+    const nextDir: SortDir = sameKey && sortDir === "desc" ? "asc" : "desc";
+    updateParams({
+      sort: key === "created_at" ? null : key,
+      dir: nextDir === "desc" ? null : "asc",
+    });
+  }
+
+  function handlePerPageChange(next: number) {
+    updateParams({ per_page: next === 10 ? null : String(next) });
+  }
+
+  function handlePageChange(next: number) {
+    updateParams({ page: next === 1 ? null : String(next) });
+  }
+
+  const productOptions = useMemo(
+    () => products.map((p) => ({ id: p.id, name: p.name ?? `Product #${p.id}` })),
+    [products],
+  );
 
   return (
     <RouteGuard permission="loans:view" pageName="Loans">
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage loan applications and track approval workflow
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/loans/past-due">
-            <Button variant="outline">
-              <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
-              Past Due Loans
-            </Button>
-          </Link>
-          <PermissionGate permission="loans:create">
-            <Link href="/loans/new">
-              <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
-                <Plus className="mr-2 h-4 w-4" />
-                New Application
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage loan applications and track approval workflow
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/loans/past-due">
+              <Button variant="outline">
+                <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
+                Past Due Loans
               </Button>
             </Link>
-          </PermissionGate>
+            <PermissionGate permission="loans:create">
+              <Link href="/loans/new">
+                <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Application
+                </Button>
+              </Link>
+            </PermissionGate>
+          </div>
         </div>
-      </div>
 
-      {/* Summary Cards — clicking any card sets the status filter below so
-          the table reflects the KPI the user just tapped. Active Loans is a
-          virtual "active" filter matching released/current/ongoing/past_due. */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total Applications"
-          value={summaryStats.total}
-          valueClassName=""
-          icon={<FileText className="h-5 w-5 text-brand-blue" />}
-          iconBg="bg-brand-blue/10"
-          active={activeTab === "all"}
-          onClick={() => setActiveTab("all")}
-        />
-        <StatCard
-          label="Pending Approval"
-          value={summaryStats.forReview}
-          valueClassName="text-amber-600"
-          icon={<Clock className="h-5 w-5 text-amber-600" />}
-          iconBg="bg-amber-500/10"
-          active={activeTab === "for_review"}
-          onClick={() => setActiveTab("for_review")}
-        />
-        <StatCard
-          label="Active Loans"
-          value={summaryStats.active}
-          valueClassName="text-green-600"
-          icon={<Banknote className="h-5 w-5 text-green-600" />}
-          iconBg="bg-green-500/10"
-          active={activeTab === "active"}
-          onClick={() => setActiveTab("active")}
-        />
-        <StatCard
-          label="Rejected"
-          value={summaryStats.rejected}
-          valueClassName="text-red-600"
-          icon={<XCircle className="h-5 w-5 text-red-600" />}
-          iconBg="bg-red-500/10"
-          active={activeTab === "rejected"}
-          onClick={() => setActiveTab("rejected")}
-        />
-      </div>
+        {/* Summary Cards */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Total Applications"
+            value={summaryStats.total}
+            valueClassName=""
+            icon={<FileText className="h-5 w-5 text-brand-blue" />}
+            iconBg="bg-brand-blue/10"
+            active={tab === "all"}
+            onClick={() => handleTabChange("all")}
+          />
+          <StatCard
+            label="Pending Approval"
+            value={summaryStats.forReview}
+            valueClassName="text-amber-600"
+            icon={<Clock className="h-5 w-5 text-amber-600" />}
+            iconBg="bg-amber-500/10"
+            active={tab === "for_review"}
+            onClick={() => handleTabChange("for_review")}
+          />
+          <StatCard
+            label="Active Loans"
+            value={summaryStats.active}
+            valueClassName="text-green-600"
+            icon={<Banknote className="h-5 w-5 text-green-600" />}
+            iconBg="bg-green-500/10"
+            active={tab === "active"}
+            onClick={() => handleTabChange("active")}
+          />
+          <StatCard
+            label="Rejected"
+            value={summaryStats.rejected}
+            valueClassName="text-red-600"
+            icon={<XCircle className="h-5 w-5 text-red-600" />}
+            iconBg="bg-red-500/10"
+            active={tab === "rejected"}
+            onClick={() => handleTabChange("rejected")}
+          />
+        </div>
 
-      {/* Status Filter Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveTab(tab.value)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
-              activeTab === tab.value
-                ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
-                : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50"
-            )}
-          >
-            {tab.label}
-            <span
+        {/* Status Filter Tabs */}
+        <div className="flex flex-wrap gap-2">
+          {FILTER_TABS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => handleTabChange(t.value)}
               className={cn(
-                "ml-1 rounded-full px-1.5 py-0.5 text-xs",
-                activeTab === tab.value
-                  ? "bg-brand-orange text-brand-orange-foreground"
-                  : "bg-muted text-muted-foreground"
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+                tab === t.value
+                  ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
+                  : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
               )}
             >
-              {statusCounts[tab.value] ?? 0}
-            </span>
-          </button>
-        ))}
-      </div>
+              {t.label}
+              <span
+                className={cn(
+                  "ml-1 rounded-full px-1.5 py-0.5 text-xs",
+                  tab === t.value
+                    ? "bg-brand-orange text-brand-orange-foreground"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {statusCounts[t.value] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
 
-      {/* Data Table */}
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-sm font-medium">
-            Loan Applications ({filteredLoans.length})
-          </CardTitle>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search loans..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Spinner className="size-6 text-brand-orange" />
+        {/* Data Table */}
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-sm font-medium">
+              Loan Applications ({total})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
+              <LoanFilters
+                search={searchDraft}
+                onSearchChange={setSearchDraft}
+                productId={productId}
+                onProductChange={handleProductChange}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateRangeChange={handleDateRangeChange}
+                productOptions={productOptions}
+                productsLoading={productsLoading}
+              />
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Application #</TableHead>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Term</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Auto-Pay</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLoans.map((loan) => (
-                    <TableRow
-                      key={loan.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/loans/${loan.id}`)}
-                    >
-                      <TableCell className="font-mono text-sm">
-                        {loan.application_number}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {loan.borrower?.full_name ?? loan.borrower?.name ?? loan.borrower_name ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {loan.loan_product?.name ?? loan.loan_product_name ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(loan.principal_amount)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {loan.term ?? loan.term_months ?? 0}mo /{" "}
-                        {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ??
-                          loan.frequency ?? loan.payment_frequency) || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={statusColors[loan.status]}
-                        >
-                          {loan.is_restructure && loan.status !== "restructured"
-                            ? `Restructured — ${LOAN_STATUS_LABELS[loan.status] ?? loan.status}`
-                            : (LOAN_STATUS_LABELS[loan.status] ?? loan.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(loan.created_at)}
-                      </TableCell>
-                      <TableCell
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {["released", "current"].includes(loan.status) ? (
-                          <button
-                            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
-                            onClick={() =>
-                              setAutoPayTarget({
-                                loanId: loan.id,
-                                loanAccountNumber: loan.loan_account_number,
-                                enabled: loan.auto_pay_enabled ?? false,
-                                cbsReference: loan.auto_pay_cbs_reference,
-                              })
-                            }
-                          >
-                            <Zap
-                              className={cn(
-                                "h-3 w-3",
-                                loan.auto_pay_enabled
-                                  ? "text-blue-600"
-                                  : "text-muted-foreground"
-                              )}
-                            />
-                            <span
-                              className={
-                                loan.auto_pay_enabled
-                                  ? "text-blue-700 dark:text-blue-300"
-                                  : "text-muted-foreground"
-                              }
-                            >
-                              {loan.auto_pay_enabled ? "Enabled" : "Enable"}
-                            </span>
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredLoans.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={8}
-                        className="h-24 text-center text-muted-foreground"
-                      >
-                        No loan applications found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      {autoPayTarget && (
-        <AutoPayToggleDialog
-          loanId={autoPayTarget.loanId}
-          loanAccountNumber={autoPayTarget.loanAccountNumber}
-          currentEnabled={autoPayTarget.enabled}
-          currentCbsReference={autoPayTarget.cbsReference}
-          open={!!autoPayTarget}
-          onOpenChange={(open) => {
-            if (!open) setAutoPayTarget(null);
-          }}
-          onSuccess={(settings) => {
-            const targetId = autoPayTarget.loanId;
-            setLoans((prev) =>
-              prev.map((l) =>
-                l.id === targetId
-                  ? {
-                      ...l,
-                      auto_pay_enabled: settings.auto_pay_enabled,
-                      auto_pay_cbs_reference: settings.cbs_reference,
-                    }
-                  : l
-              )
-            );
-          }}
-        />
-      )}
-    </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Spinner className="size-6 text-brand-orange" />
+              </div>
+            ) : (
+              <>
+                <LoanTable
+                  loans={pageRows}
+                  sort={{ key: sortKey, dir: sortDir }}
+                  onSortChange={handleSortChange}
+                  onRowClick={(id) => router.push(`/loans/${id}`)}
+                  onAutoPayClick={(loan) =>
+                    setAutoPayTarget({
+                      loanId: loan.id,
+                      loanAccountNumber: loan.loan_account_number,
+                      enabled: loan.auto_pay_enabled ?? false,
+                      cbsReference: loan.auto_pay_cbs_reference,
+                    })
+                  }
+                />
+                <TablePagination
+                  page={safePage}
+                  perPage={perPage}
+                  total={total}
+                  onPageChange={handlePageChange}
+                  onPerPageChange={handlePerPageChange}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+        {autoPayTarget && (
+          <AutoPayToggleDialog
+            loanId={autoPayTarget.loanId}
+            loanAccountNumber={autoPayTarget.loanAccountNumber}
+            currentEnabled={autoPayTarget.enabled}
+            currentCbsReference={autoPayTarget.cbsReference}
+            open={!!autoPayTarget}
+            onOpenChange={(open) => {
+              if (!open) setAutoPayTarget(null);
+            }}
+            onSuccess={(settings) => {
+              const targetId = autoPayTarget.loanId;
+              setLoans((prev) =>
+                prev.map((l) =>
+                  l.id === targetId
+                    ? {
+                        ...l,
+                        auto_pay_enabled: settings.auto_pay_enabled,
+                        auto_pay_cbs_reference: settings.cbs_reference,
+                      }
+                    : l,
+                ),
+              );
+            }}
+          />
+        )}
+      </div>
     </RouteGuard>
   );
 }
