@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
 import type { Loan } from "@/types/loan";
-import type { LoanSortKey, SortDir } from "./utils";
+import {
+  loanBorrowerName,
+  loanProductName,
+  type LoanSortKey,
+  type SortDir,
+} from "./utils";
 
 // Status pill colors — kept identical to the previous inline render to
 // avoid any visual diff in this task.
@@ -112,13 +117,10 @@ export function LoanTable({
                 {loan.application_number}
               </TableCell>
               <TableCell className="font-medium">
-                {loan.borrower?.full_name ??
-                  loan.borrower?.name ??
-                  loan.borrower_name ??
-                  "—"}
+                {loanBorrowerName(loan) || "—"}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {loan.loan_product?.name ?? loan.loan_product_name ?? "—"}
+                {loanProductName(loan) || "—"}
               </TableCell>
               <TableCell className="text-right font-medium">
                 {formatCurrency(loan.principal_amount)}

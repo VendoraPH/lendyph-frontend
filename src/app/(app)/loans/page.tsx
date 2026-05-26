@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,8 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateISO } from "@/lib/format";
-import type { Loan } from "@/types/loan";
-import type { LoanProduct } from "@/types/loan";
+import type { Loan, LoanProduct } from "@/types/loan";
 import { LoanTable } from "./_components/loan-table";
 import { LoanFilters } from "./_components/loan-filters";
 import {
@@ -140,10 +139,19 @@ export default function LoansPage() {
     cbsReference?: string | null;
   } | null>(null);
 
+  // Keep searchParams in a ref so updateParams always reads the latest URL,
+  // even when called multiple times within a single render or inside a
+  // debounced callback. Capturing searchParams in a closure would cause the
+  // "last call wins" race that broke the Clear button and the search debounce.
+  const searchParamsRef = useRef(searchParams);
+  useLayoutEffect(() => {
+    searchParamsRef.current = searchParams;
+  });
+
   // ── URL-update helper. Resets page=1 unless only `page` is being updated. ──
   const updateParams = useCallback(
     (next: Partial<Record<string, string | null>>) => {
-      const p = new URLSearchParams(searchParams.toString());
+      const p = new URLSearchParams(searchParamsRef.current.toString());
       const keys = Object.keys(next);
       const resetsPage = keys.some((k) => k !== "page");
       if (resetsPage) p.delete("page");
@@ -152,9 +160,9 @@ export default function LoansPage() {
         else p.set(k, v);
       }
       const qs = p.toString();
-      router.replace(qs ? `?${qs}` : "?", { scroll: false });
+      router.replace(qs ? `?${qs}` : "", { scroll: false });
     },
-    [router, searchParams],
+    [router],
   );
 
   // ── Fetch loans + products in parallel on mount ──
@@ -197,7 +205,10 @@ export default function LoansPage() {
       updateParams({ q: searchDraft });
     }, 250);
     return () => clearTimeout(t);
-    // `q` is intentionally excluded — we only fire when the draft changes.
+    // `q` and `updateParams` are intentionally excluded — we only fire when
+    // the local draft changes. `updateParams` is now closure-safe via the
+    // searchParamsRef pattern above, so omitting it cannot cause stale URL
+    // writes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDraft]);
 
@@ -251,10 +262,6 @@ export default function LoansPage() {
   // ── Handlers ──
   function handleTabChange(next: FilterTab) {
     updateParams({ tab: next === "all" ? null : next });
-  }
-
-  function handleSearchChange(value: string) {
-    setSearchDraft(value);
   }
 
   function handleProductChange(id: number | null) {
@@ -364,6 +371,7 @@ export default function LoansPage() {
           {FILTER_TABS.map((t) => (
             <button
               key={t.value}
+              type="button"
               onClick={() => handleTabChange(t.value)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
@@ -398,7 +406,7 @@ export default function LoansPage() {
             <div className="mb-4">
               <LoanFilters
                 search={searchDraft}
-                onSearchChange={handleSearchChange}
+                onSearchChange={setSearchDraft}
                 productId={productId}
                 onProductChange={handleProductChange}
                 dateFrom={dateFrom}
