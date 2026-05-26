@@ -7,7 +7,7 @@ export type ReleaseLoanPayload = {
   insurance_premium_percentage?: number;
   insurance_premium_amount?: number;
   insurance_payment_type?: "full" | "partial";
-  insurance_partial_amount?: number | null;
+  insurance_partial_amount?: number;
   insurance_remaining_balance?: number;
 };
 

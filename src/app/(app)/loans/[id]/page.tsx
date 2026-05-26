@@ -1624,7 +1624,7 @@ export default function LoanDetailPage({
         insurance_premium_amount: totalPremium,
         insurance_payment_type: insurancePremium.paymentType,
         insurance_partial_amount:
-          insurancePremium.paymentType === "partial" ? upfrontDeduction : null,
+          insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
         insurance_remaining_balance: remainingBalance,
       };
       const updated = await loanService.release(loan.id, releasePayload);
@@ -1651,8 +1651,19 @@ export default function LoanDetailPage({
         );
         persistApprovalState(updatedSteps, approvalRounds);
       }
-    } catch {
-      toast.error("Failed to release loan");
+    } catch (err) {
+      console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
+      let msg = "Failed to release loan";
+      if (err instanceof AxiosError) {
+        const data = err.response?.data as
+          | { message?: string; errors?: Record<string, string[]> }
+          | undefined;
+        const firstFieldError = data?.errors
+          ? Object.values(data.errors).flat()[0]
+          : undefined;
+        msg = firstFieldError || data?.message || msg;
+      }
+      toast.error(msg);
     } finally {
       setActionLoading(false);
     }
