@@ -141,9 +141,13 @@ function compareByKey(a: Loan, b: Loan, key: LoanSortKey): number {
     case "term":
       return compareNumber(loanTerm(a), loanTerm(b));
     case "status":
+      // Unmapped/legacy statuses (defaulted, restructured, closed, ongoing,
+      // etc.) sort to the end. Use MAX_SAFE_INTEGER, not Infinity — two
+      // Infinity values would produce NaN under subtraction, making the
+      // comparator non-deterministic.
       return compareNumber(
-        STATUS_ORDER[a.status] ?? Number.POSITIVE_INFINITY,
-        STATUS_ORDER[b.status] ?? Number.POSITIVE_INFINITY,
+        STATUS_ORDER[a.status] ?? Number.MAX_SAFE_INTEGER,
+        STATUS_ORDER[b.status] ?? Number.MAX_SAFE_INTEGER,
       );
     case "created_at":
       return compareDate(a.created_at, b.created_at);
@@ -154,12 +158,12 @@ function compareString(
   a: string | null | undefined,
   b: string | null | undefined,
 ): number {
-  const aMissing = !a;
-  const bMissing = !b;
+  const aMissing = a == null;
+  const bMissing = b == null;
   if (aMissing && bMissing) return 0;
   if (aMissing) return 1;
   if (bMissing) return -1;
-  return a!.localeCompare(b!);
+  return a.localeCompare(b);
 }
 
 function compareNumber(
