@@ -74,8 +74,11 @@ export interface Registration {
   spouse_contact_number?: string | null;
   spouse_occupation?: string | null;
   // Surfaced from /borrowers/{id} so the admin can see the applicant's
-  // uploaded headshot directly on the review page.
+  // uploaded headshot directly on the review page. The shared /borrowers list
+  // returns the headshot as the legacy `photo` (absolute URL) field instead, so
+  // both are declared and consumers fall back from one to the other.
   photo_url?: string | null;
+  photo?: string | null;
   status: RegistrationStatus;
   rejection_reason?: string | null;
   submitted_at: string;
@@ -138,6 +141,9 @@ export const registrationService = {
 
   listValidIds: (id: number) =>
     api.get<RegistrationValidId[]>(API_ENDPOINTS.BORROWERS.LIST_VALID_IDS(id)),
+
+  deleteValidId: (id: number, validIdId: number) =>
+    api.delete(API_ENDPOINTS.BORROWERS.DELETE_VALID_ID(id, validIdId)),
 
   update: (id: number, data: Partial<RegistrationPayload>) =>
     api.put<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
