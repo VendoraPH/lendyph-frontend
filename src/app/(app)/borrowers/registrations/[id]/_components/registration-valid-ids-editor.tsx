@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Upload, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,25 @@ interface Props {
 export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Track every blob URL we mint via URL.createObjectURL so we can revoke them
+  // on replace / revert / draft removal / unmount. Without this, each picked
+  // image leaks memory until the page reloads.
+  const createdUrlsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const urls = createdUrlsRef.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
+
+  function revokeUrl(url: string | null | undefined) {
+    if (url && createdUrlsRef.current.has(url)) {
+      URL.revokeObjectURL(url);
+      createdUrlsRef.current.delete(url);
+    }
+  }
 
   function patch(key: string, changes: Partial<ValidIdDraft>) {
     onChange((prev) =>
@@ -102,9 +121,15 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
       delete next[errKey];
       return next;
     });
+    const draft = drafts.find((d) => d.key === key);
+    const previousPreview =
+      side === "front" ? draft?.front_preview : draft?.back_preview;
+    revokeUrl(previousPreview);
+
     const preview = file.type.startsWith("image/")
       ? URL.createObjectURL(file)
       : null;
+    if (preview) createdUrlsRef.current.add(preview);
     patch(
       key,
       side === "front"
@@ -114,6 +139,10 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
   }
 
   function revertSide(key: string, side: Side) {
+    const draft = drafts.find((d) => d.key === key);
+    const previousPreview =
+      side === "front" ? draft?.front_preview : draft?.back_preview;
+    revokeUrl(previousPreview);
     patch(
       key,
       side === "front"
@@ -123,6 +152,9 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
   }
 
   function removeDraft(key: string) {
+    const draft = drafts.find((d) => d.key === key);
+    revokeUrl(draft?.front_preview);
+    revokeUrl(draft?.back_preview);
     onChange((prev) => prev.filter((d) => d.key !== key));
   }
 
