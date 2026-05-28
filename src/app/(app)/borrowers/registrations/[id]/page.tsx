@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
@@ -94,6 +95,18 @@ export default function RegistrationReviewPage() {
     }
   }
 
+  async function deleteValidIdIdempotent(validIdId: number) {
+    // A retry after a partial sync failure (delete OK, recreate failed) will
+    // hit a 404 here. Treat that as success so the loop can continue and
+    // re-upload the replacement.
+    try {
+      await registrationService.deleteValidId(registrationId, validIdId);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response?.status === 404) return;
+      throw err;
+    }
+  }
+
   async function syncValidIds() {
     // Entries removed from the editor (existing id no longer present) → delete.
     const keptIds = new Set(
@@ -101,7 +114,7 @@ export default function RegistrationReviewPage() {
     );
     for (const v of validIds) {
       if (!keptIds.has(v.id)) {
-        await registrationService.deleteValidId(registrationId, v.id);
+        await deleteValidIdIdempotent(v.id);
       }
     }
 
@@ -111,12 +124,9 @@ export default function RegistrationReviewPage() {
       if (!isNew && !replaced) continue; // unchanged existing entry
 
       // Replacing an existing entry: there is no per-side update endpoint, so
-      // delete the old grouped entry and re-create it. Preserve the untouched
-      // side by refetching it (best-effort — cross-origin storage may block it).
-      if (replaced) {
-        await registrationService.deleteValidId(registrationId, d.id as number);
-      }
-
+      // we have to delete the old grouped entry and re-create it. Resolve ALL
+      // files (new uploads + refetches of the untouched side) BEFORE deleting,
+      // so a CORS-blocked refetch doesn't silently lose the untouched side.
       const front = d.front_file
         ? await compressImage(d.front_file)
         : replaced
@@ -128,7 +138,21 @@ export default function RegistrationReviewPage() {
         ? await urlToFile(d.back_existing_url, "back.jpg")
         : null;
 
+      if (replaced) {
+        const lostFront = !d.front_file && d.front_existing_url && !front;
+        const lostBack = !d.back_file && d.back_existing_url && !back;
+        if (lostFront || lostBack) {
+          throw new Error(
+            "Couldn't preserve the unchanged side of an ID image (storage blocked the refetch). Please re-upload both sides and try again."
+          );
+        }
+      }
+
       if (!d.type || (!front && !back)) continue; // skip incomplete entries
+
+      if (replaced) {
+        await deleteValidIdIdempotent(d.id as number);
+      }
 
       const fd = new FormData();
       fd.append("type", d.type);
@@ -150,8 +174,17 @@ export default function RegistrationReviewPage() {
       await registrationService.approve(registrationId);
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
-    } catch {
-      toast.error("Failed to save and approve. Please try again.");
+    } catch (err) {
+      // Prefer the thrown message (covers the CORS-blocked refetch warning
+      // from syncValidIds) and fall back to a server message or generic.
+      const axiosMsg =
+        err instanceof AxiosError
+          ? (err.response?.data as { message?: string } | undefined)?.message
+          : undefined;
+      const customMsg = err instanceof Error ? err.message : undefined;
+      toast.error(
+        customMsg || axiosMsg || "Failed to save and approve. Please try again."
+      );
     } finally {
       setSavingEdit(false);
     }
