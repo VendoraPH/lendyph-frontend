@@ -30,6 +30,7 @@ export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapit
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
     if (!borrowerId) return;
@@ -68,7 +69,7 @@ export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapit
   }, [entries]);
 
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <CollapsibleTrigger className="w-full text-left group/trigger">
