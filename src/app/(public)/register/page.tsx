@@ -18,6 +18,7 @@ import {
 } from "./_components/step-employment-review";
 import { registrationService } from "@/services/registration.service";
 import { usePublicBranches } from "@/hooks/use-public-branches";
+import { compressImage } from "@/lib/image-compress";
 
 const STEP_LABELS = [
   "Personal Info",
@@ -156,6 +157,11 @@ export default function RegisterPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
 
+  // Once the borrower record is created we keep its id/token so a resubmit
+  // (after a partial upload failure) reuses it instead of creating a duplicate.
+  const [created, setCreated] = useState<{ id: number; token?: string } | null>(null);
+  const [photoUploaded, setPhotoUploaded] = useState(false);
+
   const [errors, setErrors] = useState<FullErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -234,64 +240,75 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const created = await registrationService.submit({
-        first_name: personal.first_name.trim(),
-        middle_name: personal.middle_name.trim() || undefined,
-        last_name: personal.last_name.trim(),
-        suffix:
-          personal.suffix && personal.suffix !== "none" ? personal.suffix : undefined,
-        birthdate: personal.birthdate,
-        gender: personal.gender,
-        civil_status: personal.civil_status,
-        contact_number: contact.contact_number.trim(),
-        email: contact.email.trim() || undefined,
-        address: contact.address.trim(),
-        barangay: contact.barangay.trim() || undefined,
-        city: contact.city.trim(),
-        province: contact.province.trim(),
-        branch_id: personal.branch_id ? Number(personal.branch_id) : undefined,
-        employer_or_business: employment.employer_or_business.trim() || undefined,
-        monthly_income: employment.monthly_income
-          ? Number(employment.monthly_income)
-          : undefined,
-        pledge_amount: employment.pledge_amount ? Number(employment.pledge_amount) : 0,
-        spouse_first_name: isMarried
-          ? spouse.spouse_first_name.trim() || undefined
-          : undefined,
-        spouse_middle_name: isMarried
-          ? spouse.spouse_middle_name.trim() || undefined
-          : undefined,
-        spouse_last_name: isMarried
-          ? spouse.spouse_last_name.trim() || undefined
-          : undefined,
-        spouse_contact_number: isMarried
-          ? spouse.spouse_contact_number.trim() || undefined
-          : undefined,
-        spouse_occupation: isMarried
-          ? spouse.spouse_occupation.trim() || undefined
-          : undefined,
-        status: "pending",
-      });
+      // Create the borrower once. On a resubmit after a partial upload failure
+      // we reuse the existing record rather than creating a duplicate.
+      let borrowerId = created?.id;
+      let token = created?.token;
+      if (!borrowerId) {
+        const result = await registrationService.submit({
+          first_name: personal.first_name.trim(),
+          middle_name: personal.middle_name.trim() || undefined,
+          last_name: personal.last_name.trim(),
+          suffix:
+            personal.suffix && personal.suffix !== "none" ? personal.suffix : undefined,
+          birthdate: personal.birthdate,
+          gender: personal.gender,
+          civil_status: personal.civil_status,
+          contact_number: contact.contact_number.trim(),
+          email: contact.email.trim() || undefined,
+          address: contact.address.trim(),
+          barangay: contact.barangay.trim() || undefined,
+          city: contact.city.trim(),
+          province: contact.province.trim(),
+          branch_id: personal.branch_id ? Number(personal.branch_id) : undefined,
+          employer_or_business: employment.employer_or_business.trim() || undefined,
+          monthly_income: employment.monthly_income
+            ? Number(employment.monthly_income)
+            : undefined,
+          pledge_amount: employment.pledge_amount ? Number(employment.pledge_amount) : 0,
+          spouse_first_name: isMarried
+            ? spouse.spouse_first_name.trim() || undefined
+            : undefined,
+          spouse_middle_name: isMarried
+            ? spouse.spouse_middle_name.trim() || undefined
+            : undefined,
+          spouse_last_name: isMarried
+            ? spouse.spouse_last_name.trim() || undefined
+            : undefined,
+          spouse_contact_number: isMarried
+            ? spouse.spouse_contact_number.trim() || undefined
+            : undefined,
+          spouse_occupation: isMarried
+            ? spouse.spouse_occupation.trim() || undefined
+            : undefined,
+          status: "pending",
+        });
+        borrowerId = result.id;
+        token = result.submission_token;
+        setCreated({ id: borrowerId, token });
+      }
 
-      const borrowerId = created.id;
-      const token = created.submission_token;
+      const uploadErrors: string[] = [];
 
-      // Upload profile photo (best-effort — don't fail the whole flow).
-      if (photoFile && borrowerId) {
+      // Upload profile photo. Idempotent (replaces), so safe to retry.
+      if (photoFile && borrowerId && !photoUploaded) {
         try {
           const fd = new FormData();
-          fd.append("photo", photoFile);
+          fd.append("photo", await compressImage(photoFile));
           await registrationService.uploadPhoto(borrowerId, fd, token);
+          setPhotoUploaded(true);
         } catch (err) {
-          toast.error(
-            submissionErrorMessage(err, "Application saved but photo upload failed.")
+          uploadErrors.push(
+            submissionErrorMessage(err, "Profile photo upload failed.")
           );
         }
       }
 
-      // Upload valid IDs — same filter rules as admin /borrowers/new.
+      // Upload valid IDs — same filter rules as admin /borrowers/new. Skip any
+      // already uploaded on a prior attempt to avoid duplicate ID records.
       const idsToUpload = validIds.filter(
         (v) =>
+          !v.uploaded &&
           v.type &&
           (v.front_file || v.back_file) &&
           (v.type !== "others" || v.custom_type_name.trim())
@@ -304,12 +321,24 @@ export default function RegisterPage() {
             fd.append("custom_type_name", entry.custom_type_name.trim());
           }
           if (entry.id_number.trim()) fd.append("id_number", entry.id_number.trim());
-          if (entry.front_file) fd.append("front_file", entry.front_file);
-          if (entry.back_file) fd.append("back_file", entry.back_file);
+          if (entry.front_file) fd.append("front_file", await compressImage(entry.front_file));
+          if (entry.back_file) fd.append("back_file", await compressImage(entry.back_file));
           await registrationService.uploadValidId(borrowerId, fd, token);
+          setValidIds((prev) =>
+            prev.map((v) => (v === entry ? { ...v, uploaded: true } : v))
+          );
         } catch (err) {
-          toast.error(submissionErrorMessage(err, `Failed to upload ${entry.type} ID`));
+          uploadErrors.push(
+            submissionErrorMessage(err, `Failed to upload ${entry.type} ID`)
+          );
         }
+      }
+
+      // Do not advance to the success page if any upload failed — surface the
+      // error and keep the user here so they can fix the file and resubmit.
+      if (uploadErrors.length) {
+        toast.error(uploadErrors[0]);
+        return;
       }
 
       router.push("/register/success");

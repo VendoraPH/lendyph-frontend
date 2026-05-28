@@ -13,3 +13,25 @@ export function fileUrl(url: string | null | undefined): string {
   if (/^https?:\/\//i.test(url)) return url;
   return `${env.storage.url || ""}${url}`;
 }
+
+/**
+ * Best-effort fetch of a stored image back into a File so it can be re-uploaded
+ * (e.g. preserving the unchanged side when replacing one side of a valid ID).
+ * Storage is typically cross-origin, so this can fail on CORS — callers must
+ * handle a null return.
+ */
+export async function urlToFile(
+  url: string | null | undefined,
+  filename: string
+): Promise<File | null> {
+  const resolved = fileUrl(url);
+  if (!resolved) return null;
+  try {
+    const res = await fetch(resolved);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type || "image/jpeg" });
+  } catch {
+    return null;
+  }
+}

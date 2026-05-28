@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
@@ -18,11 +19,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getInitials } from "@/app/(app)/borrowers/_components/utils";
-import { fileUrl } from "@/lib/file-url";
+import { fileUrl, urlToFile } from "@/lib/file-url";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { RegistrationInfoCards } from "./_components/registration-info-cards";
 import { ReviewActionPanel } from "./_components/review-action-panel";
 import { RejectDialog } from "./_components/reject-dialog";
+import {
+  RegistrationValidIdsEditor,
+  draftFromServer,
+  type ValidIdDraft,
+} from "./_components/registration-valid-ids-editor";
+import { compressImage } from "@/lib/image-compress";
 
 export default function RegistrationReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +43,7 @@ export default function RegistrationReviewPage() {
 
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Partial<RegistrationPayload>>({});
+  const [idDrafts, setIdDrafts] = useState<ValidIdDraft[]>([]);
   const [approving, setApproving] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -87,15 +95,96 @@ export default function RegistrationReviewPage() {
     }
   }
 
+  async function deleteValidIdIdempotent(validIdId: number) {
+    // A retry after a partial sync failure (delete OK, recreate failed) will
+    // hit a 404 here. Treat that as success so the loop can continue and
+    // re-upload the replacement.
+    try {
+      await registrationService.deleteValidId(registrationId, validIdId);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response?.status === 404) return;
+      throw err;
+    }
+  }
+
+  async function syncValidIds() {
+    // Entries removed from the editor (existing id no longer present) → delete.
+    const keptIds = new Set(
+      idDrafts.filter((d) => d.id != null).map((d) => d.id as number)
+    );
+    for (const v of validIds) {
+      if (!keptIds.has(v.id)) {
+        await deleteValidIdIdempotent(v.id);
+      }
+    }
+
+    for (const d of idDrafts) {
+      const isNew = d.id == null;
+      const replaced = !isNew && (d.front_file != null || d.back_file != null);
+      if (!isNew && !replaced) continue; // unchanged existing entry
+
+      // Replacing an existing entry: there is no per-side update endpoint, so
+      // we have to delete the old grouped entry and re-create it. Resolve ALL
+      // files (new uploads + refetches of the untouched side) BEFORE deleting,
+      // so a CORS-blocked refetch doesn't silently lose the untouched side.
+      const front = d.front_file
+        ? await compressImage(d.front_file)
+        : replaced
+        ? await urlToFile(d.front_existing_url, "front.jpg")
+        : null;
+      const back = d.back_file
+        ? await compressImage(d.back_file)
+        : replaced
+        ? await urlToFile(d.back_existing_url, "back.jpg")
+        : null;
+
+      if (replaced) {
+        const lostFront = !d.front_file && d.front_existing_url && !front;
+        const lostBack = !d.back_file && d.back_existing_url && !back;
+        if (lostFront || lostBack) {
+          throw new Error(
+            "Couldn't preserve the unchanged side of an ID image (storage blocked the refetch). Please re-upload both sides and try again."
+          );
+        }
+      }
+
+      if (!d.type || (!front && !back)) continue; // skip incomplete entries
+
+      if (replaced) {
+        await deleteValidIdIdempotent(d.id as number);
+      }
+
+      const fd = new FormData();
+      fd.append("type", d.type);
+      if (d.type === "others" && d.custom_type_name.trim()) {
+        fd.append("custom_type_name", d.custom_type_name.trim());
+      }
+      if (d.id_number.trim()) fd.append("id_number", d.id_number.trim());
+      if (front) fd.append("front_file", front);
+      if (back) fd.append("back_file", back);
+      await registrationService.uploadValidId(registrationId, fd);
+    }
+  }
+
   async function handleSaveEdit() {
     setSavingEdit(true);
     try {
       await registrationService.update(registrationId, draft);
+      await syncValidIds();
       await registrationService.approve(registrationId);
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
-    } catch {
-      toast.error("Failed to save and approve. Please try again.");
+    } catch (err) {
+      // Prefer the thrown message (covers the CORS-blocked refetch warning
+      // from syncValidIds) and fall back to a server message or generic.
+      const axiosMsg =
+        err instanceof AxiosError
+          ? (err.response?.data as { message?: string } | undefined)?.message
+          : undefined;
+      const customMsg = err instanceof Error ? err.message : undefined;
+      toast.error(
+        customMsg || axiosMsg || "Failed to save and approve. Please try again."
+      );
     } finally {
       setSavingEdit(false);
     }
@@ -192,12 +281,21 @@ export default function RegistrationReviewPage() {
                 onDraftChange={handleDraftChange}
               />
 
-              {validIds.length > 0 && (
-                <Card>
-                  <CardContent className="pt-5">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
-                      Valid IDs
-                    </h3>
+              <Card>
+                <CardContent className="pt-5">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
+                    Valid IDs
+                  </h3>
+                  {editMode ? (
+                    <RegistrationValidIdsEditor
+                      drafts={idDrafts}
+                      onChange={setIdDrafts}
+                    />
+                  ) : validIds.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic py-2">
+                      No valid IDs were uploaded with this application.
+                    </p>
+                  ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                       {validIds.map((item) => {
                         const label =
@@ -253,9 +351,9 @@ export default function RegistrationReviewPage() {
                         );
                       })}
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  )}
+                </CardContent>
+              </Card>
             </div>
             <ReviewActionPanel
               registration={registration}
@@ -264,7 +362,15 @@ export default function RegistrationReviewPage() {
               savingEdit={savingEdit}
               onApprove={handleApprove}
               onReject={() => setRejectOpen(true)}
-              onToggleEdit={() => { setEditMode((prev) => !prev); setDraft({}); }}
+              onToggleEdit={() => {
+                setEditMode((prev) => {
+                  const next = !prev;
+                  if (next) setIdDrafts(validIds.map(draftFromServer));
+                  else setIdDrafts([]);
+                  return next;
+                });
+                setDraft({});
+              }}
               onSaveEdit={handleSaveEdit}
             />
           </div>

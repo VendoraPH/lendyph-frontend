@@ -37,6 +37,9 @@ export interface ValidIdEntry {
   front_preview: string | null;
   back_file: File | null;
   back_preview: string | null;
+  // Set once this ID has been uploaded to the server so a resubmit (after a
+  // partial failure) doesn't create duplicate ID records.
+  uploaded?: boolean;
 }
 
 interface Props {
@@ -483,7 +486,7 @@ export function StepPhotoIds({
                             </span>
                             <input
                               type="file"
-                              accept="image/*,.pdf"
+                              accept="image/jpeg,image/png,application/pdf"
                               onChange={(e) => handleValidIdFile(index, side, e)}
                               className="hidden"
                             />

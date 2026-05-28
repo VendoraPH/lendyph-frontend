@@ -5,7 +5,10 @@ export const MAX_UPLOAD_SIZE_MB = 5;
 export const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
-export const ID_MIME_TYPES = [...IMAGE_MIME_TYPES, "application/pdf"];
+// Valid-ID files are uploaded as-is (not re-encoded), so this list must match
+// exactly what the backend accepts: jpg, jpeg, png, pdf. webp is intentionally
+// excluded — it passes a generic image check but the server rejects it.
+export const ID_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 
 const TYPE_LABELS: Record<string, string> = {
   "image/jpeg": "JPG",
