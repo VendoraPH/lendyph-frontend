@@ -13,6 +13,7 @@ import {
   collateralService,
   collateralTypeService,
   documentService,
+  feeService,
   loanProductService,
   loanService,
   userService,
@@ -28,6 +29,7 @@ import type {
   CoMaker,
   CollateralType,
   CollateralWithMeta,
+  Fee,
   Loan,
   User,
 } from "@/types";
@@ -342,19 +344,30 @@ function NewLoanApplicationInner() {
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
+  // Configured fees (Settings → Fees) that auto-apply to the selected product,
+  // e.g. a percentage "Insurance Premium" scoped to Cash Advance + Salary Loan.
+  const [fees, setFees] = useState<Fee[]>([]);
 
   // ── Fetch borrowers, products, users — and the loan when editing ──
   useEffect(() => {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, usersResult, loanResult] =
+      const [borrowersResult, productsResult, usersResult, feesResult, loanResult] =
         await Promise.allSettled([
           borrowerService.list({ per_page: 200 }),
           loanProductService.list(),
           userService.list(),
+          feeService.list(),
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
+
+      if (feesResult.status === "fulfilled") {
+        const feeData = Array.isArray(feesResult.value)
+          ? feesResult.value
+          : (feesResult.value as unknown as { data: Fee[] }).data ?? [];
+        setFees(feeData);
+      }
 
       if (borrowersResult.status === "fulfilled") {
         const borrowerData = Array.isArray(borrowersResult.value)
@@ -640,7 +653,27 @@ function NewLoanApplicationInner() {
   }, [selectedProduct, serviceFeePercent, serviceFeeRange]);
 
   const otherDed = otherDeductions.reduce((sum, d) => sum + Math.round(parseFloat(d.amount) || 0), 0);
-  const totalDeductions = processingFee + serviceFee + otherDed;
+
+  // Configured fees scoped to the selected product. Percentage fees are
+  // computed off the principal; fixed fees use their flat value. These are a
+  // preview only — the backend re-applies them via computeDeductions on submit.
+  const applicableFees = useMemo(() => {
+    const pid = Number(productId);
+    if (!pid) return [];
+    return fees
+      .filter((f) => Array.isArray(f.applicable_product_ids) && f.applicable_product_ids.includes(pid))
+      .map((f) => ({
+        name: f.name,
+        amount:
+          f.type === "percentage"
+            ? Math.round(principal * (Number(f.value) / 100))
+            : Math.round(Number(f.value)),
+      }))
+      .filter((f) => f.amount > 0);
+  }, [fees, productId, principal]);
+  const configuredFeesTotal = applicableFees.reduce((sum, f) => sum + f.amount, 0);
+
+  const totalDeductions = processingFee + serviceFee + configuredFeesTotal + otherDed;
   const netProceeds = principal - totalDeductions;
 
   // Maturity date
@@ -1775,6 +1808,18 @@ function NewLoanApplicationInner() {
             </div>
 
           </div>
+
+            {/* Configured fees that auto-apply to the selected product */}
+            {applicableFees.length > 0 && (
+              <div className="space-y-2">
+                {applicableFees.map((f) => (
+                  <div key={f.name} className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">{f.name}</span>
+                    <span className="text-sm font-medium">{formatCurrency(f.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Other Deductions */}
             <div className="space-y-3">

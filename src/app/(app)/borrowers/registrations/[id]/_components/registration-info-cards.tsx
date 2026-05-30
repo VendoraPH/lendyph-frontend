@@ -61,15 +61,15 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="e_first_name">First Name</Label>
-                  <Input id="e_first_name" value={d.first_name} onChange={(e) => onDraftChange("first_name", e.target.value)} />
+                  <Input id="e_first_name" value={d.first_name ?? ""} onChange={(e) => onDraftChange("first_name", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_last_name">Last Name</Label>
-                  <Input id="e_last_name" value={d.last_name} onChange={(e) => onDraftChange("last_name", e.target.value)} />
+                  <Input id="e_last_name" value={d.last_name ?? ""} onChange={(e) => onDraftChange("last_name", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_middle_name">Middle Name</Label>
-                  <Input id="e_middle_name" value={d.middle_name} onChange={(e) => onDraftChange("middle_name", e.target.value)} />
+                  <Input id="e_middle_name" value={d.middle_name ?? ""} onChange={(e) => onDraftChange("middle_name", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label>Suffix</Label>
@@ -84,7 +84,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_birthdate">Date of Birth</Label>
-                  <Input id="e_birthdate" type="date" value={d.birthdate} onChange={(e) => onDraftChange("birthdate", e.target.value)} />
+                  <Input id="e_birthdate" type="date" value={d.birthdate ?? ""} onChange={(e) => onDraftChange("birthdate", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label>Civil Status</Label>
@@ -130,7 +130,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="e_contact">Contact Number</Label>
-                  <Input id="e_contact" type="tel" value={d.contact_number} onChange={(e) => onDraftChange("contact_number", e.target.value)} />
+                  <Input id="e_contact" type="tel" value={d.contact_number ?? ""} onChange={(e) => onDraftChange("contact_number", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_email">Email</Label>
@@ -139,7 +139,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               </div>
               <div className="space-y-1">
                 <Label htmlFor="e_address">Street Address</Label>
-                <Input id="e_address" value={d.address} onChange={(e) => onDraftChange("address", e.target.value)} />
+                <Input id="e_address" value={d.address ?? ""} onChange={(e) => onDraftChange("address", e.target.value)} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -148,11 +148,11 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_city">City / Municipality</Label>
-                  <Input id="e_city" value={d.city} onChange={(e) => onDraftChange("city", e.target.value)} />
+                  <Input id="e_city" value={d.city ?? ""} onChange={(e) => onDraftChange("city", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="e_province">Province</Label>
-                  <Input id="e_province" value={d.province} onChange={(e) => onDraftChange("province", e.target.value)} />
+                  <Input id="e_province" value={d.province ?? ""} onChange={(e) => onDraftChange("province", e.target.value)} />
                 </div>
               </div>
             </div>

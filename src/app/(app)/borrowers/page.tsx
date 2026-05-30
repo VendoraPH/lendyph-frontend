@@ -24,7 +24,8 @@ import { BorrowerTable } from "./_components/borrower-table";
 import { useRegistrations } from "@/hooks/use-registrations";
 import type { Registration } from "@/services/registration.service";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { fileUrl } from "@/lib/file-url";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -95,11 +96,15 @@ function PendingRegistrationsTab() {
               .join(" ");
             const branchName =
               reg.branch_id != null ? branchNameById.get(reg.branch_id) : undefined;
+            const photoSrc = fileUrl(reg.photo_url ?? reg.photo);
             return (
               <TableRow key={reg.id} className="hover:bg-muted/50">
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar size="sm">
+                      {photoSrc ? (
+                        <AvatarImage src={photoSrc} alt={fullName} />
+                      ) : null}
                       <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xs font-semibold">
                         {getInitials(fullName)}
                       </AvatarFallback>

@@ -8,6 +8,7 @@ import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
+  loanProductService,
   loanAdjustmentService,
   loanDocumentService,
   repaymentService,
@@ -41,7 +42,7 @@ import {
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule } from "@/types/loan";
-import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -877,21 +878,57 @@ export default function LoanDetailPage({
       try {
         setLoading(true);
         const data = await loanService.detail(loanId);
-        // Fetch co-makers from borrower endpoint when loan doesn't embed them
-        const borrowerId = data.borrower?.id ?? data.borrower_id;
-        if (borrowerId && (!data.co_makers || data.co_makers.length === 0)) {
+        // Resolve the loan's co-makers when the detail response doesn't embed
+        // them. Co-makers are loan-scoped (chosen at application time), so we
+        // hydrate from the loan's own id(s) / flat name first, and only fall
+        // back to the borrower's registered co-makers as a last resort.
+        if (!data.co_makers || data.co_makers.length === 0) {
+          const mapCoMaker = (cm: CoMaker) => ({
+            id: cm.id,
+            full_name: cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || undefined),
+            address: cm.address,
+            relationship: cm.relationship_to_borrower ?? cm.relationship,
+          });
+          const rawLoan = data as Loan & { co_maker_ids?: number[] };
+          const coMakerIds = Array.isArray(rawLoan.co_maker_ids)
+            ? rawLoan.co_maker_ids
+            : data.co_maker_id != null
+              ? [data.co_maker_id]
+              : [];
+          // 1) Explicit co-maker id(s) on the loan → fetch each by id.
+          if (coMakerIds.length > 0) {
+            try {
+              const fetched = await Promise.all(
+                coMakerIds.map((cid) => coMakerService.detail(cid).catch(() => null))
+              );
+              const mapped = fetched.filter((cm): cm is CoMaker => !!cm).map(mapCoMaker);
+              if (mapped.length > 0) data.co_makers = mapped;
+            } catch { /* non-critical */ }
+          }
+          // 2) Legacy flat name with no id.
+          if ((!data.co_makers || data.co_makers.length === 0) && data.co_maker_name) {
+            data.co_makers = [{ id: data.co_maker_id ?? 0, full_name: data.co_maker_name }];
+          }
+          // 3) Last resort: the borrower's registered co-makers.
+          const borrowerId = data.borrower?.id ?? data.borrower_id;
+          if ((!data.co_makers || data.co_makers.length === 0) && borrowerId) {
+            try {
+              const cms = await coMakerService.list(borrowerId);
+              const cmList = Array.isArray(cms) ? cms : (cms as unknown as { data: CoMaker[] }).data ?? [];
+              if (cmList.length > 0) data.co_makers = cmList.map(mapCoMaker);
+            } catch { /* non-critical */ }
+          }
+        }
+        // Resolve the loan product name when the loan detail doesn't embed it,
+        // so the Loan Product field (incl. the Release modal) isn't "N/A".
+        const productId = data.loan_product?.id ?? data.loan_product_id;
+        if (productId && !data.loan_product?.name && !data.loan_product_name) {
           try {
-            const cms = await coMakerService.list(borrowerId);
-            const cmList = Array.isArray(cms) ? cms : (cms as unknown as { data: typeof cms }).data ?? [];
-            if (cmList.length > 0) {
-              data.co_makers = cmList.map((cm) => ({
-                id: cm.id,
-                full_name: cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || undefined),
-                address: cm.address,
-                relationship: cm.relationship_to_borrower ?? cm.relationship,
-              }));
+            const product = await loanProductService.detail(productId);
+            if (product?.name) {
+              data.loan_product = { ...(data.loan_product ?? {}), id: productId, name: product.name };
             }
-          } catch { /* co-makers fetch is non-critical */ }
+          } catch { /* product fetch is non-critical */ }
         }
         if (!cancelled) setLoan(data);
       } catch {
@@ -3060,30 +3097,38 @@ export default function LoanDetailPage({
             {/* Deductions */}
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Processing Fee
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanProcessingFee)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Service Fee
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanServiceFee)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Other Deductions
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(loanOtherDeductions > 0 ? loanOtherDeductions : 0)}
-                </span>
-              </div>
+              {(() => {
+                // Render every backend-computed deduction as its own line —
+                // including configured fees like "Insurance Premium" — so
+                // product-specific fees aren't silently folded into "Other".
+                const named = deductionsArray
+                  .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
+                  .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0) }));
+                const namedTotal = named.reduce((s, r) => s + r.amount, 0);
+                const other = Math.max(0, (loan.total_deductions ?? 0) - namedTotal);
+                const rows = named.length > 0
+                  ? named
+                  : [
+                      { label: "Processing Fee", amount: loanProcessingFee },
+                      { label: "Service Fee", amount: loanServiceFee },
+                    ];
+                return (
+                  <>
+                    {rows.map((r) => (
+                      <div key={r.label} className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{r.label}</span>
+                        <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
+                      </div>
+                    ))}
+                    {other > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Other Deductions</span>
+                        <span className="text-sm font-medium">{formatCurrency(other)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Total Deductions</span>
@@ -3324,11 +3369,19 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Next Due Date</p>
                 <p className="text-sm font-medium">
-                  {loanSummary?.next_due_date
-                    ? formatDate(loanSummary.next_due_date)
-                    : loan.next_due_date
-                      ? formatDate(loan.next_due_date)
-                      : "—"}
+                  {(() => {
+                    // Upon-maturity loans have a single payment due at maturity,
+                    // so the next due date IS the maturity date — never a
+                    // monthly increment off the release date.
+                    const isUponMaturity =
+                      loanFrequency === "upon_maturity" ||
+                      loan.interest_method === "upon_maturity" ||
+                      loan.interest_type === "upon_maturity";
+                    const nextDue = isUponMaturity
+                      ? loan.maturity_date ?? loanSummary?.next_due_date ?? loan.next_due_date
+                      : loanSummary?.next_due_date ?? loan.next_due_date;
+                    return nextDue ? formatDate(nextDue) : "—";
+                  })()}
                 </p>
               </div>
               <div>
