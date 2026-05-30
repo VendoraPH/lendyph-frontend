@@ -812,7 +812,16 @@ function NewLoanApplicationInner() {
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
         loan_product_id: Number(productId),
         principal_amount: principal,
+        // Loan terms chosen on the form. These were previously omitted from
+        // the payload, so the backend fell back to product defaults (e.g. the
+        // product's max term) — making the saved term/frequency/method, and
+        // the backend-computed maturity date and total payable, differ from
+        // what the user entered. The backend stores interest_method verbatim
+        // ("straight"/"diminishing"), so send the form value as-is.
+        term,
+        frequency: paymentFrequency,
         interest_rate: rate,
+        interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
         ...(accountOfficerId && { account_officer_id: accountOfficerId }),
