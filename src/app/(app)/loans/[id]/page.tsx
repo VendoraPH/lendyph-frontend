@@ -123,6 +123,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatRate } from "@/lib/format";
 import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
@@ -263,7 +264,12 @@ function generateSchedule(
         : addDays(startDate, i * intervalDays);
 
     let interest: number;
-    if (interestType === "fixed") {
+    // Constant interest on the original principal for straight/fixed loans.
+    // The API stores this method as "straight" (label "Straight (Fixed)"), so
+    // only "diminishing" should reduce interest on the falling balance —
+    // anything else (straight/fixed) keeps it flat. Matching only "fixed" here
+    // mis-treated straight loans as diminishing, understating total payable.
+    if ((interestType as string) !== "diminishing") {
       interest = principal * (rate / 100);
     } else {
       interest = remainingBalance * (rate / 100);
@@ -3043,7 +3049,7 @@ export default function LoanDetailPage({
                   Interest Rate
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
-                <p className="text-sm font-medium">{loan.interest_rate}%</p>
+                <p className="text-sm font-medium">{formatRate(loan.interest_rate)}%</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -4081,7 +4087,7 @@ export default function LoanDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
-                    {loan.interest_rate}% / <span className="capitalize">{loanInterestType || "N/A"}</span>
+                    {formatRate(loan.interest_rate)}% / <span className="capitalize">{loanInterestType || "N/A"}</span>
                   </p>
                 </div>
                 <div>
