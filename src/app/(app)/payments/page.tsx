@@ -205,6 +205,12 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
 
 function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
   const l = loan as Loan & Record<string, unknown>;
+  // Upon-maturity loans have a single payment due at maturity, so the next due
+  // date is the maturity date — never a monthly increment off the release date.
+  const isUponMaturity =
+    (l.frequency ?? l.payment_frequency) === "upon_maturity" ||
+    (l.interest_method ?? l.interest_type) === "upon_maturity";
+  const maturityDate = (l.maturity_date as string) || "";
   return {
     id: l.id,
     loan_account_number: l.loan_account_number || `LN-${l.id}`,
@@ -221,7 +227,7 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     total_payable: l.total_payable ?? 0,
     status: l.status,
     current_due: (l.current_due as number) || 0,
-    next_due_date: l.next_due_date || "",
+    next_due_date: isUponMaturity ? maturityDate || l.next_due_date || "" : l.next_due_date || "",
     overdue_amount: (l.overdue_amount as number) || 0,
     penalty_amount: (l.penalty_amount as number) || 0,
     scb_amount: l.scb_amount ?? undefined,
