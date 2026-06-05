@@ -12,6 +12,7 @@ import type { ValidIdEntry } from "./step-photo-ids";
 
 export interface StepEmploymentData {
   employer_or_business: string;
+  date_hired: string;
   monthly_income: string;
   pledge_amount: string;
 }
@@ -113,14 +114,30 @@ export function StepEmploymentReview({
       <div className="space-y-4">
         <h3 className="text-sm font-semibold">Employment &amp; Income</h3>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="employer_or_business">Employer / Business Name</Label>
-          <Input
-            id="employer_or_business"
-            placeholder="Company or business name"
-            value={employment.employer_or_business}
-            onChange={(e) => onEmploymentChange("employer_or_business", e.target.value)}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="employer_or_business">Employer / Business Name</Label>
+            <Input
+              id="employer_or_business"
+              placeholder="Company or business name"
+              value={employment.employer_or_business}
+              onChange={(e) => onEmploymentChange("employer_or_business", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="date_hired">Date Hired</Label>
+            <Input
+              id="date_hired"
+              type="date"
+              max={new Date().toLocaleDateString("en-CA")}
+              value={employment.date_hired}
+              onChange={(e) => onEmploymentChange("date_hired", e.target.value)}
+              className={errors.date_hired ? "border-destructive" : ""}
+            />
+            {errors.date_hired && (
+              <p className="text-xs text-destructive">{errors.date_hired}</p>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -295,6 +312,7 @@ export function StepEmploymentReview({
               label="Employer / Business"
               value={employment.employer_or_business}
             />
+            <Row label="Date Hired" value={employment.date_hired} />
             <Row
               label="Monthly Income"
               value={

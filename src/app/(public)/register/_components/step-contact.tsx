@@ -49,7 +49,11 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
             placeholder="name@example.com"
             value={data.email}
             onChange={(e) => onChange("email", e.target.value)}
+            className={errors.email ? "border-destructive" : ""}
           />
+          {errors.email && (
+            <p className="text-xs text-destructive">{errors.email}</p>
+          )}
         </div>
       </div>
 

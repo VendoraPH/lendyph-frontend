@@ -71,6 +71,7 @@ function emptySpouse(): StepSpouseData {
 function emptyEmployment(): StepEmploymentData {
   return {
     employer_or_business: "",
+    date_hired: "",
     monthly_income: "",
     pledge_amount: "",
   };
@@ -92,7 +93,15 @@ function validatePersonal(d: StepOneData): Partial<Record<keyof StepOneData, str
 
 function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, string>> {
   const errs: Partial<Record<keyof StepTwoData, string>> = {};
-  if (!d.contact_number.trim()) errs.contact_number = "Contact number is required";
+  if (!d.contact_number.trim()) {
+    errs.contact_number = "Contact number is required";
+  } else if (!/^(\+?\d{7,15}|0\d{9,10})$/.test(d.contact_number.trim())) {
+    // Mirror the backend regex so the user fixes a bad number here, not on submit.
+    errs.contact_number = "Enter a valid phone number (e.g., 09171234567 or +639171234567)";
+  }
+  if (d.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) {
+    errs.email = "Enter a valid email address";
+  }
   if (!d.address.trim()) errs.address = "Street address is required";
   if (!d.city.trim()) errs.city = "City / Municipality is required";
   if (!d.province.trim()) errs.province = "Province is required";
@@ -139,6 +148,10 @@ function validateEmployment(
   }
   if (d.pledge_amount && Number(d.pledge_amount) < 0) {
     errs.pledge_amount = "Pledge amount cannot be negative";
+  }
+  // en-CA renders local time as YYYY-MM-DD, so a plain string compare works.
+  if (d.date_hired && d.date_hired > new Date().toLocaleDateString("en-CA")) {
+    errs.date_hired = "Date hired cannot be in the future";
   }
   return errs;
 }
@@ -228,6 +241,21 @@ export default function RegisterPage() {
   }
 
   function handleNextPhotoIds() {
+    // KYC: at least one valid ID (with a front photo) is required before review.
+    // Mirrors the backend gate that blocks approving a registration with no ID.
+    const hasUsableId = validIds.some(
+      (v) =>
+        v.uploaded ||
+        (v.type &&
+          v.front_file &&
+          (v.type !== "others" || v.custom_type_name.trim()))
+    );
+    if (!hasUsableId) {
+      toast.error(
+        "Please add at least one valid ID (with a front photo) before continuing."
+      );
+      return;
+    }
     goToStep(4);
   }
 
@@ -262,6 +290,7 @@ export default function RegisterPage() {
           province: contact.province.trim(),
           branch_id: personal.branch_id ? Number(personal.branch_id) : undefined,
           employer_or_business: employment.employer_or_business.trim() || undefined,
+          date_hired: employment.date_hired || undefined,
           monthly_income: employment.monthly_income
             ? Number(employment.monthly_income)
             : undefined,
