@@ -353,7 +353,9 @@ export function StepPhotoIds({
       {/* Valid IDs */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Valid IDs</h3>
+          <h3 className="text-sm font-semibold">
+            Valid IDs <span className="text-destructive">*</span>
+          </h3>
           <Button type="button" variant="outline" size="sm" onClick={addValidId}>
             <Plus className="h-3.5 w-3.5 mr-1" />
             Add ID
@@ -362,7 +364,7 @@ export function StepPhotoIds({
 
         {validIds.length === 0 ? (
           <p className="text-xs text-muted-foreground py-3 text-center border border-dashed rounded-md">
-            No IDs added yet. Optional, but helps speed up your verification.
+            No IDs added yet. At least one valid ID (with a front photo) is required.
           </p>
         ) : (
           <div className="space-y-3">
