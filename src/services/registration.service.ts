@@ -27,6 +27,8 @@ export interface RegistrationPayload {
   // assigns one during review.
   branch_id?: number;
   employer_or_business?: string;
+  // Employment start date (YYYY-MM-DD). Backend rejects future dates.
+  date_hired?: string;
   monthly_income?: number;
   pledge_amount?: number;
 
@@ -66,6 +68,7 @@ export interface Registration {
   province: string;
   branch_id?: number | null;
   employer_or_business?: string | null;
+  date_hired?: string | null;
   monthly_income?: number | null;
   pledge_amount?: number | null;
   spouse_first_name?: string | null;
