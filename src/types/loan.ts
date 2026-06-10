@@ -125,6 +125,7 @@ export interface LoanProduct {
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee: number;
   service_fee: number;
+  notarial_fee?: number;
   // Optional fee range (percentages). When present, the new loan application
   // constrains the user-editable fee percent to [min, max] per fee type.
   min_processing_fee?: number;
