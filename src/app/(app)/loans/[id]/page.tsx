@@ -1670,7 +1670,12 @@ export default function LoanDetailPage({
           insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
         insurance_remaining_balance: remainingBalance,
       };
-      const updated = await loanService.release(loan.id, releasePayload);
+      await loanService.release(loan.id, releasePayload);
+      // Refetch the full loan detail rather than trusting the PATCH body —
+      // the GET endpoint returns the complete server state (deductions
+      // including the insurance premium added on release, total_deductions,
+      // net_proceeds, and embedded relations).
+      const updated = await loanService.detail(loan.id);
       setLoan(updated);
       toast.success("Loan released successfully");
       setReleaseOpen(false);
