@@ -12,10 +12,8 @@ import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
 import type { StepSpouseData } from "./_components/step-spouse";
 import { StepPhotoIds, type ValidIdEntry } from "./_components/step-photo-ids";
-import {
-  StepEmploymentReview,
-  type StepEmploymentData,
-} from "./_components/step-employment-review";
+import { StepEmployment, type StepEmploymentData } from "./_components/step-employment";
+import { StepReview } from "./_components/step-review";
 import { registrationService } from "@/services/registration.service";
 import { usePublicBranches } from "@/hooks/use-public-branches";
 import { compressImage } from "@/lib/image-compress";
@@ -24,7 +22,8 @@ const STEP_LABELS = [
   "Personal Info",
   "Contact & Address",
   "Photo & IDs",
-  "Employment & Review",
+  "Employment",
+  "Review",
 ];
 
 type FullErrors = Partial<
@@ -259,13 +258,16 @@ export default function RegisterPage() {
     goToStep(4);
   }
 
-  async function handleSubmit() {
+  function handleNextEmployment() {
     const errs = validateEmployment(employment);
     if (Object.keys(errs).length) {
       setErrors((prev) => ({ ...prev, ...errs }));
       return;
     }
+    goToStep(5);
+  }
 
+  async function handleSubmit() {
     setSubmitting(true);
     try {
       // Create the borrower once. On a resubmit after a partial upload failure
@@ -462,18 +464,25 @@ export default function RegisterPage() {
             />
           )}
           {step === 4 && (
-            <StepEmploymentReview
+            <StepEmployment
+              employment={employment}
+              errors={errors as Partial<Record<keyof StepEmploymentData, string>>}
+              onChange={updateEmployment}
+              onNext={handleNextEmployment}
+              onBack={() => goToStep(3)}
+            />
+          )}
+          {step === 5 && (
+            <StepReview
               personal={personal}
               contact={contact}
               spouse={spouse}
               employment={employment}
-              errors={errors as Partial<Record<keyof StepEmploymentData, string>>}
               photoPreview={photoPreview}
               validIds={validIds}
               branches={branches}
-              onEmploymentChange={updateEmployment}
               onSubmit={handleSubmit}
-              onBack={() => goToStep(3)}
+              onBack={() => goToStep(4)}
               submitting={submitting}
             />
           )}
