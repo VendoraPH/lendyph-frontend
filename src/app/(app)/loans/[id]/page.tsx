@@ -797,7 +797,6 @@ export default function LoanDetailPage({
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
-  const [loanProductNotarialFee, setLoanProductNotarialFee] = useState<number>(0);
 
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
@@ -926,17 +925,15 @@ export default function LoanDetailPage({
             } catch { /* non-critical */ }
           }
         }
-        // Fetch the full loan product so we have notarial_fee for the
-        // deductions display (backend only populates the deductions array
-        // with "Notarial Fee" after release, not before).
+        // Resolve the loan product name when the loan detail doesn't embed it,
+        // so the Loan Product field (incl. the Release modal) isn't "N/A".
         const productId = data.loan_product?.id ?? data.loan_product_id;
-        if (productId) {
+        if (productId && !data.loan_product?.name && !data.loan_product_name) {
           try {
             const product = await loanProductService.detail(productId);
-            if (product?.name && !data.loan_product?.name) {
+            if (product?.name) {
               data.loan_product = { ...(data.loan_product ?? {}), id: productId, name: product.name };
             }
-            if (!cancelled) setLoanProductNotarialFee(Number(product?.notarial_fee ?? 0));
           } catch { /* product fetch is non-critical */ }
         }
         if (!cancelled) setLoan(data);
@@ -1525,13 +1522,7 @@ export default function LoanDetailPage({
   };
   const loanProcessingFee = findDeductionAmount("Processing Fee");
   const loanServiceFee = findDeductionAmount("Service Fee");
-  // Backend only adds "Notarial Fee" to the deductions array after release.
-  // Before release, fall back to the product's configured rate × principal.
-  const loanNotarialFee =
-    findDeductionAmount("Notarial Fee") ||
-    (loanProductNotarialFee > 0
-      ? Math.round(Number(loan?.principal_amount ?? 0) * loanProductNotarialFee / 100)
-      : 0);
+  const loanNotarialFee = findDeductionAmount("Notarial Fee");
   const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
   const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
@@ -1680,10 +1671,10 @@ export default function LoanDetailPage({
         insurance_remaining_balance: remainingBalance,
       };
       await loanService.release(loan.id, releasePayload);
-      // Refetch the full loan detail — the PATCH response may not include
-      // all deductions (e.g. insurance premium, special fees) that the
-      // backend computes on release. The GET endpoint always returns the
-      // complete, server-computed deductions and total_deductions.
+      // Refetch the full loan detail rather than trusting the PATCH body —
+      // the GET endpoint returns the complete server state (deductions
+      // including the insurance premium added on release, total_deductions,
+      // net_proceeds, and embedded relations).
       const updated = await loanService.detail(loan.id);
       setLoan(updated);
       toast.success("Loan released successfully");
@@ -3124,13 +3115,6 @@ export default function LoanDetailPage({
                 const named = deductionsArray
                   .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
                   .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0) }));
-                // Before release the backend omits "Notarial Fee" from the
-                // deductions array even though it's factored into total_deductions.
-                // Inject it from the product rate so it shows with its proper name.
-                const hasNotarialRow = named.some((r) => r.label.toLowerCase() === "notarial fee");
-                if (!hasNotarialRow && loanNotarialFee > 0) {
-                  named.push({ label: "Notarial Fee", amount: loanNotarialFee });
-                }
                 const namedTotal = named.reduce((s, r) => s + r.amount, 0);
                 const other = Math.max(0, (loan.total_deductions ?? 0) - namedTotal);
                 const rows = named.length > 0
