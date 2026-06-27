@@ -1,6 +1,7 @@
 // src/app/(public)/register/page.tsx
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -395,8 +396,7 @@ export default function RegisterPage() {
       {/* Logo bar */}
       <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Logo/Lendy_logo.png" alt="Lendy.PH" className="h-8 w-auto" />
+          <Image src="/Logo/binhs logo.png" alt="Lendy.PH" width={360} height={144} className="h-36 w-auto" />
         </div>
       </div>
 
