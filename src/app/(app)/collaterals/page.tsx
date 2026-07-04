@@ -91,7 +91,7 @@ export default function CollateralListingPage() {
         await Promise.all([
           collateralService.list(),
           collateralTypeService.list(),
-          borrowerService.list(),
+          borrowerService.list({ per_page: 9999 }),
           loanService.list(),
         ]);
       const borrowers: Borrower[] = Array.isArray(borrowerRes)

@@ -51,7 +51,13 @@ import { toast } from "sonner";
 
 interface LedgerEntry {
   id: number;
-  memberId: string;
+  // Stable grouping/filtering key — always present on every entry, unlike
+  // member_id which is only populated when the nested `borrower` relation
+  // is loaded. Grouping by member_id caused a single borrower's entries to
+  // split across two different keys whenever it was missing on some rows,
+  // understating their Total Share on the ledger.
+  borrowerId: string;
+  memberCode: string;
   member: string;
   date: string;
   description: string;
@@ -79,7 +85,8 @@ function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
 
   return {
     id: raw.id,
-    memberId: raw.borrower?.member_id ?? String(raw.borrower_id),
+    borrowerId: String(raw.borrower_id),
+    memberCode: raw.borrower?.member_id ?? String(raw.borrower_id),
     member: raw.borrower?.full_name ?? raw.borrower?.name ?? raw.borrower_name ?? `Borrower #${raw.borrower_id}`,
     date: raw.date,
     description: raw.description ?? (entry.description as string) ?? "",
@@ -104,7 +111,8 @@ const PAGE_SIZES = [10, 25, 50];
 
 function computeMemberSummaries(entries: LedgerEntry[]) {
   const map = new Map<string, {
-    memberId: string;
+    borrowerId: string;
+    memberCode: string;
     name: string;
     totalDebits: number;
     totalCredits: number;
@@ -113,7 +121,7 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
   }>();
 
   for (const e of entries) {
-    const key = e.memberId;
+    const key = e.borrowerId;
     const existing = map.get(key);
     if (existing) {
       existing.totalDebits += e.debit;
@@ -124,7 +132,8 @@ function computeMemberSummaries(entries: LedgerEntry[]) {
       }
     } else {
       map.set(key, {
-        memberId: key,
+        borrowerId: key,
+        memberCode: e.memberCode,
         name: e.member,
         totalDebits: e.debit,
         totalCredits: e.credit,
@@ -213,7 +222,7 @@ export default function SubsidiaryLedgerPage() {
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
-        (m) => m.name.toLowerCase().includes(q) || m.memberId.toLowerCase().includes(q)
+        (m) => m.name.toLowerCase().includes(q) || m.memberCode.toLowerCase().includes(q)
       );
     }
     if (masterSort) {
@@ -245,7 +254,7 @@ export default function SubsidiaryLedgerPage() {
   const memberAllEntries = useMemo(() => {
     if (!selectedMemberId) return [];
     return ledgerData
-      .filter((e) => e.memberId === selectedMemberId)
+      .filter((e) => e.borrowerId === selectedMemberId)
       .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
   }, [selectedMemberId, ledgerData]);
 
@@ -294,7 +303,7 @@ export default function SubsidiaryLedgerPage() {
   const detailTotalCredits = filteredEntries.reduce((s, e) => s + e.credit, 0);
   const endingBalance = openingBalance + detailTotalCredits - detailTotalDebits;
 
-  const selectedSummary = selectedMemberId ? allMembers.find((m) => m.memberId === selectedMemberId) : null;
+  const selectedSummary = selectedMemberId ? allMembers.find((m) => m.borrowerId === selectedMemberId) : null;
 
   // ── Handlers ──
 
@@ -317,9 +326,9 @@ export default function SubsidiaryLedgerPage() {
     }
   }
 
-  function openMember(name: string, memberId: string) {
+  function openMember(name: string, borrowerId: string) {
     setSelectedMember(name);
-    setSelectedMemberId(memberId);
+    setSelectedMemberId(borrowerId);
     setDateRange(undefined);
     setDetailSort("date");
     setDetailSortDir("asc");
@@ -361,7 +370,7 @@ export default function SubsidiaryLedgerPage() {
                   {" / "}
                   <span>{selectedMember}</span>
                   {selectedSummary && (
-                    <span className="ml-2 text-xs text-muted-foreground">({selectedSummary.memberId})</span>
+                    <span className="ml-2 text-xs text-muted-foreground">({selectedSummary.memberCode})</span>
                   )}
                 </>
               ) : (
@@ -502,12 +511,12 @@ export default function SubsidiaryLedgerPage() {
                     <TableBody>
                       {paginatedMembers.map((member) => (
                         <TableRow
-                          key={member.name}
+                          key={member.borrowerId}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => openMember(member.name, member.memberId)}
+                          onClick={() => openMember(member.name, member.borrowerId)}
                         >
                           <TableCell className="text-xs text-muted-foreground font-mono">
-                            {member.memberId}
+                            {member.memberCode}
                           </TableCell>
                           <TableCell className="font-medium text-sm">{member.name}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">

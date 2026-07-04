@@ -32,7 +32,7 @@ import {
   UserX,
 } from "lucide-react";
 import type { Borrower } from "@/types";
-import { statusBadgeColor, formatCurrency, getInitials } from "./utils";
+import { statusBadgeColor, getInitials } from "./utils";
 import { BorrowerActionsCell } from "./borrower-actions";
 
 interface BorrowerTableProps {
@@ -55,13 +55,12 @@ interface SortState {
   direction: SortDirection;
 }
 
-type ToggleableColumn = "contact" | "branch" | "email" | "income";
+type ToggleableColumn = "contact" | "branch" | "email";
 
 const TOGGLEABLE_COLUMNS: { key: ToggleableColumn; label: string }[] = [
   { key: "contact", label: "Contact" },
   { key: "branch", label: "Branch" },
   { key: "email", label: "Email" },
-  { key: "income", label: "Income" },
 ];
 
 function SortIcon({ direction }: { direction: SortDirection }) {
@@ -95,7 +94,6 @@ export function BorrowerTable({
     contact: true,
     branch: true,
     email: true,
-    income: true,
   });
 
   // Handle sort toggle: asc -> desc -> none
@@ -170,7 +168,6 @@ export function BorrowerTable({
     (visibleColumns.contact ? 1 : 0) +
     (visibleColumns.branch ? 1 : 0) +
     (visibleColumns.email ? 1 : 0) +
-    (visibleColumns.income ? 1 : 0) +
     2; // status + actions (always visible)
 
   return (
@@ -260,7 +257,6 @@ export function BorrowerTable({
               {visibleColumns.contact && <TableHead>Contact</TableHead>}
               {visibleColumns.branch && <TableHead>Branch</TableHead>}
               {visibleColumns.email && <TableHead>Email</TableHead>}
-              {visibleColumns.income && <TableHead className="text-right">Income</TableHead>}
               <TableHead>
                 <button
                   type="button"
@@ -328,13 +324,6 @@ export function BorrowerTable({
                 {visibleColumns.email && (
                   <TableCell className="text-muted-foreground">
                     {borrower.email || "\u2014"}
-                  </TableCell>
-                )}
-                {visibleColumns.income && (
-                  <TableCell className="text-right tabular-nums text-brand-orange font-medium">
-                    {borrower.monthly_income
-                      ? formatCurrency(Number(borrower.monthly_income))
-                      : "\u2014"}
                   </TableCell>
                 )}
                 <TableCell>

@@ -1542,6 +1542,8 @@ export default function LoanDetailPage({
       : storedSchedule.length > 0
         ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
         : Number(loan?.principal_amount ?? 0) + expectedInterest;
+  const loanInterestAmount =
+    storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly
@@ -3039,7 +3041,7 @@ export default function LoanDetailPage({
 
             <Separator />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   Principal Amount
@@ -3048,6 +3050,13 @@ export default function LoanDetailPage({
                 <p className="text-sm font-semibold">
                   {formatCurrency(loan.principal_amount)}
                 </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  Interest Amount
+                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </p>
+                <p className="text-sm font-semibold">{formatCurrency(loanInterestAmount)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -3074,6 +3083,16 @@ export default function LoanDetailPage({
                   {loanTerm} months
                 </p>
               </div>
+              {(loan.scb_amount ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Share Capital Build-Up
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">
                   Payment Frequency
