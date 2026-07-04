@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    # CI-only changes (e.g. adding the binhs-coop dispatch workflow) shouldn't
+    # trigger an app deploy.
+    paths-ignore:
+      - '.github/**'
 
 jobs:
   deploy:
