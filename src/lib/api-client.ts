@@ -46,10 +46,37 @@ export const api = {
     return response.data.data;
   },
 
-  upload: async <T>(url: string, formData: FormData): Promise<T> => {
+  upload: async <T>(
+    url: string,
+    formData: FormData,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await axiosClient.post<ApiResponse<T>>(url, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      ...config,
+      headers: {
+        ...(config?.headers ?? {}),
+        "Content-Type": "multipart/form-data",
+      },
     });
     return response.data.data;
+  },
+
+  /** Download a file (e.g. CSV export) — returns a Blob */
+  download: async (url: string, config?: AxiosRequestConfig): Promise<Blob> => {
+    const response = await axiosClient.get(url, {
+      ...config,
+      responseType: "blob",
+    });
+    return response.data as Blob;
+  },
+
+  /** POST without unwrapping nested `data` — for endpoints that return flat responses (e.g. login) */
+  rawPost: async <T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
+    const response = await axiosClient.post<T>(url, data, config);
+    return response.data;
   },
 };

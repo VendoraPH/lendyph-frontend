@@ -62,6 +62,8 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.15s ease-in;
 }
 
 :root {
@@ -71,43 +73,43 @@
   --card-foreground: oklch(0.145 0.015 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0.015 250);
-  --primary: oklch(0.488 0.217 264);
+  --primary: oklch(0.637 0.174 248.6);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.72 0.19 50);
+  --secondary: oklch(0.748 0.202 54.1);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.96 0.006 250);
   --muted-foreground: oklch(0.5 0.02 250);
-  --accent: oklch(0.93 0.03 250);
-  --accent-foreground: oklch(0.35 0.1 264);
+  --accent: oklch(0.95 0.02 248);
+  --accent-foreground: oklch(0.35 0.1 248);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0.01 250);
   --input: oklch(0.9 0.01 250);
-  --ring: oklch(0.488 0.217 264);
-  --chart-1: oklch(0.488 0.217 264);
-  --chart-2: oklch(0.72 0.19 50);
-  --chart-3: oklch(0.6 0.18 264);
-  --chart-4: oklch(0.65 0.16 50);
-  --chart-5: oklch(0.75 0.12 264);
+  --ring: oklch(0.637 0.174 248.6);
+  --chart-1: oklch(0.637 0.174 248.6);
+  --chart-2: oklch(0.748 0.202 54.1);
+  --chart-3: oklch(0.55 0.15 248);
+  --chart-4: oklch(0.68 0.16 54);
+  --chart-5: oklch(0.72 0.12 248);
   --radius: 0.625rem;
-  --sidebar: oklch(0.25 0.06 264);
-  --sidebar-foreground: oklch(0.95 0.01 250);
-  --sidebar-primary: oklch(0.488 0.217 264);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.35 0.02 260);
+  --sidebar-primary: oklch(0.748 0.202 54.1);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.32 0.06 264);
-  --sidebar-accent-foreground: oklch(0.95 0.01 250);
-  --sidebar-border: oklch(0.35 0.05 264);
-  --sidebar-ring: oklch(0.488 0.217 264);
+  --sidebar-accent: oklch(0.96 0.01 260);
+  --sidebar-accent-foreground: oklch(0.25 0.02 260);
+  --sidebar-border: oklch(0.92 0.01 260);
+  --sidebar-ring: oklch(0.748 0.202 54.1);
 
-  /* Brand: Blue */
-  --brand-blue: oklch(0.488 0.217 264);
-  --brand-blue-light: oklch(0.62 0.18 264);
-  --brand-blue-dark: oklch(0.38 0.19 264);
+  /* Brand: Blue — matches logo ".ph" (#2196F3) */
+  --brand-blue: oklch(0.637 0.174 248.6);
+  --brand-blue-light: oklch(0.72 0.15 248);
+  --brand-blue-dark: oklch(0.52 0.18 248);
   --brand-blue-foreground: oklch(0.985 0 0);
 
-  /* Brand: Orange */
-  --brand-orange: oklch(0.72 0.19 50);
-  --brand-orange-light: oklch(0.82 0.14 50);
-  --brand-orange-dark: oklch(0.6 0.2 50);
+  /* Brand: Orange — matches logo "Lendy" (#FF8C00) */
+  --brand-orange: oklch(0.748 0.202 54.1);
+  --brand-orange-light: oklch(0.82 0.16 54);
+  --brand-orange-dark: oklch(0.65 0.21 54);
   --brand-orange-foreground: oklch(0.985 0 0);
 
   /* Status Colors */
@@ -126,42 +128,42 @@
   --card-foreground: oklch(0.95 0.01 250);
   --popover: oklch(0.2 0.02 250);
   --popover-foreground: oklch(0.95 0.01 250);
-  --primary: oklch(0.55 0.22 264);
+  --primary: oklch(0.68 0.17 248.6);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.72 0.19 50);
+  --secondary: oklch(0.748 0.202 54.1);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.25 0.015 250);
   --muted-foreground: oklch(0.65 0.02 250);
-  --accent: oklch(0.28 0.03 250);
-  --accent-foreground: oklch(0.85 0.08 264);
+  --accent: oklch(0.28 0.03 248);
+  --accent-foreground: oklch(0.85 0.08 248);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.55 0.22 264);
-  --chart-1: oklch(0.55 0.22 264);
-  --chart-2: oklch(0.72 0.19 50);
-  --chart-3: oklch(0.65 0.16 264);
-  --chart-4: oklch(0.7 0.14 50);
-  --chart-5: oklch(0.78 0.1 264);
+  --border: oklch(0.35 0.01 250);
+  --input: oklch(0.35 0.01 250);
+  --ring: oklch(0.68 0.17 248.6);
+  --chart-1: oklch(0.68 0.17 248.6);
+  --chart-2: oklch(0.748 0.202 54.1);
+  --chart-3: oklch(0.58 0.15 248);
+  --chart-4: oklch(0.7 0.14 54);
+  --chart-5: oklch(0.75 0.1 248);
   --sidebar: oklch(0.18 0.025 250);
   --sidebar-foreground: oklch(0.95 0.01 250);
-  --sidebar-primary: oklch(0.55 0.22 264);
+  --sidebar-primary: oklch(0.748 0.202 54.1);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.25 0.03 250);
   --sidebar-accent-foreground: oklch(0.95 0.01 250);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.55 0.22 264);
+  --sidebar-border: oklch(0.32 0.01 250);
+  --sidebar-ring: oklch(0.748 0.202 54.1);
 
-  /* Brand: Blue (Dark Mode) */
-  --brand-blue: oklch(0.55 0.22 264);
-  --brand-blue-light: oklch(0.65 0.18 264);
-  --brand-blue-dark: oklch(0.45 0.2 264);
+  /* Brand: Blue (Dark Mode) — matches logo ".ph" */
+  --brand-blue: oklch(0.68 0.17 248.6);
+  --brand-blue-light: oklch(0.75 0.14 248);
+  --brand-blue-dark: oklch(0.55 0.18 248);
   --brand-blue-foreground: oklch(0.985 0 0);
 
-  /* Brand: Orange (Dark Mode) */
-  --brand-orange: oklch(0.72 0.19 50);
-  --brand-orange-light: oklch(0.8 0.15 50);
-  --brand-orange-dark: oklch(0.62 0.2 50);
+  /* Brand: Orange (Dark Mode) — matches logo "Lendy" */
+  --brand-orange: oklch(0.748 0.202 54.1);
+  --brand-orange-light: oklch(0.8 0.16 54);
+  --brand-orange-dark: oklch(0.65 0.21 54);
   --brand-orange-foreground: oklch(0.985 0 0);
 
   /* Status Colors (Dark Mode) */
@@ -183,4 +185,13 @@
   html {
     @apply font-sans;
   }
+}
+
+@keyframes collapsible-down {
+  from { height: 0; }
+  to { height: var(--collapsible-panel-height); }
+}
+@keyframes collapsible-up {
+  from { height: var(--collapsible-panel-height); }
+  to { height: 0; }
 }

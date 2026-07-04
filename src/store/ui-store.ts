@@ -5,6 +5,8 @@ interface UIState {
   sidebarOpen: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
+  sidebarCollapsed: boolean;
+  toggleSidebarCollapsed: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -13,9 +15,12 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: true,
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      sidebarCollapsed: false,
+      toggleSidebarCollapsed: () =>
+        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
     }),
     {
-      name: "lendyph-ui",
+      name: "lendy-ui",
     }
   )
 );

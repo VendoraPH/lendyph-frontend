@@ -1,8 +1,15 @@
 import axios from "axios";
 import { env } from "@/config/env";
 
+const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
+
+// Use Next.js API proxy on client-side to bypass CORS/CSRF issues
+// Server-side (SSR) calls go direct to the API
+const API_BASE_URL =
+  typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL;
+
 const axiosClient = axios.create({
-  baseURL: env.api.baseUrl,
+  baseURL: API_BASE_URL,
   timeout: env.api.timeout,
   headers: {
     "Content-Type": "application/json",
@@ -35,8 +42,23 @@ export const tokenManager = {
 };
 
 // Request interceptor — attach token
+// Public-registration uploads identify themselves with X-Submission-Token.
+// In that case we must NOT attach a Bearer token, otherwise a stale admin
+// session in localStorage gets forwarded and the backend rejects the
+// request with 401.
+const SUBMISSION_TOKEN_HEADER = "X-Submission-Token";
+
+function hasSubmissionToken(config: { headers?: unknown }): boolean {
+  const headers = config.headers as Record<string, unknown> | undefined;
+  if (!headers) return false;
+  return Boolean(headers[SUBMISSION_TOKEN_HEADER] ?? headers[SUBMISSION_TOKEN_HEADER.toLowerCase()]);
+}
+
 axiosClient.interceptors.request.use(
   (config) => {
+    if (hasSubmissionToken(config)) {
+      return config;
+    }
     const token = tokenManager.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -69,7 +91,23 @@ axiosClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const isAuthRoute = originalRequest?.url?.includes("/auth/login") ||
+      originalRequest?.url?.includes("/auth/refresh");
+    const isPublicSubmission = hasSubmissionToken(originalRequest ?? {});
+
+    // If there is no access token in storage, the caller is anonymous (e.g. the
+    // public /register page). A 401 here means the endpoint required auth or
+    // doesn't allow anonymous access — refreshing a non-existent token would
+    // just produce another 401 and a spurious "session expired" event.
+    const hasAccessToken = tokenManager.getAccessToken() !== null;
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthRoute &&
+      hasAccessToken &&
+      !isPublicSubmission
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -85,17 +123,20 @@ axiosClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = tokenManager.getRefreshToken();
+        const currentToken = tokenManager.getAccessToken();
         const { data } = await axios.post(
-          `${env.api.baseUrl}/auth/refresh`,
-          { refresh_token: refreshToken }
+          `${typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL}/auth/refresh`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              "Content-Type": "application/json",
+            },
+          }
         );
 
-        const newToken = data.data.token;
+        const newToken = data.token;
         tokenManager.setAccessToken(newToken);
-        if (data.data.refreshToken) {
-          tokenManager.setRefreshToken(data.data.refreshToken);
-        }
 
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -103,8 +144,12 @@ axiosClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         tokenManager.clearTokens();
+        // Instead of a hard redirect (window.location.href = "/login"),
+        // dispatch a custom event so the SessionProvider can handle the
+        // logout gracefully — showing a toast and cleaning up auth state
+        // without jarring the user mid-action.
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          window.dispatchEvent(new CustomEvent("auth:session-expired"));
         }
         return Promise.reject(refreshError);
       } finally {

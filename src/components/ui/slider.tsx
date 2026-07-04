@@ -17,10 +17,14 @@ function Slider({
     () =>
       Array.isArray(value)
         ? value
-        : Array.isArray(defaultValue)
-          ? defaultValue
-          : [min, max],
-    [value, defaultValue, min, max]
+        : value !== undefined
+          ? [value as number]
+          : Array.isArray(defaultValue)
+            ? defaultValue
+            : defaultValue !== undefined
+              ? [defaultValue as number]
+              : [min],
+    [value, defaultValue, min]
   )
 
   return (
@@ -31,7 +35,6 @@ function Slider({
       value={value}
       min={min}
       max={max}
-      thumbAlignment="edge"
       {...props}
     >
       <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">

@@ -21,7 +21,7 @@ const getNumberEnvVar = (key: string, defaultValue: number): number => {
 
 export const env = {
   app: {
-    name: getEnvVar("NEXT_PUBLIC_APP_NAME", "Lendyph"),
+    name: getEnvVar("NEXT_PUBLIC_APP_NAME", "Lendy.PH"),
     url: getEnvVar("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
     env: getEnvVar("NEXT_PUBLIC_APP_ENV", "development"),
     isDevelopment:
@@ -34,12 +34,12 @@ export const env = {
     timeout: getNumberEnvVar("NEXT_PUBLIC_API_TIMEOUT", 30000),
   },
   auth: {
-    tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendyph_access_token"),
+    tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendy_access_token"),
     refreshTokenKey: getEnvVar(
       "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
-      "lendyph_refresh_token"
+      "lendy_refresh_token"
     ),
-    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 60),
+    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 30),
   },
   storage: {
     url: getEnvVar("NEXT_PUBLIC_STORAGE_URL", "http://localhost:8000/storage"),

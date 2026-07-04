@@ -2,13 +2,28 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({
+  open,
+  onOpenChange,
+  ...props
+}: Omit<DialogPrimitive.Root.Props, "onOpenChange"> & {
+  onOpenChange?: (open: boolean) => void
+}) {
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open}
+      onOpenChange={(value) => onOpenChange?.(value)}
+      modal
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -31,31 +46,64 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/50",
         className
       )}
+      render={
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        />
+      }
       {...props}
     />
   )
+}
+
+type DialogSize = "sm" | "default" | "md" | "lg" | "xl" | "full"
+
+const dialogSizeClasses: Record<DialogSize, string> = {
+  sm: "sm:max-w-sm",
+  default: "sm:max-w-md",
+  md: "sm:max-w-lg",
+  lg: "sm:max-w-2xl",
+  xl: "sm:max-w-4xl",
+  full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)] h-full",
 }
 
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  size?: DialogSize
 }) {
+  const isFullScreen = size === "full"
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed inset-0 z-50 m-auto flex h-fit w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-4 bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
+          isFullScreen ? "rounded-lg overflow-auto" : "rounded-xl overflow-hidden",
+          dialogSizeClasses[size],
           className
         )}
+        render={
+          <motion.div
+            initial={{ opacity: 0, scale: isFullScreen ? 0.98 : 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: isFullScreen ? 0.98 : 0.95 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          />
+        }
         {...props}
       >
         {children}
@@ -70,8 +118,7 @@ function DialogContent({
               />
             }
           >
-            <XIcon
-            />
+            <XIcon />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
@@ -158,3 +205,5 @@ export {
   DialogTitle,
   DialogTrigger,
 }
+
+export type { DialogSize }

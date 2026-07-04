@@ -1,0 +1,297 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks";
+import { authService } from "@/services";
+import { tokenManager } from "@/lib/axios-client";
+import { toast } from "sonner";
+import { AxiosError } from "axios";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { setUser } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [form, setForm] = useState({ login: "", password: "" });
+  const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState<{ login?: string; password?: string }>(
+    {}
+  );
+
+  const validate = (): boolean => {
+    const newErrors: typeof errors = {};
+
+    if (!form.login) {
+      newErrors.login = "Username or email is required";
+    }
+
+    if (!form.password) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      const { token, user } = await authService.login({
+        login: form.login,
+        password: form.password,
+        remember: rememberMe,
+      });
+
+      tokenManager.setAccessToken(token);
+
+      if (rememberMe) {
+        localStorage.setItem("lendy_remember_me", "true");
+      } else {
+        localStorage.removeItem("lendy_remember_me");
+      }
+
+      setUser(user);
+      toast.success(`Welcome back, ${user.first_name || user.username}!`);
+      router.push("/dashboard");
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        if (status === 422 && data?.errors) {
+          setErrors({
+            login: data.errors.login?.[0],
+            password: data.errors.password?.[0],
+          });
+        } else if (status === 401) {
+          toast.error(
+            "The username or password you entered is incorrect. Please double-check and try again."
+          );
+        } else if (status === 419) {
+          toast.error(
+            "Your session has expired. Please refresh the page and sign in again."
+          );
+        } else if (status === 429) {
+          toast.error(
+            "Too many sign-in attempts. Please wait a moment before trying again."
+          );
+        } else if (status === 502 || status === 504) {
+          toast.error(
+            "Our servers are currently undergoing maintenance. Please try again in a few minutes."
+          );
+        } else if (status === 403) {
+          toast.error(
+            "Your account has been deactivated. Please contact your administrator for assistance."
+          );
+        } else {
+          toast.error(
+            data?.message ||
+              "Something unexpected happened. Please try again or contact support if the issue persists."
+          );
+        }
+      } else {
+        toast.error(
+          "Unable to reach the server. Please check your internet connection and try again."
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Left Column — Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-brand-orange overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-orange-dark via-brand-orange to-brand-orange-light opacity-90" />
+
+        {/* Decorative circles */}
+        <div className="absolute -top-20 -left-20 h-80 w-80 rounded-full bg-white/5" />
+        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-white/5" />
+        <div className="absolute top-1/3 right-10 h-48 w-48 rounded-full bg-brand-blue/20" />
+
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
+          <div>
+            <div className="inline-flex items-center rounded-2xl bg-white/95 backdrop-blur-sm px-6 py-4 shadow-lg shadow-black/10">
+              <img
+                src="/Logo/Lendy_logo.png"
+                alt="Lendy.PH"
+                width={240}
+                height={64}
+                className="drop-shadow-sm"
+              />
+            </div>
+            <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
+              Lending Management Platform
+            </p>
+          </div>
+
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold leading-tight">
+              Manage your lending business with confidence
+            </h2>
+            <p className="mt-4 text-lg text-white/80 leading-relaxed">
+              Track borrowers, process loans, collect payments, and monitor your
+              portfolio — all in one place.
+            </p>
+
+          </div>
+
+          <p className="text-xs text-white/50" suppressHydrationWarning>
+            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
+          </p>
+        </div>
+      </div>
+
+      {/* Right Column — Login Form */}
+      <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
+        <div className="w-full max-w-md space-y-8">
+          {/* Mobile logo */}
+          <div className="flex flex-col items-center lg:hidden">
+            <img
+              src="/Logo/Lendy_logo.png"
+              alt="Lendy.PH"
+              width={180}
+              height={48}
+            />
+            <p className="text-sm text-muted-foreground mt-1">
+              Lending Management Platform
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in to your account to continue
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="login">Username or Email</Label>
+              <Input
+                id="login"
+                type="text"
+                placeholder="Username or email"
+                value={form.login}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, login: e.target.value }));
+                  if (errors.login)
+                    setErrors((prev) => ({ ...prev, login: undefined }));
+                }}
+                required
+                autoComplete="username"
+                className={`h-11 ${errors.login ? "border-destructive" : ""}`}
+              />
+              {errors.login && (
+                <p className="text-xs text-destructive">{errors.login}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <a
+                  href="/forgot-password"
+                  className="text-sm font-medium text-brand-orange hover:text-brand-orange-dark"
+                >
+                  Forgot password?
+                </a>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={form.password}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, password: e.target.value }));
+                    if (errors.password)
+                      setErrors((prev) => ({
+                        ...prev,
+                        password: undefined,
+                      }));
+                  }}
+                  required
+                  autoComplete="current-password"
+                  className={`h-11 pr-10 ${errors.password ? "border-destructive" : ""}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) =>
+                  setRememberMe(checked as boolean)
+                }
+              />
+              <Label
+                htmlFor="remember"
+                className="text-sm font-normal text-muted-foreground cursor-pointer"
+              >
+                Remember me for 30 days
+              </Label>
+            </div>
+
+            <Button
+              type="submit"
+              className="h-11 w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </Button>
+          </form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or
+              </span>
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Contact your administrator for account access.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
