@@ -132,6 +132,7 @@ import {
   ADJUSTMENT_STATUS_LABELS,
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
+import type { ApiScheduleRow } from "@/lib/amortization";
 
 // ── Currency & Date Formatters ──
 
@@ -142,6 +143,17 @@ const formatCurrency = (amount: number | string | undefined | null) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
+
+// Like formatCurrency but keeps centavos — use where the number shown must
+// exactly equal a number being posted (e.g. the interest collected on extend),
+// so the display never rounds away centavos that are actually charged.
+const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parseFloat(String(amount ?? 0)) || 0);
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-PH", {
@@ -166,7 +178,16 @@ const formatDateObj = (date: Date) =>
     day: "numeric",
   });
 
-const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
+// Format a Date as YYYY-MM-DD using the LOCAL calendar day. Using toISOString()
+// here shifts UTC+8 (PHT) dates back a day for any local time before 08:00,
+// so a picked/"today" date could post as the previous day. Build from local
+// Y/M/D parts to keep the calendar date the user actually selected.
+const formatDateISO = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
 // ── Amortization Schedule Helpers ──
 
@@ -806,6 +827,11 @@ export default function LoanDetailPage({
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+  // Raw amortization rows exactly as the backend returns them. The mapped
+  // `apiSchedule` above folds each row's interest_paid into amount_paid, which
+  // loses the per-row interest breakdown; we keep the raw rows so the extend
+  // flow can read the true outstanding interest (interest_due - interest_paid).
+  const [rawSchedule, setRawSchedule] = useState<ApiScheduleRow[] | null>(null);
 
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
@@ -1019,6 +1045,10 @@ export default function LoanDetailPage({
         // Map ApiScheduleRow field names to LoanSchedule field names
         const first = rows[0] as Record<string, unknown>;
         const isApiFormat = "principal_due" in first;
+        // Keep the raw rows only when they carry the API breakdown fields
+        // (interest_due / interest_paid); otherwise fall back to null so the
+        // outstanding-interest memo uses the client-side schedule instead.
+        setRawSchedule(isApiFormat ? (rows as unknown as ApiScheduleRow[]) : null);
         setApiSchedule(
           isApiFormat
             ? (rows as Record<string, unknown>[]).map((r) => ({
@@ -1036,9 +1066,11 @@ export default function LoanDetailPage({
         );
       } else {
         setApiSchedule([]);
+        setRawSchedule(null);
       }
     } catch {
       setApiSchedule(null); // fallback to client-side generation
+      setRawSchedule(null);
     }
   }, []);
 
@@ -1122,7 +1154,11 @@ export default function LoanDetailPage({
     try {
       setAdjustmentsLoading(true);
       const res = await loanAdjustmentService.list(id);
-      setAdjustments(Array.isArray(res) ? res : []);
+      const list = Array.isArray(res) ? [...res] : [];
+      // Newest first — the list endpoint doesn't guarantee an order, so sort by
+      // created_at desc for a readable history (latest extension/adjustment on top).
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setAdjustments(list);
     } catch {
       // silently fail
     } finally {
@@ -1362,13 +1398,35 @@ export default function LoanDetailPage({
     return [];
   }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
 
-  // Single source of truth for the interest due on the current open period —
-  // used both to decide whether to pay it before extending, and to render
-  // the "Interest Due" amount in the Extend dialog.
-  const currentInterestDue = useMemo(
-    () => storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0,
-    [storedSchedule]
-  );
+  // Single source of truth for the interest still OWED on the loan — used both
+  // to decide whether to collect it before extending, and to render the
+  // "Interest Due" amount in the Extend dialog.
+  //
+  // This must be the OUTSTANDING interest, not the gross interest_due. It is
+  // computed from the raw amortization rows as Σ max(0, interest_due −
+  // interest_paid) over every not-fully-paid period. The gross sum (what the
+  // collapsed upon-maturity row exposes) re-charges interest already collected
+  // in earlier periods: after the backend's /extend carries a settled period
+  // forward alongside a new one, a 2nd extension would bill period-1's interest
+  // again. Netting out interest_paid per row means a settled period contributes
+  // 0, so extension N collects exactly period-N's still-unpaid interest.
+  //
+  // Rounded to centavos so the displayed figure and the posted amount match to
+  // the last decimal (formatCurrencyPrecise shows the same value we charge).
+  const currentInterestDue = useMemo(() => {
+    if (rawSchedule && rawSchedule.length > 0) {
+      const outstanding = rawSchedule.reduce((sum, row) => {
+        const due = parseFloat(String(row.interest_due ?? 0)) || 0;
+        const paid = parseFloat(String(row.interest_paid ?? 0)) || 0;
+        return sum + Math.max(0, due - paid);
+      }, 0);
+      return Math.round(outstanding * 100) / 100;
+    }
+    // No raw API rows (client-generated schedule): nothing has been paid yet,
+    // so the first open period's interest is the full amount owed.
+    const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
+    return Math.round(fallback * 100) / 100;
+  }, [rawSchedule, storedSchedule]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -1520,6 +1578,14 @@ export default function LoanDetailPage({
   }, [sendBackTargets]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+  // Statuses for which the backend has schedule / repayment / adjustment data —
+  // the SAME set fetchSchedule/fetchRepayments/fetchAdjustments use. Unlike
+  // isLocked, this includes `current` and `past_due` (the primary active
+  // states), so the Adjustments & History card shows for loans that can be
+  // extended/adjusted, not just terminal ones.
+  const hasServerLoanData = loan
+    ? ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)
+    : false;
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
@@ -2207,6 +2273,10 @@ export default function LoanDetailPage({
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
+        // Refresh the extension/adjustment history too — the effect that loads
+        // adjustments only re-runs on loan.id/status change, and a same-status
+        // extension wouldn't trigger it, leaving the history card stale.
+        await fetchAdjustments(loan.id);
       } catch {
         // non-fatal — dialog state above already reflects the outcome
       }
@@ -2235,6 +2305,8 @@ export default function LoanDetailPage({
       setLoan(updated);
       fetchSchedule(loan.id);
       fetchLoanSummary(loan.id);
+      // Keep the extension/adjustment history in sync without a reload.
+      fetchAdjustments(loan.id);
     } catch (err) {
       toast.error(extendErrorMessage(err));
     } finally {
@@ -3914,8 +3986,10 @@ export default function LoanDetailPage({
         </Card>
       )}
 
-      {/* Adjustments & Extension History — only for released+ loans */}
-      {isLocked && (
+      {/* Adjustments & Extension History — shown for every status that has
+          server-side loan data (incl. current / past_due), matching the set
+          fetchAdjustments loads for. */}
+      {hasServerLoanData && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -5338,7 +5412,7 @@ export default function LoanDetailPage({
               Interest Due — must be paid to extend
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {formatCurrency(currentInterestDue)}
+              {formatCurrencyPrecise(currentInterestDue)}
             </p>
           </div>
           <div className="space-y-2">
