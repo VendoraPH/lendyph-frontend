@@ -6,11 +6,19 @@
 export interface CompressOptions {
   maxDimension?: number;
   quality?: number;
+  /**
+   * Output MIME type for the re-encoded image. Defaults to "image/jpeg" (smallest
+   * for opaque photos). Pass an alpha-capable type ("image/png" / "image/webp") to
+   * preserve transparency — JPEG has no alpha channel and flattens transparent
+   * pixels to black (e.g. a transparent logo).
+   */
+  mimeType?: string;
 }
 
 const DEFAULTS: Required<CompressOptions> = {
   maxDimension: 2000,
   quality: 0.85,
+  mimeType: "image/jpeg",
 };
 
 function readAsDataURL(file: File): Promise<string> {
@@ -35,7 +43,7 @@ export async function compressImage(
   file: File,
   options: CompressOptions = {}
 ): Promise<File> {
-  const { maxDimension, quality } = { ...DEFAULTS, ...options };
+  const { maxDimension, quality, mimeType } = { ...DEFAULTS, ...options };
 
   // Only raster images can be drawn to a canvas. GIF/SVG/PDF pass through.
   if (!file.type.startsWith("image/") || file.type === "image/gif") {
@@ -58,13 +66,15 @@ export async function compressImage(
     ctx.drawImage(img, 0, 0, targetW, targetH);
 
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality)
+      canvas.toBlob(resolve, mimeType, quality)
     );
     // If re-encoding didn't actually shrink it, keep the original.
     if (!blob || blob.size >= file.size) return file;
 
-    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
-    return new File([blob], name, { type: "image/jpeg" });
+    const ext =
+      mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+    const name = file.name.replace(/\.[^.]+$/, "") + "." + ext;
+    return new File([blob], name, { type: mimeType });
   } catch {
     // Any failure (decode error, tainted canvas) → send the original file.
     return file;

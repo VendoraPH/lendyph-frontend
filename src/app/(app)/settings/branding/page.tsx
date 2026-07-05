@@ -16,6 +16,10 @@ import { siteConfig } from "@/config/site";
 
 const DEFAULT_LOGO = "/Logo/Lendy_logo.png";
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5MB — matches the backend cap.
+// Alpha-capable raster + JPEG only. SVG is intentionally excluded (stored SVG is
+// an XSS surface, and the backend's `image` rule rejects it anyway); the upload
+// step below preserves transparency for PNG/WEBP so logos don't get a black box.
+const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 // ── API error helper (matches the settings/profile convention) ──
 
@@ -79,8 +83,8 @@ export default function BrandingSettingsPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file.");
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      toast.error("Please choose a PNG, JPG, or WEBP image.");
       setInputKey((k) => k + 1);
       return;
     }
@@ -97,9 +101,15 @@ export default function BrandingSettingsPage() {
     if (!selectedFile || saving) return;
     setSaving(true);
     try {
-      // Downscale/re-encode oversized images client-side, same as the public
-      // registration uploads, so the request stays under the server cap.
-      const compressed = await compressImage(selectedFile);
+      // Downscale/re-encode oversized images client-side so the request stays
+      // under the server cap. Preserve transparency for alpha-capable formats —
+      // re-encoding a transparent PNG/WEBP to JPEG would fill it with black.
+      const preserveAlpha =
+        selectedFile.type === "image/png" || selectedFile.type === "image/webp";
+      const compressed = await compressImage(
+        selectedFile,
+        preserveAlpha ? { mimeType: selectedFile.type } : {}
+      );
       const res = await brandingService.uploadLogo(compressed);
       setLogoUrl(res?.logo_url ?? null);
       resetSelection();
@@ -193,13 +203,13 @@ export default function BrandingSettingsPage() {
                     key={inputKey}
                     id="logo-file"
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp"
                     onChange={handleFileSelect}
                     disabled={busy}
                   />
                   <p className="text-xs text-muted-foreground">
-                    PNG, JPG, WEBP, or SVG up to 5MB. A wide, transparent PNG
-                    looks best in the sidebar.
+                    PNG, JPG, or WEBP up to 5MB. A wide, transparent PNG looks
+                    best in the sidebar.
                   </p>
                 </div>
 
