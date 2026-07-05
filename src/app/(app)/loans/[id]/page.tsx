@@ -2017,7 +2017,7 @@ export default function LoanDetailPage({
     payment_date: string;
     amount_paid: number;
     remarks?: string;
-  }) => {
+  }): Promise<boolean> => {
     setActionLoading(true);
     try {
       const repayment = await repaymentService.create(loan.id, data);
@@ -2039,8 +2039,10 @@ export default function LoanDetailPage({
       fetchLoanSummary(loanId);
       fetchRepayments(loanId);
       loanService.detail(loanId).then(setLoan).catch(() => {});
+      return true;
     } catch {
       toast.error("Failed to record payment");
+      return false;
     } finally {
       setActionLoading(false);
     }
