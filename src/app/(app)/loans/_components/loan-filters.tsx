@@ -78,6 +78,10 @@ export function LoanFilters({
           onProductChange(val === PRODUCT_ALL_VALUE ? null : Number(val))
         }
         disabled={productsLoading}
+        items={[
+          { value: PRODUCT_ALL_VALUE, label: "All products" },
+          ...productOptions.map((p) => ({ value: String(p.id), label: p.name })),
+        ]}
       >
         <SelectTrigger size="sm" className="w-full sm:w-48">
           <SelectValue

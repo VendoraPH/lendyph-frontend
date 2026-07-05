@@ -22,8 +22,8 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
   const accessibleModules = permissions
     .filter((p) => p.endsWith(":view"))
     .map((p) => {
-      const module = p.split(":")[0];
-      return module
+      const moduleName = p.split(":")[0];
+      return moduleName
         .replace(/_/g, " ")
         .replace(/\b\w/g, (c) => c.toUpperCase());
     });
