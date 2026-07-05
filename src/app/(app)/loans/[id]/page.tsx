@@ -3838,8 +3838,9 @@ export default function LoanDetailPage({
           the policy exception letter is reachable from the very first save. */}
       <LoanDocumentsCard loanId={loan.id} />
 
-      {/* Ledger — only for released+ loans */}
-      {isLocked && (
+      {/* Ledger — shown for every status that has server-side repayment data
+          (incl. current / past_due), matching the Adjustments & History card. */}
+      {hasServerLoanData && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
