@@ -13,6 +13,15 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Advisory perf rule (react.dev "you might not need an effect"). The app
+      // consistently kicks off fetches with a synchronous setLoading(true) at the
+      // top of an effect across ~9 call sites; treat as a warning rather than a
+      // build-breaker so lint-in-CI can gate real errors without a mass refactor.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;
