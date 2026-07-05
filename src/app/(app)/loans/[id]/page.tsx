@@ -863,6 +863,10 @@ export default function LoanDetailPage({
   } | null>(null);
   const [extendPaymentDate, setExtendPaymentDate] = useState<Date>(new Date());
   const [extendPaymentDatePickerOpen, setExtendPaymentDatePickerOpen] = useState(false);
+  // Guards against posting the interest payment twice within the same
+  // Extend-dialog session (e.g. if extend() fails and the user retries
+  // before the backend's refreshed schedule reflects the payment).
+  const extendInterestPaidRef = useRef(false);
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -1357,6 +1361,14 @@ export default function LoanDetailPage({
 
     return [];
   }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
+
+  // Single source of truth for the interest due on the current open period —
+  // used both to decide whether to pay it before extending, and to render
+  // the "Interest Due" amount in the Extend dialog.
+  const currentInterestDue = useMemo(
+    () => storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0,
+    [storedSchedule]
+  );
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -2045,11 +2057,16 @@ export default function LoanDetailPage({
       setAdvancePeriods(1);
       // Refresh independently — don't let any single failure block the others
       // or pollute the catch block (payment already succeeded at this point).
+      // Awaited (not fire-and-forget) so callers that chain another mutation
+      // afterward (e.g. handlePartialExtendConfirm calling extend()) don't
+      // race this refresh with their own later one.
       const loanId = loan.id;
-      fetchSchedule(loanId);
-      fetchLoanSummary(loanId);
-      fetchRepayments(loanId);
-      loanService.detail(loanId).then(setLoan).catch(() => {});
+      await Promise.allSettled([
+        fetchSchedule(loanId),
+        fetchLoanSummary(loanId),
+        fetchRepayments(loanId),
+        loanService.detail(loanId).then(setLoan).catch(() => {}),
+      ]);
       return true;
     } catch {
       toast.error("Failed to record payment");
@@ -2147,18 +2164,21 @@ export default function LoanDetailPage({
   };
 
   const handleExtendLoan = async () => {
-    const currentDue = storedSchedule.find((row) => row.status !== "paid");
-    const interestDue = currentDue?.interest ?? 0;
     setActionLoading(true);
     // Pay the interest due for the current period first — extending
     // without collecting it would let staff defer the loan indefinitely.
-    if (interestDue > 0) {
+    // Guard against paying twice on retry: if extend() fails after a
+    // successful payment, the backend's refreshed schedule may not yet
+    // reflect the payment, so recomputing interest due here could show the
+    // same amount due again — extendInterestPaidRef prevents a second charge.
+    if (currentInterestDue > 0 && !extendInterestPaidRef.current) {
       try {
         await repaymentService.create(loan.id, {
           payment_date: formatDateISO(extendPaymentDate),
-          amount_paid: interestDue,
+          amount_paid: currentInterestDue,
           remarks: extendRemarks.trim() || "[EXTENSION INTEREST]",
         });
+        extendInterestPaidRef.current = true;
       } catch {
         toast.error("Failed to record the interest payment. Extension was not processed.");
         setActionLoading(false);
@@ -2173,10 +2193,12 @@ export default function LoanDetailPage({
       setExtendOpen(false);
       setExtendRemarks("");
       setExtendPaymentDate(new Date());
+      extendInterestPaidRef.current = false;
     } catch (err) {
       // Interest (if any) is already paid at this point — leave the dialog
-      // open so the user can see the error and retry; a retry will see
-      // interestDue recomputed as 0 and skip straight to extend().
+      // open so the user can see the error and retry; a retry will not
+      // re-charge interest (extendInterestPaidRef is already true) and will
+      // go straight to extend().
       toast.error(extendErrorMessage(err));
     } finally {
       try {
@@ -3930,7 +3952,10 @@ export default function LoanDetailPage({
                         </span>
                       </div>
                       {(adj.description || adj.remarks) && (
-                        <p className="mt-1 text-sm text-muted-foreground truncate">
+                        <p
+                          className="mt-1 text-sm text-muted-foreground truncate"
+                          title={adj.description || adj.remarks}
+                        >
                           {adj.description || adj.remarks}
                         </p>
                       )}
@@ -5288,7 +5313,13 @@ export default function LoanDetailPage({
       </Dialog>
 
       {/* Extend Loan Dialog (Upon Maturity — Process 1: manual extension) */}
-      <AlertDialog open={extendOpen} onOpenChange={setExtendOpen}>
+      <AlertDialog
+        open={extendOpen}
+        onOpenChange={(open) => {
+          setExtendOpen(open);
+          if (open) extendInterestPaidRef.current = false;
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -5302,20 +5333,14 @@ export default function LoanDetailPage({
               loan extends.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {(() => {
-            const currentDue = storedSchedule.find((row) => row.status !== "paid");
-            const interestDue = currentDue?.interest ?? 0;
-            return (
-              <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
-                <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
-                  Interest Due — must be paid to extend
-                </p>
-                <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-                  {formatCurrency(interestDue)}
-                </p>
-              </div>
-            );
-          })()}
+          <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
+            <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
+              Interest Due — must be paid to extend
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+              {formatCurrency(currentInterestDue)}
+            </p>
+          </div>
           <div className="space-y-2">
             <Label className="text-xs">Payment Date</Label>
             <Popover open={extendPaymentDatePickerOpen} onOpenChange={setExtendPaymentDatePickerOpen}>
