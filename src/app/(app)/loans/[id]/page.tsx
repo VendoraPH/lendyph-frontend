@@ -128,6 +128,8 @@ import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
+  ADJUSTMENT_TYPE_LABELS,
+  ADJUSTMENT_STATUS_LABELS,
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
 
@@ -304,6 +306,13 @@ const statusColors: Record<string, string> = {
   defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
   closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+};
+
+const adjustmentStatusColors: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  applied: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
 };
 
 // ── Multi-Step Approval Chain ──
@@ -3878,6 +3887,90 @@ export default function LoanDetailPage({
                   </div>
                 );
               })()
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Adjustments & Extension History — only for released+ loans */}
+      {isLocked && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Adjustments &amp; History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {adjustmentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="size-5 text-muted-foreground" />
+              </div>
+            ) : adjustments.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No adjustments recorded for this loan yet.
+              </p>
+            ) : (
+              <div className="divide-y">
+                {adjustments.map((adj) => (
+                  <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-xs", adjustmentStatusColors[adj.status])}
+                        >
+                          {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(adj.created_at)}
+                        </span>
+                      </div>
+                      {(adj.description || adj.remarks) && (
+                        <p className="mt-1 text-sm text-muted-foreground truncate">
+                          {adj.description || adj.remarks}
+                        </p>
+                      )}
+                    </div>
+                    {adj.adjustment_type !== "extension" && adj.status === "pending" && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {adj.adjustment_type !== "extension" && adj.status === "approved" && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
