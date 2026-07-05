@@ -209,6 +209,13 @@ export const API_ENDPOINTS = {
   },
   SETTINGS: {
     APPROVAL_WORKFLOW: "/settings/approval-workflow",
+    BRANDING: "/settings/branding",
+    BRANDING_LOGO: "/settings/branding/logo",
+  },
+  BRANDING: {
+    // Unauthenticated read that resolves the org logo for the public
+    // register/login pages and the app shell. Mirrors BRANCHES.PUBLIC_LIST.
+    PUBLIC: "/branding/public",
   },
   SYSTEM: {
     HEALTH: "/health",
