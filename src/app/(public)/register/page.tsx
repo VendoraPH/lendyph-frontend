@@ -396,7 +396,7 @@ export default function RegisterPage() {
       {/* Logo bar */}
       <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
-          <Image src="/Logo/binhs logo.png" alt="Lendy.PH" width={360} height={144} className="h-36 w-auto" />
+          <Image src="/Logo/Lendy_logo.png" alt="Lendy.PH" width={600} height={144} className="h-16 w-auto" />
         </div>
       </div>
 
