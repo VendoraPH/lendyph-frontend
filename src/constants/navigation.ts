@@ -123,6 +123,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "settings:view",
     children: [
       { title: "Profile", href: "/settings/profile" },
+      { title: "Branding", href: "/settings/branding" },
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
       { title: "Fees", href: "/settings/fees" },
