@@ -2160,31 +2160,30 @@ export default function LoanDetailPage({
 
   const handlePartialExtendConfirm = async () => {
     if (!pendingPayment) return;
+    const payload = pendingPayment;
+    setPartialExtendOpen(false);
+    setPendingPayment(null);
+    // Pay first — this posts the cashier's originally-entered amount against
+    // the CURRENT period (before it rolls over), then extend. Reversing this
+    // order (as the old code did) posted the payment against the already-
+    // extended period instead of paying down the period it was meant to settle.
+    const paid = await submitRepayment(payload);
+    if (!paid) return;
     setActionLoading(true);
     try {
       await loanService.extend(loan.id, {
-        remarks: `Auto-extend on partial payment of ${pendingPayment.amount_paid}`,
+        remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
       });
       toast.success("Loan extended");
-    } catch (err) {
-      toast.error(extendErrorMessage(err));
-      setActionLoading(false);
-      return;
-    }
-    // Refresh server-side state so the repayment posts against the
-    // new (extended) schedule, then submit the payment.
-    try {
       const updated = await loanService.detail(loan.id);
       setLoan(updated);
-      await fetchSchedule(loan.id);
-      await fetchLoanSummary(loan.id);
-    } catch {
-      // non-fatal; submitRepayment will still attempt the post
+      fetchSchedule(loan.id);
+      fetchLoanSummary(loan.id);
+    } catch (err) {
+      toast.error(extendErrorMessage(err));
+    } finally {
+      setActionLoading(false);
     }
-    setPartialExtendOpen(false);
-    const payload = pendingPayment;
-    setPendingPayment(null);
-    await submitRepayment(payload);
   };
 
   const handlePartialExtendDecline = async () => {
