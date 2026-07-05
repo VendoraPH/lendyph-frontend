@@ -852,6 +852,8 @@ export default function LoanDetailPage({
     amount_paid: number;
     remarks?: string;
   } | null>(null);
+  const [extendPaymentDate, setExtendPaymentDate] = useState<Date>(new Date());
+  const [extendPaymentDatePickerOpen, setExtendPaymentDatePickerOpen] = useState(false);
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -2136,7 +2138,24 @@ export default function LoanDetailPage({
   };
 
   const handleExtendLoan = async () => {
+    const currentDue = storedSchedule.find((row) => row.status !== "paid");
+    const interestDue = currentDue?.interest ?? 0;
     setActionLoading(true);
+    // Pay the interest due for the current period first — extending
+    // without collecting it would let staff defer the loan indefinitely.
+    if (interestDue > 0) {
+      try {
+        await repaymentService.create(loan.id, {
+          payment_date: formatDateISO(extendPaymentDate),
+          amount_paid: interestDue,
+          remarks: extendRemarks.trim() || "[EXTENSION INTEREST]",
+        });
+      } catch {
+        toast.error("Failed to record the interest payment. Extension was not processed.");
+        setActionLoading(false);
+        return;
+      }
+    }
     try {
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
@@ -2144,16 +2163,22 @@ export default function LoanDetailPage({
       toast.success("Loan extended by one cycle");
       setExtendOpen(false);
       setExtendRemarks("");
-      // Refresh loan + schedule + summary so the new due date and
-      // carried-over balances render immediately.
-      const updated = await loanService.detail(loan.id);
-      setLoan(updated);
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
-      fetchRepayments(loan.id);
+      setExtendPaymentDate(new Date());
     } catch (err) {
+      // Interest (if any) is already paid at this point — leave the dialog
+      // open so the user can see the error and retry; a retry will see
+      // interestDue recomputed as 0 and skip straight to extend().
       toast.error(extendErrorMessage(err));
     } finally {
+      try {
+        const updated = await loanService.detail(loan.id);
+        setLoan(updated);
+        await fetchSchedule(loan.id);
+        await fetchLoanSummary(loan.id);
+        await fetchRepayments(loan.id);
+      } catch {
+        // non-fatal — dialog state above already reflects the outcome
+      }
       setActionLoading(false);
     }
   };
@@ -5179,10 +5204,51 @@ export default function LoanDetailPage({
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will move the loan&apos;s due date forward by one cycle.
-              Any unpaid principal and interest will be carried over to the
-              new period. The loan stays active and no payment is recorded.
+              The principal and any remaining balance are unchanged. The
+              interest due below will be collected as a payment before the
+              loan extends.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {(() => {
+            const currentDue = storedSchedule.find((row) => row.status !== "paid");
+            const interestDue = currentDue?.interest ?? 0;
+            return (
+              <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
+                <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
+                  Interest Due — must be paid to extend
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+                  {formatCurrency(interestDue)}
+                </p>
+              </div>
+            );
+          })()}
+          <div className="space-y-2">
+            <Label className="text-xs">Payment Date</Label>
+            <Popover open={extendPaymentDatePickerOpen} onOpenChange={setExtendPaymentDatePickerOpen}>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                }
+              >
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <span>{formatDateObj(extendPaymentDate)}</span>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={extendPaymentDate}
+                  onSelect={(date) => {
+                    if (date) setExtendPaymentDate(date);
+                    setExtendPaymentDatePickerOpen(false);
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="extend-remarks" className="text-xs">
               Remarks (optional)
