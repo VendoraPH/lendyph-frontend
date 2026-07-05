@@ -128,8 +128,11 @@ import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
+  ADJUSTMENT_TYPE_LABELS,
+  ADJUSTMENT_STATUS_LABELS,
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
+import type { ApiScheduleRow } from "@/lib/amortization";
 
 // ── Currency & Date Formatters ──
 
@@ -140,6 +143,17 @@ const formatCurrency = (amount: number | string | undefined | null) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
+
+// Like formatCurrency but keeps centavos — use where the number shown must
+// exactly equal a number being posted (e.g. the interest collected on extend),
+// so the display never rounds away centavos that are actually charged.
+const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parseFloat(String(amount ?? 0)) || 0);
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-PH", {
@@ -164,7 +178,16 @@ const formatDateObj = (date: Date) =>
     day: "numeric",
   });
 
-const formatDateISO = (date: Date) => date.toISOString().split("T")[0];
+// Format a Date as YYYY-MM-DD using the LOCAL calendar day. Using toISOString()
+// here shifts UTC+8 (PHT) dates back a day for any local time before 08:00,
+// so a picked/"today" date could post as the previous day. Build from local
+// Y/M/D parts to keep the calendar date the user actually selected.
+const formatDateISO = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
 // ── Amortization Schedule Helpers ──
 
@@ -304,6 +327,13 @@ const statusColors: Record<string, string> = {
   defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
   closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+};
+
+const adjustmentStatusColors: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  applied: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
 };
 
 // ── Multi-Step Approval Chain ──
@@ -797,6 +827,11 @@ export default function LoanDetailPage({
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+  // Raw amortization rows exactly as the backend returns them. The mapped
+  // `apiSchedule` above folds each row's interest_paid into amount_paid, which
+  // loses the per-row interest breakdown; we keep the raw rows so the extend
+  // flow can read the true outstanding interest (interest_due - interest_paid).
+  const [rawSchedule, setRawSchedule] = useState<ApiScheduleRow[] | null>(null);
 
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
@@ -852,6 +887,12 @@ export default function LoanDetailPage({
     amount_paid: number;
     remarks?: string;
   } | null>(null);
+  const [extendPaymentDate, setExtendPaymentDate] = useState<Date>(new Date());
+  const [extendPaymentDatePickerOpen, setExtendPaymentDatePickerOpen] = useState(false);
+  // Guards against posting the interest payment twice within the same
+  // Extend-dialog session (e.g. if extend() fails and the user retries
+  // before the backend's refreshed schedule reflects the payment).
+  const extendInterestPaidRef = useRef(false);
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -1004,6 +1045,10 @@ export default function LoanDetailPage({
         // Map ApiScheduleRow field names to LoanSchedule field names
         const first = rows[0] as Record<string, unknown>;
         const isApiFormat = "principal_due" in first;
+        // Keep the raw rows only when they carry the API breakdown fields
+        // (interest_due / interest_paid); otherwise fall back to null so the
+        // outstanding-interest memo uses the client-side schedule instead.
+        setRawSchedule(isApiFormat ? (rows as unknown as ApiScheduleRow[]) : null);
         setApiSchedule(
           isApiFormat
             ? (rows as Record<string, unknown>[]).map((r) => ({
@@ -1021,9 +1066,11 @@ export default function LoanDetailPage({
         );
       } else {
         setApiSchedule([]);
+        setRawSchedule(null);
       }
     } catch {
       setApiSchedule(null); // fallback to client-side generation
+      setRawSchedule(null);
     }
   }, []);
 
@@ -1107,7 +1154,11 @@ export default function LoanDetailPage({
     try {
       setAdjustmentsLoading(true);
       const res = await loanAdjustmentService.list(id);
-      setAdjustments(Array.isArray(res) ? res : []);
+      const list = Array.isArray(res) ? [...res] : [];
+      // Newest first — the list endpoint doesn't guarantee an order, so sort by
+      // created_at desc for a readable history (latest extension/adjustment on top).
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setAdjustments(list);
     } catch {
       // silently fail
     } finally {
@@ -1347,6 +1398,36 @@ export default function LoanDetailPage({
     return [];
   }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
 
+  // Single source of truth for the interest still OWED on the loan — used both
+  // to decide whether to collect it before extending, and to render the
+  // "Interest Due" amount in the Extend dialog.
+  //
+  // This must be the OUTSTANDING interest, not the gross interest_due. It is
+  // computed from the raw amortization rows as Σ max(0, interest_due −
+  // interest_paid) over every not-fully-paid period. The gross sum (what the
+  // collapsed upon-maturity row exposes) re-charges interest already collected
+  // in earlier periods: after the backend's /extend carries a settled period
+  // forward alongside a new one, a 2nd extension would bill period-1's interest
+  // again. Netting out interest_paid per row means a settled period contributes
+  // 0, so extension N collects exactly period-N's still-unpaid interest.
+  //
+  // Rounded to centavos so the displayed figure and the posted amount match to
+  // the last decimal (formatCurrencyPrecise shows the same value we charge).
+  const currentInterestDue = useMemo(() => {
+    if (rawSchedule && rawSchedule.length > 0) {
+      const outstanding = rawSchedule.reduce((sum, row) => {
+        const due = parseFloat(String(row.interest_due ?? 0)) || 0;
+        const paid = parseFloat(String(row.interest_paid ?? 0)) || 0;
+        return sum + Math.max(0, due - paid);
+      }, 0);
+      return Math.round(outstanding * 100) / 100;
+    }
+    // No raw API rows (client-generated schedule): nothing has been paid yet,
+    // so the first open period's interest is the full amount owed.
+    const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
+    return Math.round(fallback * 100) / 100;
+  }, [rawSchedule, storedSchedule]);
+
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
       (acc, row) => ({
@@ -1497,6 +1578,14 @@ export default function LoanDetailPage({
   }, [sendBackTargets]);
 
   const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+  // Statuses for which the backend has schedule / repayment / adjustment data —
+  // the SAME set fetchSchedule/fetchRepayments/fetchAdjustments use. Unlike
+  // isLocked, this includes `current` and `past_due` (the primary active
+  // states), so the Adjustments & History card shows for loans that can be
+  // extended/adjusted, not just terminal ones.
+  const hasServerLoanData = loan
+    ? ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)
+    : false;
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
@@ -2019,7 +2108,7 @@ export default function LoanDetailPage({
     payment_date: string;
     amount_paid: number;
     remarks?: string;
-  }) => {
+  }): Promise<boolean> => {
     setActionLoading(true);
     try {
       const repayment = await repaymentService.create(loan.id, data);
@@ -2036,13 +2125,20 @@ export default function LoanDetailPage({
       setAdvancePeriods(1);
       // Refresh independently — don't let any single failure block the others
       // or pollute the catch block (payment already succeeded at this point).
+      // Awaited (not fire-and-forget) so callers that chain another mutation
+      // afterward (e.g. handlePartialExtendConfirm calling extend()) don't
+      // race this refresh with their own later one.
       const loanId = loan.id;
-      fetchSchedule(loanId);
-      fetchLoanSummary(loanId);
-      fetchRepayments(loanId);
-      loanService.detail(loanId).then(setLoan).catch(() => {});
+      await Promise.allSettled([
+        fetchSchedule(loanId),
+        fetchLoanSummary(loanId),
+        fetchRepayments(loanId),
+        loanService.detail(loanId).then(setLoan).catch(() => {}),
+      ]);
+      return true;
     } catch {
       toast.error("Failed to record payment");
+      return false;
     } finally {
       setActionLoading(false);
     }
@@ -2137,6 +2233,26 @@ export default function LoanDetailPage({
 
   const handleExtendLoan = async () => {
     setActionLoading(true);
+    // Pay the interest due for the current period first — extending
+    // without collecting it would let staff defer the loan indefinitely.
+    // Guard against paying twice on retry: if extend() fails after a
+    // successful payment, the backend's refreshed schedule may not yet
+    // reflect the payment, so recomputing interest due here could show the
+    // same amount due again — extendInterestPaidRef prevents a second charge.
+    if (currentInterestDue > 0 && !extendInterestPaidRef.current) {
+      try {
+        await repaymentService.create(loan.id, {
+          payment_date: formatDateISO(extendPaymentDate),
+          amount_paid: currentInterestDue,
+          remarks: extendRemarks.trim() || "[EXTENSION INTEREST]",
+        });
+        extendInterestPaidRef.current = true;
+      } catch {
+        toast.error("Failed to record the interest payment. Extension was not processed.");
+        setActionLoading(false);
+        return;
+      }
+    }
     try {
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
@@ -2144,47 +2260,60 @@ export default function LoanDetailPage({
       toast.success("Loan extended by one cycle");
       setExtendOpen(false);
       setExtendRemarks("");
-      // Refresh loan + schedule + summary so the new due date and
-      // carried-over balances render immediately.
-      const updated = await loanService.detail(loan.id);
-      setLoan(updated);
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
-      fetchRepayments(loan.id);
+      setExtendPaymentDate(new Date());
+      extendInterestPaidRef.current = false;
     } catch (err) {
+      // Interest (if any) is already paid at this point — leave the dialog
+      // open so the user can see the error and retry; a retry will not
+      // re-charge interest (extendInterestPaidRef is already true) and will
+      // go straight to extend().
       toast.error(extendErrorMessage(err));
     } finally {
+      try {
+        const updated = await loanService.detail(loan.id);
+        setLoan(updated);
+        await fetchSchedule(loan.id);
+        await fetchLoanSummary(loan.id);
+        await fetchRepayments(loan.id);
+        // Refresh the extension/adjustment history too — the effect that loads
+        // adjustments only re-runs on loan.id/status change, and a same-status
+        // extension wouldn't trigger it, leaving the history card stale.
+        await fetchAdjustments(loan.id);
+      } catch {
+        // non-fatal — dialog state above already reflects the outcome
+      }
       setActionLoading(false);
     }
   };
 
   const handlePartialExtendConfirm = async () => {
     if (!pendingPayment) return;
+    const payload = pendingPayment;
+    setPartialExtendOpen(false);
+    setPendingPayment(null);
+    // Pay first — this posts the cashier's originally-entered amount against
+    // the CURRENT period (before it rolls over), then extend. Reversing this
+    // order (as the old code did) posted the payment against the already-
+    // extended period instead of paying down the period it was meant to settle.
+    const paid = await submitRepayment(payload);
+    if (!paid) return;
     setActionLoading(true);
     try {
       await loanService.extend(loan.id, {
-        remarks: `Auto-extend on partial payment of ${pendingPayment.amount_paid}`,
+        remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
       });
       toast.success("Loan extended");
-    } catch (err) {
-      toast.error(extendErrorMessage(err));
-      setActionLoading(false);
-      return;
-    }
-    // Refresh server-side state so the repayment posts against the
-    // new (extended) schedule, then submit the payment.
-    try {
       const updated = await loanService.detail(loan.id);
       setLoan(updated);
-      await fetchSchedule(loan.id);
-      await fetchLoanSummary(loan.id);
-    } catch {
-      // non-fatal; submitRepayment will still attempt the post
+      fetchSchedule(loan.id);
+      fetchLoanSummary(loan.id);
+      // Keep the extension/adjustment history in sync without a reload.
+      fetchAdjustments(loan.id);
+    } catch (err) {
+      toast.error(extendErrorMessage(err));
+    } finally {
+      setActionLoading(false);
     }
-    setPartialExtendOpen(false);
-    const payload = pendingPayment;
-    setPendingPayment(null);
-    await submitRepayment(payload);
   };
 
   const handlePartialExtendDecline = async () => {
@@ -3876,6 +4005,95 @@ export default function LoanDetailPage({
         </Card>
       )}
 
+      {/* Adjustments & Extension History — shown for every status that has
+          server-side loan data (incl. current / past_due), matching the set
+          fetchAdjustments loads for. */}
+      {hasServerLoanData && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Adjustments &amp; History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {adjustmentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="size-5 text-muted-foreground" />
+              </div>
+            ) : adjustments.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No adjustments recorded for this loan yet.
+              </p>
+            ) : (
+              <div className="divide-y">
+                {adjustments.map((adj) => (
+                  <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-xs", adjustmentStatusColors[adj.status])}
+                        >
+                          {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(adj.created_at)}
+                        </span>
+                      </div>
+                      {(adj.description || adj.remarks) && (
+                        <p
+                          className="mt-1 text-sm text-muted-foreground truncate"
+                          title={adj.description || adj.remarks}
+                        >
+                          {adj.description || adj.remarks}
+                        </p>
+                      )}
+                    </div>
+                    {adj.adjustment_type !== "extension" && adj.status === "pending" && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {adj.adjustment_type !== "extension" && adj.status === "approved" && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
+                          disabled={actionLoading}
+                          onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Dialogs ── */}
 
       {/* Auto Pay Confirmation Dialog */}
@@ -5188,7 +5406,13 @@ export default function LoanDetailPage({
       </Dialog>
 
       {/* Extend Loan Dialog (Upon Maturity — Process 1: manual extension) */}
-      <AlertDialog open={extendOpen} onOpenChange={setExtendOpen}>
+      <AlertDialog
+        open={extendOpen}
+        onOpenChange={(open) => {
+          setExtendOpen(open);
+          if (open) extendInterestPaidRef.current = false;
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -5197,10 +5421,45 @@ export default function LoanDetailPage({
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will move the loan&apos;s due date forward by one cycle.
-              Any unpaid principal and interest will be carried over to the
-              new period. The loan stays active and no payment is recorded.
+              The principal and any remaining balance are unchanged. The
+              interest due below will be collected as a payment before the
+              loan extends.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
+            <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
+              Interest Due — must be paid to extend
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+              {formatCurrencyPrecise(currentInterestDue)}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Payment Date</Label>
+            <Popover open={extendPaymentDatePickerOpen} onOpenChange={setExtendPaymentDatePickerOpen}>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                }
+              >
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <span>{formatDateObj(extendPaymentDate)}</span>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={extendPaymentDate}
+                  onSelect={(date) => {
+                    if (date) setExtendPaymentDate(date);
+                    setExtendPaymentDatePickerOpen(false);
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="extend-remarks" className="text-xs">
               Remarks (optional)

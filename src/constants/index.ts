@@ -32,6 +32,21 @@ export const LOAN_STATUS_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 
+export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  extension: "Extension",
+  restructure: "Restructure",
+  penalty_waiver: "Penalty Waiver",
+  balance_adjustment: "Balance Adjustment",
+  term_extension: "Term Extension",
+};
+
+export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  applied: "Applied",
+};
+
 export const PAST_DUE_TRANSFER_UNIT_OPTIONS = [
   { value: "days", label: "Days" },
   { value: "months", label: "Months" },

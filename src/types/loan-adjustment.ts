@@ -2,7 +2,8 @@ export type LoanAdjustmentType =
   | "restructure"
   | "penalty_waiver"
   | "balance_adjustment"
-  | "term_extension";
+  | "term_extension"
+  | "extension";
 
 export type LoanAdjustmentStatus =
   | "pending"
