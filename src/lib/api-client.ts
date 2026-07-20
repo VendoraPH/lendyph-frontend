@@ -79,4 +79,10 @@ export const api = {
     const response = await axiosClient.post<T>(url, data, config);
     return response.data;
   },
+
+  /** GET without unwrapping nested `data` — for endpoints that return a raw Laravel paginator ({data, links, meta}) instead of the {success, data, message} envelope */
+  getRaw: async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+    const response = await axiosClient.get<T>(url, config);
+    return response.data;
+  },
 };

@@ -331,9 +331,13 @@ export default function DashboardPage() {
         const items = Array.isArray(entries) ? entries : [];
         let total = 0;
         for (const e of items) {
-          total += e.type === "credit" ? e.amount : -e.amount;
+          // Defensive coercion — bad/missing amounts shouldn't poison the running
+          // total with NaN (which would propagate to "₱NaN" in the UI).
+          const amount = Number(e.amount);
+          if (!Number.isFinite(amount)) continue;
+          total += e.type === "credit" ? amount : -amount;
         }
-        setShareCapitalTotal(formatCompactCurrency(total));
+        setShareCapitalTotal(formatCompactCurrency(Number.isFinite(total) ? total : 0));
       })
       .catch(() => {
         setShareCapitalTotal("—");

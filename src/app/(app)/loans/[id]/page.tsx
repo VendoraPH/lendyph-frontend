@@ -812,6 +812,46 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   );
 }
 
+// ── Loan product resolution ──
+// Action endpoints (submit/approve/reject/release/void/extend/etc.) commonly
+// return a leaner loan payload than GET /api/loans/{id} and don't eager-load
+// the `loan_product` relation. Left unhandled, the next setLoan(...) call
+// wipes out a product name the page already had, and "Loan Product" (incl.
+// the Release modal) shows "N/A" even though nothing about the product
+// actually changed.
+
+async function enrichLoanProduct(data: Loan): Promise<Loan> {
+  const productId = data.loan_product?.id ?? data.loan_product_id;
+  if (productId && !data.loan_product?.name && !data.loan_product_name) {
+    try {
+      const product = await loanProductService.detail(productId);
+      if (product?.name) {
+        return {
+          ...data,
+          loan_product: { ...(data.loan_product ?? {}), id: productId, name: product.name },
+        };
+      }
+    } catch { /* product fetch is non-critical */ }
+  }
+  return data;
+}
+
+// Resolves the freshest loan_product info for `updated`, falling back to a
+// product-id lookup and finally to whatever `prev` already had on hand.
+async function resolveLoan(prev: Loan | null, updated: Loan): Promise<Loan> {
+  if (updated.loan_product?.name || updated.loan_product_name) return updated;
+  const enriched = await enrichLoanProduct(updated);
+  if (enriched.loan_product?.name || enriched.loan_product_name) return enriched;
+  if (prev?.loan_product?.name || prev?.loan_product_name) {
+    return {
+      ...updated,
+      loan_product: prev.loan_product,
+      loan_product_name: prev.loan_product_name,
+    };
+  }
+  return updated;
+}
+
 // ── Main Page ──
 
 export default function LoanDetailPage({
@@ -887,8 +927,6 @@ export default function LoanDetailPage({
     amount_paid: number;
     remarks?: string;
   } | null>(null);
-  const [extendPaymentDate, setExtendPaymentDate] = useState<Date>(new Date());
-  const [extendPaymentDatePickerOpen, setExtendPaymentDatePickerOpen] = useState(false);
   // Guards against posting the interest payment twice within the same
   // Extend-dialog session (e.g. if extend() fails and the user retries
   // before the backend's refreshed schedule reflects the payment).
@@ -968,16 +1006,8 @@ export default function LoanDetailPage({
         }
         // Resolve the loan product name when the loan detail doesn't embed it,
         // so the Loan Product field (incl. the Release modal) isn't "N/A".
-        const productId = data.loan_product?.id ?? data.loan_product_id;
-        if (productId && !data.loan_product?.name && !data.loan_product_name) {
-          try {
-            const product = await loanProductService.detail(productId);
-            if (product?.name) {
-              data.loan_product = { ...(data.loan_product ?? {}), id: productId, name: product.name };
-            }
-          } catch { /* product fetch is non-critical */ }
-        }
-        if (!cancelled) setLoan(data);
+        const enriched = await enrichLoanProduct(data);
+        if (!cancelled) setLoan(enriched);
       } catch {
         if (!cancelled) toast.error("Failed to load loan details");
       } finally {
@@ -1598,6 +1628,14 @@ export default function LoanDetailPage({
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
+  // Extend-dialog preview: the extend endpoint always moves the due date
+  // forward by exactly one cycle (1 month for upon-maturity loans, matching
+  // the SCB build-up and computedMaturityDate math elsewhere on this page).
+  // This is display-only — it does not drive the actual extend() call.
+  const extendCurrentMaturity = loan?.maturity_date ?? loanSummary?.next_due_date ?? loan?.next_due_date;
+  const extendPreviewMaturityDate = extendCurrentMaturity
+    ? addMonths(new Date(extendCurrentMaturity), 1)
+    : null;
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
   // keyed by fee name and silently fell through to 0 for every fee, which
@@ -1700,7 +1738,7 @@ export default function LoanDetailPage({
     try {
       setActionLoading(true);
       const updated = await loanService.submit(loan.id);
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
       toast.success("Loan submitted for review");
       setSubmitOpen(false);
     } catch {
@@ -1716,7 +1754,7 @@ export default function LoanDetailPage({
       const updated = await loanService.approve(loan.id, {
         approval_remarks: approvalRemarks || undefined,
       });
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
       toast.success("Loan approved");
       setApprovalRemarks("");
       setApproveOpen(false);
@@ -1734,7 +1772,7 @@ export default function LoanDetailPage({
       const updated = await loanService.reject(loan.id, {
         approval_remarks: rejectionRemarks,
       });
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
       toast.success("Loan rejected");
       setRejectionRemarks("");
       setRejectOpen(false);
@@ -1767,7 +1805,7 @@ export default function LoanDetailPage({
       // including the insurance premium added on release, total_deductions,
       // net_proceeds, and embedded relations).
       const updated = await loanService.detail(loan.id);
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
       toast.success("Loan released successfully");
       setReleaseOpen(false);
       setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
@@ -1857,7 +1895,7 @@ export default function LoanDetailPage({
       setStepActionLoading(true);
       if (loan.status === "draft") {
         const updatedLoan = await loanService.submit(loan.id);
-        setLoan(updatedLoan);
+        setLoan(await resolveLoan(loan, updatedLoan));
       }
       const actedAt = new Date().toISOString();
       const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
@@ -1922,7 +1960,7 @@ export default function LoanDetailPage({
         const updatedLoan = await loanService.approve(loan.id, {
           approval_remarks: stepRemarks.trim() || undefined,
         });
-        setLoan(updatedLoan);
+        setLoan(await resolveLoan(loan, updatedLoan));
       }
       persistApprovalState(updatedSteps, approvalRounds);
       toast.success(
@@ -2242,7 +2280,7 @@ export default function LoanDetailPage({
     if (currentInterestDue > 0 && !extendInterestPaidRef.current) {
       try {
         await repaymentService.create(loan.id, {
-          payment_date: formatDateISO(extendPaymentDate),
+          payment_date: formatDateISO(new Date()),
           amount_paid: currentInterestDue,
           remarks: extendRemarks.trim() || "[EXTENSION INTEREST]",
         });
@@ -2260,7 +2298,6 @@ export default function LoanDetailPage({
       toast.success("Loan extended by one cycle");
       setExtendOpen(false);
       setExtendRemarks("");
-      setExtendPaymentDate(new Date());
       extendInterestPaidRef.current = false;
     } catch (err) {
       // Interest (if any) is already paid at this point — leave the dialog
@@ -2271,7 +2308,7 @@ export default function LoanDetailPage({
     } finally {
       try {
         const updated = await loanService.detail(loan.id);
-        setLoan(updated);
+        setLoan(await resolveLoan(loan, updated));
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
@@ -2304,7 +2341,7 @@ export default function LoanDetailPage({
       });
       toast.success("Loan extended");
       const updated = await loanService.detail(loan.id);
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
       fetchSchedule(loan.id);
       fetchLoanSummary(loan.id);
       // Keep the extension/adjustment history in sync without a reload.
@@ -2356,7 +2393,7 @@ export default function LoanDetailPage({
       toast.success("Payment voided");
       fetchRepayments(loan.id);
       const updated = await loanService.detail(loan.id);
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
     } catch {
       toast.error("Failed to void payment");
     } finally {
@@ -2370,7 +2407,7 @@ export default function LoanDetailPage({
       await loanService.void(loan.id);
       toast.success("Loan voided");
       const updated = await loanService.detail(loan.id);
-      setLoan(updated);
+      setLoan(await resolveLoan(loan, updated));
     } catch {
       toast.error("Failed to void loan");
     } finally {
@@ -2440,7 +2477,7 @@ export default function LoanDetailPage({
         await loanAdjustmentService.apply(adjId);
         toast.success("Adjustment applied");
         const updated = await loanService.detail(loan.id);
-        setLoan(updated);
+        setLoan(await resolveLoan(loan, updated));
       }
       fetchAdjustments(loan.id);
     } catch {
@@ -5436,30 +5473,35 @@ export default function LoanDetailPage({
             </p>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Payment Date</Label>
-            <Popover open={extendPaymentDatePickerOpen} onOpenChange={setExtendPaymentDatePickerOpen}>
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  />
-                }
-              >
-                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                <span>{formatDateObj(extendPaymentDate)}</span>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={extendPaymentDate}
-                  onSelect={(date) => {
-                    if (date) setExtendPaymentDate(date);
-                    setExtendPaymentDatePickerOpen(false);
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
+            <Label className="text-xs">Extension Details</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={1}
+                disabled
+                className="w-20"
+                aria-label="Extension duration"
+              />
+              <Select value="months" disabled>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Months" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="days">Days</SelectItem>
+                  <SelectItem value="months">Months</SelectItem>
+                  <SelectItem value="years">Years</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Every extension moves the due date forward by one fixed cycle.
+            </p>
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">New Maturity Date</p>
+              <p className="text-sm font-medium">
+                {extendPreviewMaturityDate ? formatDateObj(extendPreviewMaturityDate) : "—"}
+              </p>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="extend-remarks" className="text-xs">

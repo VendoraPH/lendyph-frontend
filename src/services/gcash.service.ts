@@ -12,8 +12,11 @@ import type {
 } from "@/types";
 
 export const gcashService = {
+  // Backend returns a raw Laravel paginator ({data, links, meta}) for this
+  // endpoint with no {success, data} envelope, so it must bypass api.get's
+  // unwrap (which would otherwise strip meta/links and return a bare array).
   listTransactions: (params?: GCashListFilters) =>
-    api.get<PaginatedResponse<GCashTransaction>>(
+    api.getRaw<PaginatedResponse<GCashTransaction>>(
       API_ENDPOINTS.GCASH.TRANSACTIONS_LIST,
       { params },
     ),
