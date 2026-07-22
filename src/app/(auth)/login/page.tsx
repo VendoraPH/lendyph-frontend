@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { BrandLogo } from "@/components/common";
+import { BrandLogo, PoweredByLendy } from "@/components/common";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
 import { authService } from "@/services";
@@ -124,6 +124,9 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
+            {/* Organization logo — <BrandLogo> resolves the admin-configured
+                logo, so this is the tenant's mark, not the Lendy one. The
+                Lendy attribution lives in the footer below. */}
             <div className="inline-flex items-center rounded-2xl bg-white/95 backdrop-blur-sm px-6 py-4 shadow-lg shadow-black/10">
               <BrandLogo className="h-16 w-auto drop-shadow-sm" />
             </div>
@@ -143,9 +146,12 @@ export default function LoginPage() {
 
           </div>
 
-          <p className="text-xs text-white/50" suppressHydrationWarning>
-            &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-xs text-white/50" suppressHydrationWarning>
+              &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
+            </p>
+            <PoweredByLendy onColor />
+          </div>
         </div>
       </div>
 
@@ -280,6 +286,17 @@ export default function LoginPage() {
           <p className="text-center text-xs text-muted-foreground">
             Contact your administrator for account access.
           </p>
+
+          {/* Mobile footer — the desktop attribution lives in the left column */}
+          <div className="flex flex-col items-center gap-2 lg:hidden">
+            <p
+              className="text-xs text-muted-foreground"
+              suppressHydrationWarning
+            >
+              &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
+            </p>
+            <PoweredByLendy />
+          </div>
         </div>
       </div>
     </div>
