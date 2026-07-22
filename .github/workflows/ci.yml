@@ -1,13 +1,24 @@
 name: CI Checks
 
+# Runs on PRs into a deployed branch and on pushes to those branches
+# (development -> staging, main -> production), so the development -> main
+# promotion and direct pushes are gated too — not just PRs into development.
 on:
   pull_request:
-    branches:
-      - development
+    branches: [development, main]
+  push:
+    branches: [development, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   merge-check:
     name: Merge Conflict Check
+    # PR-only: relies on PR context (issue number) and a base branch to
+    # test-merge against, so it is skipped on the push triggers above.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -77,6 +88,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: TypeScript check
         run: npx tsc --noEmit

@@ -79,7 +79,7 @@ export function CollateralForm({ initial, mode }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([borrowerService.list(), collateralTypeService.list()])
+    Promise.all([borrowerService.list({ per_page: 9999 }), collateralTypeService.list()])
       .then(([bRes, tRes]) => {
         if (cancelled) return;
         const borrowerList = Array.isArray(bRes)
@@ -243,7 +243,6 @@ export function CollateralForm({ initial, mode }: Props) {
                   type="button"
                   role="combobox"
                   aria-expanded={borrowerOpen}
-                  disabled={mode === "edit"}
                   className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"
                 />
               }
@@ -294,11 +293,6 @@ export function CollateralForm({ initial, mode }: Props) {
               </Command>
             </PopoverContent>
           </Popover>
-          {mode === "edit" && (
-            <p className="text-xs text-muted-foreground">
-              Member can&apos;t be changed after registration.
-            </p>
-          )}
         </div>
 
         {/* ── Section: Type ───────────────────────────────────────── */}

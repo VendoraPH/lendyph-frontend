@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { loanService } from "@/services/loan.service";
@@ -97,6 +97,7 @@ function StatCard({
 
 export default function LoansPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // ── URL → state (derived every render, cheap) ──
@@ -160,9 +161,9 @@ export default function LoansPage() {
         else p.set(k, v);
       }
       const qs = p.toString();
-      router.replace(qs ? `?${qs}` : "", { scroll: false });
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [router],
+    [router, pathname],
   );
 
   // ── Fetch loans + products in parallel on mount ──

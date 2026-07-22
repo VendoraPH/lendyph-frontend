@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BrandLogo } from "@/components/common";
 import { useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
 
@@ -265,12 +266,7 @@ function SidebarContent({
           ) : (
             <>
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/Logo/Lendy_logo.png"
-                  alt="Lendy.PH"
-                  className="h-6 w-auto object-contain"
-                />
+                <BrandLogo className="h-6 w-auto object-contain" />
               </div>
               {onToggle && (
                 <button

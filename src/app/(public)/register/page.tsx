@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AxiosError } from "axios";
 import { Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { BrandLogo } from "@/components/common";
 import { StepIndicator } from "./_components/step-indicator";
 import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
@@ -395,8 +396,7 @@ export default function RegisterPage() {
       {/* Logo bar */}
       <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Logo/Lendy_logo.png" alt="Lendy.PH" className="h-8 w-auto" />
+          <BrandLogo className="h-16 w-auto" />
         </div>
       </div>
 

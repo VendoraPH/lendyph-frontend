@@ -1,5 +1,5 @@
 import type { Permission } from "@/types";
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -14,8 +14,8 @@ import {
   Package,
   Landmark,
   ShieldCheck,
-  Smartphone,
 } from "lucide-react";
+import { GCashIcon } from "@/components/icons/gcash-icon";
 
 export interface NavSubItem {
   title: string;
@@ -25,7 +25,7 @@ export interface NavSubItem {
 export interface NavItem {
   title: string;
   href: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   permission: Permission;
   children?: NavSubItem[];
 }
@@ -95,7 +95,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "GCash",
     href: "/gcash",
-    icon: Smartphone,
+    icon: GCashIcon,
     permission: "gcash:view",
   },
   {
@@ -123,6 +123,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "settings:view",
     children: [
       { title: "Profile", href: "/settings/profile" },
+      { title: "Branding", href: "/settings/branding" },
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
       { title: "Fees", href: "/settings/fees" },
