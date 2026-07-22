@@ -124,9 +124,13 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            {/* Brand mark intentionally omitted here — the attribution lives in
-                the footer alongside the copyright line. */}
-            <p className="text-base font-semibold text-white/90 tracking-wide">
+            {/* Organization logo — <BrandLogo> resolves the admin-configured
+                logo, so this is the tenant's mark, not the Lendy one. The
+                Lendy attribution lives in the footer below. */}
+            <div className="inline-flex items-center rounded-2xl bg-white/95 backdrop-blur-sm px-6 py-4 shadow-lg shadow-black/10">
+              <BrandLogo className="h-16 w-auto drop-shadow-sm" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
               Lending Management Platform
             </p>
           </div>
