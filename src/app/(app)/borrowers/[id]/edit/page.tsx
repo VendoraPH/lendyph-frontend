@@ -15,6 +15,7 @@ import {
   Crop as CropIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError, notifyValidation } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -145,7 +146,6 @@ export default function EditBorrowerPage() {
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   // Branches for selector
   const [branches, setBranches] = useState<ApiBranch[]>([]);
@@ -356,36 +356,34 @@ export default function EditBorrowerPage() {
 
   function update<K extends keyof BorrowerFormData>(field: K, value: BorrowerFormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErrors({});
 
-    const clientErrors: Record<string, string[]> = {};
-    if (!form.first_name.trim()) clientErrors.first_name = ["First name is required"];
-    if (!form.last_name.trim()) clientErrors.last_name = ["Last name is required"];
-    if (!form.middle_name.trim()) clientErrors.middle_name = ["Middle name is required"];
-    if (!form.birthdate) clientErrors.birthdate = ["Birthdate is required"];
-    if (!form.gender) clientErrors.gender = ["Gender is required"];
-    if (!form.civil_status) clientErrors.civil_status = ["Civil status is required"];
-    if (!form.contact_number.trim())
-      clientErrors.contact_number = ["Contact number is required"];
-    if (!form.address.trim()) clientErrors.address = ["Street address is required"];
-    if (!form.city.trim()) clientErrors.city = ["City / Municipality is required"];
-    if (!form.province.trim()) clientErrors.province = ["Province is required"];
-    if (!form.branch_id) clientErrors.branch_id = ["Branch is required"];
+    // A missing branch means the member isn't assigned to one — a
+    // configuration problem, not something the operator can fix on this form.
+    if (!form.branch_id) {
+      toast.error("Your account is not assigned to a branch. Contact an administrator.");
+      return;
+    }
 
-    if (Object.keys(clientErrors).length > 0) {
-      setErrors(clientErrors);
-      toast.error("Please fill in all required fields");
+    // Client-side validation — collect human labels for every empty required
+    // field and surface them in a single consolidated toast.
+    const missing: string[] = [];
+    if (!form.first_name.trim()) missing.push("First name");
+    if (!form.last_name.trim()) missing.push("Last name");
+    if (!form.middle_name.trim()) missing.push("Middle name");
+    if (!form.birthdate) missing.push("Date of birth");
+    if (!form.gender) missing.push("Gender");
+    if (!form.civil_status) missing.push("Civil status");
+    if (!form.contact_number.trim()) missing.push("Contact number");
+    if (!form.address.trim()) missing.push("Street address");
+    if (!form.city.trim()) missing.push("City / Municipality");
+    if (!form.province.trim()) missing.push("Province");
+
+    if (missing.length > 0) {
+      notifyValidation(missing);
       return;
     }
 
@@ -455,25 +453,10 @@ export default function EditBorrowerPage() {
       toast.success("Member updated successfully");
       router.push(`/borrowers/${borrowerId}`);
     } catch (err: unknown) {
-      const apiError = err as {
-        response?: { data?: { errors?: Record<string, string[]>; message?: string } };
-      };
-      if (apiError?.response?.data?.errors) {
-        setErrors(apiError.response.data.errors);
-        toast.error("Please fix the validation errors below");
-      } else if (apiError?.response?.data?.message) {
-        toast.error(apiError.response.data.message);
-      } else {
-        toast.error("Failed to update member");
-      }
+      notifyError(err, "We couldn't save your changes. Please check the details and try again.");
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function fieldError(field: string) {
-    if (!errors[field]?.length) return null;
-    return <p className="text-xs text-destructive mt-1">{errors[field]![0]}</p>;
   }
 
   if (loading) {
@@ -674,7 +657,6 @@ export default function EditBorrowerPage() {
                 <p className="text-xs text-muted-foreground">
                   Change the branch this member is assigned to.
                 </p>
-                {fieldError("branch_id")}
               </div>
             </CardContent>
           </Card>
@@ -695,7 +677,6 @@ export default function EditBorrowerPage() {
                     value={form.first_name}
                     onChange={(e) => update("first_name", e.target.value)}
                   />
-                  {fieldError("first_name")}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="last_name">
@@ -707,7 +688,6 @@ export default function EditBorrowerPage() {
                     value={form.last_name}
                     onChange={(e) => update("last_name", e.target.value)}
                   />
-                  {fieldError("last_name")}
                 </div>
               </div>
 
@@ -722,7 +702,6 @@ export default function EditBorrowerPage() {
                     value={form.middle_name}
                     onChange={(e) => update("middle_name", e.target.value)}
                   />
-                  {fieldError("middle_name")}
                 </div>
                 <div className="space-y-2">
                   <Label>Suffix</Label>
@@ -761,7 +740,6 @@ export default function EditBorrowerPage() {
                     value={form.birthdate}
                     onChange={(e) => update("birthdate", e.target.value)}
                   />
-                  {fieldError("birthdate")}
                 </div>
                 <div className="space-y-2">
                   <Label>
@@ -781,7 +759,6 @@ export default function EditBorrowerPage() {
                       <span className="text-sm">Female</span>
                     </label>
                   </RadioGroup>
-                  {fieldError("gender")}
                 </div>
               </div>
 
@@ -892,7 +869,6 @@ export default function EditBorrowerPage() {
                     value={form.contact_number}
                     onChange={(e) => update("contact_number", e.target.value)}
                   />
-                  {fieldError("contact_number")}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -903,7 +879,6 @@ export default function EditBorrowerPage() {
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
                   />
-                  {fieldError("email")}
                 </div>
               </div>
 
@@ -917,7 +892,6 @@ export default function EditBorrowerPage() {
                   value={form.address}
                   onChange={(e) => update("address", e.target.value)}
                 />
-                {fieldError("address")}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -940,7 +914,6 @@ export default function EditBorrowerPage() {
                     value={form.city}
                     onChange={(e) => update("city", e.target.value)}
                   />
-                  {fieldError("city")}
                 </div>
               </div>
 
@@ -954,7 +927,6 @@ export default function EditBorrowerPage() {
                   value={form.province}
                   onChange={(e) => update("province", e.target.value)}
                 />
-                {fieldError("province")}
               </div>
             </CardContent>
           </Card>
@@ -1180,7 +1152,6 @@ export default function EditBorrowerPage() {
                   value={form.monthly_income}
                   onChange={(e) => update("monthly_income", e.target.value)}
                 />
-                {fieldError("monthly_income")}
               </div>
             </CardContent>
           </Card>

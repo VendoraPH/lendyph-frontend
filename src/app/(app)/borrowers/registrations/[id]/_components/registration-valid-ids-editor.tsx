@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { Plus, Trash2, Upload, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +75,6 @@ interface Props {
 }
 
 export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // Track every blob URL we mint via URL.createObjectURL so we can revoke them
   // on replace / revert / draft removal / unmount. Without this, each picked
@@ -110,17 +110,11 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const errKey = `${key}-${side}`;
     const result = validateUploadFile(file, ID_MIME_TYPES);
     if (!result.ok) {
-      setErrors((prev) => ({ ...prev, [errKey]: result.error ?? "Invalid file." }));
+      toast.error(result.error ?? "Invalid file.");
       return;
     }
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[errKey];
-      return next;
-    });
     const draft = drafts.find((d) => d.key === key);
     const previousPreview =
       side === "front" ? draft?.front_preview : draft?.back_preview;
@@ -313,11 +307,6 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
                         onChange={(e) => handlePick(d.key, side, e)}
                       />
                     </div>
-                    {errors[errKey] && (
-                      <p className="text-[11px] text-destructive">
-                        {errors[errKey]}
-                      </p>
-                    )}
                   </div>
                 );
               })}

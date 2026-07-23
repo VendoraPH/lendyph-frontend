@@ -53,6 +53,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyValidation } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -363,12 +364,11 @@ function RoleFormDialog({
   }
 
   function handleSave() {
-    if (!label.trim()) {
-      toast.error("Role name is required");
-      return;
-    }
-    if (!description.trim()) {
-      toast.error("Description is required");
+    const missing: string[] = [];
+    if (!label.trim()) missing.push("Role name");
+    if (!description.trim()) missing.push("Description");
+    if (missing.length > 0) {
+      notifyValidation(missing);
       return;
     }
     const key = isEdit && role ? role.key : slugify(label);

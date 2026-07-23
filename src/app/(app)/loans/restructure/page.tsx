@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { notifyError, notifyValidation } from "@/lib/notify";
 import {
   ArrowLeft,
   CalendarIcon,
@@ -554,20 +555,6 @@ function RestructureLoanInner() {
     return null;
   }, [termMonths, term, selectedProduct]);
 
-  const canSubmit =
-    formVisible &&
-    borrowerId !== null &&
-    sourceLoanId !== null &&
-    productId !== null &&
-    principal > 0 &&
-    !principalError &&
-    term > 0 &&
-    !termError &&
-    paymentFrequency !== null &&
-    interestType !== null &&
-    rate > 0 &&
-    restructureDate !== undefined;
-
   // ── Handlers ──
   const handleBorrowerChange = useCallback((id: number | null) => {
     setBorrowerId(id);
@@ -611,7 +598,23 @@ function RestructureLoanInner() {
   );
 
   const handleSubmit = async () => {
-    if (!canSubmit || !restructureDate || !sourceLoanId || !borrowerId) return;
+    // Collect every field the user still needs to fix and surface them in a
+    // single consolidated pop-up instead of inline red messages.
+    const missing: string[] = [];
+    if (borrowerId === null) missing.push("Borrower");
+    if (sourceLoanId === null) missing.push("Source loan");
+    if (productId === null) missing.push("Loan product");
+    if (!(principal > 0) || principalError) missing.push("Principal amount");
+    if (!(term > 0) || termError) missing.push("Term");
+    if (paymentFrequency === null) missing.push("Payment frequency");
+    if (interestType === null) missing.push("Interest type");
+    if (!(rate > 0)) missing.push("Interest rate");
+    if (restructureDate === undefined) missing.push("Restructure date");
+    if (missing.length > 0) {
+      notifyValidation(missing);
+      return;
+    }
+    if (!restructureDate || !sourceLoanId || !borrowerId) return;
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
@@ -653,12 +656,7 @@ function RestructureLoanInner() {
       });
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } };
-      if (axiosErr?.response?.status === 422) {
-        toast.error(axiosErr.response?.data?.message ?? "Validation error. Please check your inputs.");
-      } else {
-        toast.error("Failed to submit restructure application.");
-      }
+      notifyError(err, "We couldn't restructure this loan. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -998,9 +996,6 @@ function RestructureLoanInner() {
                       value={principalAmount}
                       onChange={(e) => setPrincipalAmount(e.target.value)}
                     />
-                    {principalError && (
-                      <p className="text-xs text-red-500">{principalError}</p>
-                    )}
                   </div>
 
                   {/* Term */}
@@ -1013,7 +1008,6 @@ function RestructureLoanInner() {
                       value={termMonths}
                       onChange={(e) => setTermMonths(e.target.value)}
                     />
-                    {termError && <p className="text-xs text-red-500">{termError}</p>}
                   </div>
 
                   {/* Payment Frequency */}
@@ -1430,7 +1424,7 @@ function RestructureLoanInner() {
                 Cancel
               </Button>
               <Button
-                disabled={!canSubmit || submitting}
+                disabled={submitting}
                 onClick={handleSubmit}
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               >
