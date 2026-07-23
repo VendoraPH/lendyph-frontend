@@ -178,7 +178,7 @@ export default function BorrowersPage() {
       const res = await borrowerService.list();
       setBorrowers(Array.isArray(res) ? res : res.data ?? []);
     } catch {
-      toast.error("Failed to load borrowers");
+      toast.error("We couldn't load the borrowers. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -252,21 +252,21 @@ export default function BorrowersPage() {
         await borrowerService.reactivate(id);
       }
       toast.success(
-        `Borrower ${borrower.status === "active" ? "deactivated" : "reactivated"} successfully`
+        `Borrower ${borrower.status === "active" ? "deactivated" : "reactivated"}`
       );
       fetchBorrowers();
     } catch {
-      toast.error("Failed to update borrower status");
+      toast.error("We couldn't update the borrower status. Please try again.");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await borrowerService.delete(id);
-      toast.success("Borrower deleted successfully");
+      toast.success("Borrower deleted");
       fetchBorrowers();
     } catch {
-      toast.error("Failed to delete borrower");
+      toast.error("We couldn't delete the borrower. Please try again.");
     }
   };
 
@@ -276,7 +276,7 @@ export default function BorrowersPage() {
       toast.success(`${ids.length} borrower(s) deactivated`);
       fetchBorrowers();
     } catch {
-      toast.error("Failed to deactivate some borrowers");
+      toast.error("We couldn't deactivate some borrowers. Please try again.");
     }
   };
 
@@ -286,7 +286,7 @@ export default function BorrowersPage() {
       toast.success(`${ids.length} borrower(s) deleted`);
       fetchBorrowers();
     } catch {
-      toast.error("Failed to delete some borrowers");
+      toast.error("We couldn't delete some borrowers. Please try again.");
     }
   };
 

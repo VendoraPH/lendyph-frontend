@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
@@ -89,7 +90,7 @@ export default function RegistrationReviewPage() {
       toast.success("Registration approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch {
-      toast.error("Failed to approve registration. Please try again.");
+      toast.error("We couldn't approve the registration. Please try again.");
     } finally {
       setApproving(false);
     }
@@ -175,16 +176,7 @@ export default function RegistrationReviewPage() {
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
-      // Prefer the thrown message (covers the CORS-blocked refetch warning
-      // from syncValidIds) and fall back to a server message or generic.
-      const axiosMsg =
-        err instanceof AxiosError
-          ? (err.response?.data as { message?: string } | undefined)?.message
-          : undefined;
-      const customMsg = err instanceof Error ? err.message : undefined;
-      toast.error(
-        customMsg || axiosMsg || "Failed to save and approve. Please try again."
-      );
+      notifyError(err, "We couldn't save and approve this registration. Please try again.");
     } finally {
       setSavingEdit(false);
     }

@@ -51,7 +51,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
       setRemoveConfirmOpen(false);
       onPhotoUpdate?.();
     } catch {
-      toast.error("Failed to remove photo");
+      toast.error("We couldn't remove the photo. Please try again.");
     } finally {
       setRemoving(false);
     }
@@ -73,7 +73,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
       toast.success("Photo updated");
       onPhotoUpdate?.();
     } catch {
-      toast.error("Failed to upload photo");
+      toast.error("We couldn't upload the photo. Please try again.");
     }
     setCropDialogOpen(false);
     setSelectedFile(null);

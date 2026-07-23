@@ -103,7 +103,7 @@ export function CoMakerDocumentsDialog({
       toast.success("Document uploaded");
       fetchDocuments();
     } catch {
-      toast.error("Failed to upload document");
+      toast.error("We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -117,7 +117,7 @@ export function CoMakerDocumentsDialog({
       toast.success("Document deleted");
       setDocuments((prev) => prev.filter((d) => d.id !== id));
     } catch {
-      toast.error("Failed to delete document");
+      toast.error("We couldn't delete this document. Please try again.");
     } finally {
       setDeleting(null);
     }

@@ -72,10 +72,10 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       formData.append("type", file.name.split(".").pop()?.toUpperCase() || "FILE");
       formData.append("label", file.name);
       await documentService.borrowerUpload(borrowerId, formData);
-      toast.success("Document uploaded successfully");
+      toast.success("Document uploaded");
       fetchData();
     } catch {
-      toast.error("Failed to upload document");
+      toast.error("We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -89,7 +89,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       toast.success("Document deleted");
       setDocuments((prev) => prev.filter((d) => d.id !== id));
     } catch {
-      toast.error("Failed to delete document");
+      toast.error("We couldn't delete this document. Please try again.");
     } finally {
       setDeletingDoc(null);
     }
@@ -102,7 +102,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       toast.success("Valid ID deleted");
       setValidIds((prev) => prev.filter((v) => v.id !== id));
     } catch {
-      toast.error("Failed to delete valid ID");
+      toast.error("We couldn't delete this valid ID. Please try again.");
     } finally {
       setDeletingValidId(null);
     }

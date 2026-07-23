@@ -51,7 +51,7 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
       setSubsidiary(payload ?? {});
       toast.success("Subsidiary ledger loaded");
     } catch {
-      toast.error("Failed to load subsidiary ledger");
+      toast.error("We couldn't load the subsidiary ledger. Please try again.");
       setSubsidiary(null);
     } finally {
       setSubsidiaryLoading(false);

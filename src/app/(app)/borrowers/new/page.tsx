@@ -574,13 +574,13 @@ export default function NewBorrowerPage() {
             if (entry.back_file) idData.append("back_file", entry.back_file);
             await borrowerService.uploadValidId(borrowerId, idData);
           } catch {
-            toast.error(`Failed to upload ${entry.type} ID`);
+            toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
           }
         }
       }
 
       setDuplicateMatch(null);
-      toast.success("Member created successfully");
+      toast.success("Member created");
       router.push("/borrowers");
     } catch (err: unknown) {
       const apiError = err as {

@@ -193,7 +193,7 @@ export default function EditBorrowerPage() {
           : ((branchRes as unknown as { data?: ApiBranch[] }).data ?? []);
         setBranches(list.filter((br) => br.is_active));
       } catch {
-        if (!cancelled) toast.error("Failed to load member details");
+        if (!cancelled) toast.error("We couldn't load the member details. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -446,11 +446,11 @@ export default function EditBorrowerPage() {
           if (entry.back_file) idData.append("back_file", entry.back_file);
           await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
         } catch {
-          toast.error(`Failed to upload ${entry.type} ID`);
+          toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
         }
       }
 
-      toast.success("Member updated successfully");
+      toast.success("Member updated");
       router.push(`/borrowers/${borrowerId}`);
     } catch (err: unknown) {
       notifyError(err, "We couldn't save your changes. Please check the details and try again.");
