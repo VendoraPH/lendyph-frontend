@@ -27,7 +27,7 @@ export function useGCashTiers(): UseGCashTiersResult {
       safe.sort((a, b) => a.display_order - b.display_order);
       setTiers(safe);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tiers");
+      setError(err instanceof Error ? err.message : "We couldn't load the tiers. Please try again.");
     } finally {
       setLoading(false);
     }

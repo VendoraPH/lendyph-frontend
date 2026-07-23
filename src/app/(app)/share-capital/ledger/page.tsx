@@ -203,7 +203,7 @@ export default function SubsidiaryLedgerPage() {
       const entries = Array.isArray(res) ? res : Array.isArray(res.data) ? res.data : [];
       setLedgerData(entries.map(toLedgerEntry));
     } catch {
-      toast.error("Failed to load ledger data");
+      toast.error("We couldn't load the ledger data. Please try again.");
     } finally {
       setLoading(false);
     }

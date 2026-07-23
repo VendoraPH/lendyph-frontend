@@ -145,7 +145,7 @@ export default function CollateralListingPage() {
       setCollaterals(enriched);
       setTypes(typeRows);
     } catch {
-      toast.error("Failed to load collaterals");
+      toast.error("We couldn't load the collaterals. Please try again.");
     } finally {
       setLoading(false);
     }

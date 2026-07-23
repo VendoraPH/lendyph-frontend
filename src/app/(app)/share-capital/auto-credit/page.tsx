@@ -84,7 +84,7 @@ export default function AutoCreditPage() {
         if (runDate) setLastRun(new Date(runDate).toLocaleString("en-PH"));
       }
     } catch {
-      toast.error("Failed to load auto-credit status");
+      toast.error("We couldn't load the auto-credit status. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -114,7 +114,7 @@ export default function AutoCreditPage() {
       );
       fetchStatus();
     } catch {
-      toast.error("Failed to process auto-credit");
+      toast.error("We couldn't process auto-credit. Please try again.");
     } finally {
       setProcessing(false);
     }

@@ -90,7 +90,7 @@ export function CollateralForm({ initial, mode }: Props) {
         setTypes(tRes.filter((t) => t.is_visible));
       })
       .catch(() => {
-        if (!cancelled) toast.error("Failed to load form data");
+        if (!cancelled) toast.error("We couldn't load the form data. Please try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
