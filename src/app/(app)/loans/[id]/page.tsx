@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, use, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -1759,7 +1760,7 @@ export default function LoanDetailPage({
       setApprovalRemarks("");
       setApproveOpen(false);
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to approve loan"));
+      notifyError(err, "We couldn't approve this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1777,7 +1778,7 @@ export default function LoanDetailPage({
       setRejectionRemarks("");
       setRejectOpen(false);
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to reject loan"));
+      notifyError(err, "We couldn't reject this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1830,17 +1831,7 @@ export default function LoanDetailPage({
       }
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      let msg = "Failed to release loan";
-      if (err instanceof AxiosError) {
-        const data = err.response?.data as
-          | { message?: string; errors?: Record<string, string[]> }
-          | undefined;
-        const firstFieldError = data?.errors
-          ? Object.values(data.errors).flat()[0]
-          : undefined;
-        msg = firstFieldError || data?.message || msg;
-      }
-      toast.error(msg);
+      notifyError(err, "We couldn't release this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1967,7 +1958,7 @@ export default function LoanDetailPage({
         `Approved by ${currentStep.name}. Forwarded to ${nextStep?.name ?? "next step"}.`
       );
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to record approval"));
+      notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -2220,55 +2211,6 @@ export default function LoanDetailPage({
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
-  // Surface the actual backend error message from /loans/{id}/extend so the
-  // user sees the real reason (e.g. wrong status, no open period) instead of
-  // a generic "Failed to extend loan" toast. Maps documented status codes
-  // (401/403/404/422) to friendly text and falls back to the server's
-  // `message` / first `errors[*]` entry for unexpected statuses.
-  const extendErrorMessage = (err: unknown): string => {
-    if (err instanceof AxiosError) {
-      const status = err.response?.status;
-      const data = err.response?.data as
-        | { message?: string; errors?: Record<string, string[]> }
-        | undefined;
-      const firstFieldError = data?.errors
-        ? Object.values(data.errors).flat()[0]
-        : undefined;
-      const serverMsg = firstFieldError || data?.message;
-      if (status === 401)
-        return "Your session has expired. Please sign in again.";
-      if (status === 403)
-        return "You don't have permission to extend loans. Contact your administrator.";
-      if (status === 404)
-        return "Loan not found.";
-      if (status === 422)
-        return (
-          serverMsg ||
-          "This loan cannot be extended (must be an upon-maturity loan in released or ongoing status with an open period)."
-        );
-      if (serverMsg) return serverMsg;
-    }
-    return "Failed to extend loan. Please try again.";
-  };
-
-  const approvalErrorMessage = (err: unknown, fallback: string): string => {
-    if (err instanceof AxiosError) {
-      const status = err.response?.status;
-      const data = err.response?.data as
-        | { message?: string; errors?: Record<string, string[]> }
-        | undefined;
-      const firstFieldError = data?.errors
-        ? Object.values(data.errors).flat()[0]
-        : undefined;
-      const serverMsg = firstFieldError || data?.message;
-      if (status === 401) return "Your session has expired. Please sign in again.";
-      if (status === 403) return "You don't have permission to perform this action.";
-      if (status === 404) return "Loan not found.";
-      if (serverMsg) return serverMsg;
-    }
-    return fallback;
-  };
-
   const handleExtendLoan = async () => {
     setActionLoading(true);
     // Pay the interest due for the current period first — extending
@@ -2304,7 +2246,7 @@ export default function LoanDetailPage({
       // open so the user can see the error and retry; a retry will not
       // re-charge interest (extendInterestPaidRef is already true) and will
       // go straight to extend().
-      toast.error(extendErrorMessage(err));
+      notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       try {
         const updated = await loanService.detail(loan.id);
@@ -2347,7 +2289,7 @@ export default function LoanDetailPage({
       // Keep the extension/adjustment history in sync without a reload.
       fetchAdjustments(loan.id);
     } catch (err) {
-      toast.error(extendErrorMessage(err));
+      notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }

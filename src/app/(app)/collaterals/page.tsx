@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import {
   ShieldCheck,
   Plus,
@@ -222,8 +223,7 @@ export default function CollateralListingPage() {
       setDeleting(null);
       await loadAll();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to delete";
-      toast.error(msg);
+      notifyError(err, "We couldn't delete this collateral. Please try again.");
     } finally {
       setDeleteSubmitting(false);
     }

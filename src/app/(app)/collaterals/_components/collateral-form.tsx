@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import {
   Popover,
   PopoverContent,
@@ -190,8 +191,7 @@ export function CollateralForm({ initial, mode }: Props) {
       }
       router.push("/collaterals");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to save";
-      toast.error(msg);
+      notifyError(err, "We couldn't save this collateral. Please try again.");
     } finally {
       setSubmitting(false);
     }

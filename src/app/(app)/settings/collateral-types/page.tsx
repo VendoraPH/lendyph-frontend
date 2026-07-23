@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import {
   ShieldCheck,
   Plus,
@@ -138,8 +139,7 @@ export default function CollateralTypesSettingsPage() {
       setFormOpen(false);
       await load();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to save";
-      toast.error(msg);
+      notifyError(err, "We couldn't save this collateral type. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -153,8 +153,7 @@ export default function CollateralTypesSettingsPage() {
       setDeleting(null);
       await load();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to delete";
-      toast.error(msg);
+      notifyError(err, "We couldn't delete this collateral type. Please try again.");
     }
   };
 

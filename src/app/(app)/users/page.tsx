@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
@@ -310,15 +311,8 @@ function AddUserDialog({
       resetForm();
       setOpen(false);
       onAdd();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
-      const apiErrors = err?.response?.data?.errors;
-      if (apiErrors) {
-        const firstError = Object.values(apiErrors)[0]?.[0];
-        toast.error(firstError || "Validation failed");
-      } else {
-        toast.error(err?.response?.data?.message || "Failed to create user");
-      }
+    } catch (err) {
+      notifyError(err, "We couldn't create this user. Please try again.");
     } finally {
       setSubmitting(false);
     }
