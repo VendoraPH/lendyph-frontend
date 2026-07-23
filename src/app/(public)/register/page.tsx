@@ -18,7 +18,14 @@ import { registrationService } from "@/services/registration.service";
 import { usePublicBranches } from "@/hooks/use-public-branches";
 import { compressImage } from "@/lib/image-compress";
 import { getErrorMessage } from "@/lib/api-error";
+import { isAlreadyRegisteredError } from "@/lib/duplicate-error";
 import { notifyError, notifyValidation } from "@/lib/notify";
+
+// Shown when the backend rejects the submission because this applicant is
+// already on file. A public applicant has no session, so we can't tell a
+// pending registration from an active member — one clear message covers both.
+const ALREADY_REGISTERED_MESSAGE =
+  "It looks like you're already registered with us. If you've already applied, please wait for approval — or contact us if you're already a member.";
 
 const STEP_LABELS = [
   "Personal Info",
@@ -345,10 +352,17 @@ export default function RegisterPage() {
 
       router.push("/register/success");
     } catch (err) {
-      notifyError(
-        err,
-        "We couldn't submit your registration. Please check your connection and try again."
-      );
+      // "Already on file" is the most common — and most confusing — rejection.
+      // Surface a clear, friendly message instead of the raw duplicate copy
+      // (which the leak guard strips down to a vague validation notice).
+      if (isAlreadyRegisteredError(err)) {
+        toast.error(ALREADY_REGISTERED_MESSAGE);
+      } else {
+        notifyError(
+          err,
+          "We couldn't submit your registration. Please check your connection and try again."
+        );
+      }
     } finally {
       setSubmitting(false);
     }

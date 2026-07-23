@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { isDuplicateNameMessage } from "@/lib/duplicate-error";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -527,11 +528,6 @@ export default function NewBorrowerPage() {
     };
   }
 
-  function isDuplicateError(message?: string): boolean {
-    if (!message) return false;
-    return /similar borrower|force=true|already exists/i.test(message);
-  }
-
   async function submitBorrower(force: boolean) {
     if (force) setCreatingAnyway(true);
     else setSubmitting(true);
@@ -597,7 +593,7 @@ export default function NewBorrowerPage() {
       // Duplicate detection: surface as a dedicated dialog with a "Create
       // Anyway" button that retries with force=true. Don't dump the raw
       // "Pass force=true" line into the form errors — that's internal.
-      if (!force && apiError?.response?.status === 422 && isDuplicateError(firstMessage)) {
+      if (!force && apiError?.response?.status === 422 && isDuplicateNameMessage(firstMessage)) {
         setDuplicateMatch({ ...parseDuplicateMessage(firstMessage!), rawMessage: firstMessage! });
         return;
       }
