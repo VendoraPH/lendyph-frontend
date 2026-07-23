@@ -15,13 +15,12 @@ export interface StepTwoData {
 
 interface Props {
   data: StepTwoData;
-  errors: Partial<Record<keyof StepTwoData, string>>;
   onChange: <K extends keyof StepTwoData>(field: K, value: StepTwoData[K]) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
-export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
+export function StepContact({ data, onChange, onNext, onBack }: Props) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -35,11 +34,7 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
             placeholder="09XXXXXXXXX"
             value={data.contact_number}
             onChange={(e) => onChange("contact_number", e.target.value)}
-            className={errors.contact_number ? "border-destructive" : ""}
           />
-          {errors.contact_number && (
-            <p className="text-xs text-destructive">{errors.contact_number}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
@@ -49,11 +44,7 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
             placeholder="name@example.com"
             value={data.email}
             onChange={(e) => onChange("email", e.target.value)}
-            className={errors.email ? "border-destructive" : ""}
           />
-          {errors.email && (
-            <p className="text-xs text-destructive">{errors.email}</p>
-          )}
         </div>
       </div>
 
@@ -66,11 +57,7 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
           placeholder="House/Lot/Block number, Street name"
           value={data.address}
           onChange={(e) => onChange("address", e.target.value)}
-          className={errors.address ? "border-destructive" : ""}
         />
-        {errors.address && (
-          <p className="text-xs text-destructive">{errors.address}</p>
-        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -92,11 +79,7 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
             placeholder="City name"
             value={data.city}
             onChange={(e) => onChange("city", e.target.value)}
-            className={errors.city ? "border-destructive" : ""}
           />
-          {errors.city && (
-            <p className="text-xs text-destructive">{errors.city}</p>
-          )}
         </div>
       </div>
 
@@ -109,11 +92,7 @@ export function StepContact({ data, errors, onChange, onNext, onBack }: Props) {
           placeholder="Province"
           value={data.province}
           onChange={(e) => onChange("province", e.target.value)}
-          className={errors.province ? "border-destructive" : ""}
         />
-        {errors.province && (
-          <p className="text-xs text-destructive">{errors.province}</p>
-        )}
       </div>
 
       <div className="flex items-center justify-between pt-4 border-t border-border">
