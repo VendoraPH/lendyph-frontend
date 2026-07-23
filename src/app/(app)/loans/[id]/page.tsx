@@ -1010,7 +1010,7 @@ export default function LoanDetailPage({
         const enriched = await enrichLoanProduct(data);
         if (!cancelled) setLoan(enriched);
       } catch {
-        if (!cancelled) toast.error("Failed to load loan details");
+        if (!cancelled) toast.error("We couldn't load the loan details. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1057,10 +1057,10 @@ export default function LoanDetailPage({
     try {
       await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
       setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
-      toast.success("Account Officer updated");
+      toast.success("Account officer updated");
       setAoEditing(false);
     } catch {
-      toast.error("Failed to update Account Officer");
+      toast.error("We couldn't update the account officer. Please try again.");
     } finally {
       setAoSaving(false);
     }
@@ -1743,7 +1743,7 @@ export default function LoanDetailPage({
       toast.success("Loan submitted for review");
       setSubmitOpen(false);
     } catch {
-      toast.error("Failed to submit loan for review");
+      toast.error("We couldn't submit the loan for review. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1807,7 +1807,7 @@ export default function LoanDetailPage({
       // net_proceeds, and embedded relations).
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan released successfully");
+      toast.success("Loan released");
       setReleaseOpen(false);
       setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
       setAutoPayIsPostRelease(true);
@@ -1908,7 +1908,7 @@ export default function LoanDetailPage({
       setStepRemarks("");
       toast.success("Submitted for review. Forwarded to Manager.");
     } catch {
-      toast.error("Failed to submit for review");
+      toast.error("We couldn't submit for review. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -2048,7 +2048,7 @@ export default function LoanDetailPage({
         `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
     } catch {
-      toast.error("Failed to send back for revision");
+      toast.error("We couldn't send this back for revision. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -2113,7 +2113,7 @@ export default function LoanDetailPage({
         relationship_to_borrower: "",
       });
     } catch {
-      toast.error("Failed to add co-maker");
+      toast.error("We couldn't add the co-maker. Please try again.");
     } finally {
       setAddingCoMaker(false);
     }
@@ -2166,7 +2166,7 @@ export default function LoanDetailPage({
       ]);
       return true;
     } catch {
-      toast.error("Failed to record payment");
+      toast.error("We couldn't record the payment. Please try again.");
       return false;
     } finally {
       setActionLoading(false);
@@ -2228,7 +2228,7 @@ export default function LoanDetailPage({
         });
         extendInterestPaidRef.current = true;
       } catch {
-        toast.error("Failed to record the interest payment. Extension was not processed.");
+        toast.error("We couldn't record the interest payment. Extension was not processed.");
         setActionLoading(false);
         return;
       }
@@ -2316,10 +2316,10 @@ export default function LoanDetailPage({
         remarks: "[AUTO PAY]",
       });
       setAutoPayConfirmOpen(false);
-      toast.success("Auto pay processed successfully");
+      toast.success("Auto pay processed");
       router.push(`/payments/${repayment.id}`);
     } catch {
-      toast.error("Failed to process auto pay");
+      toast.error("We couldn't process auto pay. Please try again.");
     } finally {
       setAutoPayProcessing(false);
     }
@@ -2337,7 +2337,7 @@ export default function LoanDetailPage({
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
     } catch {
-      toast.error("Failed to void payment");
+      toast.error("We couldn't void the payment. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2351,7 +2351,7 @@ export default function LoanDetailPage({
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
     } catch {
-      toast.error("Failed to void loan");
+      toast.error("We couldn't void the loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2397,7 +2397,7 @@ export default function LoanDetailPage({
       setAdjPenaltyAmount("");
       fetchAdjustments(loan.id);
     } catch {
-      toast.error("Failed to create adjustment");
+      toast.error("We couldn't create the adjustment. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2423,7 +2423,7 @@ export default function LoanDetailPage({
       }
       fetchAdjustments(loan.id);
     } catch {
-      toast.error(`Failed to ${action} adjustment`);
+      toast.error(`We couldn't ${action} the adjustment. Please try again.`);
     } finally {
       setActionLoading(false);
     }
@@ -2442,7 +2442,7 @@ export default function LoanDetailPage({
         : res) as Record<string, unknown> | null;
       setSoaData(payload ?? {});
     } catch {
-      toast.error("Failed to fetch statement of account");
+      toast.error("We couldn't load the statement of account. Please try again.");
       setSoaData(null);
     } finally {
       setSoaLoading(false);
@@ -2570,7 +2570,7 @@ export default function LoanDetailPage({
       toast.success(`${type === "disclosure" ? "Disclosure Statement" : "Promissory Note"} opened`);
     } catch (err) {
       console.error("Document generation error:", err);
-      toast.error(`Failed to generate ${type === "disclosure" ? "disclosure statement" : "promissory note"}`);
+      notifyError(err, `We couldn't generate the ${type === "disclosure" ? "disclosure statement" : "promissory note"}. Please try again.`);
     } finally {
       setDocLoading(null);
     }

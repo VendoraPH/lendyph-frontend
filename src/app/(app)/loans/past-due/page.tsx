@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -280,7 +280,7 @@ export default function PastDueLoansPage() {
       setLoans(aggregateByLoan(mapped));
     } catch (err) {
       console.error("Failed to load past-due loans:", err);
-      toast.error("Failed to load past due loans");
+      notifyError(err, "We couldn't load past due loans. Please try again.");
       setLoans([]);
     } finally {
       setLoading(false);

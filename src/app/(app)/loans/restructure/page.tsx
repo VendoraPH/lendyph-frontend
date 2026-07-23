@@ -305,7 +305,7 @@ function RestructureLoanInner() {
       loanService.summary(sourceLoanId),
     ]).then(([loanRes, summaryRes]) => {
       if (loanRes.status !== "fulfilled") {
-        toast.error("Failed to load loan details");
+        toast.error("We couldn't load the loan details. Please try again.");
         setLoadingLoanDetail(false);
         return;
       }
@@ -651,7 +651,7 @@ function RestructureLoanInner() {
         toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
       }
 
-      toast.success("Restructure Application Submitted", {
+      toast.success("Restructure application submitted", {
         description: "Forwarded to Manager for approval.",
       });
       router.push(`/loans/${newLoan.id}`);

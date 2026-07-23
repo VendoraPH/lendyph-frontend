@@ -376,7 +376,7 @@ function NewLoanApplicationInner() {
           : (borrowersResult.value as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
       } else {
-        toast.error("Failed to load members");
+        toast.error("We couldn't load members. Please try again.");
       }
 
       let productsList: LoanProduct[] = [];
@@ -386,7 +386,7 @@ function NewLoanApplicationInner() {
           : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
         setProducts(productsList);
       } else {
-        toast.error("Failed to load loan products");
+        toast.error("We couldn't load loan products. Please try again.");
       }
 
       if (usersResult.status === "fulfilled") {
@@ -429,7 +429,7 @@ function NewLoanApplicationInner() {
             setPolicyExceptionDetails(loan.policy_exception_details ?? "");
           }
         } else {
-          toast.error("Failed to load loan — redirecting");
+          toast.error("We couldn't load this loan. Redirecting…");
           router.push(`/loans/${editLoanId}`);
         }
       }
@@ -977,10 +977,10 @@ function NewLoanApplicationInner() {
         );
       }
 
-      toast.success("Loan Application Created", {
+      toast.success("Loan application created", {
         description: forwarded
           ? "Forwarded to Manager for approval."
-          : "Loan application has been created successfully.",
+          : "Loan application has been created.",
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
