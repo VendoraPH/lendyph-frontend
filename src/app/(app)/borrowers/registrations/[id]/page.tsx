@@ -68,7 +68,7 @@ export default function RegistrationReviewPage() {
           setValidIds([]);
         }
       } catch {
-        setLoadError("Failed to load registration. It may have been processed already.");
+        setLoadError("We couldn't load this registration. It may have been processed already.");
       } finally {
         setLoading(false);
       }
