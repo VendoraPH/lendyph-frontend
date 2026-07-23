@@ -396,7 +396,7 @@ export default function RegisterPage() {
       {/* Logo bar */}
       <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
-          <BrandLogo className="h-16 w-auto" />
+          <BrandLogo className="h-28 sm:h-36 w-auto" />
         </div>
       </div>
 
