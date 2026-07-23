@@ -307,7 +307,7 @@ function AddUserDialog({
         branch_id: form.branch_id as number,
         role: form.role,
       });
-      toast.success("User created successfully");
+      toast.success("User created");
       resetForm();
       setOpen(false);
       onAdd();
@@ -514,11 +514,11 @@ function EditUserDialog({
         branch_id: form.branch_id as number,
         role: form.role,
       });
-      toast.success("User updated successfully");
+      toast.success("User updated");
       onOpenChange(false);
       onSave();
     } catch {
-      toast.error("Failed to update user");
+      toast.error("We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -647,12 +647,12 @@ function ResetPasswordDialog({
         password,
         password_confirmation: confirm,
       });
-      toast.success("Password reset successfully");
+      toast.success("Password reset");
       setPassword("");
       setConfirm("");
       onOpenChange(false);
     } catch {
-      toast.error("Failed to reset password");
+      toast.error("We couldn't reset the password. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -739,16 +739,18 @@ function ToggleStatusDialog({
     try {
       if (isActive) {
         await userService.deactivate(user.id);
-        toast.success("User deactivated successfully");
+        toast.success("User deactivated");
       } else {
         await userService.reactivate(user.id);
-        toast.success("User reactivated successfully");
+        toast.success("User reactivated");
       }
       onOpenChange(false);
       onConfirm();
     } catch {
       toast.error(
-        isActive ? "Failed to deactivate user" : "Failed to reactivate user"
+        isActive
+          ? "We couldn't deactivate the user. Please try again."
+          : "We couldn't reactivate the user. Please try again."
       );
     } finally {
       setSubmitting(false);
@@ -907,7 +909,7 @@ export default function UsersPage() {
       setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
       setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
     } catch {
-      toast.error("Failed to load data");
+      toast.error("We couldn't load the data. Please try again.");
     } finally {
       setLoading(false);
     }

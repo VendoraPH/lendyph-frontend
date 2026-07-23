@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
@@ -444,7 +445,7 @@ export default function PaymentHistoryPage() {
     } catch (err) {
       console.error("Failed to load payment history", err);
       setPayments([]);
-      toast.error("Failed to load payment history");
+      notifyError(err, "We couldn't load the payment history. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -505,7 +506,7 @@ export default function PaymentHistoryPage() {
       toast.success("Payment voided");
       fetchPayments();
     } catch {
-      toast.error("Failed to void payment");
+      toast.error("We couldn't void the payment. Please try again.");
     }
   };
 

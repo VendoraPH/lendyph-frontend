@@ -178,7 +178,7 @@ export default function PaymentReceiptPage({
       setReceipt(mapPaymentToReceipt(repayment));
     } catch {
       setNotFound(true);
-      toast.error("Failed to load receipt");
+      toast.error("We couldn't load the receipt. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -193,12 +193,12 @@ export default function PaymentReceiptPage({
     setVoiding(true);
     try {
       await repaymentService.void(receipt.id, { void_reason: voidReason.trim() });
-      toast.success("Payment voided successfully");
+      toast.success("Payment voided");
       setShowVoidConfirm(false);
       setVoidReason("");
       fetchReceipt();
     } catch {
-      toast.error("Failed to void payment");
+      toast.error("We couldn't void the payment. Please try again.");
     } finally {
       setVoiding(false);
     }
