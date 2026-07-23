@@ -89,7 +89,7 @@ export default function CollateralTypesSettingsPage() {
       const rows = await collateralTypeService.list();
       setTypes(rows);
     } catch {
-      toast.error("Failed to load collateral types");
+      toast.error("We couldn't load the collateral types. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -162,7 +162,7 @@ export default function CollateralTypesSettingsPage() {
       await collateralTypeService.update(t.id, { is_visible: !t.is_visible });
       await load();
     } catch {
-      toast.error("Failed to update visibility");
+      toast.error("We couldn't update the visibility. Please try again.");
     }
   };
 
@@ -175,7 +175,7 @@ export default function CollateralTypesSettingsPage() {
       await collateralTypeService.reorder(next.map((t) => t.id));
       setTypes(next.map((t, i) => ({ ...t, display_order: i + 1 })));
     } catch {
-      toast.error("Failed to reorder");
+      toast.error("We couldn't reorder the collateral types. Please try again.");
     }
   };
 

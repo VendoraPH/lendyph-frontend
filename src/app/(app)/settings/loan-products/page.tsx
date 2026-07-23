@@ -1272,7 +1272,7 @@ export default function LoanProductsPage() {
       const res = await loanProductService.list();
       setProducts(Array.isArray(res) ? res : (res as unknown as { data: LoanProduct[] }).data ?? []);
     } catch {
-      toast.error("Failed to load loan products");
+      toast.error("We couldn't load the loan products. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -1315,7 +1315,7 @@ export default function LoanProductsPage() {
       toast.success(product.is_active ? "Product deactivated" : "Product activated");
       fetchProducts();
     } catch {
-      toast.error("Failed to update product status");
+      toast.error("We couldn't update the product status. Please try again.");
     }
   };
 
@@ -1325,7 +1325,7 @@ export default function LoanProductsPage() {
       toast.success("Loan product deleted");
       fetchProducts();
     } catch {
-      toast.error("Failed to delete loan product");
+      toast.error("We couldn't delete the loan product. Please try again.");
     }
   };
 

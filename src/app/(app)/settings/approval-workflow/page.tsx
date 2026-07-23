@@ -47,6 +47,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -328,7 +329,7 @@ export default function ApprovalWorkflowPage() {
         }
 
         if (normalResult.status === "rejected" || peResult.status === "rejected") {
-          toast.error("Failed to load approval workflow");
+          toast.error("We couldn't load the approval workflow. Please try again.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -426,8 +427,7 @@ export default function ApprovalWorkflowPage() {
       }
       toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow saved`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save workflow";
-      toast.error(message);
+      notifyError(err, "We couldn't save the workflow. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -456,7 +456,7 @@ export default function ApprovalWorkflowPage() {
       }
       toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow reset to default`);
     } catch {
-      toast.error("Failed to reset workflow");
+      toast.error("We couldn't reset the workflow. Please try again.");
     } finally {
       setSaving(false);
       setResetConfirmOpen(false);

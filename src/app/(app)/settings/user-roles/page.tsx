@@ -600,7 +600,7 @@ export default function UserRolesPage() {
         : (res as unknown as { data: ApiRole[] })?.data ?? [];
       setRoles(list.map(apiRoleToItem));
     } catch {
-      toast.error("Failed to load roles");
+      toast.error("We couldn't load the roles. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -631,7 +631,7 @@ export default function UserRolesPage() {
         await maybeRefreshCurrentUser(item.key);
       }
     } catch {
-      toast.error(formMode === "create" ? "Failed to create role" : "Failed to update role");
+      toast.error(formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -651,7 +651,7 @@ export default function UserRolesPage() {
       await loadRoles();
       await maybeRefreshCurrentUser(role.key);
     } catch {
-      toast.error("Failed to update role status");
+      toast.error("We couldn't update the role status. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -668,7 +668,7 @@ export default function UserRolesPage() {
       await loadRoles();
       await maybeRefreshCurrentUser(affected);
     } catch {
-      toast.error("Failed to delete role");
+      toast.error("We couldn't delete the role. Please try again.");
     } finally {
       setActionLoading(false);
     }
