@@ -313,7 +313,7 @@ export default function AuditTrailPage() {
         setLogs([]);
       }
     } catch {
-      toast.error("Failed to load audit logs");
+      toast.error("We couldn't load the audit logs. Please try again.");
       setLogs([]);
     } finally {
       setLoading(false);
@@ -370,7 +370,7 @@ export default function AuditTrailPage() {
       URL.revokeObjectURL(url);
       toast.success("Audit logs exported");
     } catch {
-      toast.error("Failed to export audit logs");
+      toast.error("We couldn't export the audit logs. Please try again.");
     } finally {
       setExporting(false);
     }

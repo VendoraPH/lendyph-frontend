@@ -177,7 +177,7 @@ export default function LoansPage() {
         const data = Array.isArray(res) ? res : (res.data ?? []);
         setLoans(data);
       } catch {
-        if (!cancelled) toast.error("Failed to load loans");
+        if (!cancelled) toast.error("We couldn't load loans. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }

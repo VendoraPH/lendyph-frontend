@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError, notifyValidation } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,7 +106,6 @@ export default function NewBorrowerPage() {
   const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string[]>>({});
   // Surface the backend's Levenshtein/birthdate duplicate detection as a
   // confirmation dialog instead of leaking "Pass force=true to create
   // anyway" through the field-errors panel. See handleSubmit for wiring.
@@ -300,41 +300,34 @@ export default function NewBorrowerPage() {
 
   function update<K extends keyof BorrowerFormData>(field: K, value: BorrowerFormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    // Clear field error on change
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErrors({});
 
-    // Client-side validation
-    const clientErrors: Record<string, string[]> = {};
-    if (!form.first_name.trim()) clientErrors.first_name = ["First name is required"];
-    if (!form.last_name.trim()) clientErrors.last_name = ["Last name is required"];
-    if (!form.middle_name.trim()) clientErrors.middle_name = ["Middle name is required"];
-    if (!form.birthdate) clientErrors.birthdate = ["Birthdate is required"];
-    if (!form.gender) clientErrors.gender = ["Gender is required"];
-    if (!form.civil_status) clientErrors.civil_status = ["Civil status is required"];
-    if (!form.contact_number.trim()) clientErrors.contact_number = ["Contact number is required"];
-    if (!form.address.trim()) clientErrors.address = ["Street address is required"];
-    if (!form.city.trim()) clientErrors.city = ["City / Municipality is required"];
-    if (!form.province.trim()) clientErrors.province = ["Province is required"];
+    // A missing branch means the signed-in user isn't assigned to one — a
+    // configuration problem, not something the operator can fix on this form.
     if (!form.branch_id) {
-      clientErrors.branch_id = [
-        "Your account is not assigned to a branch. Contact an administrator.",
-      ];
+      toast.error("Your account is not assigned to a branch. Contact an administrator.");
+      return;
     }
 
-    if (Object.keys(clientErrors).length > 0) {
-      setErrors(clientErrors);
-      toast.error("Please fill in all required fields");
+    // Client-side validation — collect human labels for every empty required
+    // field and surface them in a single consolidated toast.
+    const missing: string[] = [];
+    if (!form.first_name.trim()) missing.push("First name");
+    if (!form.last_name.trim()) missing.push("Last name");
+    if (!form.middle_name.trim()) missing.push("Middle name");
+    if (!form.birthdate) missing.push("Date of birth");
+    if (!form.gender) missing.push("Gender");
+    if (!form.civil_status) missing.push("Civil status");
+    if (!form.contact_number.trim()) missing.push("Contact number");
+    if (!form.address.trim()) missing.push("Street address");
+    if (!form.city.trim()) missing.push("City / Municipality");
+    if (!form.province.trim()) missing.push("Province");
+
+    if (missing.length > 0) {
+      notifyValidation(missing);
       return;
     }
 
@@ -581,13 +574,13 @@ export default function NewBorrowerPage() {
             if (entry.back_file) idData.append("back_file", entry.back_file);
             await borrowerService.uploadValidId(borrowerId, idData);
           } catch {
-            toast.error(`Failed to upload ${entry.type} ID`);
+            toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
           }
         }
       }
 
       setDuplicateMatch(null);
-      toast.success("Member created successfully");
+      toast.success("Member created");
       router.push("/borrowers");
     } catch (err: unknown) {
       const apiError = err as {
@@ -609,25 +602,11 @@ export default function NewBorrowerPage() {
         return;
       }
 
-      if (data?.errors) {
-        setErrors(data.errors);
-        toast.error("Please fix the validation errors below");
-      } else if (data?.message) {
-        toast.error(data.message);
-      } else {
-        toast.error("Failed to create member");
-      }
+      notifyError(err, "We couldn't save this member. Please check the details and try again.");
     } finally {
       setSubmitting(false);
       setCreatingAnyway(false);
     }
-  }
-
-  function fieldError(field: string) {
-    if (!errors[field]?.length) return null;
-    return (
-      <p className="text-xs text-destructive mt-1">{errors[field]![0]}</p>
-    );
   }
 
   return (
@@ -780,7 +759,6 @@ export default function NewBorrowerPage() {
                   value={form.first_name}
                   onChange={(e) => update("first_name", e.target.value)}
                 />
-                {fieldError("first_name")}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="last_name">
@@ -792,7 +770,6 @@ export default function NewBorrowerPage() {
                   value={form.last_name}
                   onChange={(e) => update("last_name", e.target.value)}
                 />
-                {fieldError("last_name")}
               </div>
             </div>
 
@@ -807,7 +784,6 @@ export default function NewBorrowerPage() {
                   value={form.middle_name}
                   onChange={(e) => update("middle_name", e.target.value)}
                 />
-                {fieldError("middle_name")}
               </div>
               <div className="space-y-2">
                 <Label>Suffix</Label>
@@ -846,7 +822,6 @@ export default function NewBorrowerPage() {
                   value={form.birthdate}
                   onChange={(e) => update("birthdate", e.target.value)}
                 />
-                {fieldError("birthdate")}
               </div>
               <div className="space-y-2">
                 <Label>
@@ -866,7 +841,6 @@ export default function NewBorrowerPage() {
                     <span className="text-sm">Female</span>
                   </label>
                 </RadioGroup>
-                {fieldError("gender")}
               </div>
             </div>
 
@@ -977,7 +951,6 @@ export default function NewBorrowerPage() {
                   value={form.contact_number}
                   onChange={(e) => update("contact_number", e.target.value)}
                 />
-                {fieldError("contact_number")}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -988,7 +961,6 @@ export default function NewBorrowerPage() {
                   value={form.email}
                   onChange={(e) => update("email", e.target.value)}
                 />
-                {fieldError("email")}
               </div>
             </div>
 
@@ -1002,7 +974,6 @@ export default function NewBorrowerPage() {
                 value={form.address}
                 onChange={(e) => update("address", e.target.value)}
               />
-              {fieldError("address")}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1025,7 +996,6 @@ export default function NewBorrowerPage() {
                   value={form.city}
                   onChange={(e) => update("city", e.target.value)}
                 />
-                {fieldError("city")}
               </div>
             </div>
 
@@ -1039,7 +1009,6 @@ export default function NewBorrowerPage() {
                 value={form.province}
                 onChange={(e) => update("province", e.target.value)}
               />
-              {fieldError("province")}
             </div>
           </CardContent>
         </Card>
@@ -1257,7 +1226,6 @@ export default function NewBorrowerPage() {
                   value={form.monthly_income}
                   onChange={(e) => update("monthly_income", e.target.value)}
                 />
-                {fieldError("monthly_income")}
               </div>
 
               <div className="space-y-2">
@@ -1272,7 +1240,6 @@ export default function NewBorrowerPage() {
                   onChange={(e) => update("pledge_amount", e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">Share capital pledge. Defaults to ₱0 if left empty.</p>
-                {fieldError("pledge_amount")}
               </div>
             </div>
           </CardContent>

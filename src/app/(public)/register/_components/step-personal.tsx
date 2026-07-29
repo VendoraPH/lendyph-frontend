@@ -28,7 +28,6 @@ export interface StepOneData {
 
 interface Props {
   data: StepOneData;
-  errors: Partial<Record<keyof StepOneData, string>>;
   onChange: <K extends keyof StepOneData>(field: K, value: StepOneData[K]) => void;
   spouse: StepSpouseData;
   onSpouseChange: <K extends keyof StepSpouseData>(
@@ -40,7 +39,6 @@ interface Props {
 
 export function StepPersonal({
   data,
-  errors,
   onChange,
   spouse,
   onSpouseChange,
@@ -60,11 +58,7 @@ export function StepPersonal({
             placeholder="Juan"
             value={data.first_name}
             onChange={(e) => onChange("first_name", e.target.value)}
-            className={errors.first_name ? "border-destructive" : ""}
           />
-          {errors.first_name && (
-            <p className="text-xs text-destructive">{errors.first_name}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="last_name">
@@ -75,11 +69,7 @@ export function StepPersonal({
             placeholder="Santos"
             value={data.last_name}
             onChange={(e) => onChange("last_name", e.target.value)}
-            className={errors.last_name ? "border-destructive" : ""}
           />
-          {errors.last_name && (
-            <p className="text-xs text-destructive">{errors.last_name}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="middle_name">Middle Name</Label>
@@ -128,11 +118,7 @@ export function StepPersonal({
             type="date"
             value={data.birthdate}
             onChange={(e) => onChange("birthdate", e.target.value)}
-            className={errors.birthdate ? "border-destructive" : ""}
           />
-          {errors.birthdate && (
-            <p className="text-xs text-destructive">{errors.birthdate}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label>
@@ -160,9 +146,6 @@ export function StepPersonal({
               ))}
             </SelectContent>
           </Select>
-          {errors.civil_status && (
-            <p className="text-xs text-destructive">{errors.civil_status}</p>
-          )}
         </div>
       </div>
 
@@ -185,9 +168,6 @@ export function StepPersonal({
               <span className="text-sm">Female</span>
             </label>
           </RadioGroup>
-          {errors.gender && (
-            <p className="text-xs text-destructive">{errors.gender}</p>
-          )}
         </div>
         <div className="space-y-1.5">
           <Label>
@@ -231,9 +211,6 @@ export function StepPersonal({
               ))}
             </SelectContent>
           </Select>
-          {errors.branch_id && !branchesError && (
-            <p className="text-xs text-destructive">{errors.branch_id}</p>
-          )}
           {branchesError && (
             <p className="text-xs text-muted-foreground">
               Branch list is temporarily unavailable. You can continue — an admin

@@ -1,10 +1,13 @@
 import { AxiosError } from "axios";
+import { getErrorMessage } from "./api-error";
 
 interface ApiErrorBody {
   message?: string;
   errors?: Record<string, string[]>;
 }
 
+// GCash-specific friendly copy for a few domain cases, then falls through to the
+// shared getErrorMessage helper (status-code map + leak guard) for everything else.
 export function extractGCashErrorMessage(err: unknown): string {
   if (err instanceof AxiosError) {
     const status = err.response?.status;
@@ -19,14 +22,9 @@ export function extractGCashErrorMessage(err: unknown): string {
     if (status === 403) {
       return "You don't have permission to record GCash transactions.";
     }
-
-    if (body?.errors) {
-      const firstField = Object.keys(body.errors)[0];
-      const firstMsg = firstField && body.errors[firstField]?.[0];
-      if (firstMsg) return firstMsg;
-    }
-    if (body?.message) return body.message;
   }
-  if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  return getErrorMessage(
+    err,
+    "Something went wrong with that GCash action. Please try again."
+  );
 }

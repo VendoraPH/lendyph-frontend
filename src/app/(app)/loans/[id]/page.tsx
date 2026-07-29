@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, use, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -1009,7 +1010,7 @@ export default function LoanDetailPage({
         const enriched = await enrichLoanProduct(data);
         if (!cancelled) setLoan(enriched);
       } catch {
-        if (!cancelled) toast.error("Failed to load loan details");
+        if (!cancelled) toast.error("We couldn't load the loan details. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1056,10 +1057,10 @@ export default function LoanDetailPage({
     try {
       await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
       setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
-      toast.success("Account Officer updated");
+      toast.success("Account officer updated");
       setAoEditing(false);
     } catch {
-      toast.error("Failed to update Account Officer");
+      toast.error("We couldn't update the account officer. Please try again.");
     } finally {
       setAoSaving(false);
     }
@@ -1742,7 +1743,7 @@ export default function LoanDetailPage({
       toast.success("Loan submitted for review");
       setSubmitOpen(false);
     } catch {
-      toast.error("Failed to submit loan for review");
+      toast.error("We couldn't submit the loan for review. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1759,7 +1760,7 @@ export default function LoanDetailPage({
       setApprovalRemarks("");
       setApproveOpen(false);
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to approve loan"));
+      notifyError(err, "We couldn't approve this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1777,7 +1778,7 @@ export default function LoanDetailPage({
       setRejectionRemarks("");
       setRejectOpen(false);
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to reject loan"));
+      notifyError(err, "We couldn't reject this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1806,7 +1807,7 @@ export default function LoanDetailPage({
       // net_proceeds, and embedded relations).
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan released successfully");
+      toast.success("Loan released");
       setReleaseOpen(false);
       setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
       setAutoPayIsPostRelease(true);
@@ -1830,17 +1831,7 @@ export default function LoanDetailPage({
       }
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      let msg = "Failed to release loan";
-      if (err instanceof AxiosError) {
-        const data = err.response?.data as
-          | { message?: string; errors?: Record<string, string[]> }
-          | undefined;
-        const firstFieldError = data?.errors
-          ? Object.values(data.errors).flat()[0]
-          : undefined;
-        msg = firstFieldError || data?.message || msg;
-      }
-      toast.error(msg);
+      notifyError(err, "We couldn't release this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1917,7 +1908,7 @@ export default function LoanDetailPage({
       setStepRemarks("");
       toast.success("Submitted for review. Forwarded to Manager.");
     } catch {
-      toast.error("Failed to submit for review");
+      toast.error("We couldn't submit for review. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -1967,7 +1958,7 @@ export default function LoanDetailPage({
         `Approved by ${currentStep.name}. Forwarded to ${nextStep?.name ?? "next step"}.`
       );
     } catch (err) {
-      toast.error(approvalErrorMessage(err, "Failed to record approval"));
+      notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -2057,7 +2048,7 @@ export default function LoanDetailPage({
         `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
     } catch {
-      toast.error("Failed to send back for revision");
+      toast.error("We couldn't send this back for revision. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -2122,7 +2113,7 @@ export default function LoanDetailPage({
         relationship_to_borrower: "",
       });
     } catch {
-      toast.error("Failed to add co-maker");
+      toast.error("We couldn't add the co-maker. Please try again.");
     } finally {
       setAddingCoMaker(false);
     }
@@ -2175,7 +2166,7 @@ export default function LoanDetailPage({
       ]);
       return true;
     } catch {
-      toast.error("Failed to record payment");
+      toast.error("We couldn't record the payment. Please try again.");
       return false;
     } finally {
       setActionLoading(false);
@@ -2220,55 +2211,6 @@ export default function LoanDetailPage({
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
-  // Surface the actual backend error message from /loans/{id}/extend so the
-  // user sees the real reason (e.g. wrong status, no open period) instead of
-  // a generic "Failed to extend loan" toast. Maps documented status codes
-  // (401/403/404/422) to friendly text and falls back to the server's
-  // `message` / first `errors[*]` entry for unexpected statuses.
-  const extendErrorMessage = (err: unknown): string => {
-    if (err instanceof AxiosError) {
-      const status = err.response?.status;
-      const data = err.response?.data as
-        | { message?: string; errors?: Record<string, string[]> }
-        | undefined;
-      const firstFieldError = data?.errors
-        ? Object.values(data.errors).flat()[0]
-        : undefined;
-      const serverMsg = firstFieldError || data?.message;
-      if (status === 401)
-        return "Your session has expired. Please sign in again.";
-      if (status === 403)
-        return "You don't have permission to extend loans. Contact your administrator.";
-      if (status === 404)
-        return "Loan not found.";
-      if (status === 422)
-        return (
-          serverMsg ||
-          "This loan cannot be extended (must be an upon-maturity loan in released or ongoing status with an open period)."
-        );
-      if (serverMsg) return serverMsg;
-    }
-    return "Failed to extend loan. Please try again.";
-  };
-
-  const approvalErrorMessage = (err: unknown, fallback: string): string => {
-    if (err instanceof AxiosError) {
-      const status = err.response?.status;
-      const data = err.response?.data as
-        | { message?: string; errors?: Record<string, string[]> }
-        | undefined;
-      const firstFieldError = data?.errors
-        ? Object.values(data.errors).flat()[0]
-        : undefined;
-      const serverMsg = firstFieldError || data?.message;
-      if (status === 401) return "Your session has expired. Please sign in again.";
-      if (status === 403) return "You don't have permission to perform this action.";
-      if (status === 404) return "Loan not found.";
-      if (serverMsg) return serverMsg;
-    }
-    return fallback;
-  };
-
   const handleExtendLoan = async () => {
     setActionLoading(true);
     // Pay the interest due for the current period first — extending
@@ -2286,7 +2228,7 @@ export default function LoanDetailPage({
         });
         extendInterestPaidRef.current = true;
       } catch {
-        toast.error("Failed to record the interest payment. Extension was not processed.");
+        toast.error("We couldn't record the interest payment. Extension was not processed.");
         setActionLoading(false);
         return;
       }
@@ -2304,7 +2246,7 @@ export default function LoanDetailPage({
       // open so the user can see the error and retry; a retry will not
       // re-charge interest (extendInterestPaidRef is already true) and will
       // go straight to extend().
-      toast.error(extendErrorMessage(err));
+      notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       try {
         const updated = await loanService.detail(loan.id);
@@ -2347,7 +2289,7 @@ export default function LoanDetailPage({
       // Keep the extension/adjustment history in sync without a reload.
       fetchAdjustments(loan.id);
     } catch (err) {
-      toast.error(extendErrorMessage(err));
+      notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2374,10 +2316,10 @@ export default function LoanDetailPage({
         remarks: "[AUTO PAY]",
       });
       setAutoPayConfirmOpen(false);
-      toast.success("Auto pay processed successfully");
+      toast.success("Auto pay processed");
       router.push(`/payments/${repayment.id}`);
     } catch {
-      toast.error("Failed to process auto pay");
+      toast.error("We couldn't process auto pay. Please try again.");
     } finally {
       setAutoPayProcessing(false);
     }
@@ -2395,7 +2337,7 @@ export default function LoanDetailPage({
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
     } catch {
-      toast.error("Failed to void payment");
+      toast.error("We couldn't void the payment. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2409,7 +2351,7 @@ export default function LoanDetailPage({
       const updated = await loanService.detail(loan.id);
       setLoan(await resolveLoan(loan, updated));
     } catch {
-      toast.error("Failed to void loan");
+      toast.error("We couldn't void the loan. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2455,7 +2397,7 @@ export default function LoanDetailPage({
       setAdjPenaltyAmount("");
       fetchAdjustments(loan.id);
     } catch {
-      toast.error("Failed to create adjustment");
+      toast.error("We couldn't create the adjustment. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -2481,7 +2423,7 @@ export default function LoanDetailPage({
       }
       fetchAdjustments(loan.id);
     } catch {
-      toast.error(`Failed to ${action} adjustment`);
+      toast.error(`We couldn't ${action} the adjustment. Please try again.`);
     } finally {
       setActionLoading(false);
     }
@@ -2500,7 +2442,7 @@ export default function LoanDetailPage({
         : res) as Record<string, unknown> | null;
       setSoaData(payload ?? {});
     } catch {
-      toast.error("Failed to fetch statement of account");
+      toast.error("We couldn't load the statement of account. Please try again.");
       setSoaData(null);
     } finally {
       setSoaLoading(false);
@@ -2628,7 +2570,7 @@ export default function LoanDetailPage({
       toast.success(`${type === "disclosure" ? "Disclosure Statement" : "Promissory Note"} opened`);
     } catch (err) {
       console.error("Document generation error:", err);
-      toast.error(`Failed to generate ${type === "disclosure" ? "disclosure statement" : "promissory note"}`);
+      notifyError(err, `We couldn't generate the ${type === "disclosure" ? "disclosure statement" : "promissory note"}. Please try again.`);
     } finally {
       setDocLoading(null);
     }

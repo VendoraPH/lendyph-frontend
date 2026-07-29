@@ -43,7 +43,7 @@ export function useRegistrations(options: Options = {}) {
       setRegistrations(filtered);
       setTotal(totalCount);
     } catch {
-      setError("Failed to load registrations");
+      setError("We couldn't load the registrations. Please try again.");
     } finally {
       setLoading(false);
     }

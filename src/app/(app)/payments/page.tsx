@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { loanService, repaymentService, shareCapitalService } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import type { Loan } from "@/types";
@@ -283,7 +284,7 @@ export default function PaymentsPage() {
     } catch (err) {
       console.error("Failed to load active loans", err);
       setApiLoans([]);
-      toast.error("Failed to load active loans");
+      notifyError(err, "We couldn't load the active loans. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -513,7 +514,7 @@ export default function PaymentsPage() {
       const receiptId = repayment?.id;
       if (receiptId) setLastReceiptId(receiptId);
 
-      toast.success("Payment posted successfully", {
+      toast.success("Payment posted", {
         description: `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
         action: receiptId
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
@@ -544,7 +545,7 @@ export default function PaymentsPage() {
       await fetchLoans();
       resetForm();
     } catch {
-      toast.error("Failed to post payment", {
+      toast.error("We couldn't post the payment. Please try again.", {
         description: "Please try again or check your connection.",
       });
     } finally {

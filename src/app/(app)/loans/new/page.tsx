@@ -5,6 +5,7 @@ import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { notifyError, notifyValidation } from "@/lib/notify";
 import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -375,7 +376,7 @@ function NewLoanApplicationInner() {
           : (borrowersResult.value as { data: Borrower[] }).data ?? [];
         setBorrowers(borrowerData);
       } else {
-        toast.error("Failed to load members");
+        toast.error("We couldn't load members. Please try again.");
       }
 
       let productsList: LoanProduct[] = [];
@@ -385,7 +386,7 @@ function NewLoanApplicationInner() {
           : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
         setProducts(productsList);
       } else {
-        toast.error("Failed to load loan products");
+        toast.error("We couldn't load loan products. Please try again.");
       }
 
       if (usersResult.status === "fulfilled") {
@@ -428,7 +429,7 @@ function NewLoanApplicationInner() {
             setPolicyExceptionDetails(loan.policy_exception_details ?? "");
           }
         } else {
-          toast.error("Failed to load loan — redirecting");
+          toast.error("We couldn't load this loan. Redirecting…");
           router.push(`/loans/${editLoanId}`);
         }
       }
@@ -821,23 +822,34 @@ function NewLoanApplicationInner() {
   }
 
   // ── Submit ──
-  const canSubmit =
-    borrowerId !== null &&
-    productId !== null &&
-    principal > 0 &&
-    !principalError &&
-    term > 0 &&
-    !termError &&
-    paymentFrequency !== null &&
-    interestType !== null &&
-    rate > 0 &&
-    releaseDate !== undefined &&
-    !scbError &&
-    !processingFeePercentError &&
-    !serviceFeePercentError;
-
   const handleSubmit = async () => {
-    if (!canSubmit || !releaseDate) return;
+    // Collect every field the user still needs to fix and surface them in a
+    // single consolidated pop-up instead of inline red messages.
+    const missing: string[] = [];
+    if (borrowerId === null) missing.push("Borrower");
+    if (productId === null) missing.push("Loan product");
+    if (!(principal > 0) || principalError) missing.push("Principal amount");
+    if (!(term > 0) || termError) missing.push("Term");
+    if (paymentFrequency === null) missing.push("Payment frequency");
+    if (interestType === null) missing.push("Interest type");
+    if (!(rate > 0)) missing.push("Interest rate");
+    if (releaseDate === undefined) missing.push("Release date");
+    if (scbError) missing.push("Share Capital Build-Up");
+    if (processingFeePercentError) missing.push("Processing fee");
+    if (serviceFeePercentError) missing.push("Service fee");
+    if (missing.length > 0) {
+      notifyValidation(missing);
+      return;
+    }
+    // Narrow the nullable form state before building the payload.
+    if (
+      borrowerId === null ||
+      productId === null ||
+      paymentFrequency === null ||
+      interestType === null ||
+      releaseDate === undefined
+    )
+      return;
     try {
       setSubmitting(true);
       const payload = {
@@ -965,19 +977,19 @@ function NewLoanApplicationInner() {
         );
       }
 
-      toast.success("Loan Application Created", {
+      toast.success("Loan application created", {
         description: forwarded
           ? "Forwarded to Manager for approval."
-          : "Loan application has been created successfully.",
+          : "Loan application has been created.",
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } };
-      if (axiosErr?.response?.status === 422) {
-        toast.error(axiosErr.response.data?.message ?? "Validation error. Please check your inputs.");
-      } else {
-        toast.error(isEditMode ? "Failed to update loan application" : "Failed to create loan application");
-      }
+      notifyError(
+        err,
+        isEditMode
+          ? "We couldn't update this loan. Please try again."
+          : "We couldn't create this loan. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1388,9 +1400,6 @@ function NewLoanApplicationInner() {
                 min={selectedProduct?.min_amount}
                 max={selectedProduct?.max_amount}
               />
-              {principalError && (
-                <p className="text-xs text-destructive">{principalError}</p>
-              )}
             </div>
 
             {/* Term */}
@@ -1407,9 +1416,6 @@ function NewLoanApplicationInner() {
                 min={selectedProduct?.min_term}
                 max={selectedProduct?.max_term}
               />
-              {termError && (
-                <p className="text-xs text-destructive">{termError}</p>
-              )}
             </div>
           </div>
 
@@ -1524,9 +1530,6 @@ function NewLoanApplicationInner() {
                     value={scbAmount}
                     onChange={(e) => setScbAmount(e.target.value)}
                   />
-                  {scbError && (
-                    <p className="text-xs text-destructive">{scbError}</p>
-                  )}
                 </div>
                 {selectedProduct.scb_required && (selectedProduct.min_scb ?? 0) > 0 && (
                   <div className="flex items-center text-xs text-muted-foreground">
@@ -1766,9 +1769,6 @@ function NewLoanApplicationInner() {
                   Allowed range: {processingFeeRange.min}% – {processingFeeRange.max}%
                 </p>
               )}
-              {processingFeePercentError && (
-                <p className="text-[10px] text-destructive">{processingFeePercentError}</p>
-              )}
             </div>
 
             {/* Service Fee */}
@@ -1810,9 +1810,6 @@ function NewLoanApplicationInner() {
                 <p className="text-[10px] text-muted-foreground">
                   Allowed range: {serviceFeeRange.min}% – {serviceFeeRange.max}%
                 </p>
-              )}
-              {serviceFeePercentError && (
-                <p className="text-[10px] text-destructive">{serviceFeePercentError}</p>
               )}
             </div>
 
@@ -1993,7 +1990,7 @@ function NewLoanApplicationInner() {
         <Button
           size="lg"
           className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark sm:w-auto"
-          disabled={!canSubmit || submitting}
+          disabled={submitting}
           onClick={handleSubmit}
         >
           {submitting

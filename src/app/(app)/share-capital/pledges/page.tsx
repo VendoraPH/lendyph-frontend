@@ -102,7 +102,7 @@ export default function PledgeEntryPage() {
           : [];
       setPledges(pledgeArr.map(toLocalPledge));
     } catch {
-      toast.error("Failed to load pledges");
+      toast.error("We couldn't load the pledges. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -223,7 +223,7 @@ export default function PledgeEntryPage() {
           : `Auto-credit activated for ${pledge.borrower}`
       );
     } catch {
-      toast.error("Failed to toggle auto-credit");
+      toast.error("We couldn't toggle auto-credit. Please try again.");
     }
   }
 
@@ -247,7 +247,7 @@ export default function PledgeEntryPage() {
       setEditingAmountId(null);
       toast.success("Pledge amount updated");
     } catch {
-      toast.error("Failed to update pledge amount");
+      toast.error("We couldn't update the pledge amount. Please try again.");
     }
   }
 
@@ -271,7 +271,7 @@ export default function PledgeEntryPage() {
       setEditingScheduleId(null);
       toast.success("Schedule updated");
     } catch {
-      toast.error("Failed to update schedule");
+      toast.error("We couldn't update the schedule. Please try again.");
     }
   }
 
@@ -304,7 +304,7 @@ export default function PledgeEntryPage() {
       setManualAmount("");
       setManualTransaction("credit");
     } catch {
-      toast.error("Failed to create manual entry");
+      toast.error("We couldn't create the manual entry. Please try again.");
     }
   }
 
@@ -374,11 +374,11 @@ export default function PledgeEntryPage() {
           type: entry.transaction,
         })),
       });
-      toast.success(`${valid.length} entries created successfully`);
+      toast.success(`${valid.length} entries created`);
       setSelectedIds(new Set());
       setBulkEntries({});
     } catch {
-      toast.error("Failed to create bulk entries");
+      toast.error("We couldn't create the bulk entries. Please try again.");
     }
   }
 

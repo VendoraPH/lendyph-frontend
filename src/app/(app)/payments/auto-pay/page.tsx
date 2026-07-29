@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { AxiosError } from "axios";
+import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
 import { autoPayService } from "@/services/auto-pay.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,11 +32,7 @@ export default function AutoPayPage() {
       );
       setStep(2);
     } catch (err) {
-      const msg =
-        err instanceof AxiosError
-          ? (err.response?.data?.message ?? err.message)
-          : "Failed to load preview.";
-      toast.error(msg);
+      notifyError(err, "We couldn't load the preview. Please try again.");
     } finally {
       setPreviewing(false);
     }
@@ -70,11 +66,7 @@ export default function AutoPayPage() {
       setPreview(null);
       setIncludedPartialIds(new Set());
     } catch (err) {
-      const msg =
-        err instanceof AxiosError
-          ? (err.response?.data?.message ?? err.message)
-          : "Auto-Pay failed.";
-      toast.error(msg);
+      notifyError(err, "Auto-Pay couldn't be completed. Please try again.");
     } finally {
       setProcessing(false);
     }

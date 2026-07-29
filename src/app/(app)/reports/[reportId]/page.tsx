@@ -207,7 +207,7 @@ export default function ReportDetailPage() {
       const result = await report.build(activeRange);
       setDoc(result);
     } catch {
-      toast.error("Failed to generate report.");
+      toast.error("We couldn't generate the report. Please try again.");
       setDoc(null);
     } finally {
       setGenerating(false);

@@ -225,7 +225,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     tokenManager.clearTokens();
     localStorage.removeItem("lendy_remember_me");
     clearAuth();
-    toast.success("Logged out successfully");
+    toast.success("Logged out");
     router.replace("/login");
   };
 

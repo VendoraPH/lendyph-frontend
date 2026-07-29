@@ -105,7 +105,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       onOpenChange(false);
       onSave();
     } catch {
-      toast.error(isEdit ? "Failed to update fee" : "Failed to create fee");
+      toast.error(isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -302,7 +302,7 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
       onOpenChange(false);
       onConfirm();
     } catch {
-      toast.error("Failed to delete fee");
+      toast.error("We couldn't delete the fee. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -378,7 +378,7 @@ export default function FeesPage() {
       setFees(Array.isArray(feesRes) ? feesRes : (feesRes as { data?: Fee[] })?.data ?? []);
       setProducts(Array.isArray(productsRes) ? productsRes : (productsRes as { data?: LoanProduct[] })?.data ?? []);
     } catch {
-      toast.error("Failed to load fees");
+      toast.error("We couldn't load the fees. Please try again.");
     } finally {
       setLoading(false);
     }

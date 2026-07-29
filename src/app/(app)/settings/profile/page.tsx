@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { Camera, KeyRound, Loader2, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,25 +19,6 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
-
-// ── API error helper (matches codebase convention) ──
-
-type ApiError = {
-  response?: {
-    data?: { message?: string; errors?: Record<string, string[]> };
-  };
-};
-
-function showApiError(err: unknown, fallback: string): void {
-  const apiError = err as ApiError;
-  const errors = apiError?.response?.data?.errors;
-  if (errors) {
-    const firstError = Object.values(errors)[0]?.[0];
-    toast.error(firstError || fallback);
-    return;
-  }
-  toast.error(apiError?.response?.data?.message || fallback);
-}
 
 // ── Helpers ──
 
@@ -196,7 +178,7 @@ function EditProfileCard() {
       });
       toast.success("Profile updated");
     } catch (err) {
-      showApiError(err, "Failed to update profile");
+      notifyError(err, "We couldn't update your profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -343,7 +325,7 @@ function ChangePasswordCard() {
       toast.success("Password updated. Other active sessions have been signed out.");
       setForm(EMPTY_PASSWORD);
     } catch (err) {
-      showApiError(err, "Failed to update password");
+      notifyError(err, "We couldn't update your password. Please try again.");
     } finally {
       setSaving(false);
     }
