@@ -1,8 +1,8 @@
 name: Deploy binhs-coop (frontend)
 
 # Manual-only deploys for the binhs-coop client instance.
-#   staging    -> binhs-coop-staging.lendyph.com  (/var/www/binhs-coop-staging)
-#   production -> binhs-coop.lendyph.com           (/var/www/binhs-coop)
+#   staging    -> binhs-coop-staging.lendyph.com  (/var/www/binhs-coop-frontend-staging)
+#   production -> binhs-coop.lendyph.com           (/var/www/binhs-coop-frontend)
 # Both track the `development` branch (main is stale for the frontend).
 on:
   workflow_dispatch:
@@ -32,9 +32,9 @@ jobs:
           script: |
             set -e
             if [ "${{ inputs.environment }}" = "production" ]; then
-              bash /var/www/binhs-coop/deploy.sh
+              bash /var/www/binhs-coop-frontend/deploy.sh
             else
-              bash /var/www/binhs-coop-staging/deploy.sh
+              bash /var/www/binhs-coop-frontend-staging/deploy.sh
             fi
 
       # The VPS has intermittently flaky inbound SSH (dial tcp :22 i/o timeout).
@@ -51,7 +51,7 @@ jobs:
           script: |
             set -e
             if [ "${{ inputs.environment }}" = "production" ]; then
-              bash /var/www/binhs-coop/deploy.sh
+              bash /var/www/binhs-coop-frontend/deploy.sh
             else
-              bash /var/www/binhs-coop-staging/deploy.sh
+              bash /var/www/binhs-coop-frontend-staging/deploy.sh
             fi
