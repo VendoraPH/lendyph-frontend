@@ -156,9 +156,9 @@ const KPI_CARD_STRUCTURE = [
   { key: "active_loans" as const, sparkKey: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", href: "/loans" },
   { key: "collected" as const, sparkKey: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", href: "/payments" },
   // `/collections` is not a route — it never existed, so this card 404'd on
-  // click and on Next's prefetch. Point it at the loans list filtered to the
-  // overdue status, which is what the card counts.
-  { key: "overdue" as const, sparkKey: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", href: "/loans?tab=past_due" },
+  // click and on Next's prefetch. `/loans/past-due` is the purpose-built Past
+  // Due Loans report, which is exactly what this card counts.
+  { key: "overdue" as const, sparkKey: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
   { key: "share_capital" as const, sparkKey: null, icon: Landmark, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
 ];
 
