@@ -32,8 +32,16 @@ import { dashboardService } from "@/services/dashboard.service";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 // ---------------------------------------------------------------------------
-// Backend response shapes (best-effort — wire defensively, fall back if empty)
+// Backend response shapes
 // ---------------------------------------------------------------------------
+// Wire defensively (the API is tolerant about field names), but NEVER
+// substitute invented data when a response is empty or fails — an empty
+// dashboard must read as empty. See the empty/loading states below.
+
+type SparklinePoint = { v: number };
+
+/** Sparkline series returned by GET /dashboard/stats. Keys mirror KPI_CARD_STRUCTURE. */
+type SparklineKey = "portfolio" | "active_loans" | "collected" | "overdue";
 
 interface DashboardStats {
   total_portfolio?: number;
@@ -41,6 +49,7 @@ interface DashboardStats {
   total_collected?: number;
   overdue_count?: number;
   share_capital_total?: number;
+  sparklines?: Partial<Record<SparklineKey, SparklinePoint[]>>;
 }
 
 interface CollectionsTrendPoint {
@@ -85,40 +94,31 @@ function getInitials(name: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data
+// View models — what the UI renders, after mapping the API response
 // ---------------------------------------------------------------------------
 
-const SPARKLINE_PURPLE = [
-  { v: 120 }, { v: 135 }, { v: 128 }, { v: 145 }, { v: 152 }, { v: 148 }, { v: 160 },
-];
-const SPARKLINE_ORANGE = [
-  { v: 800 }, { v: 810 }, { v: 820 }, { v: 815 }, { v: 830 }, { v: 838 }, { v: 843 },
-];
-const SPARKLINE_GREEN = [
-  { v: 180 }, { v: 195 }, { v: 210 }, { v: 205 }, { v: 220 }, { v: 235 }, { v: 240 },
-];
-const SPARKLINE_BLUE = [
-  { v: 40 }, { v: 42 }, { v: 41 }, { v: 43 }, { v: 44 }, { v: 46 }, { v: 47 },
-];
-const SPARKLINE_TEAL = [
-  { v: 50 }, { v: 55 }, { v: 60 }, { v: 58 }, { v: 65 }, { v: 70 }, { v: 75 },
-];
+/** Request lifecycle for a section, so empty data and a failed fetch render differently. */
+type LoadState = "loading" | "ready" | "error";
 
-// Mini area chart for left side of main card
-const COLLECTIONS_TREND = [
-  { day: "W1",  value: 380000 },
-  { day: "W2",  value: 520000 },
-  { day: "W3",  value: 450000 },
-  { day: "W4",  value: 680000 },
-  { day: "W5",  value: 620000 },
-  { day: "W6",  value: 890000 },
-  { day: "W7",  value: 780000 },
-  { day: "W8",  value: 950000 },
-  { day: "W9",  value: 870000 },
-  { day: "W10", value: 1020000 },
-  { day: "W11", value: 960000 },
-  { day: "W12", value: 1100000 },
-];
+type TrendPoint = { day: string; value: number };
+
+type DueItemView = {
+  id: number;
+  borrower: string;
+  loanId: string;
+  amountDue: number;
+  amountPaid: number;
+  status: "collected" | "partial" | "pending";
+};
+
+type TransactionView = {
+  id: number;
+  name: string;
+  desc: string;
+  amount: number;
+  date: string;
+  color: string;
+};
 
 // Candlestick data — open/close/high/low per day (like the reference screenshot)
 const CANDLESTICK_DATA = [
@@ -144,36 +144,22 @@ const CANDLESTICK_DATA = [
   { date: "31", open: 76, close: 85, high: 88, low: 74, volume: 68 },
 ];
 
-// Mock data — Loans due today vs actual collections
-const DAILY_DUE_ITEMS = [
-  { id: 1, borrower: "Rosario D. Santos", loanId: "LN-2026-0042", amountDue: 5500, amountPaid: 5500, status: "collected" as const },
-  { id: 2, borrower: "Roberto Garcia", loanId: "LN-2026-0078", amountDue: 9417, amountPaid: 9417, status: "collected" as const },
-  { id: 3, borrower: "Eduardo Mendoza", loanId: "LN-2026-0103", amountDue: 4708, amountPaid: 4708, status: "collected" as const },
-  { id: 4, borrower: "Maria L. Reyes", loanId: "LN-2026-0055", amountDue: 3200, amountPaid: 958, status: "partial" as const },
-  { id: 5, borrower: "Ana Santos", loanId: "LN-2026-0091", amountDue: 6800, amountPaid: 0, status: "pending" as const },
-  { id: 6, borrower: "Carmen Torres", loanId: "LN-2026-0112", amountDue: 12000, amountPaid: 0, status: "pending" as const },
-  { id: 7, borrower: "Jose Dela Cruz", loanId: "LN-2026-0067", amountDue: 2500, amountPaid: 0, status: "pending" as const },
-];
-
-const RECENT_TRANSACTIONS = [
-  { id: 1, name: "Rosario D. Santos", desc: "Payment via GCash", amount: 3933, date: "Mar 31, 9:42 AM", color: "bg-purple-500" },
-  { id: 2, name: "Roberto Garcia", desc: "Cash payment received", amount: 9417, date: "Mar 31, 9:15 AM", color: "bg-orange-500" },
-  { id: 3, name: "Ana Santos", desc: "Loan released — Bank Transfer", amount: 15000, date: "Mar 30, 3:20 PM", color: "bg-green-500" },
-  { id: 4, name: "Eduardo Mendoza", desc: "Payment via Bank Transfer", amount: 4708, date: "Mar 30, 2:10 PM", color: "bg-blue-500" },
-  { id: 5, name: "Maria L. Reyes", desc: "Payment via Maya", amount: 958, date: "Mar 29, 11:05 AM", color: "bg-purple-500" },
-  { id: 6, name: "Carmen Torres", desc: "Loan released — Bank Transfer", amount: 50000, date: "Mar 29, 10:30 AM", color: "bg-orange-500" },
-];
-
 // ---------------------------------------------------------------------------
-// KPI Card structure (values populated from state in the component)
+// KPI Card structure (values and sparklines populated from state)
 // ---------------------------------------------------------------------------
+// `sparkKey` is the series name in stats.sparklines. Share Capital has no
+// series from the backend, so its card renders no sparkline rather than a
+// decorative one.
 
 const KPI_CARD_STRUCTURE = [
-  { key: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", sparkData: SPARKLINE_PURPLE, href: "/loans" },
-  { key: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", sparkData: SPARKLINE_ORANGE, href: "/loans" },
-  { key: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", sparkData: SPARKLINE_GREEN, href: "/payments" },
-  { key: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", sparkData: SPARKLINE_BLUE, href: "/collections" },
-  { key: "share_capital" as const, icon: Landmark, label: "Share Capital", color: "#14b8a6", sparkData: SPARKLINE_TEAL, href: "/share-capital/ledger" },
+  { key: "portfolio" as const, sparkKey: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
+  { key: "active_loans" as const, sparkKey: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", href: "/loans" },
+  { key: "collected" as const, sparkKey: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", href: "/payments" },
+  // `/collections` is not a route — it never existed, so this card 404'd on
+  // click and on Next's prefetch. `/loans/past-due` is the purpose-built Past
+  // Due Loans report, which is exactly what this card counts.
+  { key: "overdue" as const, sparkKey: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
+  { key: "share_capital" as const, sparkKey: null, icon: Landmark, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -200,6 +186,32 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
         isAnimationActive={false}
       />
     </AreaChart>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Placeholder row for a table with nothing to show
+// ---------------------------------------------------------------------------
+
+function TableEmptyRow({
+  colSpan,
+  state,
+  emptyText,
+}: {
+  colSpan: number;
+  state: LoadState;
+  emptyText: string;
+}) {
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={colSpan} className="py-10 text-center text-sm text-muted-foreground">
+        {state === "loading"
+          ? "Loading…"
+          : state === "error"
+            ? "Couldn't load this data. Please refresh the page."
+            : emptyText}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -316,9 +328,13 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [trendData, setTrendData] = useState<typeof COLLECTIONS_TREND | null>(null);
-  const [dailyDues, setDailyDues] = useState<typeof DAILY_DUE_ITEMS | null>(null);
-  const [recentTransactions, setRecentTransactions] = useState<typeof RECENT_TRANSACTIONS | null>(null);
+  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
+  const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<TransactionView[]>([]);
+  // "loading" until the request settles, then "ready" or "error" — so the UI can
+  // tell a genuinely empty dataset apart from a request that never came back.
+  const [txStatus, setTxStatus] = useState<LoadState>("loading");
+  const [duesStatus, setDuesStatus] = useState<LoadState>("loading");
 
   useEffect(() => {
     setMounted(true);
@@ -358,15 +374,16 @@ export default function DashboardPage() {
         const raw = Array.isArray(res)
           ? (res as CollectionsTrendPoint[])
           : ((res as { data?: CollectionsTrendPoint[] })?.data ?? []);
-        if (Array.isArray(raw) && raw.length > 0) {
-          const mapped = raw.map((p, i) => ({
+        setTrendData(
+          raw.map((p, i) => ({
             day: p.period_label ?? p.label ?? p.day ?? `W${i + 1}`,
             value: Number(p.value ?? p.amount ?? 0),
-          }));
-          setTrendData(mapped);
-        }
+          })),
+        );
       })
-      .catch(() => {});
+      .catch(() => {
+        setTrendData([]);
+      });
 
     // Daily dues
     dashboardService
@@ -375,29 +392,29 @@ export default function DashboardPage() {
         const raw = Array.isArray(res)
           ? (res as DailyDueItem[])
           : ((res as { data?: DailyDueItem[] })?.data ?? []);
-        if (Array.isArray(raw) && raw.length > 0) {
-          const mapped = raw.map((item, i) => {
-            const statusMap: Record<string, "collected" | "partial" | "pending"> = {
-              paid: "collected",
-              collected: "collected",
-              partial: "partial",
-              overdue: "pending",
-              pending: "pending",
-            };
-            const status = statusMap[item.status ?? "pending"] ?? "pending";
-            return {
-              id: Number(item.id ?? i + 1),
-              borrower: item.borrower ?? item.borrower_name ?? "—",
-              loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
-              amountDue: Number(item.amount_due ?? 0),
-              amountPaid: Number(item.amount_paid ?? 0),
-              status,
-            };
-          });
-          setDailyDues(mapped);
-        }
+        const statusMap: Record<string, DueItemView["status"]> = {
+          paid: "collected",
+          collected: "collected",
+          partial: "partial",
+          overdue: "pending",
+          pending: "pending",
+        };
+        setDailyDues(
+          raw.map((item, i) => ({
+            id: Number(item.id ?? i + 1),
+            borrower: item.borrower ?? item.borrower_name ?? "—",
+            loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
+            amountDue: Number(item.amount_due ?? 0),
+            amountPaid: Number(item.amount_paid ?? 0),
+            status: statusMap[item.status ?? "pending"] ?? "pending",
+          })),
+        );
+        setDuesStatus("ready");
       })
-      .catch(() => {});
+      .catch(() => {
+        setDailyDues([]);
+        setDuesStatus("error");
+      });
 
     // Recent transactions
     dashboardService
@@ -406,37 +423,42 @@ export default function DashboardPage() {
         const raw = Array.isArray(res)
           ? (res as RecentTransactionItem[])
           : ((res as { data?: RecentTransactionItem[] })?.data ?? []);
-        if (Array.isArray(raw) && raw.length > 0) {
-          const palette = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500"];
-          const mapped = raw.slice(0, 10).map((tx, i) => ({
+        const palette = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500"];
+        setRecentTransactions(
+          raw.slice(0, 10).map((tx, i) => ({
             id: Number(tx.id ?? i + 1),
             name: tx.name ?? tx.borrower_name ?? "—",
             desc: tx.description ?? tx.desc ?? (tx.type === "release" ? "Loan released" : "Payment received"),
             amount: Number(tx.amount ?? 0),
             date: tx.date ?? tx.created_at ?? "",
             color: palette[i % palette.length]!,
-          }));
-          setRecentTransactions(mapped);
-        }
+          })),
+        );
+        setTxStatus("ready");
       })
-      .catch(() => {});
+      .catch(() => {
+        setRecentTransactions([]);
+        setTxStatus("error");
+      });
   }, []);
 
   // ---------------------------------------------------------------------
-  // Derived values — prefer live data, fall back to existing mocks so the
-  // page never renders empty if the backend is not yet wired up.
+  // Derived values — live data only.
   // ---------------------------------------------------------------------
+  // If a request is still in flight or failed we show an em dash, never a
+  // stand-in figure: a placeholder here is indistinguishable from a real
+  // balance and would misrepresent the co-op's books.
   const kpiValues: Record<typeof KPI_CARD_STRUCTURE[number]["key"], string> = {
-    portfolio: stats?.total_portfolio != null ? formatCompactCurrency(stats.total_portfolio) : "₱15.2M",
-    active_loans: stats?.active_loans != null ? String(stats.active_loans) : "843",
-    collected: stats?.total_collected != null ? formatCompactCurrency(stats.total_collected) : "₱2.4M",
-    overdue: stats?.overdue_count != null ? String(stats.overdue_count) : "47",
+    portfolio: stats?.total_portfolio != null ? formatCompactCurrency(stats.total_portfolio) : "—",
+    active_loans: stats?.active_loans != null ? String(stats.active_loans) : "—",
+    collected: stats?.total_collected != null ? formatCompactCurrency(stats.total_collected) : "—",
+    overdue: stats?.overdue_count != null ? String(stats.overdue_count) : "—",
     share_capital: shareCapitalTotal,
   };
 
-  const collectionsTrend = trendData ?? COLLECTIONS_TREND;
-  const dueItems = dailyDues ?? DAILY_DUE_ITEMS;
-  const transactions = recentTransactions ?? RECENT_TRANSACTIONS;
+  const collectionsTrend = trendData;
+  const dueItems = dailyDues;
+  const transactions = recentTransactions;
 
   const totalDue = dueItems.reduce((sum, item) => sum + item.amountDue, 0);
   const totalCollected = dueItems.reduce((sum, item) => sum + item.amountPaid, 0);
@@ -476,7 +498,12 @@ export default function DashboardPage() {
                       <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
                     </div>
                   </div>
-                  <Sparkline data={kpi.sparkData} color={kpi.color} />
+                  {(() => {
+                    // Only draw a trend line when the backend actually sent that
+                    // series — no decorative curve next to a real figure.
+                    const series = kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined;
+                    return series?.length ? <Sparkline data={series} color={kpi.color} /> : null;
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -567,6 +594,13 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {dueItems.length === 0 && (
+                  <TableEmptyRow
+                    colSpan={5}
+                    state={duesStatus}
+                    emptyText="Nothing due today."
+                  />
+                )}
                 {dueItems.map((item) => (
                   <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-6">
@@ -741,6 +775,13 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {transactions.length === 0 && (
+                  <TableEmptyRow
+                    colSpan={4}
+                    state={txStatus}
+                    emptyText="No transactions yet. Payments and loan releases will appear here."
+                  />
+                )}
                 {transactions.map((tx) => {
                   const initials = getInitials(tx.name);
                   return (

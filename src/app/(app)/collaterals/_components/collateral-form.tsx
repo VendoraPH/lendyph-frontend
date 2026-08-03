@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import {
   Popover,
   PopoverContent,
@@ -89,7 +90,7 @@ export function CollateralForm({ initial, mode }: Props) {
         setTypes(tRes.filter((t) => t.is_visible));
       })
       .catch(() => {
-        if (!cancelled) toast.error("Failed to load form data");
+        if (!cancelled) toast.error("We couldn't load the form data. Please try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -190,8 +191,7 @@ export function CollateralForm({ initial, mode }: Props) {
       }
       router.push("/collaterals");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to save";
-      toast.error(msg);
+      notifyError(err, "We couldn't save this collateral. Please try again.");
     } finally {
       setSubmitting(false);
     }

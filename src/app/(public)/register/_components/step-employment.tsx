@@ -13,7 +13,6 @@ export interface StepEmploymentData {
 
 interface Props {
   employment: StepEmploymentData;
-  errors: Partial<Record<keyof StepEmploymentData, string>>;
   onChange: <K extends keyof StepEmploymentData>(
     field: K,
     value: StepEmploymentData[K]
@@ -22,7 +21,7 @@ interface Props {
   onBack: () => void;
 }
 
-export function StepEmployment({ employment, errors, onChange, onNext, onBack }: Props) {
+export function StepEmployment({ employment, onChange, onNext, onBack }: Props) {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -46,11 +45,7 @@ export function StepEmployment({ employment, errors, onChange, onNext, onBack }:
               max={new Date().toLocaleDateString("en-CA")}
               value={employment.date_hired}
               onChange={(e) => onChange("date_hired", e.target.value)}
-              className={errors.date_hired ? "border-destructive" : ""}
             />
-            {errors.date_hired && (
-              <p className="text-xs text-destructive">{errors.date_hired}</p>
-            )}
           </div>
         </div>
 
@@ -65,11 +60,7 @@ export function StepEmployment({ employment, errors, onChange, onNext, onBack }:
               placeholder="0"
               value={employment.monthly_income}
               onChange={(e) => onChange("monthly_income", e.target.value)}
-              className={errors.monthly_income ? "border-destructive" : ""}
             />
-            {errors.monthly_income && (
-              <p className="text-xs text-destructive">{errors.monthly_income}</p>
-            )}
           </div>
 
           <div className="space-y-1.5">
@@ -82,14 +73,10 @@ export function StepEmployment({ employment, errors, onChange, onNext, onBack }:
               placeholder="0"
               value={employment.pledge_amount}
               onChange={(e) => onChange("pledge_amount", e.target.value)}
-              className={errors.pledge_amount ? "border-destructive" : ""}
             />
             <p className="text-xs text-muted-foreground">
               Share capital pledge. Defaults to ₱0 if left empty.
             </p>
-            {errors.pledge_amount && (
-              <p className="text-xs text-destructive">{errors.pledge_amount}</p>
-            )}
           </div>
         </div>
       </div>

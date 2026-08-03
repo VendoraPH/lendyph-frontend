@@ -75,8 +75,6 @@ export function StepPhotoIds({
     src: string;
   } | null>(null);
 
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [idErrors, setIdErrors] = useState<Record<string, string>>({});
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     if (streamRef.current) {
@@ -116,10 +114,9 @@ export function StepPhotoIds({
     if (photoInputRef.current) photoInputRef.current.value = "";
     const result = validateUploadFile(file, IMAGE_MIME_TYPES);
     if (!result.ok) {
-      setPhotoError(result.error ?? "Invalid file.");
+      toast.error(result.error ?? "That photo can't be used. Please choose another image.");
       return;
     }
-    setPhotoError(null);
     setPendingPhotoFile(file);
     setPhotoCropOpen(true);
   }
@@ -204,17 +201,11 @@ export function StepPhotoIds({
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    const key = `${index}-${side}`;
     const result = validateUploadFile(file, ID_MIME_TYPES);
     if (!result.ok) {
-      setIdErrors((prev) => ({ ...prev, [key]: result.error ?? "Invalid file." }));
+      toast.error(result.error ?? "That file can't be used. Please choose another image.");
       return;
     }
-    setIdErrors((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
     const reader = new FileReader();
     reader.onload = () => {
       onValidIdsChange((prev) =>
@@ -231,7 +222,6 @@ export function StepPhotoIds({
 
   function removeValidId(index: number) {
     onValidIdsChange((prev) => prev.filter((_, i) => i !== index));
-    setIdErrors({});
   }
 
   return (
@@ -274,7 +264,6 @@ export function StepPhotoIds({
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground">JPG or PNG, up to 5MB. Optional.</p>
-            {photoError && <p className="text-xs text-destructive">{photoError}</p>}
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -493,11 +482,6 @@ export function StepPhotoIds({
                               className="hidden"
                             />
                           </label>
-                        )}
-                        {idErrors[`${index}-${side}`] && (
-                          <p className="text-xs text-destructive">
-                            {idErrors[`${index}-${side}`]}
-                          </p>
                         )}
                       </div>
                     );

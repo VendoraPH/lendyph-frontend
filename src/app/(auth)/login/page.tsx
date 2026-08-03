@@ -13,6 +13,7 @@ import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { toast } from "sonner";
 import { AxiosError } from "axios";
+import { notifyError, notifyValidation } from "@/lib/notify";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,23 +22,16 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ login: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
-  const [errors, setErrors] = useState<{ login?: string; password?: string }>(
-    {}
-  );
 
   const validate = (): boolean => {
-    const newErrors: typeof errors = {};
-
-    if (!form.login) {
-      newErrors.login = "Username or email is required";
+    const missing: string[] = [];
+    if (!form.login) missing.push("Username or email");
+    if (!form.password) missing.push("Password");
+    if (missing.length) {
+      notifyValidation(missing);
+      return false;
     }
-
-    if (!form.password) {
-      newErrors.password = "Password is required";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +39,6 @@ export default function LoginPage() {
     if (!validate()) return;
 
     setIsLoading(true);
-    setErrors({});
 
     try {
       const { token, user } = await authService.login({
@@ -71,10 +64,7 @@ export default function LoginPage() {
         const data = error.response?.data;
 
         if (status === 422 && data?.errors) {
-          setErrors({
-            login: data.errors.login?.[0],
-            password: data.errors.password?.[0],
-          });
+          notifyError(error, "Please check your details and try again.");
         } else if (status === 401) {
           toast.error(
             "The username or password you entered is incorrect. Please double-check and try again."
@@ -127,8 +117,8 @@ export default function LoginPage() {
             {/* Organization logo — <BrandLogo> resolves the admin-configured
                 logo, so this is the tenant's mark, not the Lendy one. The
                 Lendy attribution lives in the footer below. */}
-            <div className="inline-flex items-center rounded-2xl bg-white/95 backdrop-blur-sm px-6 py-4 shadow-lg shadow-black/10">
-              <BrandLogo className="h-16 w-auto drop-shadow-sm" />
+            <div className="inline-flex items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
+              <BrandLogo className="h-40 w-auto drop-shadow-sm" />
             </div>
             <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
               Lending Management Platform
@@ -160,7 +150,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex flex-col items-center lg:hidden">
-            <BrandLogo className="h-12 w-auto" />
+            <BrandLogo className="h-24 w-auto" />
             <p className="text-sm text-muted-foreground mt-1">
               Lending Management Platform
             </p>
@@ -181,18 +171,13 @@ export default function LoginPage() {
                 type="text"
                 placeholder="Username or email"
                 value={form.login}
-                onChange={(e) => {
-                  setForm((prev) => ({ ...prev, login: e.target.value }));
-                  if (errors.login)
-                    setErrors((prev) => ({ ...prev, login: undefined }));
-                }}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, login: e.target.value }))
+                }
                 required
                 autoComplete="username"
-                className={`h-11 ${errors.login ? "border-destructive" : ""}`}
+                className="h-11"
               />
-              {errors.login && (
-                <p className="text-xs text-destructive">{errors.login}</p>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -211,17 +196,12 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={form.password}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, password: e.target.value }));
-                    if (errors.password)
-                      setErrors((prev) => ({
-                        ...prev,
-                        password: undefined,
-                      }));
-                  }}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, password: e.target.value }))
+                  }
                   required
                   autoComplete="current-password"
-                  className={`h-11 pr-10 ${errors.password ? "border-destructive" : ""}`}
+                  className="h-11 pr-10"
                 />
                 <button
                   type="button"
@@ -235,9 +215,6 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password}</p>
-              )}
             </div>
 
             <div className="flex items-center gap-2">

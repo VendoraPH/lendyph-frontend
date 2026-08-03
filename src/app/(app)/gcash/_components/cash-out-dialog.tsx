@@ -105,11 +105,6 @@ export function CashOutDialog({
               placeholder="0.00"
               autoFocus
             />
-            {amountNum > 0 && charge === null && !tiersLoading && (
-              <p className="text-xs text-destructive">
-                No tier covers this amount. Update GCash settings.
-              </p>
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -49,7 +49,7 @@ export default function BorrowerDetailPage() {
     if (borrowerResult.status === "fulfilled") {
       setBorrower(borrowerResult.value);
     } else {
-      toast.error("Failed to load borrower details");
+      toast.error("We couldn't load the borrower details. Please try again.");
     }
 
     let loanList: Loan[] = [];
@@ -63,7 +63,7 @@ export default function BorrowerDetailPage() {
       }
       setLoans(loanList);
     } else {
-      toast.error("Failed to load loans");
+      toast.error("We couldn't load the loans. Please try again.");
     }
 
     // Fetch repayments for all borrower loans
@@ -95,30 +95,30 @@ export default function BorrowerDetailPage() {
   const handleAddCoMaker = async (data: CreateCoMakerData) => {
     try {
       await coMakerService.create(borrowerId, data);
-      toast.success("Co-maker added successfully");
+      toast.success("Co-maker added");
       await fetchCoMakers();
     } catch {
-      toast.error("Failed to add co-maker");
+      toast.error("We couldn't add the co-maker. Please try again.");
     }
   };
 
   const handleEditCoMaker = async (updated: CoMaker) => {
     try {
       await coMakerService.update(updated.id, updated as UpdateCoMakerData);
-      toast.success("Co-maker updated successfully");
+      toast.success("Co-maker updated");
       await fetchCoMakers();
     } catch {
-      toast.error("Failed to update co-maker");
+      toast.error("We couldn't update the co-maker. Please try again.");
     }
   };
 
   const handleDeleteCoMaker = async (id: number) => {
     try {
       await coMakerService.delete(id);
-      toast.success("Co-maker deleted successfully");
+      toast.success("Co-maker deleted");
       await fetchCoMakers();
     } catch {
-      toast.error("Failed to delete co-maker");
+      toast.error("We couldn't delete the co-maker. Please try again.");
     }
   };
 

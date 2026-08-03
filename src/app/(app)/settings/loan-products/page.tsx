@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1271,7 +1272,7 @@ export default function LoanProductsPage() {
       const res = await loanProductService.list();
       setProducts(Array.isArray(res) ? res : (res as unknown as { data: LoanProduct[] }).data ?? []);
     } catch {
-      toast.error("Failed to load loan products");
+      toast.error("We couldn't load the loan products. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -1290,15 +1291,8 @@ export default function LoanProductsPage() {
       await loanProductService.create(payload);
       toast.success("Loan product created");
       fetchProducts();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
-      const apiErrors = err?.response?.data?.errors;
-      if (apiErrors) {
-        const firstError = Object.values(apiErrors)[0]?.[0];
-        toast.error(firstError || "Validation failed");
-      } else {
-        toast.error(err?.response?.data?.message || "Failed to create loan product");
-      }
+    } catch (err) {
+      notifyError(err, "We couldn't create this loan product. Please try again.");
     }
   };
 
@@ -1308,9 +1302,8 @@ export default function LoanProductsPage() {
       await loanProductService.update(id, payload);
       toast.success("Loan product updated");
       fetchProducts();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err?.response?.data?.message || "Failed to update loan product");
+    } catch (err) {
+      notifyError(err, "We couldn't update this loan product. Please try again.");
     }
   };
 
@@ -1322,7 +1315,7 @@ export default function LoanProductsPage() {
       toast.success(product.is_active ? "Product deactivated" : "Product activated");
       fetchProducts();
     } catch {
-      toast.error("Failed to update product status");
+      toast.error("We couldn't update the product status. Please try again.");
     }
   };
 
@@ -1332,7 +1325,7 @@ export default function LoanProductsPage() {
       toast.success("Loan product deleted");
       fetchProducts();
     } catch {
-      toast.error("Failed to delete loan product");
+      toast.error("We couldn't delete the loan product. Please try again.");
     }
   };
 

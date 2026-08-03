@@ -53,6 +53,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyValidation } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -363,12 +364,11 @@ function RoleFormDialog({
   }
 
   function handleSave() {
-    if (!label.trim()) {
-      toast.error("Role name is required");
-      return;
-    }
-    if (!description.trim()) {
-      toast.error("Description is required");
+    const missing: string[] = [];
+    if (!label.trim()) missing.push("Role name");
+    if (!description.trim()) missing.push("Description");
+    if (missing.length > 0) {
+      notifyValidation(missing);
       return;
     }
     const key = isEdit && role ? role.key : slugify(label);
@@ -600,7 +600,7 @@ export default function UserRolesPage() {
         : (res as unknown as { data: ApiRole[] })?.data ?? [];
       setRoles(list.map(apiRoleToItem));
     } catch {
-      toast.error("Failed to load roles");
+      toast.error("We couldn't load the roles. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -631,7 +631,7 @@ export default function UserRolesPage() {
         await maybeRefreshCurrentUser(item.key);
       }
     } catch {
-      toast.error(formMode === "create" ? "Failed to create role" : "Failed to update role");
+      toast.error(formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -651,7 +651,7 @@ export default function UserRolesPage() {
       await loadRoles();
       await maybeRefreshCurrentUser(role.key);
     } catch {
-      toast.error("Failed to update role status");
+      toast.error("We couldn't update the role status. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -668,7 +668,7 @@ export default function UserRolesPage() {
       await loadRoles();
       await maybeRefreshCurrentUser(affected);
     } catch {
-      toast.error("Failed to delete role");
+      toast.error("We couldn't delete the role. Please try again.");
     } finally {
       setActionLoading(false);
     }

@@ -4,7 +4,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AxiosError } from "axios";
 import { Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BrandLogo } from "@/components/common";
@@ -18,6 +17,15 @@ import { StepReview } from "./_components/step-review";
 import { registrationService } from "@/services/registration.service";
 import { usePublicBranches } from "@/hooks/use-public-branches";
 import { compressImage } from "@/lib/image-compress";
+import { getErrorMessage } from "@/lib/api-error";
+import { isAlreadyRegisteredError } from "@/lib/duplicate-error";
+import { notifyError, notifyValidation } from "@/lib/notify";
+
+// Shown when the backend rejects the submission because this applicant is
+// already on file. A public applicant has no session, so we can't tell a
+// pending registration from an active member — one clear message covers both.
+const ALREADY_REGISTERED_MESSAGE =
+  "It looks like you're already registered with us. If you've already applied, please wait for approval — or contact us if you're already a member.";
 
 const STEP_LABELS = [
   "Personal Info",
@@ -27,12 +35,27 @@ const STEP_LABELS = [
   "Review",
 ];
 
-type FullErrors = Partial<
-  Record<
-    keyof StepOneData | keyof StepTwoData | keyof StepSpouseData | keyof StepEmploymentData,
-    string
-  >
->;
+// Human labels for the consolidated "please complete these fields" toast,
+// keyed by the field names the validators return.
+const FIELD_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  birthdate: "Date of birth",
+  civil_status: "Civil status",
+  gender: "Gender",
+  contact_number: "Contact number",
+  email: "Email address",
+  address: "Street address",
+  city: "City / Municipality",
+  province: "Province",
+  monthly_income: "Monthly income",
+  pledge_amount: "Pledge amount",
+  date_hired: "Date hired",
+};
+
+function labelsFor(errs: Record<string, unknown>): string[] {
+  return Object.keys(errs).map((k) => FIELD_LABELS[k] ?? k);
+}
 
 function emptyPersonal(): StepOneData {
   return {
@@ -108,37 +131,6 @@ function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, stri
   return errs;
 }
 
-// Extract a human-readable reason from an Axios error so the user sees
-// the real backend complaint (e.g. "The branch id field is required.")
-// instead of a generic "check your connection" message that hides the
-// actual cause. Falls back to the caller-supplied fallback string when
-// the error didn't come from the server.
-function submissionErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof AxiosError) {
-    const status = err.response?.status;
-    const data = err.response?.data as
-      | { message?: string; errors?: Record<string, string[]> }
-      | undefined;
-    const firstFieldError = data?.errors
-      ? Object.values(data.errors).flat()[0]
-      : undefined;
-    const serverMsg = firstFieldError || data?.message;
-    if (status === 401) return "Your session has expired. Please refresh the page.";
-    if (status === 403) return "You don't have permission to submit this form.";
-    if (status === 413) return "Uploaded file is too large.";
-    if (status === 429) {
-      const retryAfter = Number(err.response?.headers?.["retry-after"]);
-      const wait = Number.isFinite(retryAfter) && retryAfter > 0
-        ? ` Please try again in about ${Math.ceil(retryAfter / 10) * 10} seconds.`
-        : " Please try again in a minute.";
-      return `Too many submission attempts.${wait}`;
-    }
-    if (status === 422 && serverMsg) return serverMsg;
-    if (serverMsg) return serverMsg;
-  }
-  return fallback;
-}
-
 function validateEmployment(
   d: StepEmploymentData
 ): Partial<Record<keyof StepEmploymentData, string>> {
@@ -175,34 +167,20 @@ export default function RegisterPage() {
   const [created, setCreated] = useState<{ id: number; token?: string } | null>(null);
   const [photoUploaded, setPhotoUploaded] = useState(false);
 
-  const [errors, setErrors] = useState<FullErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   const isMarried = personal.civil_status === "married";
 
-  function clearError<K extends keyof FullErrors>(field: K) {
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
-  }
-
   function updatePersonal<K extends keyof StepOneData>(field: K, value: StepOneData[K]) {
     setPersonal((prev) => ({ ...prev, [field]: value }));
-    clearError(field);
   }
 
   function updateContact<K extends keyof StepTwoData>(field: K, value: StepTwoData[K]) {
     setContact((prev) => ({ ...prev, [field]: value }));
-    clearError(field);
   }
 
   function updateSpouse<K extends keyof StepSpouseData>(field: K, value: StepSpouseData[K]) {
     setSpouse((prev) => ({ ...prev, [field]: value }));
-    clearError(field);
   }
 
   function updateEmployment<K extends keyof StepEmploymentData>(
@@ -210,7 +188,6 @@ export default function RegisterPage() {
     value: StepEmploymentData[K]
   ) {
     setEmployment((prev) => ({ ...prev, [field]: value }));
-    clearError(field);
   }
 
   function handlePhotoChange(file: File | null, preview: string | null) {
@@ -225,7 +202,7 @@ export default function RegisterPage() {
   function handleNextPersonal() {
     const errs = validatePersonal(personal);
     if (Object.keys(errs).length) {
-      setErrors((prev) => ({ ...prev, ...errs }));
+      notifyValidation(labelsFor(errs));
       return;
     }
     goToStep(2);
@@ -234,7 +211,7 @@ export default function RegisterPage() {
   function handleNextContact() {
     const errs = validateContact(contact);
     if (Object.keys(errs).length) {
-      setErrors((prev) => ({ ...prev, ...errs }));
+      notifyValidation(labelsFor(errs));
       return;
     }
     goToStep(3);
@@ -262,7 +239,7 @@ export default function RegisterPage() {
   function handleNextEmployment() {
     const errs = validateEmployment(employment);
     if (Object.keys(errs).length) {
-      setErrors((prev) => ({ ...prev, ...errs }));
+      notifyValidation(labelsFor(errs));
       return;
     }
     goToStep(5);
@@ -331,7 +308,7 @@ export default function RegisterPage() {
           setPhotoUploaded(true);
         } catch (err) {
           uploadErrors.push(
-            submissionErrorMessage(err, "Profile photo upload failed.")
+            getErrorMessage(err, "We couldn't upload your profile photo. Please try again.")
           );
         }
       }
@@ -361,7 +338,7 @@ export default function RegisterPage() {
           );
         } catch (err) {
           uploadErrors.push(
-            submissionErrorMessage(err, `Failed to upload ${entry.type} ID`)
+            getErrorMessage(err, `We couldn't upload your ${entry.type} ID. Please try again.`)
           );
         }
       }
@@ -375,12 +352,17 @@ export default function RegisterPage() {
 
       router.push("/register/success");
     } catch (err) {
-      toast.error(
-        submissionErrorMessage(
+      // "Already on file" is the most common — and most confusing — rejection.
+      // Surface a clear, friendly message instead of the raw duplicate copy
+      // (which the leak guard strips down to a vague validation notice).
+      if (isAlreadyRegisteredError(err)) {
+        toast.error(ALREADY_REGISTERED_MESSAGE);
+      } else {
+        notifyError(
           err,
-          "Submission failed. Please check your connection and try again."
-        )
-      );
+          "We couldn't submit your registration. Please check your connection and try again."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -396,7 +378,7 @@ export default function RegisterPage() {
       {/* Logo bar */}
       <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2.5">
-          <BrandLogo className="h-16 w-auto" />
+          <BrandLogo className="h-28 sm:h-36 w-auto" />
         </div>
       </div>
 
@@ -437,7 +419,6 @@ export default function RegisterPage() {
           {step === 1 && (
             <StepPersonal
               data={personal}
-              errors={errors as Partial<Record<keyof StepOneData, string>>}
               onChange={updatePersonal}
               spouse={spouse}
               onSpouseChange={updateSpouse}
@@ -447,7 +428,6 @@ export default function RegisterPage() {
           {step === 2 && (
             <StepContact
               data={contact}
-              errors={errors as Partial<Record<keyof StepTwoData, string>>}
               onChange={updateContact}
               onNext={handleNextContact}
               onBack={() => goToStep(1)}
@@ -466,7 +446,6 @@ export default function RegisterPage() {
           {step === 4 && (
             <StepEmployment
               employment={employment}
-              errors={errors as Partial<Record<keyof StepEmploymentData, string>>}
               onChange={updateEmployment}
               onNext={handleNextEmployment}
               onBack={() => goToStep(3)}

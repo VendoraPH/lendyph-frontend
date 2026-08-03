@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { AxiosError } from "axios";
+import { notifyError } from "@/lib/notify";
 import { loanService } from "@/services/loan.service";
 import type { AutoPaySettings } from "@/types";
 import {
@@ -65,11 +65,7 @@ export function AutoPayToggleDialog({
       onSuccess(result);
       onOpenChange(false);
     } catch (err) {
-      const msg =
-        err instanceof AxiosError
-          ? (err.response?.data?.message ?? err.message)
-          : "Failed to update Auto-Pay.";
-      toast.error(msg);
+      notifyError(err, "We couldn't update Auto-Pay. Please try again.");
     } finally {
       setSaving(false);
     }

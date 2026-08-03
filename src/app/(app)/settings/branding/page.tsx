@@ -12,6 +12,7 @@ import { PermissionGate, RouteGuard } from "@/components/common";
 import { brandingService } from "@/services";
 import { compressImage } from "@/lib/image-compress";
 import { fileUrl } from "@/lib/file-url";
+import { notifyError } from "@/lib/notify";
 import { siteConfig } from "@/config/site";
 
 const DEFAULT_LOGO = "/Logo/Lendy_logo.png";
@@ -20,23 +21,6 @@ const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5MB — matches the backend cap.
 // an XSS surface, and the backend's `image` rule rejects it anyway); the upload
 // step below preserves transparency for PNG/WEBP so logos don't get a black box.
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
-
-// ── API error helper (matches the settings/profile convention) ──
-
-type ApiError = {
-  response?: { data?: { message?: string; errors?: Record<string, string[]> } };
-};
-
-function showApiError(err: unknown, fallback: string): void {
-  const apiError = err as ApiError;
-  const errors = apiError?.response?.data?.errors;
-  if (errors) {
-    const firstError = Object.values(errors)[0]?.[0];
-    toast.error(firstError || fallback);
-    return;
-  }
-  toast.error(apiError?.response?.data?.message || fallback);
-}
 
 export default function BrandingSettingsPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -58,7 +42,7 @@ export default function BrandingSettingsPage() {
         if (cancelled) return;
         setLogoUrl(res?.logo_url ?? null);
       } catch (err) {
-        if (!cancelled) showApiError(err, "Failed to load branding settings.");
+        if (!cancelled) notifyError(err, "We couldn't load your branding settings. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -115,7 +99,7 @@ export default function BrandingSettingsPage() {
       resetSelection();
       toast.success(res?.message || "Logo updated.");
     } catch (err) {
-      showApiError(err, "Failed to upload logo.");
+      notifyError(err, "We couldn't upload your logo. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -130,7 +114,7 @@ export default function BrandingSettingsPage() {
       resetSelection();
       toast.success(res?.message || "Logo reset to the default.");
     } catch (err) {
-      showApiError(err, "Failed to reset logo.");
+      notifyError(err, "We couldn't reset your logo. Please try again.");
     } finally {
       setRemoving(false);
     }

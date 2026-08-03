@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
@@ -306,19 +307,12 @@ function AddUserDialog({
         branch_id: form.branch_id as number,
         role: form.role,
       });
-      toast.success("User created successfully");
+      toast.success("User created");
       resetForm();
       setOpen(false);
       onAdd();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
-      const apiErrors = err?.response?.data?.errors;
-      if (apiErrors) {
-        const firstError = Object.values(apiErrors)[0]?.[0];
-        toast.error(firstError || "Validation failed");
-      } else {
-        toast.error(err?.response?.data?.message || "Failed to create user");
-      }
+    } catch (err) {
+      notifyError(err, "We couldn't create this user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -520,11 +514,11 @@ function EditUserDialog({
         branch_id: form.branch_id as number,
         role: form.role,
       });
-      toast.success("User updated successfully");
+      toast.success("User updated");
       onOpenChange(false);
       onSave();
     } catch {
-      toast.error("Failed to update user");
+      toast.error("We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -653,12 +647,12 @@ function ResetPasswordDialog({
         password,
         password_confirmation: confirm,
       });
-      toast.success("Password reset successfully");
+      toast.success("Password reset");
       setPassword("");
       setConfirm("");
       onOpenChange(false);
     } catch {
-      toast.error("Failed to reset password");
+      toast.error("We couldn't reset the password. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -745,16 +739,18 @@ function ToggleStatusDialog({
     try {
       if (isActive) {
         await userService.deactivate(user.id);
-        toast.success("User deactivated successfully");
+        toast.success("User deactivated");
       } else {
         await userService.reactivate(user.id);
-        toast.success("User reactivated successfully");
+        toast.success("User reactivated");
       }
       onOpenChange(false);
       onConfirm();
     } catch {
       toast.error(
-        isActive ? "Failed to deactivate user" : "Failed to reactivate user"
+        isActive
+          ? "We couldn't deactivate the user. Please try again."
+          : "We couldn't reactivate the user. Please try again."
       );
     } finally {
       setSubmitting(false);
@@ -913,7 +909,7 @@ export default function UsersPage() {
       setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
       setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
     } catch {
-      toast.error("Failed to load data");
+      toast.error("We couldn't load the data. Please try again.");
     } finally {
       setLoading(false);
     }

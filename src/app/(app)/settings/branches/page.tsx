@@ -87,7 +87,7 @@ function BranchFormDialog({ open, onOpenChange, branch, onSave }: BranchFormDial
       onOpenChange(false);
       onSave();
     } catch {
-      toast.error(isEdit ? "Failed to update branch" : "Failed to create branch");
+      toast.error(isEdit ? "We couldn't update the branch. Please try again." : "We couldn't create the branch. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -187,7 +187,7 @@ export default function BranchesPage() {
       const data = await branchService.list();
       setBranches(Array.isArray(data) ? data : []);
     } catch {
-      toast.error("Failed to load branches");
+      toast.error("We couldn't load the branches. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -215,7 +215,7 @@ export default function BranchesPage() {
       toast.success(`Branch ${branch.is_active ? "deactivated" : "activated"}`);
       fetchBranches();
     } catch {
-      toast.error("Failed to update branch status");
+      toast.error("We couldn't update the branch status. Please try again.");
     }
   }
 
