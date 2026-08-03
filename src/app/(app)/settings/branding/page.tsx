@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { PermissionGate, RouteGuard } from "@/components/common";
 import { brandingService } from "@/services";
+import { useBrandingStore } from "@/store/branding-store";
 import { compressImage } from "@/lib/image-compress";
-import { fileUrl } from "@/lib/file-url";
+import { fileUrl, withVersion } from "@/lib/file-url";
 import { notifyError } from "@/lib/notify";
 import { siteConfig } from "@/config/site";
 
@@ -23,7 +24,13 @@ const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5MB — matches the backend cap.
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export default function BrandingSettingsPage() {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  // The logo lives in the shared store so an upload here immediately updates
+  // the sidebar logo (and any other mounted <BrandLogo>) without a reload.
+  const logoUrl = useBrandingStore((s) => s.logoUrl);
+  const version = useBrandingStore((s) => s.version);
+  const hydrate = useBrandingStore((s) => s.hydrate);
+  const updateLogo = useBrandingStore((s) => s.updateLogo);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -40,7 +47,7 @@ export default function BrandingSettingsPage() {
       try {
         const res = await brandingService.get();
         if (cancelled) return;
-        setLogoUrl(res?.logo_url ?? null);
+        hydrate(res?.logo_url ?? null);
       } catch (err) {
         if (!cancelled) notifyError(err, "We couldn't load your branding settings. Please try again.");
       } finally {
@@ -50,7 +57,7 @@ export default function BrandingSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrate]);
 
   // Revoke the object URL when the preview changes or the page unmounts.
   useEffect(() => {
@@ -95,7 +102,7 @@ export default function BrandingSettingsPage() {
         preserveAlpha ? { mimeType: selectedFile.type } : {}
       );
       const res = await brandingService.uploadLogo(compressed);
-      setLogoUrl(res?.logo_url ?? null);
+      updateLogo(res?.logo_url ?? null);
       resetSelection();
       toast.success(res?.message || "Logo updated.");
     } catch (err) {
@@ -110,7 +117,7 @@ export default function BrandingSettingsPage() {
     setRemoving(true);
     try {
       const res = await brandingService.deleteLogo();
-      setLogoUrl(res?.logo_url ?? null);
+      updateLogo(res?.logo_url ?? null);
       resetSelection();
       toast.success(res?.message || "Logo reset to the default.");
     } catch (err) {
@@ -121,7 +128,9 @@ export default function BrandingSettingsPage() {
   };
 
   const hasCustomLogo = Boolean(logoUrl);
-  const currentSrc = logoUrl ? fileUrl(logoUrl) : DEFAULT_LOGO;
+  const currentSrc = logoUrl
+    ? withVersion(fileUrl(logoUrl), version)
+    : DEFAULT_LOGO;
   const displaySrc = previewUrl ?? currentSrc;
   const busy = saving || removing;
 

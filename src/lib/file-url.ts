@@ -15,6 +15,19 @@ export function fileUrl(url: string | null | undefined): string {
 }
 
 /**
+ * Append a cache-busting `v` param so a replaced image is refetched.
+ *
+ * Needed when the backend reuses a storage path across uploads: the URL is
+ * then byte-identical before and after, and the browser would serve the old
+ * cached image. A falsy version returns the URL untouched, so first paint
+ * stays cacheable.
+ */
+export function withVersion(url: string, version: number): string {
+  if (!url || !version) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
+}
+
+/**
  * Best-effort fetch of a stored image back into a File so it can be re-uploaded
  * (e.g. preserving the unchanged side when replacing one side of a valid ID).
  * Storage is typically cross-origin, so this can fail on CORS — callers must
