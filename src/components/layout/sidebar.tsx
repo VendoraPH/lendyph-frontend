@@ -41,7 +41,6 @@ const iconColors: Record<string, string> = {
   "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/30",
   "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/30",
   "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200 dark:shadow-cyan-900/30",
-  "/collections": "bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-amber-200 dark:shadow-amber-900/30",
   "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200 dark:shadow-pink-900/30",
   "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
   "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
