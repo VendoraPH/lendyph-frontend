@@ -28,7 +28,6 @@ export default function BrandingSettingsPage() {
   // the sidebar logo (and any other mounted <BrandLogo>) without a reload.
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const version = useBrandingStore((s) => s.version);
-  const hydrate = useBrandingStore((s) => s.hydrate);
   const updateLogo = useBrandingStore((s) => s.updateLogo);
 
   const [loading, setLoading] = useState(true);
@@ -47,7 +46,10 @@ export default function BrandingSettingsPage() {
       try {
         const res = await brandingService.get();
         if (cancelled) return;
-        hydrate(res?.logo_url ?? null);
+        // Read the action off the store instead of subscribing to it: this
+        // effect calls it once on mount and never needs to re-run, so the
+        // dependency array stays empty.
+        useBrandingStore.getState().hydrate(res?.logo_url ?? null);
       } catch (err) {
         if (!cancelled) notifyError(err, "We couldn't load your branding settings. Please try again.");
       } finally {
@@ -57,7 +59,7 @@ export default function BrandingSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrate]);
+  }, []);
 
   // Revoke the object URL when the preview changes or the page unmounts.
   useEffect(() => {

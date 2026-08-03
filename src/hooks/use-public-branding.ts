@@ -13,11 +13,13 @@ export function usePublicBranding() {
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loading = useBrandingStore((s) => s.loading);
   const version = useBrandingStore((s) => s.version);
-  const load = useBrandingStore((s) => s.load);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    // Read the action off the store rather than subscribing to it, so the
+    // dependency array stays empty — the fetch runs once and the store
+    // de-dupes across every mounted consumer.
+    void useBrandingStore.getState().load();
+  }, []);
 
   return { logoUrl, loading, version };
 }
