@@ -29,10 +29,6 @@ import {
   Settings,
   FilePlus,
   CreditCard,
-  DollarSign,
-  AlertTriangle,
-  FileText,
-  Check,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
@@ -117,58 +113,12 @@ interface Notification {
   iconBg: string;
 }
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: 1,
-    title: "Payment Received",
-    description: "Rosario D. Santos paid ₱3,933 via GCash",
-    time: "2 min ago",
-    read: false,
-    icon: DollarSign,
-    iconColor: "text-green-600 dark:text-green-400",
-    iconBg: "bg-green-500/10",
-  },
-  {
-    id: 2,
-    title: "Loan Overdue",
-    description: "Ana Santos — LN-2026-0091 is 3 days overdue",
-    time: "15 min ago",
-    read: false,
-    icon: AlertTriangle,
-    iconColor: "text-red-600 dark:text-red-400",
-    iconBg: "bg-red-500/10",
-  },
-  {
-    id: 3,
-    title: "New Loan Application",
-    description: "Carmen Torres applied for a ₱50,000 loan",
-    time: "1 hr ago",
-    read: false,
-    icon: FileText,
-    iconColor: "text-blue-600 dark:text-blue-400",
-    iconBg: "bg-blue-500/10",
-  },
-  {
-    id: 4,
-    title: "Payment Received",
-    description: "Roberto Garcia paid ₱9,417 — cash payment",
-    time: "2 hrs ago",
-    read: true,
-    icon: DollarSign,
-    iconColor: "text-green-600 dark:text-green-400",
-    iconBg: "bg-green-500/10",
-  },
-  {
-    id: 5,
-    title: "Loan Approved",
-    description: "Eduardo Mendoza — LN-2026-0103 has been approved",
-    time: "3 hrs ago",
-    read: true,
-    icon: Check,
-    iconColor: "text-purple-600 dark:text-purple-400",
-    iconBg: "bg-purple-500/10",
-  },
-];
+// There is no notifications endpoint yet (neither routes/api.php nor
+// api-endpoints.ts defines one), so there is nothing real to show. This stays
+// empty — the bell renders its "No notifications" state and no unread badge —
+// until a backend feed exists to populate it. Do not reintroduce sample rows:
+// they read as real activity on a client's live dashboard.
+const INITIAL_NOTIFICATIONS: Notification[] = [];
 
 const QUICK_ACTIONS = [
   { title: "New Loan", href: "/loans/new", icon: FilePlus },
