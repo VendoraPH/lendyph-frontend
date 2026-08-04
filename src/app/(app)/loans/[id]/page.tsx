@@ -946,7 +946,7 @@ export default function LoanDetailPage({
   const [adjNewInterestRate, setAdjNewInterestRate] = useState("");
   const [adjNewTerm, setAdjNewTerm] = useState("");
   const [adjNewFrequency, setAdjNewFrequency] = useState<string | null>(null);
-  const [adjPenaltyAmount, setAdjPenaltyAmount] = useState("");
+  const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
 
   // Loan Documents state
   const [docLoading, setDocLoading] = useState<string | null>(null);
@@ -2371,23 +2371,56 @@ export default function LoanDetailPage({
 
   // ── Loan Adjustment Handlers ──
 
+  /** Clear every adjustment field so the next "New Adjustment" starts from scratch. */
+  const resetAdjustmentForm = () => {
+    setAdjType("balance_adjustment");
+    setAdjDescription("");
+    setAdjRemarks("");
+    setAdjNewValues("");
+    resetAdjustmentValueFields();
+  };
+
+  /** Clear only the type-specific value fields — used when the type changes mid-form. */
+  const resetAdjustmentValueFields = () => {
+    setAdjNewBalance("");
+    setAdjNewInterestRate("");
+    setAdjNewTerm("");
+    setAdjNewFrequency(null);
+    setAdjAdditionalMonths("");
+  };
+
   const handleCreateAdjustment = async () => {
     // Build new_values from user-friendly fields based on type
     const newValues: Record<string, unknown> = {};
     if (adjType === "balance_adjustment") {
       if (!adjNewBalance) { toast.error("Please enter the new balance amount"); return; }
-      newValues.outstanding_balance = parseFloat(adjNewBalance);
+      const target = parseFloat(adjNewBalance);
+      if (!Number.isFinite(target) || target < 0) { toast.error("Enter a valid new balance"); return; }
+      // The API takes a signed delta applied to the principal
+      // (`adjustment_amount`), not the resulting balance. The dialog asks for
+      // the balance the user wants, so convert it here.
+      const current = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
+      const delta = Number((target - current).toFixed(2));
+      if (delta === 0) { toast.error("That is already the outstanding balance"); return; }
+      newValues.adjustment_amount = delta;
     } else if (adjType === "restructure") {
       if (adjNewInterestRate) newValues.interest_rate = parseFloat(adjNewInterestRate);
       if (adjNewTerm) newValues.term = parseInt(adjNewTerm);
       if (adjNewFrequency) newValues.frequency = adjNewFrequency;
       if (Object.keys(newValues).length === 0) { toast.error("Please fill in at least one field to restructure"); return; }
     } else if (adjType === "penalty_waiver") {
-      if (!adjPenaltyAmount) { toast.error("Please enter the penalty amount to waive"); return; }
-      newValues.penalty_waived = parseFloat(adjPenaltyAmount);
+      // The API waives a schedule's penalty in full — there is no partial
+      // amount waiver — so it takes `waive_all` or a list of `schedule_ids`,
+      // never a peso figure. Sending an amount used to leave the handler with
+      // no selection at all, which waived the penalty on *every* open schedule.
+      newValues.waive_all = true;
     } else if (adjType === "term_extension") {
-      if (!adjNewTerm) { toast.error("Please enter the additional months"); return; }
-      newValues.additional_months = parseInt(adjNewTerm);
+      if (!adjAdditionalMonths) { toast.error("Please enter the additional months"); return; }
+      const extraMonths = parseInt(adjAdditionalMonths);
+      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error("Additional months must be at least 1"); return; }
+      // `additional_terms` is the number of extra periods, not the resulting
+      // term — `term` is the restructure field and is ignored here.
+      newValues.additional_terms = extraMonths;
     }
     try {
       setActionLoading(true);
@@ -2399,17 +2432,10 @@ export default function LoanDetailPage({
       });
       toast.success("Adjustment created");
       setCreateAdjustmentOpen(false);
-      setAdjDescription("");
-      setAdjRemarks("");
-      setAdjNewValues("");
-      setAdjNewBalance("");
-      setAdjNewInterestRate("");
-      setAdjNewTerm("");
-      setAdjNewFrequency(null);
-      setAdjPenaltyAmount("");
+      resetAdjustmentForm();
       fetchAdjustments(loan.id);
-    } catch {
-      toast.error("We couldn't create the adjustment. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't create the adjustment. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -3844,7 +3870,12 @@ export default function LoanDetailPage({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setCreateAdjustmentOpen(true)}
+                    onClick={() => {
+                      // Start every adjustment from a clean form, however many
+                      // have already been raised on this loan.
+                      resetAdjustmentForm();
+                      setCreateAdjustmentOpen(true);
+                    }}
                   >
                     <Plus className="mr-1 h-3 w-3" />
                     New Adjustment
@@ -5543,9 +5574,23 @@ export default function LoanDetailPage({
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label>Adjustment Type <span className="text-red-500">*</span></Label>
-              <Select value={adjType} onValueChange={(v) => setAdjType(v as LoanAdjustmentType)}>
+              <Select
+                value={adjType}
+                onValueChange={(v) => {
+                  setAdjType(v as LoanAdjustmentType);
+                  // Each type collects different figures — don't carry the
+                  // previous type's numbers over.
+                  resetAdjustmentValueFields();
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select adjustment type">
+                    {(value: string | null) =>
+                      value
+                        ? (ADJUSTMENT_TYPE_LABELS[value] ?? value)
+                        : "Select adjustment type"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="restructure">Restructure</SelectItem>
@@ -5607,7 +5652,13 @@ export default function LoanDetailPage({
                   <Label>New Payment Frequency</Label>
                   <Select value={adjNewFrequency ?? null} onValueChange={(v) => setAdjNewFrequency(v)}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Keep current frequency" />
+                      <SelectValue placeholder="Keep current frequency">
+                        {(value: string | null) =>
+                          value
+                            ? (PAYMENT_FREQUENCY_LABELS[value as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? value)
+                            : "Keep current frequency"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
@@ -5621,16 +5672,20 @@ export default function LoanDetailPage({
               </>
             )}
             {adjType === "penalty_waiver" && (
+              // The API waives a schedule's penalty in full — there is no
+              // partial-amount waiver — so this states what will happen rather
+              // than asking for a figure it would have to ignore.
               <div className="space-y-1.5">
-                <Label htmlFor="adj-penalty">Penalty Amount to Waive <span className="text-red-500">*</span></Label>
-                <Input
-                  id="adj-penalty"
-                  type="number"
-                  placeholder="0.00"
-                  step="0.01"
-                  value={adjPenaltyAmount}
-                  onChange={(e) => setAdjPenaltyAmount(e.target.value)}
-                />
+                <Label>Penalties to Waive</Label>
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm">
+                  <p className="font-medium">
+                    All outstanding penalties on this loan will be waived.
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Penalties are waived in full per schedule; a partial amount cannot be waived.
+                    This still requires approval before it is applied.
+                  </p>
+                </div>
               </div>
             )}
             {adjType === "term_extension" && (
@@ -5639,10 +5694,17 @@ export default function LoanDetailPage({
                 <Input
                   id="adj-extend-term"
                   type="number"
+                  min="1"
                   placeholder="e.g. 3"
-                  value={adjNewTerm}
-                  onChange={(e) => setAdjNewTerm(e.target.value)}
+                  value={adjAdditionalMonths}
+                  onChange={(e) => setAdjAdditionalMonths(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Current term is {loanTerm ?? "—"} {loanTerm === 1 ? "month" : "months"}
+                  {adjAdditionalMonths && Number(adjAdditionalMonths) > 0
+                    ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                    : "."}
+                </p>
               </div>
             )}
             <div className="space-y-1.5">
