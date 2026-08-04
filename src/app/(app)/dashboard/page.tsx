@@ -6,12 +6,8 @@ import { RouteGuard } from "@/components/common";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
-  XAxis,
-  YAxis,
   Tooltip,
   ResponsiveContainer,
   Cell,
@@ -50,14 +46,6 @@ interface DashboardStats {
   overdue_count?: number;
   share_capital_total?: number;
   sparklines?: Partial<Record<SparklineKey, SparklinePoint[]>>;
-}
-
-interface CollectionsTrendPoint {
-  period_label?: string;
-  label?: string;
-  day?: string;
-  value?: number;
-  amount?: number;
 }
 
 interface DailyDueItem {
@@ -100,8 +88,6 @@ function getInitials(name: string) {
 /** Request lifecycle for a section, so empty data and a failed fetch render differently. */
 type LoadState = "loading" | "ready" | "error";
 
-type TrendPoint = { day: string; value: number };
-
 type DueItemView = {
   id: number;
   borrower: string;
@@ -119,30 +105,6 @@ type TransactionView = {
   date: string;
   color: string;
 };
-
-// Candlestick data — open/close/high/low per day (like the reference screenshot)
-const CANDLESTICK_DATA = [
-  { date: "12", open: 42, close: 48, high: 52, low: 38, volume: 35 },
-  { date: "13", open: 48, close: 38, high: 50, low: 35, volume: 28 },
-  { date: "14", open: 38, close: 55, high: 58, low: 36, volume: 52 },
-  { date: "15", open: 55, close: 48, high: 57, low: 45, volume: 40 },
-  { date: "16", open: 48, close: 62, high: 65, low: 46, volume: 60 },
-  { date: "17", open: 62, close: 35, high: 64, low: 32, volume: 45 },
-  { date: "18", open: 35, close: 41, high: 44, low: 33, volume: 22 },
-  { date: "19", open: 41, close: 58, high: 61, low: 39, volume: 55 },
-  { date: "20", open: 58, close: 52, high: 60, low: 49, volume: 30 },
-  { date: "21", open: 52, close: 67, high: 70, low: 50, volume: 65 },
-  { date: "22", open: 67, close: 45, high: 69, low: 42, volume: 48 },
-  { date: "23", open: 45, close: 71, high: 74, low: 43, volume: 70 },
-  { date: "24", open: 71, close: 63, high: 73, low: 60, volume: 38 },
-  { date: "25", open: 63, close: 58, high: 66, low: 55, volume: 25 },
-  { date: "26", open: 58, close: 74, high: 78, low: 56, volume: 58 },
-  { date: "27", open: 74, close: 49, high: 76, low: 46, volume: 42 },
-  { date: "28", open: 49, close: 82, high: 85, low: 47, volume: 72 },
-  { date: "29", open: 82, close: 68, high: 84, low: 65, volume: 50 },
-  { date: "30", open: 68, close: 76, high: 80, low: 66, volume: 44 },
-  { date: "31", open: 76, close: 85, high: 88, low: 74, volume: 68 },
-];
 
 // ---------------------------------------------------------------------------
 // KPI Card structure (values and sparklines populated from state)
@@ -216,94 +178,6 @@ function TableEmptyRow({
 }
 
 // ---------------------------------------------------------------------------
-// Candlestick shape renderer
-// ---------------------------------------------------------------------------
-
-function CandlestickShape(props: Record<string, unknown>) {
-  const { x, y, width, height, payload } = props as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    payload: (typeof CANDLESTICK_DATA)[0];
-  };
-
-  if (!payload) return null;
-
-  const isUp = payload.close >= payload.open;
-  const color = isUp ? "#10b981" : "#7c3aed";
-
-  // Scale values to chart coordinates
-  // The bar is rendered at (x, y) with given width/height
-  // We need to calculate wick positions relative to the bar
-  const centerX = x + width / 2;
-  const bodyWidth = Math.max(width * 0.25, 3);
-  const bodyX = centerX - bodyWidth / 2;
-
-  // Wick extends slightly above and below the body
-  const wickTop = y - (height * 0.15);
-  const wickBottom = y + height + (height * 0.15);
-
-  return (
-    <g>
-      {/* Wick (thin line) */}
-      <line
-        x1={centerX}
-        y1={wickTop}
-        x2={centerX}
-        y2={wickBottom}
-        stroke={color}
-        strokeWidth={1}
-      />
-      {/* Body (narrow rectangle) */}
-      <rect
-        x={bodyX}
-        y={y}
-        width={bodyWidth}
-        height={Math.max(height, 2)}
-        fill={color}
-        rx={1}
-        ry={1}
-      />
-    </g>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Custom tooltip for candlestick chart
-// ---------------------------------------------------------------------------
-
-function CandlestickTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { payload: (typeof CANDLESTICK_DATA)[0] }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const isUp = d.close >= d.open;
-  return (
-    <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-medium mb-1">Mar {label}</p>
-      <div className="space-y-0.5">
-        <p>Open: <span className="font-semibold">₱{d.open}K</span></p>
-        <p>Close: <span className={`font-semibold ${isUp ? "text-[#10b981]" : "text-[#7c3aed]"}`}>₱{d.close}K</span></p>
-        <p>High: ₱{d.high}K · Low: ₱{d.low}K</p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Time period toggle
-// ---------------------------------------------------------------------------
-
-const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
-
-// ---------------------------------------------------------------------------
 // Section visibility flags
 // ---------------------------------------------------------------------------
 // These dashboard sections are hidden temporarily — the underlying numbers
@@ -311,7 +185,6 @@ const TIME_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 // they're driven by real backend metrics. Flip to `true` to bring them back.
 
 const SHOW_DAILY_COLLECTION_VS_ACTUAL = false;
-const SHOW_TOTAL_COLLECTIONS_HERO = false;
 
 // ---------------------------------------------------------------------------
 // Page
@@ -324,11 +197,9 @@ function formatCompactCurrency(amount: number): string {
 }
 
 export default function DashboardPage() {
-  const [activePeriod, setActivePeriod] = useState<(typeof TIME_PERIODS)[number]>("1M");
   const [mounted, setMounted] = useState(false);
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<TransactionView[]>([]);
   // "loading" until the request settles, then "ready" or "error" — so the UI can
@@ -367,23 +238,6 @@ export default function DashboardPage() {
       })
       .catch(() => {});
 
-    // Collections trend
-    dashboardService
-      .collectionsTrend()
-      .then((res) => {
-        const raw = Array.isArray(res)
-          ? (res as CollectionsTrendPoint[])
-          : ((res as { data?: CollectionsTrendPoint[] })?.data ?? []);
-        setTrendData(
-          raw.map((p, i) => ({
-            day: p.period_label ?? p.label ?? p.day ?? `W${i + 1}`,
-            value: Number(p.value ?? p.amount ?? 0),
-          })),
-        );
-      })
-      .catch(() => {
-        setTrendData([]);
-      });
 
     // Daily dues
     dashboardService
@@ -456,7 +310,6 @@ export default function DashboardPage() {
     share_capital: shareCapitalTotal,
   };
 
-  const collectionsTrend = trendData;
   const dueItems = dailyDues;
   const transactions = recentTransactions;
 
@@ -639,122 +492,6 @@ export default function DashboardPage() {
       </Card>
       )}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 3: Main Chart Card — full width single column                 */}
-      {/* Hidden via SHOW_TOTAL_COLLECTIONS_HERO — flip flag to restore.    */}
-      {/* ----------------------------------------------------------------- */}
-      {SHOW_TOTAL_COLLECTIONS_HERO && (
-      <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="flex flex-col lg:flex-row">
-          {/* Left column: value + area chart */}
-          <div className="flex flex-col justify-between p-6 lg:w-[35%] lg:border-r border-border">
-            <div>
-              <p className="text-3xl font-bold tracking-tight">₱2,456,890</p>
-              <p className="text-sm text-muted-foreground mt-1">Total Collections</p>
-              <p className="text-sm font-medium text-green-600 mt-0.5">+12.5%</p>
-            </div>
-            {/* Purple area chart */}
-            <div className="mt-4" style={{ height: 120 }}>
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={collectionsTrend} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-                    <defs>
-                      <linearGradient id="collectionsGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#7c3aed"
-                      strokeWidth={2}
-                      fill="url(#collectionsGrad)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Right column: time toggles + candlestick chart */}
-          <div className="flex-1 p-4 pt-6">
-            <div className="flex justify-end mb-2">
-              <div className="flex items-center gap-1">
-                {TIME_PERIODS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setActivePeriod(p)}
-                    className={
-                      activePeriod === p
-                        ? "bg-purple-600 text-white rounded-full px-3 py-1 text-xs font-medium"
-                        : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors"
-                    }
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Candlestick chart */}
-            {mounted ? (
-              <>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-                    <XAxis dataKey="date" hide />
-                    <YAxis hide domain={[20, 95]} />
-                    <Tooltip content={<CandlestickTooltip />} cursor={{ fill: "transparent" }} />
-                    <Bar
-                      dataKey="close"
-                      shape={<CandlestickShape />}
-                      isAnimationActive={false}
-                    >
-                      {CANDLESTICK_DATA.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                {/* Volume bars below candlestick */}
-                <ResponsiveContainer width="100%" height={60}>
-                  <BarChart data={CANDLESTICK_DATA} margin={{ top: 0, right: 8, bottom: 4, left: 8 }}>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10, fill: "currentColor" }}
-                      tickLine={false}
-                      axisLine={false}
-                      className="text-muted-foreground"
-                    />
-                    <YAxis hide />
-                    <Bar dataKey="volume" isAnimationActive={false} radius={[2, 2, 0, 0]}>
-                      {CANDLESTICK_DATA.map((entry, index) => (
-                        <Cell
-                          key={`vol-${index}`}
-                          fill={entry.close >= entry.open ? "#10b981" : "#7c3aed"}
-                          fillOpacity={0.6}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Month labels */}
-        <div className="flex justify-between px-6 pb-4 pt-1">
-          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m) => (
-            <span key={m} className="text-[11px] text-muted-foreground">{m}</span>
-          ))}
-        </div>
-      </Card>
-      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 3: Recent Transactions Table                                   */}

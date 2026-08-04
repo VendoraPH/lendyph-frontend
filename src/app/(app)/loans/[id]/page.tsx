@@ -2134,16 +2134,12 @@ export default function LoanDetailPage({
   })();
 
   // Loan Extension is offered only on one-month-term loans, whatever the
-  // product. `term` is a period count whose unit follows `frequency` and is
-  // only months for these two, so a daily loan with term 30 is thirty daily
-  // periods — not a one-month loan. Mirrors the backend guard in
-  // LoanAdjustmentService::extendLoan.
-  const isOneMonthTermLoan = (() => {
-    if (!loan) return false;
-    const freq = loan.frequency ?? loan.payment_frequency ?? "";
-    if (freq !== "monthly" && freq !== "upon_maturity") return false;
-    return Number(loan.term) === 1;
-  })();
+  // product. The API decides: eligibility depends on the loan's ORIGINAL term,
+  // and once an extension is applied `term` no longer describes the loan as
+  // agreed — each extension increments it — so this cannot be derived from the
+  // payload. Reimplementing it here would hide the button after one use even
+  // though the API still allows more.
+  const isOneMonthTermLoan = loan?.is_one_month_term ?? false;
 
   const submitRepayment = async (data: {
     payment_date: string;
