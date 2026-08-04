@@ -38,6 +38,12 @@ export interface Loan {
   interest_rate: number;
   interest_method?: string;
   term?: number;
+  /**
+   * Whether the loan is eligible for the Extend Loan action. Server-derived
+   * from the loan's ORIGINAL term — `term` itself increments with every
+   * extension, so this cannot be recomputed from the fields above.
+   */
+  is_one_month_term?: boolean;
   frequency?: string;
   principal_amount: number;
   start_date?: string;
