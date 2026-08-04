@@ -17,7 +17,21 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
+
+            APP=lendyph-frontend-staging
+
             cd /var/www/lendyph-frontend-staging
+
+            # Assert the pm2 app exists BEFORE anything destructive. `rm -rf .next`
+            # below deletes the chunks the running server is still serving, so if
+            # the restart afterwards can't find the app, the site 500s on every
+            # chunk until someone restarts it by hand. That is exactly what a
+            # stale app name here caused once already — and because the old
+            # script had no `set -e`, the job still reported green.
+            echo "=== Checking pm2 app '$APP' exists ==="
+            pm2 describe "$APP" > /dev/null
+
             echo "=== Fetching latest ==="
             git fetch origin development
             echo "=== Resetting to match remote ==="
@@ -31,5 +45,11 @@ jobs:
             echo "=== Building ==="
             npm run build
             echo "=== Restarting PM2 ==="
-            pm2 restart lendyph-staging
+            pm2 restart "$APP" --update-env
+            pm2 save
+
+            # Fail loudly if the app did not come back up.
+            echo "=== Verifying '$APP' is online ==="
+            pm2 describe "$APP" | grep -q "status.*online"
+
             echo "=== Staging deployed at $(date) ==="
