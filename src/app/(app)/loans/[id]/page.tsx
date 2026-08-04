@@ -946,7 +946,6 @@ export default function LoanDetailPage({
   const [adjNewInterestRate, setAdjNewInterestRate] = useState("");
   const [adjNewTerm, setAdjNewTerm] = useState("");
   const [adjNewFrequency, setAdjNewFrequency] = useState<string | null>(null);
-  const [adjPenaltyAmount, setAdjPenaltyAmount] = useState("");
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
 
   // Loan Documents state
@@ -2387,7 +2386,6 @@ export default function LoanDetailPage({
     setAdjNewInterestRate("");
     setAdjNewTerm("");
     setAdjNewFrequency(null);
-    setAdjPenaltyAmount("");
     setAdjAdditionalMonths("");
   };
 
@@ -2396,21 +2394,33 @@ export default function LoanDetailPage({
     const newValues: Record<string, unknown> = {};
     if (adjType === "balance_adjustment") {
       if (!adjNewBalance) { toast.error("Please enter the new balance amount"); return; }
-      newValues.outstanding_balance = parseFloat(adjNewBalance);
+      const target = parseFloat(adjNewBalance);
+      if (!Number.isFinite(target) || target < 0) { toast.error("Enter a valid new balance"); return; }
+      // The API takes a signed delta applied to the principal
+      // (`adjustment_amount`), not the resulting balance. The dialog asks for
+      // the balance the user wants, so convert it here.
+      const current = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
+      const delta = Number((target - current).toFixed(2));
+      if (delta === 0) { toast.error("That is already the outstanding balance"); return; }
+      newValues.adjustment_amount = delta;
     } else if (adjType === "restructure") {
       if (adjNewInterestRate) newValues.interest_rate = parseFloat(adjNewInterestRate);
       if (adjNewTerm) newValues.term = parseInt(adjNewTerm);
       if (adjNewFrequency) newValues.frequency = adjNewFrequency;
       if (Object.keys(newValues).length === 0) { toast.error("Please fill in at least one field to restructure"); return; }
     } else if (adjType === "penalty_waiver") {
-      if (!adjPenaltyAmount) { toast.error("Please enter the penalty amount to waive"); return; }
-      newValues.penalty_waived = parseFloat(adjPenaltyAmount);
+      // The API waives a schedule's penalty in full — there is no partial
+      // amount waiver — so it takes `waive_all` or a list of `schedule_ids`,
+      // never a peso figure. Sending an amount used to leave the handler with
+      // no selection at all, which waived the penalty on *every* open schedule.
+      newValues.waive_all = true;
     } else if (adjType === "term_extension") {
       if (!adjAdditionalMonths) { toast.error("Please enter the additional months"); return; }
       const extraMonths = parseInt(adjAdditionalMonths);
       if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error("Additional months must be at least 1"); return; }
-      // The API takes the resulting term, not the delta, so extend the current term here.
-      newValues.term = (loanTerm ?? 0) + extraMonths;
+      // `additional_terms` is the number of extra periods, not the resulting
+      // term — `term` is the restructure field and is ignored here.
+      newValues.additional_terms = extraMonths;
     }
     try {
       setActionLoading(true);
@@ -5662,16 +5672,20 @@ export default function LoanDetailPage({
               </>
             )}
             {adjType === "penalty_waiver" && (
+              // The API waives a schedule's penalty in full — there is no
+              // partial-amount waiver — so this states what will happen rather
+              // than asking for a figure it would have to ignore.
               <div className="space-y-1.5">
-                <Label htmlFor="adj-penalty">Penalty Amount to Waive <span className="text-red-500">*</span></Label>
-                <Input
-                  id="adj-penalty"
-                  type="number"
-                  placeholder="0.00"
-                  step="0.01"
-                  value={adjPenaltyAmount}
-                  onChange={(e) => setAdjPenaltyAmount(e.target.value)}
-                />
+                <Label>Penalties to Waive</Label>
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm">
+                  <p className="font-medium">
+                    All outstanding penalties on this loan will be waived.
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Penalties are waived in full per schedule; a partial amount cannot be waived.
+                    This still requires approval before it is applied.
+                  </p>
+                </div>
               </div>
             )}
             {adjType === "term_extension" && (
