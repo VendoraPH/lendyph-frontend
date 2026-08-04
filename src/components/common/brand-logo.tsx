@@ -1,7 +1,7 @@
 "use client";
 
 import { usePublicBranding } from "@/hooks/use-public-branding";
-import { fileUrl } from "@/lib/file-url";
+import { fileUrl, withVersion } from "@/lib/file-url";
 import { siteConfig } from "@/config/site";
 
 interface BrandLogoProps {
@@ -19,8 +19,10 @@ interface BrandLogoProps {
  * break for logos served from other deployments or localhost.
  */
 export function BrandLogo({ className }: BrandLogoProps) {
-  const { logoUrl } = usePublicBranding();
-  const src = logoUrl ? fileUrl(logoUrl) : "/Logo/Lendy_logo.png";
+  const { logoUrl, version } = usePublicBranding();
+  const src = logoUrl
+    ? withVersion(fileUrl(logoUrl), version)
+    : "/Logo/Lendy_logo.png";
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
