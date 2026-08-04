@@ -2133,6 +2133,18 @@ export default function LoanDetailPage({
     );
   })();
 
+  // Loan Extension is offered only on one-month-term loans, whatever the
+  // product. `term` is a period count whose unit follows `frequency` and is
+  // only months for these two, so a daily loan with term 30 is thirty daily
+  // periods — not a one-month loan. Mirrors the backend guard in
+  // LoanAdjustmentService::extendLoan.
+  const isOneMonthTermLoan = (() => {
+    if (!loan) return false;
+    const freq = loan.frequency ?? loan.payment_frequency ?? "";
+    if (freq !== "monthly" && freq !== "upon_maturity") return false;
+    return Number(loan.term) === 1;
+  })();
+
   const submitRepayment = async (data: {
     payment_date: string;
     amount_paid: number;
@@ -2624,7 +2636,7 @@ export default function LoanDetailPage({
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
-            {isUponMaturityLoan &&
+            {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
                 <Button
