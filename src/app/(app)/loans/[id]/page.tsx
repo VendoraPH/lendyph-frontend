@@ -42,7 +42,7 @@ import {
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import type { LoanSchedule } from "@/types/loan";
+import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
 import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
@@ -205,6 +205,29 @@ interface AmortizationRow {
   balance: number;
   status?: "pending" | "paid" | "partial" | "overdue";
   amountPaid?: number;
+}
+
+// One row of the Ledger table — either a Repayment or a LoanLedgerEntry
+// (interest a loan extension accrues or collects), flattened to a common
+// shape so both render in one chronological list with running balances.
+interface LedgerDisplayRow {
+  key: string;
+  date: string;
+  createdAt: string;
+  refNo: string;
+  remarks: string;
+  principalPaid?: number;
+  interestDebit?: number;
+  interestCredit?: number;
+  penaltyPaid?: number;
+  scbPaid?: number;
+  excessAmount?: number;
+  totalPaid?: number;
+  status?: Repayment["status"];
+  repaymentId?: number;
+  principalBal: number;
+  interestBal: number;
+  scbBal: number;
 }
 
 function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
@@ -907,6 +930,10 @@ export default function LoanDetailPage({
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [repaymentsLoading, setRepaymentsLoading] = useState(false);
+  // Ledger debit/credit entries (interest an extension accrues/collects) —
+  // merged with repayments into `ledgerRows` below.
+  const [ledgerEntries, setLedgerEntries] = useState<LoanLedgerEntry[]>([]);
+  const [ledgerEntriesLoading, setLedgerEntriesLoading] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -1181,6 +1208,21 @@ export default function LoanDetailPage({
     }
   }, []);
 
+  // Fetch debit/credit ledger entries for released+ loans — merged into
+  // `ledgerRows` alongside repayments.
+  const fetchLedgerEntries = useCallback(async (id: number) => {
+    try {
+      setLedgerEntriesLoading(true);
+      const res = await loanService.ledgerEntries(id);
+      const list: LoanLedgerEntry[] = Array.isArray(res) ? res : res.data ?? [];
+      setLedgerEntries(list);
+    } catch {
+      // silently fail — the ledger still renders correctly from repayments alone
+    } finally {
+      setLedgerEntriesLoading(false);
+    }
+  }, []);
+
   // Fetch adjustments for released+ loans
   const fetchAdjustments = useCallback(async (id: number) => {
     try {
@@ -1202,8 +1244,9 @@ export default function LoanDetailPage({
     if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
       fetchRepayments(loan.id);
       fetchAdjustments(loan.id);
+      fetchLedgerEntries(loan.id);
     }
-  }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments]);
+  }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments, fetchLedgerEntries]);
 
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
@@ -1534,24 +1577,109 @@ export default function LoanDetailPage({
     });
   }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
 
-  // Ledger rows: repayments sorted by date with running principal/interest/scb balances.
+  // Ledger rows: repayments merged with debit/credit ledger entries (interest
+  // a loan extension accrues or collects), sorted by date so the table reads
+  // as one chronological history with running Principal/Interest/SCB balances.
   const ledgerRows = useMemo(() => {
     const principalStart = loan?.principal_amount ?? 0;
-    const interestStart = storedScheduleTotals.interest;
     const scbStart = storedScheduleTotals.shareCapitalBuildUp;
-    const sorted = [...repayments].sort(
-      (a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime(),
+
+    // The API's category can widen to "principal" / "penalty" later even
+    // though only "interest" entries exist today (see LoanLedgerEntry) — this
+    // table only has an Interest debit/credit pair to put them in, so entries
+    // in some other category are left out rather than mislabeled as interest.
+    const interestEntries = ledgerEntries.filter((e) => e.category === "interest");
+
+    // A "pay" extension collects interest through a real Repayment AND logs
+    // the same money again as a credit ledger entry (linked via
+    // repayment_id) so it carries a description. Keep the ledger entry — it's
+    // the one with the description — and drop the repayment it stands in
+    // for, or that collection would render, and count, twice.
+    const creditedRepaymentIds = new Set(
+      interestEntries.map((e) => e.repayment_id).filter((id): id is number => id != null),
     );
-    let principalBal = principalStart;
-    let interestBal = interestStart;
-    let scbBal = scbStart;
-    return sorted.map((r) => {
-      principalBal = Math.max(0, principalBal - (r.principal_paid ?? 0));
-      interestBal = Math.max(0, interestBal - (r.interest_paid ?? 0));
-      scbBal = Math.max(0, scbBal - (r.scb_paid ?? 0));
-      return { ...r, principalBal, interestBal, scbBal };
+    const keptRepayments = repayments.filter((r) => !creditedRepaymentIds.has(r.id));
+
+    const repaymentRows: LedgerDisplayRow[] = keptRepayments.map((r) => ({
+      key: `repayment-${r.id}`,
+      date: r.payment_date,
+      createdAt: r.created_at,
+      refNo: (r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`,
+      remarks: r.remarks || "payment",
+      principalPaid: r.principal_paid,
+      interestCredit: r.interest_paid,
+      penaltyPaid: r.penalty_paid,
+      scbPaid: r.scb_paid,
+      excessAmount: r.excess_amount,
+      totalPaid: r.amount_paid,
+      status: r.status,
+      repaymentId: r.id,
+      principalBal: 0,
+      interestBal: 0,
+      scbBal: 0,
+    }));
+
+    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => ({
+      key: `ledger-${e.id}`,
+      date: e.entry_date,
+      createdAt: e.created_at,
+      refNo: "—",
+      remarks: e.description,
+      interestDebit: e.type === "debit" ? e.amount : undefined,
+      interestCredit: e.type === "credit" ? e.amount : undefined,
+      // A credit here IS the cash collection (its Repayment twin was dropped
+      // above), so it belongs in Total Paid too; a debit moves no cash.
+      totalPaid: e.type === "credit" ? e.amount : undefined,
+      principalBal: 0,
+      interestBal: 0,
+      scbBal: 0,
+    }));
+
+    const sorted = [...repaymentRows, ...ledgerEntryRows].sort((a, b) => {
+      const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (byDate !== 0) return byDate;
+      // Same-day tiebreaker: a debit and its paired credit share an entry_date,
+      // so fall back to creation order to keep them in a stable, sensible sequence.
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
-  }, [repayments, loan?.principal_amount, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
+
+    // Interest must walk FORWARD — a debit (extension interest accruing)
+    // raises what's owed; a credit or repayment lowers it — unlike
+    // Principal/SCB, which only ever go down. The API only ever debits
+    // extension interest; the loan's origination interest was never posted
+    // as a ledger entry, so this can't start at 0 either. Instead, solve for
+    // the opening balance that makes the LAST row land exactly on
+    // currentInterestDue — this file's own "single source of truth" for what's
+    // actually still owed (see its definition above). storedScheduleTotals.interest
+    // is deliberately NOT the anchor here even though it seeds the Interest
+    // column of the static "Loan released" row above: it's a gross, never-paid-down
+    // total (Σ interest_due across every period the schedule has ever had), so
+    // once anything has been paid it no longer equals what's outstanding today —
+    // anchoring to it would land the last row on a number too high by whatever's
+    // already been paid off. currentInterestDue nets paid amounts out already, so:
+    //
+    //   opening = currentInterestDue − debits + credits + interest paid
+    //
+    // and re-applying every debit/credit/payment below recreates that same
+    // closing figure at the end of the walk — verified against worked examples
+    // covering a bare "pay" extension and a "defer" extension stacked after one,
+    // both landing exactly on currentInterestDue.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const debitTotal = interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0);
+    const creditTotal = interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0);
+    const paidTotal = keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0);
+
+    let principalBal = principalStart;
+    let interestBal = round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
+    let scbBal = scbStart;
+
+    return sorted.map((row) => {
+      principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
+      scbBal = Math.max(0, scbBal - (row.scbPaid ?? 0));
+      interestBal = round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
+      return { ...row, principalBal, interestBal, scbBal };
+    });
+  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
 
   // Seed/load multi-step approval state whenever the loan or chain config changes.
   // The chain is visible for every status except "rejected" (voided drafts).
@@ -2281,6 +2409,10 @@ export default function LoanDetailPage({
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
+        // Extend always posts a debit (and a credit when "pay" collects the
+        // interest) — refresh so the Ledger shows both immediately rather
+        // than only after the next full page load.
+        await fetchLedgerEntries(loan.id);
         // Refresh the extension/adjustment history too — the effect that loads
         // adjustments only re-runs on loan.id/status change, and a same-status
         // extension wouldn't trigger it, leaving the history card stale.
@@ -3914,7 +4046,7 @@ export default function LoanDetailPage({
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {repaymentsLoading ? (
+            {repaymentsLoading || ledgerEntriesLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner className="size-5 text-muted-foreground" />
               </div>
@@ -3972,7 +4104,7 @@ export default function LoanDetailPage({
                             <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
                           </tr>
                         )}
-                        {/* Repayment rows */}
+                        {/* Repayment + ledger entry rows, interleaved chronologically */}
                         {ledgerRows.length === 0 ? (
                           <tr>
                             <td colSpan={totalCols} className="px-3 py-6 text-center text-muted-foreground">
@@ -3980,62 +4112,65 @@ export default function LoanDetailPage({
                             </td>
                           </tr>
                         ) : (
-                          ledgerRows.map((r) => (
-                            <tr
-                              key={r.id}
-                              className={cn(
-                                "border-b transition-colors hover:bg-muted/30",
-                                r.status === "voided" && "opacity-50 line-through",
-                              )}
-                            >
-                              <td className="border-r px-3 py-2 text-left">{formatDate(r.payment_date)}</td>
-                              <td className="border-r px-3 py-2 text-center text-muted-foreground">
-                                {(r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`}
-                              </td>
-                              {/* Principal */}
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principal_paid)}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
-                              {/* Interest */}
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interest_paid)}</td>
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
-                              {/* Past Due */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums">
-                                {r.penalty_paid != null && r.penalty_paid > 0 ? (
-                                  <span className="text-destructive">{formatCurrency(r.penalty_paid)}</span>
-                                ) : dash}
-                              </td>
-                              <td className="border-r px-3 py-2 text-center">{dash}</td>
-                              {/* SCB */}
-                              {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scb_paid)}</td>}
-                              {/* Others */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excess_amount)}</td>
-                              {/* Total Paid */}
-                              <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.amount_paid)}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-muted-foreground">{r.remarks || "payment"}</span>
-                                  <div className="flex shrink-0 items-center gap-1">
-                                    {r.status === "voided" && (
-                                      <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
-                                    )}
-                                    {r.status !== "voided" && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
-                                        onClick={() => handleVoidRepayment(r.id)}
-                                        disabled={actionLoading}
-                                      >
-                                        Void
-                                      </Button>
+                          ledgerRows.map((r) => {
+                            const repaymentId = r.repaymentId;
+                            return (
+                              <tr
+                                key={r.key}
+                                className={cn(
+                                  "border-b transition-colors hover:bg-muted/30",
+                                  r.status === "voided" && "opacity-50 line-through",
+                                )}
+                              >
+                                <td className="border-r px-3 py-2 text-left">{formatDate(r.date)}</td>
+                                <td className="border-r px-3 py-2 text-center text-muted-foreground">{r.refNo}</td>
+                                {/* Principal */}
+                                <td className="border-r px-3 py-2 text-center">{dash}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principalPaid)}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
+                                {/* Interest */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestDebit)}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestCredit)}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
+                                {/* Past Due */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums">
+                                  {r.penaltyPaid != null && r.penaltyPaid > 0 ? (
+                                    <span className="text-destructive">{formatCurrency(r.penaltyPaid)}</span>
+                                  ) : dash}
+                                </td>
+                                <td className="border-r px-3 py-2 text-center">{dash}</td>
+                                {/* SCB */}
+                                {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scbPaid)}</td>}
+                                {/* Others */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excessAmount)}</td>
+                                {/* Total Paid */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{fmtN(r.totalPaid)}</td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">{r.remarks}</span>
+                                    {repaymentId != null && (
+                                      <div className="flex shrink-0 items-center gap-1">
+                                        {r.status === "voided" && (
+                                          <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
+                                        )}
+                                        {r.status !== "voided" && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
+                                            onClick={() => handleVoidRepayment(repaymentId)}
+                                            disabled={actionLoading}
+                                          >
+                                            Void
+                                          </Button>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
