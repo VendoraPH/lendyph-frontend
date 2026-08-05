@@ -134,6 +134,7 @@ import {
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
+import { checkScheduleIntegrity } from "@/lib/amortization";
 
 // ── Currency & Date Formatters ──
 
@@ -1494,6 +1495,42 @@ export default function LoanDetailPage({
       { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
     );
   }, [storedSchedule]);
+
+  // The schedule above is rendered verbatim from the API, and every headline
+  // figure on this page (Interest Amount, Total Payable) is a sum over it. A
+  // backend that generates the wrong number of periods — or one period of
+  // interest instead of the whole term — therefore renders as a plausible but
+  // understated amount with nothing to flag it. Recompute what the loan's own
+  // stored terms imply and warn when the two disagree.
+  //
+  // Suppressed once an adjustment has been applied: extensions increment
+  // `term` and carry periods forward, and restructures rewrite the schedule
+  // outright, so a naive recompute no longer describes the loan.
+  const scheduleMismatch = useMemo(() => {
+    if (!loan) return null;
+    if (adjustments.some((adj) => adj.status === "applied")) return null;
+    return checkScheduleIntegrity({
+      principal: Number(loan.principal_amount ?? 0),
+      monthlyRate: Number(loan.interest_rate ?? 0),
+      termMonths: Number(loan.term ?? loan.term_months ?? 0),
+      frequency: String(loan.frequency ?? loan.payment_frequency ?? ""),
+      interestMethod: String(loan.interest_method ?? loan.interest_type ?? ""),
+      actualPeriods: storedSchedule.length,
+      actualInterest: storedScheduleTotals.interest,
+    });
+  }, [
+    loan?.principal_amount,
+    loan?.interest_rate,
+    loan?.term,
+    loan?.term_months,
+    loan?.frequency,
+    loan?.payment_frequency,
+    loan?.interest_method,
+    loan?.interest_type,
+    storedSchedule.length,
+    storedScheduleTotals.interest,
+    adjustments,
+  ]);
 
   // Remaining-due totals for the Schedule tab footer — excludes fully-paid periods.
   const scheduleRemainingTotals = useMemo(() => {
@@ -3156,6 +3193,61 @@ export default function LoanDetailPage({
                     View Policy Exception Letter
                   </a>
                 )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Schedule Mismatch Banner — the saved schedule disagrees with the
+          loan's own terms, so every peso figure below it is suspect. */}
+      {scheduleMismatch && (
+        <Card className="border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-900/10">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-3">
+                <div>
+                  <p className="font-semibold text-red-700 dark:text-red-400">
+                    Amortization Schedule Mismatch
+                  </p>
+                  <p className="text-sm text-red-700/80 dark:text-red-300/80">
+                    The saved schedule does not match this loan&rsquo;s terms
+                    ({loanTerm} month{loanTerm === 1 ? "" : "s"},{" "}
+                    {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
+                    , {formatRate(loan.interest_rate)}% per month). The Interest
+                    Amount and Total Payable shown below are taken from the
+                    saved schedule, so they are understated too.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {scheduleMismatch.periodsMismatch && (
+                    <div className="rounded-md border border-red-200 bg-white/60 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
+                      <p className="text-xs text-red-700/70 dark:text-red-300/70">Payment Periods</p>
+                      <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                        {scheduleMismatch.actualPeriods} saved
+                        <span className="text-red-700/60 dark:text-red-300/60">
+                          {" "}&middot; {scheduleMismatch.expectedPeriods} expected
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  {scheduleMismatch.interestMismatch && (
+                    <div className="rounded-md border border-red-200 bg-white/60 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
+                      <p className="text-xs text-red-700/70 dark:text-red-300/70">Total Interest</p>
+                      <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                        {formatCurrency(scheduleMismatch.actualInterest)} saved
+                        <span className="text-red-700/60 dark:text-red-300/60">
+                          {" "}&middot; {formatCurrency(scheduleMismatch.expectedInterest)} expected
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-red-700/70 dark:text-red-300/70">
+                  Do not collect against this schedule — report it to your system
+                  administrator so it can be regenerated.
+                </p>
               </div>
             </div>
           </CardContent>

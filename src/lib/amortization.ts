@@ -292,3 +292,128 @@ export function generateSchedule(input: AmortizationInput): GeneratedSchedule {
     },
   };
 }
+
+// ── Schedule Integrity Check ──
+
+/**
+ * Frequencies whose period count can be derived from a term in months. Any
+ * other value (e.g. "semi_monthly") is left unchecked rather than guessed at —
+ * a wrong expectation would raise a false alarm on a correct schedule.
+ */
+const CHECKABLE_FREQUENCIES: PaymentFrequency[] = [
+  "daily",
+  "weekly",
+  "bi_weekly",
+  "monthly",
+];
+
+export interface ScheduleIntegrityInput {
+  principal: number;
+  /** % per month, e.g. 5 means 5% */
+  monthlyRate: number;
+  termMonths: number;
+  /** Raw API value — "monthly", "upon_maturity", … */
+  frequency: string;
+  /** Raw API value — the backend stores "straight", not "fixed". */
+  interestMethod: string;
+  /** Period count of the schedule actually returned by the API. */
+  actualPeriods: number;
+  /** Total interest across the schedule actually returned by the API. */
+  actualInterest: number;
+}
+
+export interface ScheduleIntegrityResult {
+  expectedPeriods: number;
+  actualPeriods: number;
+  expectedInterest: number;
+  actualInterest: number;
+  periodsMismatch: boolean;
+  interestMismatch: boolean;
+}
+
+/** Interest totals within this many pesos are treated as equal (rounding). */
+const INTEREST_TOLERANCE = 1;
+
+/**
+ * Compare a server-supplied amortization schedule against what the loan's own
+ * stored terms imply.
+ *
+ * The loan detail page renders API schedule rows verbatim, so a backend that
+ * generates the wrong number of periods — or charges one period of interest
+ * instead of the whole term — shows up as a plausible-looking but understated
+ * figure with nothing to flag it. This recomputes the expectation from
+ * `generateSchedule` (the same generator the creation form previews with) so
+ * the two can be compared.
+ *
+ * Returns `null` when the schedule is consistent, or when the inputs are
+ * incomplete/unmappable and no trustworthy expectation can be formed.
+ */
+export function checkScheduleIntegrity(
+  input: ScheduleIntegrityInput
+): ScheduleIntegrityResult | null {
+  const {
+    principal,
+    monthlyRate,
+    termMonths,
+    frequency,
+    interestMethod,
+    actualPeriods,
+    actualInterest,
+  } = input;
+
+  if (
+    !(principal > 0) ||
+    !(monthlyRate > 0) ||
+    !(termMonths > 0) ||
+    !(actualPeriods > 0)
+  ) {
+    return null;
+  }
+
+  // Upon Maturity is signalled by either field depending on how the loan was
+  // created, and collapses the whole term into one payment.
+  const isUponMaturity =
+    frequency === "upon_maturity" || interestMethod === "upon_maturity";
+
+  const effectiveFrequency = isUponMaturity
+    ? "monthly"
+    : (frequency as PaymentFrequency);
+  if (!isUponMaturity && !CHECKABLE_FREQUENCIES.includes(effectiveFrequency)) {
+    return null;
+  }
+
+  // "straight" / "fixed" / "flat" all mean constant interest on the original
+  // principal, which is what generateFixed produces.
+  const effectiveMethod: InterestMethod = isUponMaturity
+    ? "upon_maturity"
+    : interestMethod === "diminishing"
+      ? "diminishing"
+      : "fixed";
+
+  const expected = generateSchedule({
+    principal,
+    monthlyRate,
+    termMonths,
+    frequency: effectiveFrequency,
+    interestMethod: effectiveMethod,
+    startDate: new Date(),
+  });
+
+  const expectedPeriods = expected.summary.numberOfPayments;
+  const expectedInterest = expected.summary.totalInterest;
+
+  const periodsMismatch = expectedPeriods !== actualPeriods;
+  const interestMismatch =
+    Math.abs(expectedInterest - actualInterest) > INTEREST_TOLERANCE;
+
+  if (!periodsMismatch && !interestMismatch) return null;
+
+  return {
+    expectedPeriods,
+    actualPeriods,
+    expectedInterest,
+    actualInterest,
+    periodsMismatch,
+    interestMismatch,
+  };
+}
