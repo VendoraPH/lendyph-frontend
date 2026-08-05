@@ -39,9 +39,15 @@ export interface Loan {
   interest_method?: string;
   term?: number;
   /**
-   * Whether the loan is eligible for the Extend Loan action. Server-derived
-   * from the loan's ORIGINAL term — `term` itself increments with every
-   * extension, so this cannot be recomputed from the fields above.
+   * How many times this loan has been rolled forward via the Extend Loan
+   * action. Distinct from `term`, which is the originally agreed term —
+   * use this alongside `term` rather than reading extensions off of it.
+   */
+  extension_count?: number;
+  /**
+   * Whether the loan is eligible for the Extend Loan action. The server owns
+   * this rule — read the flag rather than recomputing it from `term` and
+   * `frequency`, so eligibility stays in one place if the rule changes.
    */
   is_one_month_term?: boolean;
   frequency?: string;

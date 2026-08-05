@@ -1652,6 +1652,14 @@ export default function LoanDetailPage({
   const loanProductName = loan?.loan_product?.name ?? loan?.loan_product_name ?? "";
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
+  // `term` is the agreed term; how many times the loan has since been
+  // extended is a separate, additive fact (`extension_count`). Showing both
+  // keeps a rolled-forward loan from reading as if it had a longer original
+  // term than the borrower agreed to.
+  const loanExtensionCount = loan?.extension_count ?? 0;
+  const loanTermLabel =
+    `${loanTerm} ${loanTerm === 1 ? "month" : "months"}` +
+    (loanExtensionCount > 0 ? ` · extended ×${loanExtensionCount}` : "");
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
   // Extend-dialog preview: the extend endpoint always moves the due date
   // forward by exactly one cycle (1 month for upon-maturity loans, matching
@@ -3237,7 +3245,7 @@ export default function LoanDetailPage({
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
                 <p className="text-sm font-medium">
-                  {loanTerm} months
+                  {loanTermLabel}
                 </p>
               </div>
               {(loan.scb_amount ?? 0) > 0 && (
@@ -4369,7 +4377,7 @@ export default function LoanDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground">Term / Frequency</p>
                   <p className="text-sm font-medium">
-                    {loanTerm} months / {PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency}
+                    {loanTermLabel} / {PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency}
                   </p>
                 </div>
               </div>
