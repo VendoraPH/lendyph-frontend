@@ -928,10 +928,11 @@ export default function LoanDetailPage({
     amount_paid: number;
     remarks?: string;
   } | null>(null);
-  // Guards against posting the interest payment twice within the same
-  // Extend-dialog session (e.g. if extend() fails and the user retries
-  // before the backend's refreshed schedule reflects the payment).
-  const extendInterestPaidRef = useRef(false);
+  // What to do with interest already outstanding when the loan extends.
+  // Defaults to "pay", which is how extension behaved before the choice
+  // existed. The API performs the collection itself, so there is no longer a
+  // client-side payment step to guard against repeating.
+  const [extendInterestOption, setExtendInterestOption] = useState<"pay" | "defer">("pay");
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -1458,6 +1459,29 @@ export default function LoanDetailPage({
     const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
     return Math.round(fallback * 100) / 100;
   }, [rawSchedule, storedSchedule]);
+
+  /**
+   * What the new period will owe in interest if the outstanding amount is
+   * deferred: today's unpaid interest plus one fresh cycle on the unpaid
+   * principal. Mirrors LoanAdjustmentService::extendLoan, which charges a flat
+   * `principal × rate` per cycle regardless of how many days the cycle spans.
+   *
+   * Display only — the API recomputes it. Null when the figures needed aren't
+   * available, so the dialog omits the line rather than showing a wrong total.
+   */
+  const extendDeferredInterestTotal = useMemo(() => {
+    const rate = parseFloat(String(loan?.interest_rate ?? 0)) || 0;
+    if (!rate || !rawSchedule || rawSchedule.length === 0) return null;
+
+    const outstandingPrincipal = rawSchedule.reduce((sum, row) => {
+      const due = parseFloat(String(row.principal_due ?? 0)) || 0;
+      const paid = parseFloat(String(row.principal_paid ?? 0)) || 0;
+      return sum + Math.max(0, due - paid);
+    }, 0);
+
+    const fresh = Math.round(outstandingPrincipal * (rate / 100) * 100) / 100;
+    return Math.round((currentInterestDue + fresh) * 100) / 100;
+  }, [rawSchedule, loan?.interest_rate, currentInterestDue]);
 
   const storedScheduleTotals = useMemo(() => {
     return storedSchedule.reduce(
@@ -2221,39 +2245,26 @@ export default function LoanDetailPage({
 
   const handleExtendLoan = async () => {
     setActionLoading(true);
-    // Pay the interest due for the current period first — extending
-    // without collecting it would let staff defer the loan indefinitely.
-    // Guard against paying twice on retry: if extend() fails after a
-    // successful payment, the backend's refreshed schedule may not yet
-    // reflect the payment, so recomputing interest due here could show the
-    // same amount due again — extendInterestPaidRef prevents a second charge.
-    if (currentInterestDue > 0 && !extendInterestPaidRef.current) {
-      try {
-        await repaymentService.create(loan.id, {
-          payment_date: formatDateISO(new Date()),
-          amount_paid: currentInterestDue,
-          remarks: extendRemarks.trim() || "[EXTENSION INTEREST]",
-        });
-        extendInterestPaidRef.current = true;
-      } catch {
-        toast.error("We couldn't record the interest payment. Extension was not processed.");
-        setActionLoading(false);
-        return;
-      }
-    }
     try {
+      // The API collects the interest itself when "pay" is chosen, in the same
+      // transaction as the extension. That replaced a client-side repayment
+      // call followed by extend(): if the extend failed, the payment was
+      // already committed, and the only thing stopping a second charge was a
+      // ref that reset whenever this dialog was reopened.
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
+        interest_option: extendInterestOption,
       });
-      toast.success("Loan extended by one cycle");
+      toast.success(
+        extendInterestOption === "pay"
+          ? "Interest collected and loan extended by one cycle"
+          : "Loan extended by one cycle — interest carried forward",
+      );
       setExtendOpen(false);
       setExtendRemarks("");
-      extendInterestPaidRef.current = false;
     } catch (err) {
-      // Interest (if any) is already paid at this point — leave the dialog
-      // open so the user can see the error and retry; a retry will not
-      // re-charge interest (extendInterestPaidRef is already true) and will
-      // go straight to extend().
+      // Nothing was charged: a failed extension rolls the interest payment
+      // back with it, so retrying is safe.
       notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       try {
@@ -2288,6 +2299,10 @@ export default function LoanDetailPage({
     try {
       await loanService.extend(loan.id, {
         remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
+        // The cashier's payment was just posted on the line above, so the API
+        // must not collect interest again — whatever remains unpaid carries
+        // into the new period, which is how this flow has always behaved.
+        interest_option: "defer",
       });
       toast.success("Loan extended");
       const updated = await loanService.detail(loan.id);
@@ -5429,7 +5444,9 @@ export default function LoanDetailPage({
         open={extendOpen}
         onOpenChange={(open) => {
           setExtendOpen(open);
-          if (open) extendInterestPaidRef.current = false;
+          // Always reopen on the safer default rather than remembering a
+          // previous "defer".
+          if (open) setExtendInterestOption("pay");
         }}
       >
         <AlertDialogContent>
@@ -5440,18 +5457,62 @@ export default function LoanDetailPage({
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will move the loan&apos;s due date forward by one cycle.
-              The principal and any remaining balance are unchanged. The
-              interest due below will be collected as a payment before the
-              loan extends.
+              The principal and any remaining balance are unchanged.{" "}
+              {extendInterestOption === "pay"
+                ? "The interest due below will be collected as a payment before the loan extends."
+                : "The interest due below stays unpaid and is added to the new period's interest."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
             <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
-              Interest Due — must be paid to extend
+              {extendInterestOption === "pay"
+                ? "Interest Due — will be collected to extend"
+                : "Interest Due — carried into the new period"}
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
               {formatCurrencyPrecise(currentInterestDue)}
             </p>
+            {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
+              // Spells out the stacking the team described: ₱50 already due
+              // plus ₱50 fresh becomes ₱100 owed on the new period.
+              <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                Stays unpaid — the new period will owe{" "}
+                <span className="font-semibold tabular-nums">
+                  {formatCurrencyPrecise(extendDeferredInterestTotal)}
+                </span>{" "}
+                once this cycle&apos;s interest is added.
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Interest Due Option</Label>
+            <Select
+              value={extendInterestOption}
+              onValueChange={(v) => setExtendInterestOption(v as "pay" | "defer")}
+            >
+              <SelectTrigger className="w-full">
+                {/* Render function, else the trigger shows the raw value */}
+                <SelectValue>
+                  {(value: string | null) =>
+                    value === "defer" ? "Defer Outstanding Interest" : "Pay Outstanding Interest"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pay">
+                  <span className="font-medium">Pay Outstanding Interest</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Pay the accrued interest before extension
+                  </span>
+                </SelectItem>
+                <SelectItem value="defer">
+                  <span className="font-medium">Defer Outstanding Interest</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Outstanding interest remains unpaid and is added to the total interest due
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Extension Details</Label>

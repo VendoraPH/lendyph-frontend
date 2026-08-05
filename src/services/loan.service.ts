@@ -56,7 +56,14 @@ export const loanService = {
   schedule: (id: number) =>
     api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
 
-  extend: (id: number, data?: { remarks?: string }) =>
+  /**
+   * `interest_option` is required by the API — it decides whether the
+   * outstanding interest is collected as a repayment before the loan extends
+   * ("pay") or carries into the new period on top of the fresh cycle
+   * ("defer"). The API performs the collection itself, in the same
+   * transaction as the extension.
+   */
+  extend: (id: number, data: { remarks?: string; interest_option: "pay" | "defer" }) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
 
   restructure: (id: number, data: Record<string, unknown>) =>
