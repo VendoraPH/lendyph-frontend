@@ -124,6 +124,27 @@ export interface LoanSchedule {
   status: "pending" | "paid" | "partial" | "overdue";
 }
 
+/**
+ * A single debit/credit posting against the loan — currently only ever
+ * raised by Extend Loan (a debit for the interest the extension accrues,
+ * plus a credit — linked via `repayment_id` — when that interest is collected
+ * immediately rather than deferred). The API's schema allows `category` to
+ * widen to "principal" / "penalty" later even though only "interest" entries
+ * are written today — callers should filter by category rather than assuming
+ * every entry belongs to the Interest column.
+ */
+export interface LoanLedgerEntry {
+  id: number;
+  type: "debit" | "credit";
+  category: "principal" | "interest" | "penalty";
+  amount: number;
+  entry_date: string;
+  description: string;
+  loan_adjustment_id: number | null;
+  repayment_id: number | null;
+  created_at: string;
+}
+
 export interface LoanProduct {
   id: number;
   name: string;
