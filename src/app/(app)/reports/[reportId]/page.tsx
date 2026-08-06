@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatDateISO } from "@/lib/format";
 import {
   ArrowLeft,
   ChevronDown,
@@ -110,10 +111,11 @@ const PRESETS: { id: Preset; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
+/**
+ * Preset ranges are serialised with formatDateISO, which reads the Date's
+ * *local* calendar parts. `toISOString()` used to shift every preset a day
+ * earlier in Manila (UTC+8) — "Today" literally queried yesterday.
+ */
 function presetRange(preset: Preset, fallback: DateRange): DateRange {
   const now = new Date();
   const y = now.getFullYear();
@@ -121,30 +123,33 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
   const d = now.getDate();
   switch (preset) {
     case "today": {
-      const t = isoDate(new Date(y, m, d));
+      const t = formatDateISO(new Date(y, m, d));
       return { from: t, to: t };
     }
     case "yesterday": {
-      const t = isoDate(new Date(y, m, d - 1));
+      const t = formatDateISO(new Date(y, m, d - 1));
       return { from: t, to: t };
     }
     case "last_7":
       return {
-        from: isoDate(new Date(y, m, d - 6)),
-        to: isoDate(new Date(y, m, d)),
+        from: formatDateISO(new Date(y, m, d - 6)),
+        to: formatDateISO(new Date(y, m, d)),
       };
     case "this_month":
       return {
-        from: isoDate(new Date(y, m, 1)),
-        to: isoDate(new Date(y, m, d)),
+        from: formatDateISO(new Date(y, m, 1)),
+        to: formatDateISO(new Date(y, m, d)),
       };
     case "last_month":
       return {
-        from: isoDate(new Date(y, m - 1, 1)),
-        to: isoDate(new Date(y, m, 0)),
+        from: formatDateISO(new Date(y, m - 1, 1)),
+        to: formatDateISO(new Date(y, m, 0)),
       };
     case "ytd":
-      return { from: isoDate(new Date(y, 0, 1)), to: isoDate(new Date(y, m, d)) };
+      return {
+        from: formatDateISO(new Date(y, 0, 1)),
+        to: formatDateISO(new Date(y, m, d)),
+      };
     case "custom":
     default:
       return fallback;

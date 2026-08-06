@@ -2,17 +2,21 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 
 export const reportService = {
+  // The three list endpoints return a Laravel paginator envelope
+  // ({ data, meta, totals }) rather than the { success, data } wrapper, so they
+  // use getRaw — unwrapping to `data` would throw away the server-side totals
+  // and row count the reports need to avoid summing a single page.
   duePastDue: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.DUE_PAST_DUE, { params }),
+    api.getRaw(API_ENDPOINTS.REPORTS.DUE_PAST_DUE, { params }),
 
   loanBalanceSummary: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.LOAN_BALANCE_SUMMARY, { params }),
 
   releases: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.RELEASES, { params }),
+    api.getRaw(API_ENDPOINTS.REPORTS.RELEASES, { params }),
 
   repayments: (params?: Record<string, unknown>) =>
-    api.get(API_ENDPOINTS.REPORTS.REPAYMENTS, { params }),
+    api.getRaw(API_ENDPOINTS.REPORTS.REPAYMENTS, { params }),
 
   statementOfAccount: (loanId: number) =>
     api.get(API_ENDPOINTS.REPORTS.STATEMENT_OF_ACCOUNT(loanId)),

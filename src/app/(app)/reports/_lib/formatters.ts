@@ -1,16 +1,31 @@
 import type { ColumnFormat, ReportColumn } from "./types";
 
+/** Shown wherever the API did not send a figure we can display. */
+export const DASH = "—";
+
+// Report money is accurate to the centavo. Rounding to whole pesos made a
+// column of values disagree with its own total — and the Excel export
+// inherited the drift — so every currency figure inside a report carries two
+// decimals. This is deliberately report-scoped: `@/lib/format` keeps the
+// whole-peso `formatCurrency` the rest of the app renders.
 const currencyFmt = new Intl.NumberFormat("en-PH", {
   style: "currency",
   currency: "PHP",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const numberFmt = new Intl.NumberFormat("en-PH", {
   maximumFractionDigits: 2,
 });
 
+const countFmt = new Intl.NumberFormat("en-PH", {
+  maximumFractionDigits: 0,
+});
+
+// API contract: percentages come back as whole percents (12.5 means 12.5%),
+// so they are always divided by 100 before Intl re-multiplies them. Never
+// guess from magnitude — a genuine 0.8% used to render as 80%.
 const percentFmt = new Intl.NumberFormat("en-PH", {
   style: "percent",
   minimumFractionDigits: 1,
@@ -31,28 +46,57 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-PH", {
   minute: "2-digit",
 });
 
+/** Coerce an API value to a finite number, or null when it is not one. */
+export function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function formatCurrency(value: number): string {
-  return currencyFmt.format(Math.round(value));
+  return currencyFmt.format(value);
+}
+
+export function formatCount(value: number): string {
+  return countFmt.format(value);
+}
+
+export function formatPercent(value: number): string {
+  return percentFmt.format(value / 100);
+}
+
+export function currencyOrDash(value: unknown): string {
+  const n = toNumber(value);
+  return n === null ? DASH : formatCurrency(n);
+}
+
+export function countOrDash(value: unknown): string {
+  const n = toNumber(value);
+  return n === null ? DASH : formatCount(n);
+}
+
+export function percentOrDash(value: unknown): string {
+  const n = toNumber(value);
+  return n === null ? DASH : formatPercent(n);
 }
 
 export function formatValue(value: unknown, format?: ColumnFormat): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return DASH;
   switch (format) {
     case "currency": {
-      const n = typeof value === "number" ? value : Number(value);
-      if (Number.isNaN(n)) return String(value);
-      return currencyFmt.format(Math.round(n));
+      const n = toNumber(value);
+      if (n === null) return String(value);
+      return formatCurrency(n);
     }
     case "number": {
-      const n = typeof value === "number" ? value : Number(value);
-      if (Number.isNaN(n)) return String(value);
+      const n = toNumber(value);
+      if (n === null) return String(value);
       return numberFmt.format(n);
     }
     case "percent": {
-      const n = typeof value === "number" ? value : Number(value);
-      if (Number.isNaN(n)) return String(value);
-      // Treat values >1 as whole-number percents (e.g. 85 → 85%).
-      return percentFmt.format(n > 1 ? n / 100 : n);
+      const n = toNumber(value);
+      if (n === null) return String(value);
+      return formatPercent(n);
     }
     case "date": {
       const d = new Date(value as string | number | Date);
