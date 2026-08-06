@@ -1,0 +1,107 @@
+name: Deploy Portfolio
+
+# LendyPH — PORTFOLIO frontend (the owner's personal demo, NOT a product
+# environment).
+#   domain   : lendyph-staging.abedubas.dev
+#   dir      : /var/www/lendyph-frontend-staging   (VPS 76.13.22.110)
+#   branch   : main
+#   pm2 app  : lendyph-frontend-staging            (pre-existing name — do not rename)
+#
+# Manual-only on purpose. deploy-staging.yml used to fire on every push to
+# `development` and deploy *this* directory, which put a personal demo box in
+# the product's release train while the real environments got nothing. The real
+# ones are now deploy-production.yml (app.lendyph.com) and deploy-staging.yml
+# (staging-app.lendyph.com); refresh the demo from here when you want to.
+#
+# The on-VPS deploy.sh in this directory still pulls `development` and skips the
+# raised Node heap, so the steps stay inline here rather than calling it.
+on:
+  workflow_dispatch:
+
+# Never let two demo deploys interleave over the same checkout, and never let
+# two Next builds compete for memory on this box.
+concurrency:
+  group: deploy-portfolio-frontend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy portfolio demo (lendyph-staging.abedubas.dev)
+    runs-on: ubuntu-latest
+
+    # The on-VPS deploy script is defined once and reused by both the initial
+    # attempt and the transient-failure retry below, so the two never drift.
+    env:
+      DEPLOY_SCRIPT: |
+        set -e
+
+        APP=lendyph-frontend-staging
+
+        cd /var/www/lendyph-frontend-staging
+
+        # Assert the pm2 app exists BEFORE anything destructive. `rm -rf .next`
+        # below deletes the chunks the running server is still serving, so if
+        # the restart afterwards can't find the app, the site 500s on every
+        # chunk until someone restarts it by hand. That is exactly what a
+        # stale app name here caused once already — and because the old
+        # script had no `set -e`, the job still reported green. Unlike the
+        # lendyph-com-* deploy.sh scripts there is no `|| pm2 start` fallback
+        # here, so this stays a hard gate.
+        echo "=== Checking pm2 app '$APP' exists ==="
+        pm2 describe "$APP" > /dev/null
+
+        echo "=== Fetching latest ==="
+        git fetch origin main
+        # This checkout has historically tracked `development`; the demo now
+        # follows `main`. `-f` throws away local edits (the box's own deploy.sh
+        # did `git checkout -- .` for the same reason) and `-B` creates-or-
+        # repoints a local `main` at origin/main, so this is idempotent
+        # whichever branch the directory was last left on.
+        echo "=== Resetting to match origin/main ==="
+        git checkout -f -B main origin/main
+        echo "=== Current commit ==="
+        git log --oneline -1
+        echo "=== Installing dependencies ==="
+        npm install
+        echo "=== Clearing Next.js cache ==="
+        rm -rf .next
+        # This box swaps hard (~3.0G/4.0G); the default heap OOMs the Next
+        # build. Matches the ceiling the binhs-coop and lendyph-com deploys use.
+        echo "=== Building ==="
+        NODE_OPTIONS="--max-old-space-size=3072" npm run build
+        echo "=== Restarting PM2 ==="
+        pm2 restart "$APP" --update-env
+        pm2 save
+
+        # Fail loudly if the app did not come back up.
+        echo "=== Verifying '$APP' is online ==="
+        pm2 describe "$APP" | grep -q "status.*online"
+
+        echo "=== Portfolio demo deployed at $(date) ==="
+
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Bumped from the 30s default: a slow handshake should wait, not fail.
+          timeout: 120s
+          # Next builds on this box are slow under swap pressure.
+          command_timeout: 20m
+          script: ${{ env.DEPLOY_SCRIPT }}
+
+      # The VPS has intermittently flaky inbound SSH (dial tcp :22 i/o timeout
+      # while the box was healthy). appleboy/ssh-action does not retry on its
+      # own and the script is idempotent, so retry once to ride out a blip.
+      - name: Deploy to VPS via SSH (retry on transient failure)
+        if: failure()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 120s
+          command_timeout: 20m
+          script: ${{ env.DEPLOY_SCRIPT }}

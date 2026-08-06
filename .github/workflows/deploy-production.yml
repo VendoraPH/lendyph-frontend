@@ -1,41 +1,36 @@
-name: Deploy Staging
+name: Deploy Production
 
-# LendyPH SaaS — STAGING frontend.
-#   domain   : staging-app.lendyph.com
-#   dir      : /var/www/lendyph-com-frontend-staging   (VPS 76.13.22.110)
-#   branch   : development
-#   pm2 app  : lendyph-com-frontend-staging            (upstream 127.0.0.1:3031)
+# LendyPH SaaS — PRODUCTION frontend.
+#   domain   : app.lendyph.com
+#   dir      : /var/www/lendyph-com-frontend   (VPS 76.13.22.110)
+#   branch   : main
+#   pm2 app  : lendyph-com-frontend            (upstream 127.0.0.1:3030)
 #
-# This workflow used to point at /var/www/lendyph-frontend-staging — the owner's
-# personal portfolio demo — which meant the product had no staging deploy at
-# all. The demo now lives in deploy-portfolio.yml and is manual-only.
-#
-# The on-VPS /var/www/lendyph-com-frontend-staging/deploy.sh owns the build
-# (fetch/reset to origin/development, `npm ci`, `NODE_OPTIONS=
-# --max-old-space-size=3072 npm run build` — this box swaps hard, ~3.0G/4.0G,
-# and a default heap OOMs the Next build — then `pm2 restart --update-env ||
-# pm2 start` and `pm2 save`).
+# The on-VPS /var/www/lendyph-com-frontend/deploy.sh owns the build (fetch/reset
+# to origin/main, `npm ci`, `NODE_OPTIONS=--max-old-space-size=3072 npm run
+# build` — this box swaps hard, ~3.0G/4.0G, and a default heap OOMs the Next
+# build — then `pm2 restart --update-env || pm2 start` and `pm2 save`).
 # NOTE: NEXT_PUBLIC_* values are inlined at BUILD time, so a .env edit on the
 # VPS does nothing until this runs again.
 on:
   push:
-    branches: [development]
-    # CI-only changes (e.g. edits to these workflows) shouldn't redeploy staging.
+    branches: [main]
+    # CI-only changes (e.g. edits to these workflows) shouldn't redeploy prod.
     paths-ignore: ['.github/**']
-  # Manual re-deploy path: re-runs the idempotent deploy against whatever
-  # origin/development points at now, without needing an empty commit.
+  # Manual re-deploy / rollback path: re-runs the idempotent deploy against
+  # whatever origin/main points at now, without needing an empty commit.
   workflow_dispatch:
 
 # Two overlapping deploys would `git reset --hard` the checkout out from under
 # a running `npm run build`, and two concurrent builds would exhaust memory on
 # this box. Queue them; never cancel a deploy mid-flight.
 concurrency:
-  group: deploy-staging-frontend
+  group: deploy-production-frontend
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy staging (staging-app.lendyph.com)
+    name: Deploy production (app.lendyph.com)
     runs-on: ubuntu-latest
 
     # The on-VPS deploy script is defined once and reused by both the initial
@@ -43,7 +38,7 @@ jobs:
     env:
       DEPLOY_SCRIPT: |
         set -e
-        APP=lendyph-com-frontend-staging
+        APP=lendyph-com-frontend
 
         # Assert the pm2 app exists BEFORE the deploy touches the build output.
         # A stale app name here once left the site 500ing on every chunk: the
@@ -53,14 +48,14 @@ jobs:
         echo "=== Checking pm2 app '$APP' exists ==="
         pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
 
-        bash /var/www/lendyph-com-frontend-staging/deploy.sh
+        bash /var/www/lendyph-com-frontend/deploy.sh
 
         # Fail loudly if the app did not come back up — deploy.sh does not
         # check this, and a half-restarted Next server serves 500s happily.
         echo "=== Verifying '$APP' is online ==="
         pm2 describe "$APP" | grep -q "status.*online"
 
-        echo "=== Staging deployed at $(date) ==="
+        echo "=== Production deployed at $(date) ==="
 
     steps:
       - name: Deploy to VPS via SSH
@@ -78,7 +73,7 @@ jobs:
       # The VPS has intermittently flaky inbound SSH (dial tcp :22 i/o timeout
       # while the box was healthy). appleboy/ssh-action does not retry on its
       # own and deploy.sh is idempotent, so retry once to ride out a blip
-      # instead of leaving development merged-but-undeployed.
+      # instead of leaving main merged-but-undeployed.
       - name: Deploy to VPS via SSH (retry on transient failure)
         if: failure()
         uses: appleboy/ssh-action@v1
