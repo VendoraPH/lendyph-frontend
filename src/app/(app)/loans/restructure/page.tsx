@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarIcon,
   ChevronsUpDown,
@@ -17,6 +18,7 @@ import { RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -71,7 +73,13 @@ import {
 import { getShareCapitalBalance } from "@/utils/share-capital";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
 import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
-import { INTEREST_TYPE_OPTIONS, PAYMENT_FREQUENCY_OPTIONS, LOAN_STATUS_LABELS } from "@/constants";
+import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
+import {
+  INTEREST_TYPE_OPTIONS,
+  PAYMENT_FREQUENCY_LABELS,
+  PAYMENT_FREQUENCY_OPTIONS,
+  LOAN_STATUS_LABELS,
+} from "@/constants";
 
 import type { Borrower, CollateralType, CollateralWithMeta, Loan, User } from "@/types";
 import type { LoanProduct } from "@/types/loan";
@@ -214,6 +222,8 @@ function RestructureLoanInner() {
   const [sourceLoanId, setSourceLoanId] = useState<number | null>(null);
   const [loanOpen, setLoanOpen] = useState(false);
   const [loadingLoanDetail, setLoadingLoanDetail] = useState(false);
+  /** Source loan's outstanding balance — the API rejects a lower principal without remarks. */
+  const [sourceOutstanding, setSourceOutstanding] = useState<number | null>(null);
 
   // ── Form state ──
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
@@ -226,7 +236,6 @@ function RestructureLoanInner() {
   const [termMonths, setTermMonths] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
-  const [interestType, setInterestType] = useState<string | null>(null);
   const [scbAmount, setScbAmount] = useState<string>("");
   const [restructureDate, setRestructureDate] = useState<Date | undefined>(new Date());
   const [restructureDateOpen, setRestructureDateOpen] = useState(false);
@@ -234,6 +243,9 @@ function RestructureLoanInner() {
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
+  const [remarks, setRemarks] = useState("");
+  const [policyException, setPolicyException] = useState(false);
+  const [policyExceptionDetails, setPolicyExceptionDetails] = useState("");
 
   // ── Collaterals ──
   const [availableCollaterals, setAvailableCollaterals] = useState<CollateralWithMeta[]>([]);
@@ -296,6 +308,7 @@ function RestructureLoanInner() {
   // ── Pre-fill form when source loan is selected ──
   useEffect(() => {
     if (!sourceLoanId) {
+      setSourceOutstanding(null);
       setFormVisible(false);
       return;
     }
@@ -331,14 +344,14 @@ function RestructureLoanInner() {
 
       // Principal = outstanding balance
       const outstanding = summary?.outstanding_balance ?? loan.outstanding_balance ?? loan.principal_amount;
+      setSourceOutstanding(outstanding != null ? Number(outstanding) : null);
       setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding))) : "");
 
-      // Terms
+      // Terms. Interest type is not prefilled — it is snapshotted from the loan
+      // product by the API, so the form derives it from the product instead.
       setTermMonths(String(loan.term ?? loan.term_months ?? ""));
       setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
       setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
-      const rawMethod = String(loan.interest_method ?? loan.interest_type ?? "straight");
-      setInterestType(rawMethod === "fixed" ? "straight" : rawMethod);
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
 
       // Restructure date defaults to today
@@ -357,6 +370,11 @@ function RestructureLoanInner() {
         setServiceFeeRate("");
       }
       setOtherDeductions([]);
+
+      // Reasons and exceptions are specific to this restructure — never inherited.
+      setRemarks("");
+      setPolicyException(false);
+      setPolicyExceptionDetails("");
 
       setFormVisible(true);
       setLoadingLoanDetail(false);
@@ -456,6 +474,31 @@ function RestructureLoanInner() {
     [borrowerLoans, sourceLoanId],
   );
 
+  // Base UI resolves <SelectValue> labels from `items`, not from the mounted
+  // <SelectItem> children — without it the trigger shows the raw value ("1").
+  const productItems = useMemo(
+    () => products.map((p) => ({ value: String(p.id), label: p.name })),
+    [products],
+  );
+
+  // Interest type is display-only: the API snapshots `interest_method` from the
+  // loan product and ignores anything the request sends, so the form shows the
+  // product's actual method instead of letting the user pick one that is dropped.
+  const interestType = useMemo<InterestType | null>(() => {
+    if (!selectedProduct) return null;
+    const ap = selectedProduct as unknown as Record<string, unknown>;
+    const raw = String(ap.interest_method ?? selectedProduct.interest_type ?? "straight");
+    return (raw === "fixed" ? "straight" : raw) as InterestType;
+  }, [selectedProduct]);
+
+  const interestTypeLabel = useMemo(
+    () =>
+      interestType
+        ? INTEREST_TYPE_OPTIONS.find((o) => o.value === interestType)?.label ?? interestType
+        : null,
+    [interestType],
+  );
+
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termMonths) || 0;
   const rate = parseFloat(interestRate) || 0;
@@ -470,6 +513,18 @@ function RestructureLoanInner() {
   );
   const totalDeductions = processingFeeAmount + serviceFeeAmount + otherDeductionsTotal;
   const netProceeds = principal - totalDeductions;
+
+  // Deductions travel with the payload so the new loan matches this preview
+  // instead of falling back to the loan product's configured fees.
+  const deductions = useMemo(
+    () => buildLoanDeductions({ processingFeePercent, serviceFeePercent, otherDeductions }),
+    [processingFeePercent, serviceFeePercent, otherDeductions],
+  );
+
+  // Restructuring for less than the outstanding balance writes the difference
+  // off, so the API requires remarks explaining it.
+  const shortfall = calcRestructureShortfall(principal, sourceOutstanding);
+  const remarksRequired = shortfall > 0;
 
   const totalCollateralValue = useMemo(
     () => selectedCollaterals.reduce((s, c) => s + c.snapshot_value, 0),
@@ -571,8 +626,6 @@ function RestructureLoanInner() {
         const ap = prod as unknown as Record<string, unknown>;
         const rawRate = ap.min_interest_rate ?? ap.interest_rate ?? prod.interest_rate;
         setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
-        const rawType = String(ap.interest_method ?? prod.interest_type ?? "straight");
-        setInterestType(rawType === "fixed" ? "straight" : rawType);
         const rawFreqs = ap.frequencies ?? ap.frequency ?? prod.payment_frequency;
         const freqArr = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
         setPaymentFrequency(String(freqArr[0] ?? "monthly"));
@@ -607,26 +660,41 @@ function RestructureLoanInner() {
     if (!(principal > 0) || principalError) missing.push("Principal amount");
     if (!(term > 0) || termError) missing.push("Term");
     if (paymentFrequency === null) missing.push("Payment frequency");
-    if (interestType === null) missing.push("Interest type");
     if (!(rate > 0)) missing.push("Interest rate");
     if (restructureDate === undefined) missing.push("Restructure date");
+    // A principal below the outstanding balance writes debt off — the API
+    // rejects it (422) unless the reason is stated.
+    if (remarksRequired && !remarks.trim()) missing.push("Remarks");
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
     }
-    if (!restructureDate || !sourceLoanId || !borrowerId) return;
+    if (!restructureDate || !sourceLoanId || !borrowerId || paymentFrequency === null) return;
     setSubmitting(true);
     try {
+      // Contract: POST /loans/{loan}/restructure. The frequency field is
+      // `frequency` (not `payment_frequency`), and `interest_method` is not
+      // accepted — the API snapshots it from the loan product.
       const payload: Record<string, unknown> = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
         loan_product_id: Number(productId),
         principal_amount: principal,
+        // Terms the user actually approved in the amortization preview. Omitting
+        // these made the API fall back to the loan product's defaults.
+        term,
+        frequency: paymentFrequency,
         interest_rate: rate,
         start_date: formatDateISO(restructureDate),
+        deductions,
         ...(scb > 0 && { scb_amount: scb }),
         ...(accountOfficerId && { account_officer_id: accountOfficerId }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
+        ...(remarks.trim() && { remarks: remarks.trim() }),
+        ...(policyException && {
+          policy_exception: true,
+          policy_exception_details: policyExceptionDetails.trim() || undefined,
+        }),
       };
 
       const newLoan = await loanService.restructure(sourceLoanId, payload);
@@ -674,7 +742,7 @@ function RestructureLoanInner() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <RouteGuard permission="loans:create" pageName="Restructure Loan">
+    <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
       <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
 
         {/* Header */}
@@ -968,8 +1036,12 @@ function RestructureLoanInner() {
                   {/* Product */}
                   <div className="space-y-1.5">
                     <Label>Loan Product</Label>
-                    <Select value={productId ?? ""} onValueChange={(v) => handleProductChange(v || null)}>
-                      <SelectTrigger>
+                    <Select
+                      value={productId ?? null}
+                      onValueChange={(v) => handleProductChange(v)}
+                      items={productItems}
+                    >
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select product…" />
                       </SelectTrigger>
                       <SelectContent>
@@ -995,7 +1067,23 @@ function RestructureLoanInner() {
                       placeholder="0.00"
                       value={principalAmount}
                       onChange={(e) => setPrincipalAmount(e.target.value)}
+                      aria-describedby={sourceOutstanding !== null ? "principal-hint" : undefined}
                     />
+                    {sourceOutstanding !== null && (
+                      <p
+                        id="principal-hint"
+                        className={cn(
+                          "text-xs",
+                          remarksRequired
+                            ? "text-amber-600 dark:text-amber-500"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {remarksRequired
+                          ? `${formatCurrency(shortfall)} below the outstanding balance of ${formatCurrency(sourceOutstanding)} — remarks required.`
+                          : `Outstanding balance: ${formatCurrency(sourceOutstanding)}`}
+                      </p>
+                    )}
                   </div>
 
                   {/* Term */}
@@ -1014,11 +1102,15 @@ function RestructureLoanInner() {
                   <div className="space-y-1.5">
                     <Label>Payment Frequency</Label>
                     <Select
-                      value={paymentFrequency ?? ""}
-                      onValueChange={(v) => setPaymentFrequency(v || null)}
+                      value={paymentFrequency ?? null}
+                      onValueChange={(v) => setPaymentFrequency(v ?? null)}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select frequency…" />
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select frequency…">
+                          {(value: string | null) =>
+                            value ? PAYMENT_FREQUENCY_LABELS[value] ?? value : "Select frequency…"
+                          }
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {PAYMENT_FREQUENCY_OPTIONS.filter(
@@ -1045,24 +1137,19 @@ function RestructureLoanInner() {
                     />
                   </div>
 
-                  {/* Interest Type */}
+                  {/* Interest Type — read-only: the API snapshots it from the product */}
                   <div className="space-y-1.5">
-                    <Label>Interest Type</Label>
-                    <Select
-                      value={interestType ?? ""}
-                      onValueChange={(v) => setInterestType(v || null)}
+                    <Label htmlFor="interest-type">Interest Type</Label>
+                    {/* <output> is labelable, so the read-only value keeps its label */}
+                    <output
+                      id="interest-type"
+                      className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm"
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INTEREST_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {interestTypeLabel ?? (
+                        <span className="text-muted-foreground">Select a product first</span>
+                      )}
+                    </output>
+                    <p className="text-xs text-muted-foreground">Set by loan product</p>
                   </div>
 
                   {/* SCB Amount */}
@@ -1364,6 +1451,85 @@ function RestructureLoanInner() {
                     <span>{formatCurrency(netProceeds)}</span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Remarks & Policy Exception */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {remarksRequired && (
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p>
+                      The new principal is {formatCurrency(shortfall)}{" "}
+                      below this loan&rsquo;s outstanding balance of{" "}
+                      {formatCurrency(sourceOutstanding ?? 0)}. The difference is written
+                      off, so a reason is required.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="remarks">
+                    Remarks{" "}
+                    {remarksRequired ? (
+                      <span className="text-destructive">*</span>
+                    ) : (
+                      <span className="text-muted-foreground">(optional)</span>
+                    )}
+                  </Label>
+                  <Textarea
+                    id="remarks"
+                    placeholder={
+                      remarksRequired
+                        ? "Explain why the restructured principal is below the outstanding balance…"
+                        : "Notes about this restructure…"
+                    }
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    rows={3}
+                    required={remarksRequired}
+                    aria-invalid={remarksRequired && !remarks.trim()}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="policy-exception"
+                    checked={policyException}
+                    onCheckedChange={(checked) => {
+                      setPolicyException(checked === true);
+                      if (!checked) setPolicyExceptionDetails("");
+                    }}
+                  />
+                  <div>
+                    <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
+                      Policy Exception
+                    </Label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Check this if the restructure requires policy exception approval (full BOD
+                      review)
+                    </p>
+                  </div>
+                </div>
+
+                {policyException && (
+                  <div className="space-y-1.5 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-700 dark:bg-amber-900/10">
+                    <Label htmlFor="policy-exception-details">Policy Exception Details</Label>
+                    <Textarea
+                      id="policy-exception-details"
+                      placeholder="Describe why this restructure requires a policy exception…"
+                      value={policyExceptionDetails}
+                      onChange={(e) => setPolicyExceptionDetails(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
 

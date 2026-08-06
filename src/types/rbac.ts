@@ -38,6 +38,9 @@ export type Action =
   | "approve"
   | "reject"
   | "release"
+  // Restructuring closes a loan and opens a replacement, so the API gates it
+  // behind its own permission rather than plain `loans:create`.
+  | "restructure"
   | "void"
   | "mark_collected"
   | "export"

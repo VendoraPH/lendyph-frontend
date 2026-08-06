@@ -202,7 +202,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
 const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release"],
+  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
   payments: ["view", "create", "update", "void"],
   share_capital: ["view", "create", "update"],
   collaterals: ["view", "create", "update", "delete"],
@@ -222,6 +222,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   approve: { label: "Approve", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
   reject: { label: "Reject", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
