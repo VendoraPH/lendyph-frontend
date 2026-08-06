@@ -25,8 +25,10 @@ function setupSheet(ws: ExcelJS.Worksheet) {
 
 function excelNumFormat(col: ReportColumn): string | undefined {
   switch (col.format) {
+    // Centavo-accurate, matching the on-screen preview — whole-peso rounding
+    // made a column disagree with its own total.
     case "currency":
-      return '"₱"#,##0;[Red]-"₱"#,##0';
+      return '"₱"#,##0.00;[Red]-"₱"#,##0.00';
     case "number":
       return "#,##0.##";
     case "percent":
@@ -51,7 +53,9 @@ function coerceValue(value: unknown, col: ReportColumn): unknown {
     case "percent": {
       const n = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(n)) return value;
-      return n > 1 ? n / 100 : n;
+      // The API returns whole percents (12.5 = 12.5%); Excel's 0.0% format
+      // expects a fraction. Never guess from magnitude — 0.8 is 0.8%, not 80%.
+      return n / 100;
     }
     case "date":
     case "datetime": {

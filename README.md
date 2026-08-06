@@ -20,6 +20,25 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment variables
+
+All environment variables are read and given defaults in [`src/config/env.ts`](src/config/env.ts) — treat that file as the source of truth. Anything prefixed with `NEXT_PUBLIC_` is **inlined into the browser bundle at build time**, so changing one requires a rebuild (`npm run build`), not just a restart.
+
+### Feature flags
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION` | off | Enables the **Amortization BINHS** calculator (`/loans/amortization-binhs`) — its sidebar entry under *Loans* and the route itself. Client-specific to **binhs-coop**; leave unset on every other deployment, where the nav entry is hidden and the route returns 404. |
+| `NEXT_PUBLIC_ENABLE_ANALYTICS` | off | Enables analytics. |
+
+Flags are off unless explicitly set to `true` or `1`; unset or empty means off.
+
+Lendyph is single-tenant-per-deployment and each instance builds separately on its VPS, so set these in that instance's own env file and rebuild. To keep the BINHS calculator live on `binhs.lendyph.com`:
+
+```bash
+NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION=true
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -1,6 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { Loan, LoanSchedule, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { Loan, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 
 export type ReleaseLoanPayload = {
@@ -68,6 +68,10 @@ export const loanService = {
 
   restructure: (id: number, data: Record<string, unknown>) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
+
+  /** Debit/credit postings against the loan's interest — see `LoanLedgerEntry`. */
+  ledgerEntries: (id: number) =>
+    api.get<PaginatedResponse<LoanLedgerEntry>>(API_ENDPOINTS.LOANS.LEDGER_ENTRIES(id)),
 
   toggleAutoPay: (id: number, data: AutoPayToggleData) =>
     api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),

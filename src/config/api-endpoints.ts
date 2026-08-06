@@ -73,6 +73,7 @@ export const API_ENDPOINTS = {
     EXTEND: (id: number) => `/loans/${id}/extend`,
     TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
+    LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
