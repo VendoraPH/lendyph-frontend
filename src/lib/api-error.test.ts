@@ -88,3 +88,56 @@ test("getFieldErrors returns all messages flattened", () => {
 test("firstFieldError returns null when none", () => {
   assert.equal(firstFieldError(httpErr(500, {})), null);
 });
+
+// --- Server-supplied explanations on statuses that may carry one -------------
+
+test("403 prefers the server's explanation over the generic permission copy", () => {
+  const err = httpErr(403, {
+    message: "A restructure must be approved by someone other than the person who created it.",
+  });
+  assert.equal(
+    getErrorMessage(err),
+    "A restructure must be approved by someone other than the person who created it."
+  );
+});
+
+test("403 with no server message still falls back to the generic copy", () => {
+  assert.equal(getErrorMessage(httpErr(403, {})), "You don't have permission to do that.");
+});
+
+test("404 prefers a written explanation when the server gives one", () => {
+  const err = httpErr(404, { message: "That loan product is no longer available." });
+  assert.equal(getErrorMessage(err), "That loan product is no longer available.");
+});
+
+test("404 does NOT leak Laravel's route-model-binding message", () => {
+  const err = httpErr(404, { message: "No query results for model [App\\Models\\Loan] 99999" });
+  assert.equal(getErrorMessage(err), "We couldn't find what you were looking for.");
+});
+
+test("409 prefers the server's explanation", () => {
+  const err = httpErr(409, { message: "This loan already has a restructure in progress." });
+  assert.equal(getErrorMessage(err), "This loan already has a restructure in progress.");
+});
+
+test("401 ignores the server message — session copy is always right", () => {
+  const err = httpErr(401, { message: "Token signature could not be verified." });
+  assert.equal(getErrorMessage(err), "Your session has expired. Please sign in again.");
+});
+
+test("500 never surfaces the server body", () => {
+  const err = httpErr(500, { message: "Connection refused on 127.0.0.1:3306" });
+  assert.equal(getErrorMessage(err), "Something went wrong on our end. Please try again in a moment.");
+});
+
+test("a technical 403 body is rejected in favour of the generic copy", () => {
+  const err = httpErr(403, { message: "AuthorizationException thrown in Gate::class" });
+  assert.equal(getErrorMessage(err), "You don't have permission to do that.");
+});
+
+test("404 rejects a model-binding message even without a class path", () => {
+  // Laravel omits the namespace when the model is bound by its short name, so
+  // the backslash guard alone would let this through.
+  const err = httpErr(404, { message: "No query results for model Loan 42" });
+  assert.equal(getErrorMessage(err), "We couldn't find what you were looking for.");
+});

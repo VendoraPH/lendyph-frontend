@@ -36,12 +36,27 @@ export function firstFieldError(err: unknown): string | null {
 
 // Reject strings that are clearly technical or internal rather than user copy,
 // so a raw backend/Axios message can never leak to the UI.
+//
+// `No query results for model [App\Models\Loan] 42` and bare class paths are
+// called out explicitly: Laravel emits them for a failed route-model binding,
+// and they read as plausible prose to a naive filter while meaning nothing to a
+// user. They must never reach the UI now that 404 can surface a server message.
 function looksHuman(msg: string | undefined): msg is string {
   if (!msg || typeof msg !== "string") return false;
-  return !/status code|network error|axios|force=true|sqlstate|exception|undefined|null|econn|timeout of|\bstack\b/i.test(
+  return !/status code|network error|axios|force=true|sqlstate|exception|undefined|null|econn|timeout of|\bstack\b|no query results|\\|::|\bclass\b|\bat line\b/i.test(
     msg
   );
 }
+
+// Statuses where the server may legitimately explain WHY, in copy written for a
+// user. Without this the explanation is thrown away and replaced by generic
+// text: a restructure blocked by dual control reported "You don't have
+// permission to do that", which sends people to check their roles instead of
+// noticing they were the one who created the loan.
+//
+// 401 and 5xx are deliberately excluded — a session expiry is never better
+// explained by the server, and a 500 body is exactly where internals leak.
+const STATUSES_THAT_MAY_EXPLAIN = new Set([403, 404, 409, 413, 429]);
 
 const STATUS_COPY: Record<number, string> = {
   401: "Your session has expired. Please sign in again.",
@@ -63,9 +78,9 @@ const VALIDATION = "Please review the highlighted details and try again.";
 /**
  * Turn any thrown value into a safe, friendly message.
  *
- * Priority: fixed status-code copy > whitelisted human server message >
- * caller fallback. Never returns a raw Axios/Error message or an internal
- * backend flag.
+ * Priority: server message (only where the status may carry an explanation and
+ * the text passes the human check) > fixed status-code copy > caller fallback.
+ * Never returns a raw Axios/Error message or an internal backend flag.
  */
 export function getErrorMessage(err: unknown, fallback: string = GENERIC): string {
   const http = asHttpError(err);
@@ -86,7 +101,13 @@ export function getErrorMessage(err: unknown, fallback: string = GENERIC): strin
     return VALIDATION;
   }
 
-  // Known status → fixed friendly copy (never trust the body here).
+  // Where the server may explain itself, prefer its wording over the generic
+  // copy — but only if it reads like something written for a person.
+  if (STATUSES_THAT_MAY_EXPLAIN.has(status) && looksHuman(body?.message)) {
+    return body!.message!;
+  }
+
+  // Known status → fixed friendly copy.
   if (STATUS_COPY[status]) return STATUS_COPY[status];
 
   // Unknown status: only surface the server message if it reads like human copy.
