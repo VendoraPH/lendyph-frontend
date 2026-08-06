@@ -6,11 +6,23 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
   return value || "";
 };
 
-const getBoolEnvVar = (key: string, defaultValue = false): boolean => {
-  const value = process.env[key];
+/**
+ * Truthiness rule for every boolean env var: only an explicit "true" / "1" turns
+ * a flag on. An unset var falls back to `defaultValue`; any other value
+ * (including "") is off.
+ * Takes the value rather than the key so callers that must reference
+ * `process.env.SOME_VAR` literally (see `features.binhsAmortization`) can share it.
+ */
+const parseBoolEnvValue = (
+  value: string | undefined,
+  defaultValue = false
+): boolean => {
   if (value === undefined) return defaultValue;
   return value === "true" || value === "1";
 };
+
+const getBoolEnvVar = (key: string, defaultValue = false): boolean =>
+  parseBoolEnvValue(process.env[key], defaultValue);
 
 const getNumberEnvVar = (key: string, defaultValue: number): number => {
   const value = process.env[key];
@@ -52,6 +64,19 @@ export const env = {
   },
   features: {
     analytics: getBoolEnvVar("NEXT_PUBLIC_ENABLE_ANALYTICS", false),
+    // The BINHS amortization calculator is specific to the binhs-coop client.
+    // lendyph is single-tenant-per-deployment and every instance builds
+    // separately, so this build-time flag keeps the page live on
+    // binhs.lendyph.com while hiding it from the shared product — no client name
+    // hardcoded into shared code.
+    //
+    // Referenced literally on purpose: Next.js inlines `NEXT_PUBLIC_*` into the
+    // browser bundle only for static `process.env.X` lookups. A dynamic
+    // `process.env[key]` (as `getBoolEnvVar` does) is NOT inlined and would read
+    // as undefined client-side.
+    binhsAmortization: parseBoolEnvValue(
+      process.env.NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION
+    ),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
