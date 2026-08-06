@@ -16,6 +16,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
+import { env } from "@/config/env";
 
 export interface NavSubItem {
   title: string;
@@ -56,7 +57,11 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "All Loans", href: "/loans" },
       { title: "New Application", href: "/loans/new" },
       { title: "Amortization Calculator", href: "/loans/amortization" },
-      { title: "Amortization BINHS", href: "/loans/amortization-binhs" },
+      // binhs-coop only — gated on NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION at
+      // build time. The route itself also 404s when the flag is off.
+      ...(env.features.binhsAmortization
+        ? [{ title: "Amortization BINHS", href: "/loans/amortization-binhs" }]
+        : []),
       { title: "Restructure", href: "/loans/restructure" },
     ],
   },
