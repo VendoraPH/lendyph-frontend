@@ -48,6 +48,17 @@ export function formatDateObj(date: Date): string {
   });
 }
 
+/**
+ * Serialise a Date to `YYYY-MM-DD` using its *local* calendar parts.
+ *
+ * `toISOString()` converts to UTC first, so a Date built at local midnight in
+ * Manila (UTC+8) serialised to the previous day — every date filter and every
+ * posted date landed one day early. Build the string from local Y/M/D so the
+ * value is exactly the calendar date the user picked.
+ */
 export function formatDateISO(date: Date): string {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
