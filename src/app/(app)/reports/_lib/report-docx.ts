@@ -2,7 +2,10 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
   HeadingLevel,
+  ImageRun,
+  PageNumber,
   PageOrientation,
   Packer,
   Paragraph,
@@ -60,78 +63,155 @@ function spacer(): Paragraph {
   return new Paragraph({ children: [new TextRun({ text: "" })] });
 }
 
+/** docx only accepts these; anything else (webp, avif) is skipped silently. */
+const DOCX_IMAGE_TYPES: Record<string, "png" | "jpg" | "gif" | "bmp"> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+};
+
+/** Decode a `data:` URL into the bytes + type an ImageRun needs. */
+function decodeLogo(
+  dataUrl: string | null | undefined
+): { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp" } | null {
+  if (!dataUrl) return null;
+  const match = /^data:([^;,]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  const type = DOCX_IMAGE_TYPES[match[1].toLowerCase()];
+  if (!type) return null;
+  try {
+    const binary = atob(match[2]);
+    const data = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+    return { data, type };
+  } catch {
+    return null;
+  }
+}
+
 function buildHeaderTable(report: ReportDocument): Table {
-  const titleRow = new TableRow({
-    tableHeader: true,
+  const logo = decodeLogo(report.meta.logoData);
+
+  const brandCell = new TableCell({
+    shading: { type: ShadingType.SOLID, fill: BRAND_ORANGE, color: "auto" },
+    borders: NO_BORDER,
     children: [
-      new TableCell({
-        shading: { type: ShadingType.SOLID, fill: BRAND_ORANGE, color: "auto" },
-        borders: NO_BORDER,
+      ...(logo
+        ? [
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: logo.data,
+                  type: logo.type,
+                  transformation: { width: 48, height: 48 },
+                }),
+              ],
+            }),
+          ]
+        : []),
+      new Paragraph({
         children: [
+          new TextRun({
+            text: report.meta.org.toUpperCase(),
+            color: "FFFFFF",
+            italics: true,
+            size: 18,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: report.meta.title,
+            bold: true,
+            color: "FFFFFF",
+            size: 32,
+          }),
+        ],
+      }),
+      ...(report.meta.subtitle
+        ? [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: report.meta.subtitle,
+                  color: "FFFFFF",
+                  size: 20,
+                }),
+              ],
+            }),
+          ]
+        : []),
+    ],
+  });
+
+  // Reference sits in its own right-hand cell so it stays put no matter how
+  // long the title runs.
+  const referenceCell = new TableCell({
+    width: { size: 28, type: WidthType.PERCENTAGE },
+    shading: { type: ShadingType.SOLID, fill: BRAND_ORANGE, color: "auto" },
+    borders: NO_BORDER,
+    children: report.meta.reference
+      ? [
           new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            children: [
+              new TextRun({ text: "REFERENCE", color: "FFFFFF", size: 14 }),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
             children: [
               new TextRun({
-                text: report.meta.org.toUpperCase(),
+                text: report.meta.reference,
                 color: "FFFFFF",
-                italics: true,
+                bold: true,
                 size: 18,
               }),
             ],
           }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: report.meta.title,
-                bold: true,
-                color: "FFFFFF",
-                size: 32,
-              }),
-            ],
-          }),
-          ...(report.meta.subtitle
-            ? [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: report.meta.subtitle,
-                      color: "FFFFFF",
-                      size: 20,
-                    }),
-                  ],
-                }),
-              ]
-            : []),
-        ],
-      }),
-    ],
+        ]
+      : [new Paragraph({ children: [] })],
   });
 
-  const periodCell = new TableCell({
-    shading: { type: ShadingType.SOLID, fill: "F5F5F5", color: "auto" },
-    borders: NO_BORDER,
-    children: [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `Period: ${report.meta.period ?? "—"}`,
-            color: MUTED,
-            size: 18,
-          }),
-        ],
-      }),
-      new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        children: [
-          new TextRun({
-            text: `Generated: ${report.meta.generatedAt}`,
-            color: MUTED,
-            size: 18,
-          }),
-        ],
-      }),
-    ],
+  const titleRow = new TableRow({
+    tableHeader: true,
+    children: [brandCell, referenceCell],
   });
-  const periodRow = new TableRow({ children: [periodCell] });
+
+  const metaLine = (text: string, align: (typeof AlignmentType)[keyof typeof AlignmentType]) =>
+    new Paragraph({
+      alignment: align,
+      children: [new TextRun({ text, color: MUTED, size: 18 })],
+    });
+
+  const metaCell = (paragraphs: Paragraph[], size: number) =>
+    new TableCell({
+      width: { size, type: WidthType.PERCENTAGE },
+      shading: { type: ShadingType.SOLID, fill: "F5F5F5", color: "auto" },
+      borders: NO_BORDER,
+      children: paragraphs.length ? paragraphs : [new Paragraph({ children: [] })],
+    });
+
+  const leftMeta = [metaLine(`Period: ${report.meta.period ?? "—"}`, AlignmentType.LEFT)];
+  if (report.meta.branchLabel) {
+    leftMeta.push(metaLine(`Branch: ${report.meta.branchLabel}`, AlignmentType.LEFT));
+  }
+
+  const rightMeta = [
+    metaLine(`Generated: ${report.meta.generatedAt}`, AlignmentType.RIGHT),
+  ];
+  if (report.meta.preparedBy) {
+    rightMeta.push(
+      metaLine(`Prepared by: ${report.meta.preparedBy}`, AlignmentType.RIGHT)
+    );
+  }
+
+  const periodRow = new TableRow({
+    children: [metaCell(leftMeta, 72), metaCell(rightMeta, 28)],
+  });
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -297,6 +377,86 @@ function buildDataTable(section: ReportSection): Table | null {
   });
 }
 
+function buildFieldsTable(section: ReportSection): Table | null {
+  if (section.kind !== "fields" || section.items.length === 0) return null;
+
+  const rows = section.items.map(
+    (item) =>
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 40, type: WidthType.PERCENTAGE },
+            borders: THIN_BORDER,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: item.label, color: MUTED, size: 18 }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 60, type: WidthType.PERCENTAGE },
+            borders: THIN_BORDER,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: item.value,
+                    bold: true,
+                    color: FOREGROUND,
+                    size: 18,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      })
+  );
+
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
+}
+
+/**
+ * Sign-off block: blank signing space with a ruled bottom edge, captioned
+ * underneath — one column per role, the same layout as the preview and PDF.
+ */
+function buildSignatureTable(section: ReportSection): Table | null {
+  if (section.kind !== "signatures" || section.roles.length === 0) return null;
+
+  const width = Math.floor(100 / section.roles.length);
+  const ruledCell = () =>
+    new TableCell({
+      width: { size: width, type: WidthType.PERCENTAGE },
+      borders: {
+        ...NO_BORDER,
+        bottom: { style: BorderStyle.SINGLE, size: 6, color: "9CA3AF" },
+      },
+      margins: { top: 400 },
+      children: [new Paragraph({ children: [] })],
+    });
+
+  const captionCell = (role: string) =>
+    new TableCell({
+      width: { size: width, type: WidthType.PERCENTAGE },
+      borders: NO_BORDER,
+      children: [
+        new Paragraph({
+          children: [new TextRun({ text: role, color: MUTED, size: 16 })],
+        }),
+      ],
+    });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ children: section.roles.map(ruledCell) }),
+      new TableRow({ children: section.roles.map(captionCell) }),
+    ],
+  });
+}
+
 function sectionToChildren(section: ReportSection): Array<Paragraph | Table> {
   const children: Array<Paragraph | Table> = [];
 
@@ -339,6 +499,23 @@ function sectionToChildren(section: ReportSection): Array<Paragraph | Table> {
       if (t) children.push(t);
     }
     children.push(spacer());
+  } else if (section.kind === "fields") {
+    if (section.title) {
+      children.push(
+        new Paragraph({
+          heading: HeadingLevel.HEADING_3,
+          children: [new TextRun({ text: section.title, bold: true })],
+        })
+      );
+    }
+    const t = buildFieldsTable(section);
+    if (t) children.push(t);
+    children.push(spacer());
+  } else if (section.kind === "signatures") {
+    children.push(spacer());
+    const t = buildSignatureTable(section);
+    if (t) children.push(t);
+    children.push(spacer());
   } else if (section.kind === "note") {
     children.push(
       new Paragraph({
@@ -356,6 +533,27 @@ function sectionToChildren(section: ReportSection): Array<Paragraph | Table> {
   }
 
   return children;
+}
+
+function buildPageFooter(report: ReportDocument): Footer {
+  const left = [report.meta.org, report.meta.reference].filter(Boolean).join("  •  ");
+  return new Footer({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({ text: left, color: MUTED, size: 14 }),
+          new TextRun({ text: "\t\tPage ", color: MUTED, size: 14 }),
+          new TextRun({ children: [PageNumber.CURRENT], color: MUTED, size: 14 }),
+          new TextRun({ text: " of ", color: MUTED, size: 14 }),
+          new TextRun({
+            children: [PageNumber.TOTAL_PAGES],
+            color: MUTED,
+            size: 14,
+          }),
+        ],
+      }),
+    ],
+  });
 }
 
 export async function exportReportToDocx(report: ReportDocument): Promise<void> {
@@ -402,6 +600,9 @@ export async function exportReportToDocx(report: ReportDocument): Promise<void> 
             },
           },
         },
+        // Real page footer (not a trailing paragraph) so the reference and
+        // page count repeat on every printed sheet.
+        footers: { default: buildPageFooter(report) },
         children: bodyChildren,
       },
     ],

@@ -10,9 +10,11 @@ import {
   buildPortfolioSummaryDoc,
   buildReleasesListDoc,
   buildRepaymentsListDoc,
+  buildStatementOfAccountDoc,
+  buildSubsidiaryLedgerDoc,
 } from "./report-builders";
 import { DASH } from "./formatters";
-import type { DateRange, KpiItem, ReportDocument } from "./types";
+import type { DateRange, FieldItem, KpiItem, ReportDocument } from "./types";
 
 /**
  * Contract tests: every payload below mirrors what the API actually returns
@@ -49,6 +51,41 @@ function tableTotal(doc: ReportDocument, column: string): string | undefined {
 function tableRows(doc: ReportDocument): Record<string, unknown>[] {
   const table = doc.sections.find((s) => s.kind === "table");
   return table && table.kind === "table" ? table.rows : [];
+}
+
+/** A named table — reports now carry several, so position is not enough. */
+function namedTable(doc: ReportDocument, title: string) {
+  const section = doc.sections.find(
+    (s) => s.kind === "table" && s.title === title
+  );
+  assert.ok(section && section.kind === "table", `table "${title}" not found`);
+  return section;
+}
+
+function hasTable(doc: ReportDocument, title: string): boolean {
+  return doc.sections.some((s) => s.kind === "table" && s.title === title);
+}
+
+function namedTableTotal(
+  doc: ReportDocument,
+  title: string,
+  column: string
+): string | undefined {
+  return namedTable(doc, title).totals?.find((t) => t.column === column)?.value;
+}
+
+function fieldItems(doc: ReportDocument, title: string): FieldItem[] {
+  const section = doc.sections.find(
+    (s) => s.kind === "fields" && s.title === title
+  );
+  assert.ok(section && section.kind === "fields", `fields "${title}" not found`);
+  return section.items;
+}
+
+function fieldValue(doc: ReportDocument, title: string, label: string): string {
+  const item = fieldItems(doc, title).find((f) => f.label === label);
+  assert.ok(item, `field "${label}" not found in "${title}"`);
+  return item.value;
 }
 
 function assertNoDashes(doc: ReportDocument): void {
@@ -617,4 +654,388 @@ test("a bare array response (no envelope) still renders rows and totals", () => 
   assert.equal(tableRows(doc).length, 2);
   assert.equal(kpiValue(doc, "Total Releases"), "2");
   assert.equal(kpiValue(doc, "Total Principal"), "₱125,000.50");
+});
+
+// ---------------------------------------------------------------------------
+// Data the API sends that the reports used to fetch and discard
+// ---------------------------------------------------------------------------
+
+test("portfolio summary renders the by_branch breakdown it used to drop", () => {
+  const doc = buildPortfolioSummaryDoc(PORTFOLIO_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Breakdown by Branch");
+
+  assert.equal(table.rows.length, 1);
+  assert.equal(table.rows[0].branch_name, "Main");
+  assert.equal(table.rows[0].loan_count, 42);
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "total_released"), "₱5,250,000.00");
+});
+
+test("a branch row with no name is labelled rather than left blank", () => {
+  const doc = buildPortfolioSummaryDoc(
+    { ...PORTFOLIO_PAYLOAD, by_branch: [{ branch_id: null, loan_count: 3 }] },
+    RANGE
+  );
+  assert.equal(namedTable(doc, "Breakdown by Branch").rows[0].branch_name, "Unassigned");
+});
+
+test("portfolio summary omits the branch table when the API sends no branches", () => {
+  const { by_branch, ...withoutBranches } = PORTFOLIO_PAYLOAD;
+  void by_branch;
+  assert.equal(
+    hasTable(buildPortfolioSummaryDoc(withoutBranches, RANGE), "Breakdown by Branch"),
+    false
+  );
+});
+
+test("portfolio summary splits outstanding against overdue by component", () => {
+  const doc = buildPortfolioSummaryDoc(PORTFOLIO_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Outstanding vs Overdue Composition");
+
+  assert.deepEqual(
+    table.rows.map((r) => r.component),
+    ["Principal", "Interest", "Penalty"]
+  );
+  assert.equal(table.rows[0].outstanding, 3120450.75);
+  assert.equal(table.rows[0].overdue, 410200.4);
+  // 3,120,450.75 + 285,300.50 + 12,400.25
+  assert.equal(
+    namedTableTotal(doc, "Outstanding vs Overdue Composition", "outstanding"),
+    "₱3,418,151.50"
+  );
+});
+
+test("a component the API omitted on both sides is dropped, not shown as zero", () => {
+  const doc = buildPortfolioSummaryDoc(
+    {
+      ...PORTFOLIO_PAYLOAD,
+      outstanding: { principal: 100, interest: 20 },
+      overdue: { principal: 10, interest: 2 },
+    },
+    RANGE
+  );
+  assert.deepEqual(
+    namedTable(doc, "Outstanding vs Overdue Composition").rows.map((r) => r.component),
+    ["Principal", "Interest"]
+  );
+});
+
+test("aging report renders a schedule with each bucket's share of the total", () => {
+  const doc = buildAgingDoc(AGING_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Aging Schedule");
+
+  assert.equal(table.rows.length, 4);
+  assert.equal(table.rows[0].amount, 128450.5);
+  // 128,450.50 ÷ 451,861.50
+  assert.equal(Math.round((table.rows[0].share as number) * 100) / 100, 28.43);
+  assert.equal(namedTableTotal(doc, "Aging Schedule", "amount"), "₱451,861.50");
+  assert.equal(namedTableTotal(doc, "Aging Schedule", "share"), "100.0%");
+});
+
+test("the aging schedule never totals the loan counts", () => {
+  // 12 + 5 + 1 + 9 = 27 against a real 21: a loan late in two buckets is one
+  // loan, so summing the column would overstate the delinquency.
+  const totals = namedTable(buildAgingDoc(AGING_PAYLOAD, RANGE), "Aging Schedule").totals;
+  assert.equal(totals?.some((t) => t.column === "count"), false);
+});
+
+test("aging shares fall back to the buckets when the API omits the total", () => {
+  const { total, ...withoutTotal } = AGING_PAYLOAD;
+  void total;
+  const doc = buildAgingDoc(withoutTotal, RANGE);
+  assert.equal(namedTableTotal(doc, "Aging Schedule", "amount"), "₱451,861.50");
+});
+
+test("a zero overdue total reports no share instead of NaN", () => {
+  const doc = buildAgingDoc(
+    {
+      buckets: {
+        "1_30": { amount: 0, count: 0 },
+        "31_60": { amount: 0, count: 0 },
+        "61_90": { amount: 0, count: 0 },
+        over_90: { amount: 0, count: 0 },
+      },
+      total: { amount: 0, count: 0 },
+    },
+    RANGE
+  );
+  const table = namedTable(doc, "Aging Schedule");
+  assert.equal(table.rows[0].share, null);
+  assert.equal(namedTableTotal(doc, "Aging Schedule", "share"), DASH);
+});
+
+test("due/past due carries the per-row breakdown the API already sends", () => {
+  const rows = tableRows(buildDuePastDueListDoc({ data: DUE_ROWS, meta: { total: 2 } }, RANGE));
+
+  assert.equal(rows[0].period_number, 3);
+  assert.equal(rows[0].principal_due, 4000);
+  assert.equal(rows[0].interest_due, 1200.5);
+  assert.equal(rows[0].penalty_amount, 250);
+  assert.equal(rows[1].amount_paid, 1000); // principal_paid + interest_paid
+});
+
+test("an unpaid row reports zero paid, while a silent API reports nothing", () => {
+  const doc = buildDuePastDueListDoc(
+    {
+      data: [
+        DUE_ROWS[0],
+        (() => {
+          const { principal_paid, interest_paid, ...silent } = DUE_ROWS[1];
+          void principal_paid;
+          void interest_paid;
+          return silent;
+        })(),
+      ],
+    },
+    RANGE
+  );
+  const rows = tableRows(doc);
+
+  assert.equal(rows[0].amount_paid, 0);
+  assert.equal(rows[1].amount_paid, null);
+});
+
+test("due/past due footer money comes from the server totals, not the page", () => {
+  const doc = buildDuePastDueListDoc(
+    { data: DUE_ROWS, meta: { total: 1432 }, totals: DUE_TOTALS },
+    RANGE
+  );
+
+  assert.equal(tableTotal(doc, "principal_due"), "₱1,420,100.50");
+  assert.equal(tableTotal(doc, "interest_due"), "₱402,099.75");
+  assert.equal(tableTotal(doc, "penalty_amount"), "₱53,000.00");
+});
+
+test("releases list carries the application number", () => {
+  const doc = buildReleasesListDoc({ data: RELEASE_ROWS, meta: { total: 2 } }, RANGE);
+  assert.equal(tableRows(doc)[0].application_number, "APP-2026-0001");
+});
+
+// ---------------------------------------------------------------------------
+// Statement of Account / Subsidiary Ledger
+//
+// The API documents no response schema for either endpoint, so the builders
+// read a wide set of aliases. These fixtures pin the primary shape; the alias
+// tests below pin the fallbacks.
+// ---------------------------------------------------------------------------
+
+const SOA_PAYLOAD = {
+  loan: {
+    id: 10,
+    loan_account_number: "LN-2026-0001",
+    application_number: "APP-2026-0001",
+    principal_amount: 50000,
+    interest_rate: 3,
+    term: 6,
+    release_date: "2026-02-01",
+    maturity_date: "2026-08-01",
+    status: "ongoing",
+  },
+  borrower: { id: 5, full_name: "Maria Santos", borrower_code: "MB-0005" },
+  summary: { total_paid: 21000.5, outstanding_balance: 34500.25, overdue_amount: 5450.5 },
+  schedule: [
+    {
+      period_number: 1,
+      due_date: "2026-03-01",
+      beginning_balance: 50000,
+      principal_due: 8000,
+      interest_due: 1500,
+      penalty_amount: 0,
+      total_due: 9500,
+      principal_paid: 8000,
+      interest_paid: 1500,
+      amount_remaining: 0,
+      status: "paid",
+    },
+    {
+      period_number: 2,
+      due_date: "2026-04-01",
+      beginning_balance: 42000,
+      principal_due: 8000,
+      interest_due: 1260,
+      penalty_amount: 250,
+      total_due: 9510,
+      principal_paid: 0,
+      interest_paid: 0,
+      amount_remaining: 9510,
+      status: "overdue",
+    },
+  ],
+  transactions: [
+    {
+      id: 1,
+      date: "2026-03-01",
+      type: "repayment",
+      reference: "OR-1001",
+      method: "cash",
+      amount: 9500,
+      running_balance: 42000,
+    },
+  ],
+};
+
+test("statement of account opens with the account particulars", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+
+  assert.equal(doc.reportId, "statement_of_account");
+  assert.equal(fieldValue(doc, "Account Particulars", "Borrower"), "Maria Santos");
+  assert.equal(fieldValue(doc, "Account Particulars", "Loan Account No."), "LN-2026-0001");
+  assert.equal(fieldValue(doc, "Account Particulars", "Principal"), "₱50,000.00");
+  assert.equal(fieldValue(doc, "Account Particulars", "Interest Rate"), "3.0%");
+});
+
+test("statement of account particulars omit what the API did not send", () => {
+  const doc = buildStatementOfAccountDoc(
+    { loan: { loan_account_number: "LN-2026-0001" }, borrower: { full_name: "Maria Santos" } },
+    RANGE
+  );
+  const labels = fieldItems(doc, "Account Particulars").map((f) => f.label);
+
+  assert.deepEqual(labels, ["Borrower", "Loan Account No."]);
+  assert.equal(labels.includes("Maturity Date"), false);
+});
+
+test("statement of account reads the summary block for its balances", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+
+  assert.equal(kpiValue(doc, "Total Paid"), "₱21,000.50");
+  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
+  assert.equal(kpiValue(doc, "Past Due"), "₱5,450.50");
+});
+
+test("the amortization schedule sums paid from principal_paid + interest_paid", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Amortization Schedule");
+
+  assert.equal(table.rows[0].amount_paid, 9500);
+  assert.equal(table.rows[1].amount_paid, 0);
+  assert.equal(table.rows[1].balance, 9510);
+  assert.equal(
+    table.totals?.find((t) => t.column === "total_due")?.value,
+    "₱19,010.00"
+  );
+});
+
+test("a typed transaction is posted to the correct side of the ledger", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+
+  assert.equal(table.rows[0].credit, 9500);
+  assert.equal(table.rows[0].debit, null);
+  assert.equal(table.rows[0].particulars, "repayment");
+});
+
+test("explicit debit/credit columns are used verbatim when the API sends them", () => {
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        transactions: [
+          {
+            transaction_date: "2026-02-01",
+            description: "Loan release",
+            debit: 50000,
+            credit: 0,
+            balance: 50000,
+          },
+        ],
+      },
+      RANGE
+    ),
+    "Transaction History"
+  );
+
+  assert.equal(table.rows[0].debit, 50000);
+  assert.equal(table.rows[0].particulars, "Loan release");
+  assert.equal(table.rows[0].running_balance, 50000);
+});
+
+test("a failed statement request still renders the shell", () => {
+  const doc = buildStatementOfAccountDoc(null, RANGE);
+
+  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(namedTable(doc, "Amortization Schedule").rows.length, 0);
+});
+
+const LEDGER_PAYLOAD = {
+  borrower: {
+    id: 5,
+    full_name: "Maria Santos",
+    borrower_code: "MB-0005",
+    branch: { id: 1, name: "Main" },
+    status: "active",
+  },
+  loans: [
+    {
+      loan_account_number: "LN-2026-0001",
+      release_date: "2026-02-01",
+      principal_amount: 50000,
+      total_paid: 21000.5,
+      outstanding_balance: 34500.25,
+      overdue_amount: 5450.5,
+      status: "ongoing",
+    },
+    {
+      loan_account_number: "LN-2025-0044",
+      release_date: "2025-06-01",
+      principal_amount: 30000,
+      total_paid: 30000,
+      outstanding_balance: 0,
+      overdue_amount: 0,
+      status: "closed",
+    },
+  ],
+  entries: [
+    {
+      transaction_date: "2026-03-01",
+      type: "payment",
+      reference: "OR-1001",
+      amount: 9500,
+      running_balance: 42000,
+    },
+  ],
+};
+
+test("subsidiary ledger lists every loan account for the borrower", () => {
+  const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Loan Accounts");
+
+  assert.equal(doc.reportId, "subsidiary_ledger");
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[0].loan_account_number, "LN-2026-0001");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "principal"), "₱80,000.00");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "balance"), "₱34,500.25");
+});
+
+test("subsidiary ledger reads the branch off the nested relation", () => {
+  const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
+  assert.equal(fieldValue(doc, "Member Particulars", "Branch"), "Main");
+  assert.equal(fieldValue(doc, "Member Particulars", "Member No."), "MB-0005");
+});
+
+test("ledger totals are summed from the accounts when the API sends no summary", () => {
+  const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
+
+  assert.equal(kpiValue(doc, "Total Loans"), "2");
+  assert.equal(kpiValue(doc, "Total Released"), "₱80,000.00");
+  assert.equal(kpiValue(doc, "Total Paid"), "₱51,000.50");
+});
+
+test("a server summary block wins over the summed accounts", () => {
+  const doc = buildSubsidiaryLedgerDoc(
+    { ...LEDGER_PAYLOAD, summary: { loan_count: 9, total_released: 410000, total_paid: 220000 } },
+    RANGE
+  );
+
+  assert.equal(kpiValue(doc, "Total Loans"), "9");
+  assert.equal(kpiValue(doc, "Total Released"), "₱410,000.00");
+});
+
+test("the ledger hides payment history rather than claim there were no payments", () => {
+  const { entries, ...withoutEntries } = LEDGER_PAYLOAD;
+  void entries;
+
+  assert.equal(hasTable(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE), "Payment History"), true);
+  assert.equal(hasTable(buildSubsidiaryLedgerDoc(withoutEntries, RANGE), "Payment History"), false);
+});
+
+test("the ledger subtitle names the borrower it covers", () => {
+  assert.equal(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE).meta.subtitle, "Maria Santos");
 });

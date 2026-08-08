@@ -1,15 +1,19 @@
 import {
+  DASH,
   countOrDash,
   currencyOrDash,
   formatCount,
   formatCurrency,
   formatDateRange,
   formatGeneratedAt,
+  formatPercent,
+  formatValue,
   percentOrDash,
   toNumber,
 } from "./formatters";
 import type {
   DateRange,
+  FieldItem,
   KpiItem,
   ReportColumn,
   ReportDocument,
@@ -114,6 +118,9 @@ function kpi(label: string, value: string, opts: Partial<KpiItem> = {}): KpiItem
 
 const RELEASE_COLUMNS: ReportColumn[] = [
   { key: "release_date", header: "Release Date", format: "date", width: 120 },
+  // Released loans are traced back to their application during audit; the API
+  // sends the application number on every row and it was being dropped.
+  { key: "application_number", header: "Application #", format: "text", width: 140 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
@@ -134,14 +141,23 @@ const REPAYMENT_COLUMNS: ReportColumn[] = [
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
 
+// The schedule rows carry a full principal/interest/penalty split and the
+// amounts already paid against them. Only the totals used to be rendered,
+// which left staff unable to see *what* a delinquent installment is made of
+// without opening the loan.
 const DUE_COLUMNS: ReportColumn[] = [
-  { key: "due_date", header: "Due Date", format: "date", width: 120 },
-  { key: "days_overdue", header: "Days Overdue", format: "number", align: "right", width: 120 },
+  { key: "due_date", header: "Due Date", format: "date", width: 110 },
+  { key: "period_number", header: "Period", format: "number", align: "center", width: 70 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
-  { key: "amount_due", header: "Amount Due", format: "currency", align: "right", width: 140 },
-  { key: "balance", header: "Balance", format: "currency", align: "right", width: 140 },
-  { key: "status", header: "Status", format: "text", width: 110 },
+  { key: "borrower_name", header: "Borrower", format: "text", width: 200 },
+  { key: "principal_due", header: "Principal", format: "currency", align: "right", width: 120 },
+  { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
+  { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
+  { key: "amount_due", header: "Total Due", format: "currency", align: "right", width: 130 },
+  { key: "amount_paid", header: "Paid", format: "currency", align: "right", width: 120 },
+  { key: "balance", header: "Balance", format: "currency", align: "right", width: 130 },
+  { key: "days_overdue", header: "Days Late", format: "number", align: "right", width: 100 },
+  { key: "status", header: "Status", format: "text", width: 100 },
 ];
 
 // Normalizers — accept multiple backend key conventions and shape rows for
@@ -155,6 +171,7 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
     release_date:
       pick(raw, ["release_date", "released_at", "start_date"]) ??
       pick(borrower, ["release_date"]),
+    application_number: pick(raw, ["application_number", "app_number"]),
     loan_account_number:
       pick(raw, ["loan_account_number", "account_number", "application_number"]),
     borrower_name:
@@ -188,8 +205,15 @@ function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unk
 function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> {
   const borrower = asRecord(raw.borrower);
   const loan = asRecord(raw.loan);
+
+  // The API reports what was paid per component, not a combined figure, so the
+  // "Paid" column adds them. sumFields returns null when neither key is
+  // present, keeping the cell a dash rather than claiming nothing was paid.
+  const amountPaid = sumFields(raw, ["principal_paid", "interest_paid"]);
+
   return {
     due_date: pick(raw, ["due_date", "scheduled_date", "date"]),
+    period_number: pick(raw, ["period_number", "period", "installment_number"]),
     // The API sends days_overdue per schedule; it is never derived client-side.
     days_overdue: pick(raw, ["days_overdue", "days_past_due"]) ?? 0,
     loan_account_number:
@@ -198,7 +222,11 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
+    principal_due: pick(raw, ["principal_due", "principal"]),
+    interest_due: pick(raw, ["interest_due", "interest"]),
+    penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     amount_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
+    amount_paid: amountPaid,
     // `amount_remaining` is the API's name for the unpaid balance of a schedule.
     balance: pick(raw, [
       "amount_remaining",
@@ -334,6 +362,107 @@ export function buildDailyCollectionDoc(
 /** Default PAR window used only when the API omits par_threshold_days. */
 const DEFAULT_PAR_THRESHOLD_DAYS = 30;
 
+const BY_BRANCH_COLUMNS: ReportColumn[] = [
+  { key: "branch_name", header: "Branch", format: "text", width: 200 },
+  { key: "loan_count", header: "Loans", format: "number", align: "right", width: 90 },
+  {
+    key: "total_released",
+    header: "Total Released",
+    format: "currency",
+    align: "right",
+    width: 160,
+  },
+  {
+    key: "outstanding_balance",
+    header: "Outstanding Balance",
+    format: "currency",
+    align: "right",
+    width: 170,
+  },
+];
+
+const COMPOSITION_COLUMNS: ReportColumn[] = [
+  { key: "component", header: "Component", format: "text", width: 160 },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 160 },
+  { key: "overdue", header: "Of Which Overdue", format: "currency", align: "right", width: 170 },
+];
+
+/**
+ * Per-branch breakdown. The API returns `by_branch` on every loan-balance
+ * summary; it was fetched and dropped, so a multi-branch cooperative could
+ * only ever see the consolidated figure.
+ */
+function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null {
+  if (rows.length === 0) return null;
+
+  const normalized = rows.map((raw) => ({
+    branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
+    loan_count: pick(raw, ["loan_count", "loans", "count"]),
+    total_released: pick(raw, ["total_released", "released"]),
+    outstanding_balance: pick(raw, ["outstanding_balance", "outstanding"]),
+  }));
+
+  return {
+    kind: "table",
+    title: "Breakdown by Branch",
+    columns: BY_BRANCH_COLUMNS,
+    rows: normalized,
+    totals: [
+      {
+        column: "loan_count",
+        label: "Total",
+        value: formatCount(sum(normalized, "loan_count")),
+      },
+      { column: "total_released", value: formatCurrency(sum(normalized, "total_released")) },
+      {
+        column: "outstanding_balance",
+        value: formatCurrency(sum(normalized, "outstanding_balance")),
+      },
+    ],
+    emptyText: "No branch breakdown was returned for this period.",
+  };
+}
+
+/**
+ * Principal / interest / penalty, outstanding against overdue. Both blocks
+ * come back on every response and neither was rendered — the headline balance
+ * alone cannot tell a collections officer what the arrears are made of.
+ */
+function compositionSection(
+  outstanding: Record<string, unknown> | null,
+  overdue: Record<string, unknown> | null
+): ReportSection | null {
+  if (!outstanding && !overdue) return null;
+
+  const components: [string, string][] = [
+    ["Principal", "principal"],
+    ["Interest", "interest"],
+    ["Penalty", "penalty"],
+  ];
+  const rows = components
+    .map(([label, key]) => ({
+      component: label,
+      outstanding: outstanding?.[key] ?? null,
+      overdue: overdue?.[key] ?? null,
+    }))
+    // A component the API omitted on both sides is not a zero — drop the row
+    // rather than assert a balance the server never reported.
+    .filter((r) => r.outstanding !== null || r.overdue !== null);
+
+  if (rows.length === 0) return null;
+
+  return {
+    kind: "table",
+    title: "Outstanding vs Overdue Composition",
+    columns: COMPOSITION_COLUMNS,
+    rows,
+    totals: [
+      { column: "outstanding", label: "Total", value: formatCurrency(sum(rows, "outstanding")) },
+      { column: "overdue", value: formatCurrency(sum(rows, "overdue")) },
+    ],
+  };
+}
+
 export function buildPortfolioSummaryDoc(
   raw: unknown,
   range: DateRange
@@ -378,10 +507,18 @@ export function buildPortfolioSummaryDoc(
     }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  const composition = compositionSection(outstanding, overdue);
+  if (composition) sections.push(composition);
+
+  const branches = byBranchSection(asArray(pick(obj, ["by_branch", "branches"])));
+  if (branches) sections.push(branches);
+
   return {
     reportId: "portfolio_summary",
     meta: meta("Portfolio Summary", range, "Overall loan portfolio status"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
@@ -457,6 +594,66 @@ function agingTotalNote(total: Record<string, unknown> | null): ReportSection {
   };
 }
 
+/** Bucket label → the key aliases the API may use for it, in priority order. */
+const AGING_BUCKETS: [string, string[]][] = [
+  ["1–30 Days", ["1_30", "bucket_1_30", "days_1_30"]],
+  ["31–60 Days", ["31_60", "bucket_31_60", "days_31_60"]],
+  ["61–90 Days", ["61_90", "bucket_61_90", "days_61_90"]],
+  ["Over 90 Days", ["over_90", "90_plus", "bucket_over_90"]],
+];
+
+const AGING_COLUMNS: ReportColumn[] = [
+  { key: "bucket", header: "Aging Bucket", format: "text", width: 160 },
+  { key: "amount", header: "Overdue Amount", format: "currency", align: "right", width: 170 },
+  { key: "share", header: "% of Overdue", format: "percent", align: "right", width: 120 },
+  { key: "count", header: "Loans", format: "number", align: "right", width: 90 },
+];
+
+/**
+ * The aging schedule proper. Four KPI cards state the buckets but cannot show
+ * concentration — which bucket holds the arrears is the entire question an
+ * aging report exists to answer, so each bucket's share of the total is
+ * computed here from the amounts the API already sent.
+ */
+function agingScheduleSection(
+  buckets: Record<string, unknown> | null,
+  total: Record<string, unknown> | null
+): ReportSection | null {
+  const rows = AGING_BUCKETS.map(([label, keys]) => {
+    const value = pick(buckets, keys);
+    const bucket = asRecord(value);
+    return {
+      bucket: label,
+      amount: toNumber(bucket ? bucket.amount : value),
+      count: toNumber(bucket?.count),
+    };
+  }).filter((r) => r.amount !== null);
+
+  if (rows.length === 0) return null;
+
+  // Prefer the server's total as the denominator; fall back to the buckets we
+  // were given so the shares still add to 100% rather than to nothing.
+  const totalAmount = toNumber(total?.amount) ?? sum(rows, "amount");
+  const withShare = rows.map((r) => ({
+    ...r,
+    // A zero total would make every share NaN — report no share instead.
+    share: totalAmount > 0 ? ((r.amount ?? 0) / totalAmount) * 100 : null,
+  }));
+
+  return {
+    kind: "table",
+    title: "Aging Schedule",
+    columns: AGING_COLUMNS,
+    rows: withShare,
+    totals: [
+      { column: "amount", label: "Total", value: formatCurrency(totalAmount) },
+      // Deliberately no total for `count`: bucket counts double-count a loan
+      // that is late in two buckets, so a column sum would be wrong.
+      { column: "share", value: totalAmount > 0 ? formatPercent(100) : DASH },
+    ],
+  };
+}
+
 export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
   const buckets = asRecord(pick(obj, ["buckets", "aging_buckets"])) ?? obj;
@@ -473,10 +670,17 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
     }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  const schedule = agingScheduleSection(buckets, total);
+  if (schedule) sections.push(schedule);
+
+  sections.push(agingTotalNote(total));
+
   return {
     reportId: "aging_report",
     meta: meta("Aging Report", range, "Overdue amounts grouped by aging bucket"),
-    sections: [{ kind: "kpi_grid", items }, agingTotalNote(total)],
+    sections,
   };
 }
 
@@ -641,6 +845,344 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
   };
 }
 
+// ---------------------------------------------------------------------------
+// Subject-scoped reports — one loan, or one borrower
+// ---------------------------------------------------------------------------
+
+const SOA_SCHEDULE_COLUMNS: ReportColumn[] = [
+  { key: "period_number", header: "Period", format: "number", align: "center", width: 70 },
+  { key: "due_date", header: "Due Date", format: "date", width: 110 },
+  {
+    key: "beginning_balance",
+    header: "Beginning Balance",
+    format: "currency",
+    align: "right",
+    width: 150,
+  },
+  { key: "principal_due", header: "Principal", format: "currency", align: "right", width: 120 },
+  { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
+  { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
+  { key: "total_due", header: "Total Due", format: "currency", align: "right", width: 130 },
+  { key: "amount_paid", header: "Paid", format: "currency", align: "right", width: 120 },
+  { key: "balance", header: "Balance", format: "currency", align: "right", width: 130 },
+  { key: "status", header: "Status", format: "text", width: 100 },
+];
+
+const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
+  { key: "date", header: "Date", format: "date", width: 110 },
+  { key: "reference", header: "Reference", format: "text", width: 140 },
+  { key: "particulars", header: "Particulars", format: "text", width: 220 },
+  { key: "method", header: "Method", format: "text", width: 110 },
+  { key: "debit", header: "Debit", format: "currency", align: "right", width: 130 },
+  { key: "credit", header: "Credit", format: "currency", align: "right", width: 130 },
+  { key: "running_balance", header: "Balance", format: "currency", align: "right", width: 140 },
+];
+
+function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unknown> {
+  return {
+    period_number: pick(raw, ["period_number", "period", "installment_number"]),
+    due_date: pick(raw, ["due_date", "scheduled_date", "date"]),
+    beginning_balance: pick(raw, ["beginning_balance", "opening_balance"]),
+    principal_due: pick(raw, ["principal_due", "principal"]),
+    interest_due: pick(raw, ["interest_due", "interest"]),
+    penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
+    total_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
+    amount_paid:
+      sumFields(raw, ["principal_paid", "interest_paid"]) ??
+      toNumber(pick(raw, ["amount_paid", "total_paid"])),
+    balance: pick(raw, ["amount_remaining", "balance", "remaining_balance"]),
+    status: pick(raw, ["status"]),
+  };
+}
+
+/**
+ * Ledger lines arrive either already split into debit/credit columns, or as a
+ * single signed/typed amount. Both are normalized to the two-column form a
+ * statement is read in.
+ */
+function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const explicitDebit = toNumber(pick(raw, ["debit", "debit_amount"]));
+  const explicitCredit = toNumber(pick(raw, ["credit", "credit_amount"]));
+  const amount = toNumber(pick(raw, ["amount", "amount_paid", "total_amount"]));
+  const type = String(pick(raw, ["type", "entry_type", "transaction_type"]) ?? "").toLowerCase();
+
+  // A release/charge debits the loan; a repayment credits it.
+  const isCredit = /payment|repayment|credit|collection/.test(type);
+  const isDebit = /release|charge|debit|interest|penalty|disburse/.test(type);
+
+  return {
+    date: pick(raw, ["date", "transaction_date", "paid_at", "payment_date", "created_at"]),
+    reference: pick(raw, ["reference", "reference_no", "receipt_no", "or_number", "id"]),
+    particulars:
+      pick(raw, ["particulars", "description", "remarks", "narration"]) ??
+      (type ? type.replace(/_/g, " ") : null),
+    method: pick(raw, ["method", "payment_method"]),
+    debit: explicitDebit ?? (isDebit && !isCredit ? amount : null),
+    credit: explicitCredit ?? (isCredit ? amount : null),
+    running_balance: pick(raw, ["running_balance", "balance", "outstanding_balance"]),
+  };
+}
+
+/** Label→value particulars for the account the statement covers. */
+function accountFields(
+  loan: Record<string, unknown> | null,
+  borrower: Record<string, unknown> | null
+): FieldItem[] {
+  const fields: [string, unknown, "text" | "currency" | "date" | "percent"][] = [
+    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
+    ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"]), "text"],
+    ["Loan Account No.", pick(loan, ["loan_account_number", "account_number"]), "text"],
+    ["Application No.", pick(loan, ["application_number"]), "text"],
+    ["Loan Product", pick(loan, ["product_name", "loan_product_name"]), "text"],
+    ["Principal", pick(loan, ["principal_amount", "principal"]), "currency"],
+    ["Interest Rate", pick(loan, ["interest_rate", "rate"]), "percent"],
+    ["Term", pick(loan, ["term_label", "term"]), "text"],
+    ["Release Date", pick(loan, ["release_date", "released_at"]), "date"],
+    ["Maturity Date", pick(loan, ["maturity_date", "end_date"]), "date"],
+    ["Status", pick(loan, ["status"]), "text"],
+  ];
+
+  // Only particulars the API actually sent — a statement padded with dashes
+  // reads as missing data rather than as an inapplicable field.
+  return fields
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([label, value, format]) => ({
+      label,
+      value: formatValue(value, format),
+    }));
+}
+
+export function buildStatementOfAccountDoc(
+  raw: unknown,
+  range: DateRange
+): ReportDocument {
+  const obj = asRecord(raw);
+  const loan = asRecord(pick(obj, ["loan"])) ?? obj;
+  const borrower = asRecord(pick(obj, ["borrower"])) ?? asRecord(pick(loan, ["borrower"]));
+  const summary = asRecord(pick(obj, ["summary", "balance", "totals"]));
+
+  const scheduleRows = asArray(
+    pick(obj, ["schedule", "amortization_schedule", "schedules", "installments"])
+  ).map(normalizeScheduleRow);
+  const transactionRows = asArray(
+    pick(obj, ["transactions", "repayments", "payments", "ledger", "entries"])
+  ).map(normalizeTransactionRow);
+
+  const outstanding =
+    pick(summary, ["outstanding_balance", "total_balance", "balance"]) ??
+    pick(obj, ["outstanding_balance", "balance"]);
+  const totalPaid =
+    pick(summary, ["total_paid", "amount_paid", "total_amount_paid"]) ??
+    pick(obj, ["total_paid"]);
+
+  const sections: ReportSection[] = [];
+
+  const fields = accountFields(loan, borrower);
+  if (fields.length > 0) {
+    sections.push({ kind: "fields", title: "Account Particulars", items: fields });
+  }
+
+  sections.push({
+    kind: "kpi_grid",
+    title: "Balance Summary",
+    items: [
+      kpi("Principal", currencyOrDash(pick(loan, ["principal_amount", "principal"]))),
+      kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
+      kpi("Outstanding Balance", currencyOrDash(outstanding), { tone: "negative" }),
+      kpi(
+        "Past Due",
+        currencyOrDash(pick(summary, ["overdue_amount", "past_due_amount", "total_overdue"])),
+        { tone: "negative" }
+      ),
+    ],
+  });
+
+  sections.push({
+    kind: "table",
+    title: "Amortization Schedule",
+    columns: SOA_SCHEDULE_COLUMNS,
+    rows: scheduleRows,
+    totals:
+      scheduleRows.length > 0
+        ? [
+            {
+              column: "principal_due",
+              label: "Total",
+              value: formatCurrency(sum(scheduleRows, "principal_due")),
+            },
+            { column: "interest_due", value: formatCurrency(sum(scheduleRows, "interest_due")) },
+            {
+              column: "penalty_amount",
+              value: formatCurrency(sum(scheduleRows, "penalty_amount")),
+            },
+            { column: "total_due", value: formatCurrency(sum(scheduleRows, "total_due")) },
+            { column: "amount_paid", value: formatCurrency(sum(scheduleRows, "amount_paid")) },
+          ]
+        : undefined,
+    emptyText: "No amortization schedule is available for this loan.",
+  });
+
+  sections.push({
+    kind: "table",
+    title: "Transaction History",
+    columns: SOA_TRANSACTION_COLUMNS,
+    rows: transactionRows,
+    totals:
+      transactionRows.length > 0
+        ? [
+            {
+              column: "debit",
+              label: "Total",
+              value: formatCurrency(sum(transactionRows, "debit")),
+            },
+            { column: "credit", value: formatCurrency(sum(transactionRows, "credit")) },
+          ]
+        : undefined,
+    emptyText: "No transactions have been recorded against this loan.",
+  });
+
+  return {
+    reportId: "statement_of_account",
+    meta: meta(
+      "Statement of Account",
+      range,
+      pick(loan, ["loan_account_number", "account_number"])
+        ? `Loan ${pick(loan, ["loan_account_number", "account_number"])}`
+        : "Schedule, payments, and balance for a single loan"
+    ),
+    sections,
+  };
+}
+
+const LEDGER_LOAN_COLUMNS: ReportColumn[] = [
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "release_date", header: "Released", format: "date", width: 110 },
+  { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
+  { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: 140 },
+  { key: "balance", header: "Outstanding", format: "currency", align: "right", width: 140 },
+  { key: "overdue", header: "Past Due", format: "currency", align: "right", width: 130 },
+  { key: "status", header: "Status", format: "text", width: 110 },
+];
+
+function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
+  return {
+    loan_account_number: pick(raw, [
+      "loan_account_number",
+      "account_number",
+      "application_number",
+    ]),
+    release_date: pick(raw, ["release_date", "released_at", "start_date"]),
+    principal: pick(raw, ["principal_amount", "principal"]),
+    total_paid: pick(raw, ["total_paid", "amount_paid", "total_amount_paid"]),
+    balance: pick(raw, ["outstanding_balance", "balance", "remaining_balance"]),
+    overdue: pick(raw, ["overdue_amount", "past_due_amount", "total_overdue"]),
+    status: pick(raw, ["status"]),
+  };
+}
+
+export function buildSubsidiaryLedgerDoc(
+  raw: unknown,
+  range: DateRange
+): ReportDocument {
+  const obj = asRecord(raw);
+  const borrower = asRecord(pick(obj, ["borrower", "member"])) ?? obj;
+  const summary = asRecord(pick(obj, ["summary", "totals"]));
+
+  const loanRows = asArray(pick(obj, ["loans", "accounts"])).map(normalizeLedgerLoanRow);
+  const entryRows = asArray(
+    pick(obj, ["entries", "transactions", "ledger", "payments", "repayments"])
+  ).map(normalizeTransactionRow);
+
+  const sections: ReportSection[] = [];
+
+  const memberFields: [string, unknown][] = [
+    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"])],
+    ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"])],
+    ["Branch", pick(borrower, ["branch_name"]) ?? pick(asRecord(borrower?.branch), ["name"])],
+    ["Status", pick(borrower, ["status"])],
+  ];
+  const fields = memberFields
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([label, value]) => ({ label, value: String(value) }));
+  if (fields.length > 0) {
+    sections.push({ kind: "fields", title: "Member Particulars", items: fields });
+  }
+
+  // Loan-level figures are summed from the account rows only when the API
+  // sends no summary block of its own.
+  sections.push({
+    kind: "kpi_grid",
+    title: "Ledger Summary",
+    items: [
+      kpi("Total Loans", countOrDash(pick(summary, ["loan_count", "total_loans"]) ?? loanRows.length)),
+      kpi(
+        "Total Released",
+        currencyOrDash(pick(summary, ["total_released", "total_principal"]) ?? sum(loanRows, "principal")),
+      ),
+      kpi(
+        "Total Paid",
+        currencyOrDash(pick(summary, ["total_paid", "total_amount_paid"]) ?? sum(loanRows, "total_paid")),
+        { tone: "positive" }
+      ),
+      kpi(
+        "Outstanding Balance",
+        currencyOrDash(
+          pick(summary, ["outstanding_balance", "total_balance"]) ?? sum(loanRows, "balance")
+        ),
+        { tone: "negative" }
+      ),
+    ],
+  });
+
+  sections.push({
+    kind: "table",
+    title: "Loan Accounts",
+    columns: LEDGER_LOAN_COLUMNS,
+    rows: loanRows,
+    totals:
+      loanRows.length > 0
+        ? [
+            {
+              column: "principal",
+              label: "Total",
+              value: formatCurrency(sum(loanRows, "principal")),
+            },
+            { column: "total_paid", value: formatCurrency(sum(loanRows, "total_paid")) },
+            { column: "balance", value: formatCurrency(sum(loanRows, "balance")) },
+            { column: "overdue", value: formatCurrency(sum(loanRows, "overdue")) },
+          ]
+        : undefined,
+    emptyText: "This borrower has no loan accounts on record.",
+  });
+
+  // Only rendered when the API returns entries — an empty transaction table on
+  // a ledger reads as "no payments", which would be a claim we cannot make.
+  if (entryRows.length > 0) {
+    sections.push({
+      kind: "table",
+      title: "Payment History",
+      columns: SOA_TRANSACTION_COLUMNS,
+      rows: entryRows,
+      totals: [
+        { column: "debit", label: "Total", value: formatCurrency(sum(entryRows, "debit")) },
+        { column: "credit", value: formatCurrency(sum(entryRows, "credit")) },
+      ],
+    });
+  }
+
+  return {
+    reportId: "subsidiary_ledger",
+    meta: meta(
+      "Subsidiary Ledger",
+      range,
+      pick(borrower, ["full_name", "name"])
+        ? String(pick(borrower, ["full_name", "name"]))
+        : "All loans and payments for a single borrower"
+    ),
+    sections,
+  };
+}
+
 export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeDueRow);
@@ -692,6 +1234,18 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
   );
   if (note) sections.push(note);
 
+  // Each component prefers the server's period-wide total and falls back to
+  // summing the page, exactly as the headline figures do — so the footer never
+  // mixes a period total in one column with a page total in the next.
+  const principalDue = resolveTotal(
+    totals,
+    ["total_principal_due"],
+    rows,
+    "principal_due"
+  );
+  const interestDue = resolveTotal(totals, ["total_interest_due"], rows, "interest_due");
+  const penalty = resolveTotal(totals, ["total_penalty"], rows, "penalty_amount");
+
   sections.push({
     kind: "table",
     title: "Due / Past Due",
@@ -700,7 +1254,15 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
     totals:
       rows.length > 0
         ? [
-            { column: "amount_due", label: "Total", value: formatCurrency(due.value) },
+            {
+              column: "principal_due",
+              label: "Total",
+              value: formatCurrency(principalDue.value),
+            },
+            { column: "interest_due", value: formatCurrency(interestDue.value) },
+            { column: "penalty_amount", value: formatCurrency(penalty.value) },
+            { column: "amount_due", value: formatCurrency(due.value) },
+            { column: "amount_paid", value: formatCurrency(sum(rows, "amount_paid")) },
             { column: "balance", value: formatCurrency(balance.value) },
           ]
         : undefined,

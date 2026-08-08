@@ -15,6 +15,12 @@ const FOREGROUND: [number, number, number] = [17, 24, 39];
 
 const PAGE_MARGIN_X = 36;
 
+/** Right-aligned text helper — used by the letterhead and both strips. */
+function textRight(doc: jsPDF, text: string, y: number): void {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.text(text, pageWidth - PAGE_MARGIN_X - doc.getTextWidth(text), y);
+}
+
 function drawHeader(doc: jsPDF, report: ReportDocument): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   const headerHeight = 64;
@@ -22,24 +28,53 @@ function drawHeader(doc: jsPDF, report: ReportDocument): number {
   doc.setFillColor(...BRAND_ORANGE);
   doc.rect(0, 0, pageWidth, headerHeight, "F");
 
+  // Logo, when the fetch that encodes it succeeded. Drawn on a white plate so
+  // a dark mark stays legible against the orange band.
+  let textX = PAGE_MARGIN_X;
+  if (report.meta.logoData) {
+    const size = 38;
+    const x = PAGE_MARGIN_X;
+    const y = (headerHeight - size) / 2;
+    try {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(x, y, size, size, 3, 3, "F");
+      doc.addImage(report.meta.logoData, x + 3, y + 3, size - 6, size - 6);
+      textX = x + size + 12;
+    } catch {
+      // An unsupported image format must not cost us the whole export.
+      textX = PAGE_MARGIN_X;
+    }
+  }
+
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(9);
   doc.setFont("helvetica", "italic");
-  doc.text(report.meta.org.toUpperCase(), PAGE_MARGIN_X, 22);
+  doc.text(report.meta.org.toUpperCase(), textX, 22);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text(report.meta.title, PAGE_MARGIN_X, 44);
+  doc.text(report.meta.title, textX, 44);
 
   if (report.meta.subtitle) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(report.meta.subtitle, PAGE_MARGIN_X, 58);
+    doc.text(report.meta.subtitle, textX, 58);
   }
 
-  // Period / generated-at strip
+  if (report.meta.reference) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    textRight(doc, "REFERENCE", 22);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    textRight(doc, report.meta.reference, 36);
+  }
+
+  // Scope strip: period / branch on the left, preparer / generated on the
+  // right. A second line only appears when there is something to put on it.
   const stripY = headerHeight;
-  const stripHeight = 22;
+  const secondLine = !!(report.meta.branchLabel || report.meta.preparedBy);
+  const stripHeight = secondLine ? 36 : 22;
   doc.setFillColor(245, 245, 245);
   doc.rect(0, stripY, pageWidth, stripHeight, "F");
 
@@ -47,14 +82,21 @@ function drawHeader(doc: jsPDF, report: ReportDocument): number {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.text(`Period: ${report.meta.period ?? "—"}`, PAGE_MARGIN_X, stripY + 14);
-  const generatedText = `Generated: ${report.meta.generatedAt}`;
-  const textWidth = doc.getTextWidth(generatedText);
-  doc.text(generatedText, pageWidth - PAGE_MARGIN_X - textWidth, stripY + 14);
+  textRight(doc, `Generated: ${report.meta.generatedAt}`, stripY + 14);
+
+  if (secondLine) {
+    if (report.meta.branchLabel) {
+      doc.text(`Branch: ${report.meta.branchLabel}`, PAGE_MARGIN_X, stripY + 28);
+    }
+    if (report.meta.preparedBy) {
+      textRight(doc, `Prepared by: ${report.meta.preparedBy}`, stripY + 28);
+    }
+  }
 
   return stripY + stripHeight + 12;
 }
 
-function drawFooter(doc: jsPDF) {
+function drawFooter(doc: jsPDF, report: ReportDocument) {
   const pageCount = doc.getNumberOfPages();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -64,11 +106,15 @@ function drawFooter(doc: jsPDF) {
     doc.setTextColor(...MUTED);
     doc.setFont("helvetica", "italic");
     doc.setFontSize(8);
-    doc.text(
+    // The reference rides the footer so a loose page can be traced back to the
+    // run that produced it.
+    const left = [
+      report.meta.reference,
       "Auto-generated. Figures reflect data available at the time of export.",
-      PAGE_MARGIN_X,
-      pageHeight - 18
-    );
+    ]
+      .filter(Boolean)
+      .join("  •  ");
+    doc.text(left, PAGE_MARGIN_X, pageHeight - 18);
     const pageLabel = `Page ${i} of ${pageCount}`;
     const w = doc.getTextWidth(pageLabel);
     doc.text(pageLabel, pageWidth - PAGE_MARGIN_X - w, pageHeight - 18);
@@ -210,6 +256,87 @@ function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
   return lastY + 12;
 }
 
+function drawFields(doc: jsPDF, section: ReportSection, startY: number): number {
+  if (section.kind !== "fields") return startY;
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  let y = startY;
+  if (section.title) {
+    doc.setTextColor(...FOREGROUND);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(section.title, PAGE_MARGIN_X, y + 4);
+    y += 14;
+  }
+
+  // Two columns of label→value, matching the preview's definition list.
+  const cols = 2;
+  const totalW = pageWidth - PAGE_MARGIN_X * 2;
+  const colW = totalW / cols;
+  const lineH = 16;
+  const rows = Math.ceil(section.items.length / cols);
+
+  doc.setDrawColor(229, 231, 235);
+  doc.setFillColor(250, 250, 250);
+  doc.rect(PAGE_MARGIN_X, y, totalW, rows * lineH + 10, "FD");
+
+  section.items.forEach((item, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = PAGE_MARGIN_X + col * colW + 8;
+    const lineY = y + 16 + row * lineH;
+
+    doc.setTextColor(...MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(item.label, x, lineY);
+
+    doc.setTextColor(...FOREGROUND);
+    doc.setFont("helvetica", "bold");
+    const valueW = doc.getTextWidth(item.value);
+    doc.text(item.value, x + colW - 16 - valueW, lineY);
+  });
+
+  return y + rows * lineH + 20;
+}
+
+function drawSignatures(
+  doc: jsPDF,
+  section: ReportSection,
+  startY: number
+): number {
+  if (section.kind !== "signatures") return startY;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const blockHeight = 56;
+  // Never split a sign-off block across a page — half a signature line at the
+  // bottom of a page reads as a printing error.
+  let y = startY + 12;
+  if (y + blockHeight > pageHeight - 40) {
+    doc.addPage();
+    y = 52;
+  }
+
+  const totalW = pageWidth - PAGE_MARGIN_X * 2;
+  const colW = totalW / section.roles.length;
+  const ruleY = y + 30;
+
+  section.roles.forEach((role, idx) => {
+    const x = PAGE_MARGIN_X + idx * colW;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.6);
+    doc.line(x, ruleY, x + colW - 24, ruleY);
+
+    doc.setTextColor(...MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(role, x, ruleY + 11);
+  });
+
+  return ruleY + 24;
+}
+
 function drawNote(doc: jsPDF, section: ReportSection, startY: number): number {
   if (section.kind !== "note") return startY;
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -233,6 +360,10 @@ export function exportReportToPdf(report: ReportDocument): void {
       cursor = drawKpiGrid(doc, section, cursor);
     } else if (section.kind === "table") {
       cursor = drawTable(doc, section, cursor);
+    } else if (section.kind === "fields") {
+      cursor = drawFields(doc, section, cursor);
+    } else if (section.kind === "signatures") {
+      cursor = drawSignatures(doc, section, cursor);
     } else if (section.kind === "note") {
       cursor = drawNote(doc, section, cursor);
     }
@@ -246,7 +377,7 @@ export function exportReportToPdf(report: ReportDocument): void {
     }
   }
 
-  drawFooter(doc);
+  drawFooter(doc, report);
 
   const slug = report.meta.title
     .toLowerCase()

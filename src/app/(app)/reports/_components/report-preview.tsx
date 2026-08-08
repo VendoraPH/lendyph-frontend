@@ -19,29 +19,57 @@ interface ReportPreviewProps {
 export function ReportPreview({ doc }: ReportPreviewProps) {
   return (
     <div className="rounded-lg border bg-background shadow-sm overflow-hidden">
-      {/* Brand header */}
+      {/* Brand header — letterhead: logo, org, title, reference */}
       <div className="bg-brand-orange text-brand-orange-foreground px-6 py-4">
-        <p className="text-[11px] uppercase tracking-[0.2em] opacity-80">
-          {doc.meta.org}
-        </p>
-        <h2 className="text-xl font-bold leading-tight mt-1">
-          {doc.meta.title}
-        </h2>
-        {doc.meta.subtitle && (
-          <p className="text-sm opacity-90 mt-0.5">{doc.meta.subtitle}</p>
-        )}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            {doc.meta.logoUrl && (
+              // Plain <img>: the logo is an absolute URL on the API's storage
+              // host, and next/image would demand that host be allow-listed in
+              // next.config for what is a single decorative letterhead mark.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={doc.meta.logoUrl}
+                alt=""
+                className="h-11 w-11 shrink-0 rounded bg-white/90 object-contain p-1"
+              />
+            )}
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-[0.2em] opacity-80">
+                {doc.meta.org}
+              </p>
+              <h2 className="text-xl font-bold leading-tight mt-1">
+                {doc.meta.title}
+              </h2>
+              {doc.meta.subtitle && (
+                <p className="text-sm opacity-90 mt-0.5">{doc.meta.subtitle}</p>
+              )}
+            </div>
+          </div>
+
+          {doc.meta.reference && (
+            <div className="text-right shrink-0">
+              <p className="text-[10px] uppercase tracking-wider opacity-75">
+                Reference
+              </p>
+              <p className="text-xs font-semibold tabular-nums mt-0.5">
+                {doc.meta.reference}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Period / generated-at strip */}
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 bg-muted/40 border-b px-6 py-2.5">
-        <div className="text-xs">
-          <span className="text-muted-foreground">Period: </span>
-          <span className="font-medium">{doc.meta.period ?? "—"}</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-muted-foreground">Generated: </span>
-          <span className="font-medium">{doc.meta.generatedAt}</span>
-        </div>
+      {/* Period / scope / generated-at strip */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 bg-muted/40 border-b px-6 py-2.5">
+        <MetaItem label="Period" value={doc.meta.period ?? "—"} />
+        {doc.meta.branchLabel && (
+          <MetaItem label="Branch" value={doc.meta.branchLabel} />
+        )}
+        <MetaItem label="Generated" value={doc.meta.generatedAt} />
+        {doc.meta.preparedBy && (
+          <MetaItem label="Prepared by" value={doc.meta.preparedBy} />
+        )}
       </div>
 
       {/* Body */}
@@ -55,6 +83,15 @@ export function ReportPreview({ doc }: ReportPreviewProps) {
           time of export.
         </p>
       </div>
+    </div>
+  );
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-xs">
+      <span className="text-muted-foreground">{label}: </span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }
@@ -190,6 +227,46 @@ function SectionRenderer({ section }: { section: ReportSection }) {
             </table>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (section.kind === "fields") {
+    return (
+      <div>
+        {section.title && (
+          <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
+        )}
+        <dl className="grid gap-x-8 gap-y-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 rounded-md border bg-muted/20 px-4 py-3">
+          {section.items.map((item, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs text-muted-foreground shrink-0">
+                {item.label}
+              </dt>
+              <dd className="text-sm font-medium text-right tabular-nums min-w-0 truncate">
+                {item.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    );
+  }
+
+  if (section.kind === "signatures") {
+    return (
+      <div className="pt-4">
+        <div className="grid gap-8 grid-cols-1 sm:grid-cols-3">
+          {section.roles.map((role) => (
+            <div key={role}>
+              {/* Ruled line first, caption under it — the printed convention,
+                  so the block reads the same on screen and on paper. */}
+              <div className="h-10" />
+              <div className="border-t border-foreground/40" />
+              <p className="text-[11px] text-muted-foreground mt-1">{role}</p>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
