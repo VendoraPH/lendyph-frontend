@@ -1,14 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+import { useAuth, useBranches } from "@/hooks";
+import { useBrandingStore } from "@/store/branding-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +52,8 @@ import { exportReportToPdf } from "../_lib/report-pdf";
 import { exportReportToDocx } from "../_lib/report-docx";
 import { exportReportToCsv } from "../_lib/report-csv";
 import { ReportPreview } from "../_components/report-preview";
+import { SubjectPicker } from "../_components/subject-picker";
+import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -91,6 +102,9 @@ const EXPORT_FORMATS: {
     icon: Printer,
   },
 ];
+
+/** Sentinel for "no branch filter" — Select needs a string, not null. */
+const ALL_BRANCHES = "all";
 
 type Preset =
   | "today"
@@ -169,9 +183,36 @@ export default function ReportDetailPage() {
   const [range, setRange] = useState<DateRange>(() =>
     presetRange("this_month", { from: "", to: "" })
   );
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const [subjectId, setSubjectId] = useState<number | null>(null);
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
+
+  const { branches } = useBranches();
+  const { user } = useAuth();
+  const logoUrl = useBrandingStore((s) => s.logoUrl);
+  const loadBranding = useBrandingStore((s) => s.load);
+
+  const [logoData, setLogoData] = useState<string | null>(null);
+
+  // The store no-ops once loaded, so this is a cheap guard for the case where
+  // Reports is the first page of the session to need the logo.
+  useEffect(() => {
+    loadBranding();
+  }, [loadBranding]);
+
+  // Encoded once per logo rather than per export, and never awaited by the
+  // Generate path — an unreachable logo must not hold up a report.
+  useEffect(() => {
+    let cancelled = false;
+    loadLogoDataUrl(logoUrl).then((data) => {
+      if (!cancelled) setLogoData(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [logoUrl]);
 
   const activeRange = preset === "custom" ? range : presetRange(preset, range);
 
@@ -205,12 +246,32 @@ export default function ReportDetailPage() {
     }
   }
 
+  const branchLabel = report.supportsBranch
+    ? (branches.find((b) => b.id === branchId)?.name ?? "All Branches")
+    : null;
+
+  // Subject-scoped reports cannot run against nothing.
+  const missingSubject = !!report.subject && !subjectId;
+
   async function handleGenerate() {
-    if (!report) return;
+    if (!report || missingSubject) return;
     setGenerating(true);
     try {
-      const result = await report.build(activeRange);
-      setDoc(result);
+      const result = await report.build({
+        range: activeRange,
+        branchId: report.supportsBranch ? branchId : null,
+        subjectId: report.subject ? subjectId : null,
+      });
+      // Identity is stamped once, here, so the preview and every exported
+      // format quote the same reference, logo, and preparer.
+      setDoc(
+        applyChrome(result, {
+          logoUrl,
+          logoData,
+          preparedBy: user?.full_name ?? user?.username ?? null,
+          branchLabel,
+        })
+      );
     } catch {
       toast.error("We couldn't generate the report. Please try again.");
       setDoc(null);
@@ -220,7 +281,7 @@ export default function ReportDetailPage() {
   }
 
   async function handleExport(format: ExportFormat) {
-    if (!doc) return;
+    if (!doc || !report) return;
     setExportingFormat(format);
     try {
       switch (format) {
@@ -239,7 +300,14 @@ export default function ReportDetailPage() {
         case "csv": {
           const backendExporter = reportId ? BACKEND_CSV_EXPORTERS[reportId as ReportId] : undefined;
           if (backendExporter) {
-            const blob = await backendExporter({ date_from: activeRange.from, date_to: activeRange.to });
+            // The scope has to travel with the export, or a branch-filtered
+            // report downloads as the whole book while the preview beside it
+            // shows one branch.
+            const blob = await backendExporter({
+              date_from: activeRange.from,
+              date_to: activeRange.to,
+              ...(report.supportsBranch && branchId ? { branch_id: branchId } : {}),
+            });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -381,7 +449,7 @@ export default function ReportDetailPage() {
                 </div>
                 <Button
                   onClick={handleGenerate}
-                  disabled={generating}
+                  disabled={generating || missingSubject}
                   className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                 >
                   {generating ? (
@@ -403,6 +471,59 @@ export default function ReportDetailPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Scope row — only the reports whose endpoints accept these
+                filters get to show them, so the controls never imply a
+                narrowing the API would silently ignore. */}
+            {(report.supportsBranch || report.subject) && (
+              <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
+                {report.supportsBranch && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Branch</Label>
+                    <Select
+                      value={branchId === null ? ALL_BRANCHES : String(branchId)}
+                      onValueChange={(v: string | null) => {
+                        setBranchId(
+                          !v || v === ALL_BRANCHES ? null : Number(v)
+                        );
+                        setDoc(null);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-56">
+                        <SelectValue>{() => branchLabel}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_BRANCHES}>
+                          All Branches
+                        </SelectItem>
+                        {branches.map((b) => (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {report.subject && (
+                  <SubjectPicker
+                    subject={report.subject}
+                    value={subjectId}
+                    onChange={(id) => {
+                      setSubjectId(id);
+                      setDoc(null);
+                    }}
+                  />
+                )}
+
+                {missingSubject && (
+                  <p className="text-xs text-muted-foreground pb-2">
+                    Select a {report.subject} to generate this report.
+                  </p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

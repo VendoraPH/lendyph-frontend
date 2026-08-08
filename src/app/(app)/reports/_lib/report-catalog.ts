@@ -1,13 +1,15 @@
 import {
+  AlertTriangle,
   Banknote,
+  BookOpen,
   ClipboardList,
   Clock,
+  FileText,
+  ListChecks,
   PieChart,
+  Receipt,
   TrendingUp,
   Users,
-  ListChecks,
-  Receipt,
-  AlertTriangle,
 } from "lucide-react";
 import { reportService } from "@/services";
 import {
@@ -21,8 +23,15 @@ import {
   buildPortfolioSummaryDoc,
   buildReleasesListDoc,
   buildRepaymentsListDoc,
+  buildStatementOfAccountDoc,
+  buildSubsidiaryLedgerDoc,
 } from "./report-builders";
-import type { DateRange, ReportDefinition, ReportDocument } from "./types";
+import type {
+  DateRange,
+  ReportContext,
+  ReportDefinition,
+  ReportDocument,
+} from "./types";
 
 /**
  * Fetch wiring + the catalog itself. Every payload→document mapping lives in
@@ -35,15 +44,39 @@ type Mapper = (raw: unknown, range: DateRange) => ReportDocument;
 /**
  * A failed request must still render the report shell — the builders turn a
  * null payload into "—" placeholders rather than an error screen.
+ *
+ * `branch_id` is only attached when a branch is actually selected: sending
+ * `branch_id=null` would be a filter value to the API, not the absence of one.
  */
 function reportBuilder(fetcher: Fetcher, map: Mapper, extraParams: Record<string, unknown> = {}) {
-  return async (range: DateRange): Promise<ReportDocument> => {
+  return async (ctx: ReportContext): Promise<ReportDocument> => {
     const raw = await fetcher({
-      date_from: range.from,
-      date_to: range.to,
+      date_from: ctx.range.from,
+      date_to: ctx.range.to,
+      ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
       ...extraParams,
     }).catch(() => null);
-    return map(raw, range);
+    return map(raw, ctx.range);
+  };
+}
+
+/**
+ * Wiring for the two reports that read a single loan or borrower. They take a
+ * path id rather than a date filter, so they cannot share `reportBuilder`.
+ */
+function subjectReportBuilder(
+  fetcher: (id: number, params: Record<string, unknown>) => Promise<unknown>,
+  map: Mapper
+) {
+  return async (ctx: ReportContext): Promise<ReportDocument> => {
+    // The detail page blocks Generate until a subject is picked, so this is a
+    // guard against a malformed call rather than an expected state.
+    if (!ctx.subjectId) return map(null, ctx.range);
+    const raw = await fetcher(ctx.subjectId, {
+      date_from: ctx.range.from,
+      date_to: ctx.range.to,
+    }).catch(() => null);
+    return map(raw, ctx.range);
   };
 }
 
@@ -90,6 +123,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "operations",
     icon: Receipt,
     accent: ACCENT.emerald,
+    supportsBranch: true,
     build: reportBuilder(reportService.repayments, buildRepaymentsListDoc, listParams),
   },
   {
@@ -99,6 +133,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "portfolio",
     icon: PieChart,
     accent: ACCENT.blue,
+    supportsBranch: true,
     build: reportBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
   },
   {
@@ -117,6 +152,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "portfolio",
     icon: Clock,
     accent: ACCENT.red,
+    supportsBranch: true,
     build: reportBuilder(reportService.aging, buildAgingDoc),
   },
   {
@@ -126,6 +162,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "portfolio",
     icon: AlertTriangle,
     accent: ACCENT.amber,
+    supportsBranch: true,
     build: reportBuilder(reportService.duePastDue, buildDuePastDueListDoc, listParams),
   },
   {
@@ -144,6 +181,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "disbursement",
     icon: Banknote,
     accent: ACCENT.cyan,
+    supportsBranch: true,
     build: reportBuilder(reportService.disbursements, buildDisbursementDoc),
   },
   {
@@ -153,6 +191,33 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "disbursement",
     icon: ListChecks,
     accent: ACCENT.indigo,
+    supportsBranch: true,
     build: reportBuilder(reportService.releases, buildReleasesListDoc, listParams),
+  },
+  {
+    id: "statement_of_account",
+    title: "Statement of Account",
+    description: "Full schedule, payments, and balance for one loan.",
+    category: "member",
+    icon: FileText,
+    accent: ACCENT.emerald,
+    subject: "loan",
+    build: subjectReportBuilder(
+      (id) => reportService.statementOfAccount(id),
+      buildStatementOfAccountDoc
+    ),
+  },
+  {
+    id: "subsidiary_ledger",
+    title: "Subsidiary Ledger",
+    description: "Every loan and payment for one borrower.",
+    category: "member",
+    icon: BookOpen,
+    accent: ACCENT.purple,
+    subject: "borrower",
+    build: subjectReportBuilder(
+      (id, params) => reportService.subsidiaryLedger(id, params),
+      buildSubsidiaryLedgerDoc
+    ),
   },
 ];

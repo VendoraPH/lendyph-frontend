@@ -118,27 +118,38 @@ function writeHeaderBlock(
     c.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
   }
 
-  const metaRow = ws.addRow([
+  // Period / reference strip, then scope / preparer — the same four facts the
+  // preview shows, so a printed sheet is self-identifying.
+  writeMetaRow(
+    ws,
     `Period: ${doc.meta.period ?? "—"}`,
-    null,
-    null,
-    null,
-    null,
-    null,
-    `Generated: ${doc.meta.generatedAt}`,
-  ]);
-  metaRow.height = 16;
-  metaRow.getCell(1).font = { size: 10, color: { argb: MUTED_ARGB } };
-  metaRow.getCell(1).alignment = { horizontal: "left", indent: 1 };
-  metaRow.getCell(MAX_COL).font = { size: 10, color: { argb: MUTED_ARGB } };
-  metaRow.getCell(MAX_COL).alignment = { horizontal: "right", indent: 1 };
-  ws.mergeCells(metaRow.number, 1, metaRow.number, 3);
-  ws.mergeCells(metaRow.number, 4, metaRow.number, MAX_COL);
+    doc.meta.reference ? `Reference: ${doc.meta.reference}` : ""
+  );
+  if (doc.meta.branchLabel || doc.meta.preparedBy) {
+    writeMetaRow(
+      ws,
+      doc.meta.branchLabel ? `Branch: ${doc.meta.branchLabel}` : "",
+      doc.meta.preparedBy ? `Prepared by: ${doc.meta.preparedBy}` : ""
+    );
+  }
+  writeMetaRow(ws, "", `Generated: ${doc.meta.generatedAt}`);
 
   // Spacer row
   ws.addRow([]);
 
   return ws.rowCount;
+}
+
+/** One muted left/right strip line spanning the full header width. */
+function writeMetaRow(ws: ExcelJS.Worksheet, left: string, right: string): void {
+  const row = ws.addRow([left, null, null, null, null, null, right]);
+  row.height = 16;
+  row.getCell(1).font = { size: 10, color: { argb: MUTED_ARGB } };
+  row.getCell(1).alignment = { horizontal: "left", indent: 1 };
+  row.getCell(MAX_COL).font = { size: 10, color: { argb: MUTED_ARGB } };
+  row.getCell(MAX_COL).alignment = { horizontal: "right", indent: 1 };
+  ws.mergeCells(row.number, 1, row.number, 3);
+  ws.mergeCells(row.number, 4, row.number, MAX_COL);
 }
 
 function writeKpiGrid(ws: ExcelJS.Worksheet, section: ReportSection): void {
@@ -284,6 +295,70 @@ function writeTable(ws: ExcelJS.Worksheet, section: ReportSection): void {
   ws.addRow([]);
 }
 
+function writeFields(ws: ExcelJS.Worksheet, section: ReportSection): void {
+  if (section.kind !== "fields") return;
+
+  if (section.title) {
+    const r = ws.addRow([section.title]);
+    ws.mergeCells(r.number, 1, r.number, MAX_COL);
+    r.getCell(1).font = { bold: true, size: 12 };
+    r.getCell(1).alignment = { horizontal: "left", indent: 1 };
+    r.height = 20;
+  }
+
+  // Values are pre-formatted strings from the builder, so they are written as
+  // text rather than coerced — a loan account number is not a number.
+  section.items.forEach((item) => {
+    const row = ws.addRow([item.label, item.value]);
+    ws.mergeCells(row.number, 1, row.number, 3);
+    ws.mergeCells(row.number, 4, row.number, MAX_COL);
+    row.height = 20;
+    row.getCell(1).font = { size: 11, color: { argb: MUTED_ARGB } };
+    row.getCell(1).alignment = { horizontal: "left", indent: 1 };
+    row.getCell(4).font = { size: 11, bold: true };
+    row.getCell(4).alignment = { horizontal: "left", indent: 1 };
+    applyBorders(row, 1, MAX_COL);
+  });
+
+  ws.addRow([]);
+}
+
+function writeSignatures(ws: ExcelJS.Worksheet, section: ReportSection): void {
+  if (section.kind !== "signatures") return;
+
+  ws.addRow([]);
+  // Blank signing space, then the ruled line, then the captions underneath —
+  // the printed convention, mirrored from the preview.
+  const space = ws.addRow([]);
+  space.height = 34;
+
+  const span = Math.max(1, Math.floor(MAX_COL / section.roles.length));
+  const ruleRow = ws.addRow([]);
+  const captionRow = ws.addRow(
+    section.roles.flatMap((role, i) =>
+      i === 0 ? [role] : [...Array(span - 1).fill(null), role]
+    )
+  );
+  captionRow.height = 16;
+
+  section.roles.forEach((_, i) => {
+    const col = i * span + 1;
+    if (col > MAX_COL) return;
+    ruleRow.getCell(col).border = {
+      bottom: { style: "thin", color: { argb: "FF9CA3AF" } },
+    };
+    for (let c = col + 1; c < col + span && c <= MAX_COL; c++) {
+      ruleRow.getCell(c).border = {
+        bottom: { style: "thin", color: { argb: "FF9CA3AF" } },
+      };
+    }
+    captionRow.getCell(col).font = { size: 9, color: { argb: MUTED_ARGB } };
+    captionRow.getCell(col).alignment = { horizontal: "left", indent: 1 };
+  });
+
+  ws.addRow([]);
+}
+
 function writeNote(ws: ExcelJS.Worksheet, section: ReportSection): void {
   if (section.kind !== "note") return;
   const r = ws.addRow([section.text]);
@@ -293,7 +368,7 @@ function writeNote(ws: ExcelJS.Worksheet, section: ReportSection): void {
   ws.addRow([]);
 }
 
-function writeFooter(ws: ExcelJS.Worksheet): void {
+function writeFooter(ws: ExcelJS.Worksheet, doc: ReportDocument): void {
   ws.addRow([]);
   const r = ws.addRow([
     "This report is auto-generated. Figures reflect data available at the time of export.",
@@ -301,6 +376,10 @@ function writeFooter(ws: ExcelJS.Worksheet): void {
   ws.mergeCells(r.number, 1, r.number, MAX_COL);
   r.getCell(1).font = { size: 9, color: { argb: MUTED_ARGB }, italic: true };
   r.getCell(1).alignment = { horizontal: "left", indent: 1 };
+
+  // Repeat the reference in Excel's own print footer so it survives paging.
+  const footerParts = [doc.meta.org, doc.meta.reference].filter(Boolean);
+  ws.headerFooter.oddFooter = `&L&9${footerParts.join(" • ")}&R&9Page &P of &N`;
 }
 
 export async function exportReportToExcel(doc: ReportDocument): Promise<void> {
@@ -333,10 +412,12 @@ export async function exportReportToExcel(doc: ReportDocument): Promise<void> {
   for (const section of doc.sections) {
     if (section.kind === "kpi_grid") writeKpiGrid(ws, section);
     else if (section.kind === "table") writeTable(ws, section);
+    else if (section.kind === "fields") writeFields(ws, section);
+    else if (section.kind === "signatures") writeSignatures(ws, section);
     else if (section.kind === "note") writeNote(ws, section);
   }
 
-  writeFooter(ws);
+  writeFooter(ws, doc);
 
   // Ensure every column has a usable width even if no data set it.
   ws.columns.forEach((col) => {
