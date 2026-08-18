@@ -1,10 +1,21 @@
 name: Deploy binhs-coop (frontend)
 
-# Manual-only deploys for the binhs-coop client instance.
-#   staging    -> binhs-coop-staging.lendyph.com  (/var/www/binhs-coop-frontend-staging)
-#   production -> binhs-coop.lendyph.com           (/var/www/binhs-coop-frontend)
-# Both track the `development` branch (main is stale for the frontend).
+# Deploys for the binhs-coop client instance.
+#   staging    -> binhs-coop-staging.lendyph.com  (/var/www/binhs-coop-frontend-staging, branch development)
+#   production -> binhs-coop.lendyph.com          (/var/www/binhs-coop-frontend, branch main)
+#
+# Staging deploys automatically on every push to `development`, so the client's
+# staging box cannot silently fall behind the branch it tracks — it used to,
+# because every deploy needed someone to remember to dispatch this by hand.
+#
+# Production stays manual on purpose: a person picks the moment a change
+# reaches the client's live site. Note it tracks `main`, so merging to
+# `development` alone never reaches production.
 on:
+  push:
+    branches: [development]
+    # CI-only edits shouldn't redeploy the client's staging box.
+    paths-ignore: ['.github/**']
   workflow_dispatch:
     inputs:
       environment:
@@ -16,9 +27,19 @@ on:
           - staging
           - production
 
+# Never let two deploys interleave over the same checkout.
+concurrency:
+  group: deploy-binhs-coop-frontend-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  # A push to `development` always means staging; only a dispatch may name
+  # production.
+  TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+
 jobs:
   deploy:
-    name: Deploy binhs-coop ${{ inputs.environment }}
+    name: Deploy binhs-coop ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to VPS via SSH
@@ -31,7 +52,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            if [ "${{ inputs.environment }}" = "production" ]; then
+            if [ "${{ env.TARGET }}" = "production" ]; then
               bash /var/www/binhs-coop-frontend/deploy.sh
             else
               bash /var/www/binhs-coop-frontend-staging/deploy.sh
@@ -50,7 +71,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            if [ "${{ inputs.environment }}" = "production" ]; then
+            if [ "${{ env.TARGET }}" = "production" ]; then
               bash /var/www/binhs-coop-frontend/deploy.sh
             else
               bash /var/www/binhs-coop-frontend-staging/deploy.sh
