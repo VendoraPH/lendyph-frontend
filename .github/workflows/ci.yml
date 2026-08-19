@@ -102,6 +102,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Every NEXT_PUBLIC_* used in src/ must be documented in .env.example.
+      # A deployment cannot set a var it has never been told about, and these
+      # values are inlined at build time — so an undocumented one becomes a
+      # localhost default baked into a client's bundle.
+      - name: Env contract check
+        run: node scripts/check-env.mjs --docs-only
+
       - name: Lint
         run: npm run lint
 
@@ -120,6 +127,12 @@ jobs:
             echo "::error::No unit tests ran — the glob matched nothing."
             exit 1
           fi
+
+      # CI has no real .env, and `prebuild` refuses to build without the
+      # required vars. Building against .env.example is the point: it proves the
+      # documented contract is actually sufficient to produce a build.
+      - name: Prepare environment
+        run: cp .env.example .env
 
       - name: Production build
         run: npm run build

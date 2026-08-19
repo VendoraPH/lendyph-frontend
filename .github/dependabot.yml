@@ -1,0 +1,25 @@
+version: 2
+
+# Weekly and grouped, because this repo has one maintainer — a PR per dependency
+# per day is noise that gets ignored, which is worse than no alerts at all.
+# Security updates still arrive immediately via GitHub's separate path.
+#
+# Next.js and React are ungrouped on purpose: their majors carry migrations and
+# deserve to be looked at one at a time, not folded into a bulk bump.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+        exclude-patterns: ["next", "react", "react-dom"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
