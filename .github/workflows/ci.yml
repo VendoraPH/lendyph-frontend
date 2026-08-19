@@ -93,7 +93,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: `node --test` only learned to expand globs in 22, so
+          # the unit-test step below silently matched nothing on 20. Node 20 is
+          # also now deprecated on GitHub runners.
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -104,6 +107,19 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc --noEmit
+
+      # These tests existed but had never run in CI, so a regression in the
+      # report builders or ledger maths would have shipped green. The zero-test
+      # guard matters as much as the run: a glob that matches nothing exits 0
+      # and reads as success, which is how they stayed invisible.
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          npm run test:unit 2>&1 | tee /tmp/unit.log
+          if ! grep -qE '^. tests [1-9]' /tmp/unit.log; then
+            echo "::error::No unit tests ran — the glob matched nothing."
+            exit 1
+          fi
 
       - name: Production build
         run: npm run build
