@@ -26,21 +26,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check if branch is up-to-date with development
+      # Compare against the branch this PR actually targets. Hardcoding
+      # `development` failed every hotfix cut from `main`: such a branch is
+      # legitimately "behind development", and test-merging development into
+      # it collides with whatever main has not taken yet — reporting a
+      # conflict that cannot occur against the real base.
+      - name: Check if branch is up-to-date with the base branch
         id: behind-check
         run: |
-          git fetch origin development
-          BEHIND=$(git rev-list --count HEAD..origin/development)
+          git fetch origin "$BASE"
+          BEHIND=$(git rev-list --count "HEAD..origin/$BASE")
           echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
           if [ "$BEHIND" -gt 0 ]; then
-            echo "::warning::Branch is $BEHIND commit(s) behind development"
+            echo "::warning::Branch is $BEHIND commit(s) behind $BASE"
           fi
+        env:
+          BASE: ${{ github.base_ref }}
 
-      - name: Test merge with development
+      - name: Test merge with the base branch
         id: merge-test
+        env:
+          BASE: ${{ github.base_ref }}
         run: |
-          git fetch origin development
-          if git merge --no-commit --no-ff origin/development 2>/dev/null; then
+          git fetch origin "$BASE"
+          if git merge --no-commit --no-ff "origin/$BASE" 2>/dev/null; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
             git merge --abort 2>/dev/null || true
           else
@@ -58,18 +67,19 @@ jobs:
           script: |
             const files = '${{ steps.merge-test.outputs.files }}';
             const behind = '${{ steps.behind-check.outputs.behind }}';
+            const base = context.payload.pull_request.base.ref;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `⚠️ **Merge conflicts detected** — this branch is ${behind} commit(s) behind \`development\`.\n\n**Conflicting files:**\n${files.split(',').map(f => '- \`' + f.trim() + '\`').join('\n')}\n\nPlease rebase onto \`development\` before merging:\n\`\`\`bash\ngit fetch origin development\ngit rebase origin/development\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``
+              body: `⚠️ **Merge conflicts detected** — this branch is ${behind} commit(s) behind \`${base}\`.\n\n**Conflicting files:**\n${files.split(',').map(f => '- \`' + f.trim() + '\`').join('\n')}\n\nPlease rebase onto \`${base}\` before merging:\n\`\`\`bash\ngit fetch origin ${base}\ngit rebase origin/${base}\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``
             });
 
       - name: Fail if conflicts exist
         if: steps.merge-test.outputs.conflict == 'true'
         run: |
-          echo "❌ This branch has merge conflicts with development."
-          echo "Rebase onto development before merging."
+          echo "❌ This branch has merge conflicts with $BASE."
+          echo "Rebase onto $BASE before merging."
           exit 1
 
   ci:

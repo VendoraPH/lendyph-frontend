@@ -25,8 +25,13 @@ export function exportReportToCsv(doc: ReportDocument): void {
   lines.push(row([doc.meta.title]));
   lines.push(row([doc.meta.org]));
   if (doc.meta.subtitle) lines.push(row([doc.meta.subtitle]));
+  if (doc.meta.reference) lines.push(row([`Reference: ${doc.meta.reference}`]));
   lines.push(row([`Period: ${doc.meta.period ?? ""}`]));
+  if (doc.meta.branchLabel) lines.push(row([`Branch: ${doc.meta.branchLabel}`]));
   lines.push(row([`Generated: ${doc.meta.generatedAt}`]));
+  if (doc.meta.preparedBy) {
+    lines.push(row([`Prepared by: ${doc.meta.preparedBy}`]));
+  }
   lines.push("");
 
   for (const section of doc.sections) {
@@ -62,6 +67,20 @@ export function exportReportToCsv(doc: ReportDocument): void {
         );
         if (firstTotalIdx > 0) totalRow[firstTotalIdx - 1] = "Total";
         lines.push(row(totalRow));
+      }
+      lines.push("");
+    } else if (section.kind === "fields") {
+      if (section.title) lines.push(row([section.title]));
+      lines.push(row(["Particular", "Value"]));
+      for (const item of section.items) {
+        lines.push(row([item.label, item.value]));
+      }
+      lines.push("");
+    } else if (section.kind === "signatures") {
+      // Empty value column: a printed CSV is still signed by hand.
+      lines.push(row(["Signatories", ""]));
+      for (const role of section.roles) {
+        lines.push(row([role, ""]));
       }
       lines.push("");
     } else if (section.kind === "note") {

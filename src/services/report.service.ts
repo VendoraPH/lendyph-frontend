@@ -21,8 +21,9 @@ export const reportService = {
   statementOfAccount: (loanId: number) =>
     api.get(API_ENDPOINTS.REPORTS.STATEMENT_OF_ACCOUNT(loanId)),
 
-  subsidiaryLedger: (borrowerId: number) =>
-    api.get(API_ENDPOINTS.REPORTS.SUBSIDIARY_LEDGER(borrowerId)),
+  // Accepts date_from/date_to to window the payment history.
+  subsidiaryLedger: (borrowerId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SUBSIDIARY_LEDGER(borrowerId), { params }),
 
   dailyCollection: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.DAILY_COLLECTION, { params }),
