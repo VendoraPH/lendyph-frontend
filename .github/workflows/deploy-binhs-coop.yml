@@ -13,8 +13,14 @@ name: Deploy binhs-coop (frontend)
 # `development` alone never reaches production.
 on:
   push:
-    branches: [development]
-    # CI-only edits shouldn't redeploy the client's staging box.
+    # development -> staging, main -> production. Production used to be
+    # dispatch-only so a person could pick the moment; in practice that meant
+    # the client's box sat behind main until someone remembered, which is the
+    # failure this repo keeps hitting. main is protected and cannot take code
+    # that has not passed CI, so the gate has not been removed — it moved to
+    # the pull request, where it is enforced rather than remembered.
+    branches: [development, main]
+    # CI-only edits shouldn't redeploy anything.
     paths-ignore: ['.github/**']
   workflow_dispatch:
     inputs:
@@ -29,17 +35,17 @@ on:
 
 # Never let two deploys interleave over the same checkout.
 concurrency:
-  group: deploy-binhs-coop-frontend-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  group: deploy-binhs-coop-frontend-${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'staging') }}
   cancel-in-progress: false
 
 env:
-  # A push to `development` always means staging; only a dispatch may name
-  # production.
-  TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  # push development -> staging, push main -> production; a dispatch may name
+  # either explicitly.
+  TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'staging') }}
 
 jobs:
   deploy:
-    name: Deploy binhs-coop ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    name: Deploy binhs-coop ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'staging') }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to VPS via SSH
