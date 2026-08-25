@@ -1,5 +1,13 @@
 version: 2
 
+# Target `development`, not the default branch.
+#
+# Dependabot defaults to the repo default branch, which here is `main` — and
+# main auto-deploys to production. On 2026-08-25 a 57-package bump therefore
+# went straight to all three production frontends, client included, without
+# ever passing through staging. Targeting development restores the intended
+# path: development -> staging -> verify -> main -> production.
+
 # Weekly and grouped, because this repo has one maintainer — a PR per dependency
 # per day is noise that gets ignored, which is worse than no alerts at all.
 # Security updates still arrive immediately via GitHub's separate path.
@@ -9,6 +17,7 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: development
     schedule:
       interval: weekly
       day: monday
@@ -20,6 +29,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: development
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
