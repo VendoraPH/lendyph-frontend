@@ -23,9 +23,18 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
+      # react and react-dom are a matched pair: react-dom@X requires react@^X,
+      # so bumping either alone gives `npm error ERESOLVE could not resolve`
+      # and the PR can never go green. They must move together, in their own
+      # group rather than folded into the bulk one — a React change deserves
+      # to be looked at on its own.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+
       minor-and-patch:
         update-types: [minor, patch]
-        exclude-patterns: ["next", "react", "react-dom"]
+        exclude-patterns:
+          ["next", "react", "react-dom", "@types/react", "@types/react-dom"]
 
   - package-ecosystem: github-actions
     directory: /
