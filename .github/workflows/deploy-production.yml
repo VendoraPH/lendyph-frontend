@@ -61,8 +61,9 @@ jobs:
 
         flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/lendyph-com-frontend/deploy.sh
 
-        # Fail loudly if the app did not come back up — deploy.sh does not
-        # check this, and a half-restarted Next server serves 500s happily.
+        # Fail loudly if the app did not come back up — a half-restarted Next
+        # server serves 500s happily. deploy.sh now checks this too; kept here
+        # because that script is unversioned and this is the copy under review.
         echo "=== Verifying '$APP' is online ==="
         pm2 describe "$APP" | grep -q "status.*online"
 
