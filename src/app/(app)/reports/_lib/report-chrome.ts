@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/axios-client";
 import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./types";
 
 /**
@@ -50,14 +51,23 @@ export function buildReference(reportId: ReportId, at = new Date()): string {
  * Fetch the logo and encode it as a data URL for the binary exporters.
  *
  * The preview can point an `<img>` straight at the storage URL, but jsPDF and
- * docx need the bytes. That read is subject to CORS on the API's storage host,
- * so this fails soft: a null result means those exports lead with the
- * organization name, which is the same thing they did before the logo existed.
+ * docx need the bytes.
+ *
+ * Those bytes come from `/branding/logo` on the API, NOT from the storage URL
+ * the preview uses. `/storage/**` is served by nginx off the public/storage
+ * symlink and never reaches PHP, so it carries no CORS header and this read
+ * always failed — every export quietly fell back to the text header. Going
+ * through API_BASE_URL means the browser request is same-origin (Next rewrites
+ * it server-side), so no CORS is involved at all.
+ *
+ * `url` is still the gate: it is null when no logo is configured, and this
+ * fails soft either way — a null result means the exports lead with the
+ * organization name, as they did before the logo existed.
  */
 export async function loadLogoDataUrl(url: string | null): Promise<string | null> {
   if (!url) return null;
   try {
-    const res = await fetch(url, { mode: "cors", credentials: "omit" });
+    const res = await fetch(`${API_BASE_URL}/branding/logo`, { credentials: "omit" });
     if (!res.ok) return null;
     const blob = await res.blob();
     if (!blob.type.startsWith("image/")) return null;

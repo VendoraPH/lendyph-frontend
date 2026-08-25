@@ -30,8 +30,12 @@ export function withVersion(url: string, version: number): string {
 /**
  * Best-effort fetch of a stored image back into a File so it can be re-uploaded
  * (e.g. preserving the unchanged side when replacing one side of a valid ID).
- * Storage is typically cross-origin, so this can fail on CORS — callers must
- * handle a null return.
+ *
+ * These URLs are expiring signed links to `/api/files/documents/{id}`, not
+ * `/storage/**` paths — KYC files moved to the private disk and are streamed by
+ * FileController. So they are under `api/*` and covered by the API's CORS
+ * config. Still best-effort: a link that has passed its 30-minute TTL returns
+ * 403, so callers must handle a null return.
  */
 export async function urlToFile(
   url: string | null | undefined,
