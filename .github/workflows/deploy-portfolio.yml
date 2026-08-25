@@ -85,14 +85,22 @@ jobs:
         git checkout -f -B main origin/main
         echo "=== Current commit ==="
         git log --oneline -1
+        # `npm ci`, not `npm install`: install resolves a tree that can drift
+        # from the lockfile, and this box had a dirty package-lock.json to show
+        # for it. Today's drift was metadata-only, which is precisely why it
+        # should not be allowed to accumulate — the next one would hide in it.
         echo "=== Installing dependencies ==="
-        npm install
+        npm ci --no-audit --no-fund
         echo "=== Clearing Next.js cache ==="
         rm -rf .next
-        # This box swaps hard (~3.0G/4.0G); the default heap OOMs the Next
-        # build. Matches the ceiling the binhs-coop and lendyph-com deploys use.
+        # This box swaps hard (~3.2G/4.0G) and the default heap OOMs the Next
+        # build, so a ceiling is needed — but 3072 was standing permission to
+        # take 3 GB on a host with ~4 GB available. The observed live build peaks
+        # at 1.07 GB, so 2048 keeps ~2x headroom while halving the blast radius
+        # of a build that evicts other tenants' pages. Matches the four deploy.sh
+        # scripts.
         echo "=== Building ==="
-        NODE_OPTIONS="--max-old-space-size=3072" npm run build
+        NODE_OPTIONS="--max-old-space-size=2048" npm run build
         echo "=== Restarting PM2 ==="
         pm2 restart "$APP" --update-env
         pm2 save
