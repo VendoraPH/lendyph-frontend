@@ -101,6 +101,14 @@ jobs:
         # scripts.
         echo "=== Building ==="
         NODE_OPTIONS="--max-old-space-size=2048" npm run build
+
+        # NEXT_PUBLIC_API_URL is inlined at build time and decides which backend
+        # — and therefore which tenant database — this bundle talks to. A build
+        # run against the wrong .env produces a perfectly valid bundle that
+        # silently reads someone else's data; that has happened here before.
+        # Refuses to restart if the baked destination does not match this
+        # directory's own .env.
+        /usr/local/bin/lendyph-assert-artifact.sh /var/www/lendyph-frontend-staging
         echo "=== Restarting PM2 ==="
         pm2 restart "$APP" --update-env
         pm2 save
