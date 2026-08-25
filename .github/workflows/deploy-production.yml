@@ -25,7 +25,17 @@ on:
 # a running `npm run build`, and two concurrent builds would exhaust memory on
 # this box. Queue them; never cancel a deploy mid-flight.
 concurrency:
-  group: deploy-production-frontend
+  # ONE group across every frontend deploy on this box, deliberately.
+  #
+  # These four workflows used to have separate groups, so a single push to main
+  # fired three Next builds at once. On 2026-08-25 that took the VPS to 197 MB
+  # free with swap at 4093/4095 MB and load 11.5 — two megabytes from the OOM
+  # killer, which would have taken MySQL and every other site down with it.
+  #
+  # All five frontends build on the same 8 GB box, so builds must queue rather
+  # than race. cancel-in-progress stays false: a queued deploy is fine, a
+  # half-killed one is not.
+  group: lendyph-frontend-vps-build
   cancel-in-progress: false
 
 jobs:
