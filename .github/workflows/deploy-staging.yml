@@ -30,17 +30,18 @@ on:
 # a running `npm run build`, and two concurrent builds would exhaust memory on
 # this box. Queue them; never cancel a deploy mid-flight.
 concurrency:
-  # ONE group across every frontend deploy on this box, deliberately.
+  # Per-deployment, NOT shared across workflows.
   #
-  # These four workflows used to have separate groups, so a single push to main
-  # fired three Next builds at once. On 2026-08-25 that took the VPS to 197 MB
-  # free with swap at 4093/4095 MB and load 11.5 — two megabytes from the OOM
-  # killer, which would have taken MySQL and every other site down with it.
+  # A single shared group looked like it would serialize builds, but GitHub
+  # cancels an older *pending* run when a newer one joins the same group even
+  # with cancel-in-progress: false. With three deploys that silently dropped the
+  # middle one — on 2026-08-25 `Deploy binhs-coop` was cancelled and the client's
+  # production frontend simply never got the update.
   #
-  # All five frontends build on the same 8 GB box, so builds must queue rather
-  # than race. cancel-in-progress stays false: a queued deploy is fine, a
-  # half-killed one is not.
-  group: lendyph-frontend-vps-build
+  # Serialization belongs on the box, not in GitHub: the deploy steps below take
+  # an flock, so concurrent deploys queue instead of racing for memory. Queuing
+  # is what we wanted; cancelling never was.
+  group: deploy-staging-frontend
   cancel-in-progress: false
 
 jobs:
@@ -63,7 +64,7 @@ jobs:
         echo "=== Checking pm2 app '$APP' exists ==="
         pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
 
-        bash /var/www/lendyph-com-frontend-staging/deploy.sh
+        flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/lendyph-com-frontend-staging/deploy.sh
 
         # Fail loudly if the app did not come back up — deploy.sh does not
         # check this, and a half-restarted Next server serves 500s happily.
