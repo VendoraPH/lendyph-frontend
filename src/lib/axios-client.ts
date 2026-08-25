@@ -4,8 +4,12 @@ import { env } from "@/config/env";
 const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
 
 // Use Next.js API proxy on client-side to bypass CORS/CSRF issues
-// Server-side (SSR) calls go direct to the API
-const API_BASE_URL =
+// Server-side (SSR) calls go direct to the API.
+//
+// Exported because anything else fetching the API from the browser needs the
+// same same-origin path — a direct fetch to the API host is a cross-origin
+// request and will not carry auth or, for /storage/**, any CORS header at all.
+export const API_BASE_URL =
   typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL;
 
 const axiosClient = axios.create({
@@ -125,7 +129,7 @@ axiosClient.interceptors.response.use(
       try {
         const currentToken = tokenManager.getAccessToken();
         const { data } = await axios.post(
-          `${typeof window !== "undefined" ? "/api/proxy" : DIRECT_API_URL}/auth/refresh`,
+          `${API_BASE_URL}/auth/refresh`,
           {},
           {
             headers: {
