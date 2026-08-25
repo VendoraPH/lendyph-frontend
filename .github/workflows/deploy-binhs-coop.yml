@@ -68,12 +68,29 @@ jobs:
           timeout: 120s
           command_timeout: 20m
           script: |
-            set -e
+            set -euo pipefail
+
             if [ "${{ env.TARGET }}" = "production" ]; then
-              flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/binhs-coop-frontend/deploy.sh
+              APP=binhs-coop-frontend
             else
-              flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/binhs-coop-frontend-staging/deploy.sh
+              APP=binhs-coop-frontend-staging
             fi
+
+            # Tripwire, not a hard gate: deploy.sh recreates a missing pm2 entry,
+            # so this catches a *renamed* app before the build replaces .next.
+            echo "=== Checking pm2 app '$APP' exists ==="
+            pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
+
+            flock -w 2400 /var/lock/lendyph-frontend-build.lock bash "/var/www/$APP/deploy.sh"
+
+            # deploy.sh does not check this, and a half-restarted Next server
+            # serves 500s perfectly happily. Without it a deploy that leaves the
+            # client's site broken reports green — which is exactly what happened
+            # to this workflow's own deploys until now.
+            echo "=== Verifying '$APP' is online ==="
+            pm2 describe "$APP" | grep -q "status.*online"
+
+            echo "=== binhs-coop ${{ env.TARGET }} deployed at $(date) ==="
 
       # The retry below used to fire ~2 min after the first attempt — inside the
       # same outage window — so both legs died together and the deploy shipped
@@ -98,9 +115,26 @@ jobs:
           timeout: 120s
           command_timeout: 20m
           script: |
-            set -e
+            set -euo pipefail
+
             if [ "${{ env.TARGET }}" = "production" ]; then
-              flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/binhs-coop-frontend/deploy.sh
+              APP=binhs-coop-frontend
             else
-              flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/binhs-coop-frontend-staging/deploy.sh
+              APP=binhs-coop-frontend-staging
             fi
+
+            # Tripwire, not a hard gate: deploy.sh recreates a missing pm2 entry,
+            # so this catches a *renamed* app before the build replaces .next.
+            echo "=== Checking pm2 app '$APP' exists ==="
+            pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
+
+            flock -w 2400 /var/lock/lendyph-frontend-build.lock bash "/var/www/$APP/deploy.sh"
+
+            # deploy.sh does not check this, and a half-restarted Next server
+            # serves 500s perfectly happily. Without it a deploy that leaves the
+            # client's site broken reports green — which is exactly what happened
+            # to this workflow's own deploys until now.
+            echo "=== Verifying '$APP' is online ==="
+            pm2 describe "$APP" | grep -q "status.*online"
+
+            echo "=== binhs-coop ${{ env.TARGET }} deployed at $(date) ==="
