@@ -76,17 +76,23 @@ jobs:
               APP=binhs-coop-frontend-staging
             fi
 
-            # Tripwire, not a hard gate: deploy.sh recreates a missing pm2 entry,
-            # so this catches a *renamed* app before the build replaces .next.
+            # Hard gate. This was a warning-only tripwire on the stated grounds
+            # that "deploy.sh recreates a missing pm2 entry" — but that is only
+            # true of the lendyph-com-* scripts. binhs-coop's deploy.sh has no
+            # `|| pm2 start` fallback, so a missing entry cannot be recovered
+            # and warning-and-continuing just burns a full build before failing
+            # at `pm2 restart` with a confusing error. Fail here instead, on the
+            # client's path, before anything is spent.
             echo "=== Checking pm2 app '$APP' exists ==="
-            pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
+            pm2 describe "$APP" > /dev/null
 
             flock -w 2400 /var/lock/lendyph-frontend-build.lock bash "/var/www/$APP/deploy.sh"
 
-            # deploy.sh does not check this, and a half-restarted Next server
-            # serves 500s perfectly happily. Without it a deploy that leaves the
-            # client's site broken reports green — which is exactly what happened
-            # to this workflow's own deploys until now.
+            # A half-restarted Next server serves 500s perfectly happily.
+            # Without this a deploy that leaves the client's site broken reports
+            # green — which is exactly what this workflow did until recently.
+            # deploy.sh now checks this too; kept here because that script is
+            # unversioned and this is the copy that goes through review.
             echo "=== Verifying '$APP' is online ==="
             pm2 describe "$APP" | grep -q "status.*online"
 
@@ -123,17 +129,23 @@ jobs:
               APP=binhs-coop-frontend-staging
             fi
 
-            # Tripwire, not a hard gate: deploy.sh recreates a missing pm2 entry,
-            # so this catches a *renamed* app before the build replaces .next.
+            # Hard gate. This was a warning-only tripwire on the stated grounds
+            # that "deploy.sh recreates a missing pm2 entry" — but that is only
+            # true of the lendyph-com-* scripts. binhs-coop's deploy.sh has no
+            # `|| pm2 start` fallback, so a missing entry cannot be recovered
+            # and warning-and-continuing just burns a full build before failing
+            # at `pm2 restart` with a confusing error. Fail here instead, on the
+            # client's path, before anything is spent.
             echo "=== Checking pm2 app '$APP' exists ==="
-            pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
+            pm2 describe "$APP" > /dev/null
 
             flock -w 2400 /var/lock/lendyph-frontend-build.lock bash "/var/www/$APP/deploy.sh"
 
-            # deploy.sh does not check this, and a half-restarted Next server
-            # serves 500s perfectly happily. Without it a deploy that leaves the
-            # client's site broken reports green — which is exactly what happened
-            # to this workflow's own deploys until now.
+            # A half-restarted Next server serves 500s perfectly happily.
+            # Without this a deploy that leaves the client's site broken reports
+            # green — which is exactly what this workflow did until recently.
+            # deploy.sh now checks this too; kept here because that script is
+            # unversioned and this is the copy that goes through review.
             echo "=== Verifying '$APP' is online ==="
             pm2 describe "$APP" | grep -q "status.*online"
 
