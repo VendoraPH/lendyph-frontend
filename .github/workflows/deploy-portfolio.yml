@@ -26,17 +26,18 @@ on:
 # Never let two demo deploys interleave over the same checkout, and never let
 # two Next builds compete for memory on this box.
 concurrency:
-  # ONE group across every frontend deploy on this box, deliberately.
+  # Per-deployment, NOT shared across workflows.
   #
-  # These four workflows used to have separate groups, so a single push to main
-  # fired three Next builds at once. On 2026-08-25 that took the VPS to 197 MB
-  # free with swap at 4093/4095 MB and load 11.5 — two megabytes from the OOM
-  # killer, which would have taken MySQL and every other site down with it.
+  # A single shared group looked like it would serialize builds, but GitHub
+  # cancels an older *pending* run when a newer one joins the same group even
+  # with cancel-in-progress: false. With three deploys that silently dropped the
+  # middle one — on 2026-08-25 `Deploy binhs-coop` was cancelled and the client's
+  # production frontend simply never got the update.
   #
-  # All five frontends build on the same 8 GB box, so builds must queue rather
-  # than race. cancel-in-progress stays false: a queued deploy is fine, a
-  # half-killed one is not.
-  group: lendyph-frontend-vps-build
+  # Serialization belongs on the box, not in GitHub: the deploy steps below take
+  # an flock, so concurrent deploys queue instead of racing for memory. Queuing
+  # is what we wanted; cancelling never was.
+  group: deploy-portfolio-frontend
   cancel-in-progress: false
 
 jobs:
@@ -49,6 +50,14 @@ jobs:
     env:
       DEPLOY_SCRIPT: |
         set -e
+
+        # Serialize with the other frontend deploys. All five frontends build on
+        # the same 8 GB box; three concurrent `next build`s took it to 197 MB
+        # free with swap at 4093/4095 on 2026-08-25. Held for the whole script
+        # and released when it exits. This box has no deploy.sh, so the lock is
+        # taken here rather than wrapping one.
+        exec 9>/var/lock/lendyph-frontend-build.lock
+        flock -w 2400 9
 
         APP=lendyph-frontend-staging
 
