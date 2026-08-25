@@ -16,6 +16,11 @@ name: Deploy Portfolio
 # The on-VPS deploy.sh in this directory still pulls `development` and skips the
 # raised Node heap, so the steps stay inline here rather than calling it.
 on:
+  push:
+    # Tracks main, like the other production deployments. Previously
+    # dispatch-only, which is why this box silently fell behind.
+    branches: [main]
+    paths-ignore: ['.github/**']
   workflow_dispatch:
 
 # Never let two demo deploys interleave over the same checkout, and never let
