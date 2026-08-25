@@ -13,8 +13,13 @@ name: Deploy Portfolio
 # ones are now deploy-production.yml (app.lendyph.com) and deploy-staging.yml
 # (staging-app.lendyph.com); refresh the demo from here when you want to.
 #
-# The on-VPS deploy.sh in this directory still pulls `development` and skips the
-# raised Node heap, so the steps stay inline here rather than calling it.
+# The steps are inlined here rather than calling the on-VPS deploy.sh. That
+# script once pulled `development` and skipped the raised Node heap, which is
+# why the workflow stopped trusting it; it has since been brought in line
+# (tracks `main`, `npm ci`, 2048 heap, artifact assertion, online check), so
+# either route is now safe. Inline is kept because it is the only version-
+# controlled copy: the on-VPS scripts live outside git, so they can change
+# without review and this file cannot detect it.
 on:
   push:
     # Tracks main, like the other production deployments. Previously
@@ -54,8 +59,9 @@ jobs:
         # Serialize with the other frontend deploys. All five frontends build on
         # the same 8 GB box; three concurrent `next build`s took it to 197 MB
         # free with swap at 4093/4095 on 2026-08-25. Held for the whole script
-        # and released when it exits. This box has no deploy.sh, so the lock is
-        # taken here rather than wrapping one.
+        # and released when it exits. These steps are inlined rather than
+        # calling this directory's deploy.sh, so the lock is taken here rather
+        # than wrapping one.
         exec 9>/var/lock/lendyph-frontend-build.lock
         flock -w 2400 9
 
