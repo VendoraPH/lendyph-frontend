@@ -96,7 +96,7 @@
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/file-saver": "^2.0.7",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
