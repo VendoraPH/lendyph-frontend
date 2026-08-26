@@ -11,7 +11,6 @@ import {
   loanService,
   loanProductService,
   loanAdjustmentService,
-  loanDocumentService,
   repaymentService,
   coMakerService,
   userService,
@@ -29,7 +28,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { generateDisclosureHTML, generatePromissoryNoteHTML } from "@/lib/loan-document-templates";
+import { PrintableMenu } from "@/components/common";
+import type { PrintableId } from "@/lib/printables/types";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
@@ -108,7 +108,6 @@ import {
   AlertCircle,
   CalendarIcon,
   CalendarPlus,
-  Download,
   Plus,
   DollarSign,
   Settings2,
@@ -976,8 +975,6 @@ export default function LoanDetailPage({
   const [adjNewFrequency, setAdjNewFrequency] = useState<string | null>(null);
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
 
-  // Loan Documents state
-  const [docLoading, setDocLoading] = useState<string | null>(null);
 
   // Account Officer state
   const [users, setUsers] = useState<User[]>([]);
@@ -2638,131 +2635,34 @@ export default function LoanDetailPage({
     }
   };
 
-  // ── Loan Document Handlers ──
+  // ── Printable documents ──
+  //
+  // Every document below is built by the shared printables catalog — the same
+  // builders `/printables` uses — so a template fix reaches this page without a
+  // second implementation to keep in step.
+  //
+  // What used to sit here was an API call guarded on `apiData.borrower_name`, a
+  // key the disclosure/promissory-note endpoints have never returned, plus a
+  // ~120-line inline reconstruction of the loan for when that guard "failed".
+  // The guard was always false, so the reconstruction was the only path that
+  // ever ran. The catalog's builders degrade to a blank, printable form on a
+  // failed request, which is that failsafe done once and tested.
 
-  const handleDownloadDocument = async (type: "disclosure" | "promissory-note") => {
-    try {
-      setDocLoading(type);
-
-      if (type === "disclosure") {
-        try {
-          const apiData = await loanDocumentService.disclosure(loan.id);
-          if (apiData && apiData.borrower_name) {
-            const html = generateDisclosureHTML(apiData);
-            const blob = new Blob([html], { type: "text/html" });
-            const url = URL.createObjectURL(blob);
-            window.open(url, "_blank");
-            toast.success("Disclosure Statement opened");
-            return;
-          }
-        } catch {
-          // Fall through to local extraction
-        }
-      } else {
-        try {
-          const apiData = await loanDocumentService.promissoryNote(loan.id);
-          if (apiData && apiData.borrower_name) {
-            const html = generatePromissoryNoteHTML(apiData);
-            const blob = new Blob([html], { type: "text/html" });
-            const url = URL.createObjectURL(blob);
-            window.open(url, "_blank");
-            toast.success("Promissory Note opened");
-            return;
-          }
-        } catch {
-          // Fall through to local extraction
-        }
-      }
-
-      // Access actual API fields (differ from TS types)
-      const raw = loan as unknown as Record<string, unknown>;
-      const borrowerObj = raw.borrower as Record<string, unknown> | undefined;
-      const borrowerName = (borrowerObj?.full_name ?? borrowerObj?.name ?? "") as string;
-      const coMakersArr = raw.co_makers as Record<string, unknown>[] | undefined;
-      const coMakerName = coMakersArr?.[0] ? ((coMakersArr[0].full_name ?? coMakersArr[0].name ?? ([coMakersArr[0].first_name, coMakersArr[0].middle_name, coMakersArr[0].last_name, coMakersArr[0].suffix].filter(Boolean).join(" "))) as string || undefined) : undefined;
-      const principal = parseFloat(String(raw.principal_amount ?? 0));
-      const rate = parseFloat(String(raw.interest_rate ?? 0));
-      const interestMethod = String(raw.interest_method ?? "");
-      const term = Number(raw.term ?? 0);
-      const frequency = String(raw.frequency ?? "");
-      const netProceeds = parseFloat(String(raw.net_proceeds ?? 0));
-      const totalDeductionsVal = parseFloat(String(raw.total_deductions ?? 0));
-      // Backend returns `deductions` as an array of {name, amount, type}.
-      const deductionsArr = (Array.isArray(raw.deductions) ? raw.deductions : []) as Array<Record<string, unknown>>;
-      const findFee = (name: string): number => {
-        const m = deductionsArr.find((d) => String(d?.name ?? "").toLowerCase() === name.toLowerCase());
-        return m ? parseFloat(String(m.amount ?? 0)) : 0;
-      };
-      const processingFee = findFee("Processing Fee");
-      const serviceFee = findFee("Service Fee");
-      const notarialFee = findFee("Notarial Fee");
-      const otherDeductions = Math.max(0, totalDeductionsVal - processingFee - serviceFee - notarialFee);
-      const appNumber = String(raw.application_number ?? raw.loan_account_number ?? "");
-      const startDate = String(raw.start_date ?? "");
-      const maturityDate = String(raw.maturity_date ?? "");
-      const releasedAt = String(raw.released_at ?? raw.start_date ?? "");
-
-      // Build schedule from apiSchedule or embedded amortization_schedules
-      const scheduleSource = apiSchedule && apiSchedule.length > 0
-        ? apiSchedule
-        : (raw.amortization_schedules as Record<string, unknown>[] | undefined) ?? [];
-      const schedule = (scheduleSource as Record<string, unknown>[]).map((s, i) => ({
-        period: i + 1,
-        due_date: String(s.due_date ?? ""),
-        principal: parseFloat(String(s.principal ?? s.principal_due ?? 0)),
-        interest: parseFloat(String(s.interest ?? s.interest_due ?? 0)),
-        amount_due: parseFloat(String(s.amount_due ?? s.total_due ?? 0)),
-        balance: parseFloat(String(s.balance ?? s.remaining_balance ?? 0)),
-      }));
-
-      const totalPayable = schedule.length > 0
-        ? schedule.reduce((sum, s) => sum + s.amount_due, 0)
-        : principal + (principal * rate / 100 * term);
-
-      let html: string;
-      if (type === "disclosure") {
-        html = generateDisclosureHTML({
-          loan_id: loan.id,
-          application_number: appNumber || undefined,
-          borrower_name: borrowerName,
-          principal_amount: principal,
-          interest_rate: rate,
-          interest_type: interestMethod,
-          term_months: term,
-          payment_frequency: frequency,
-          processing_fee: processingFee,
-          service_fee: serviceFee,
-          other_deductions: otherDeductions > 0 ? otherDeductions : 0,
-          net_proceeds: netProceeds || principal - totalDeductionsVal,
-          total_payable: totalPayable,
-          amortization_schedule: schedule,
-        });
-      } else {
-        html = generatePromissoryNoteHTML({
-          loan_id: loan.id,
-          application_number: appNumber || undefined,
-          borrower_name: borrowerName,
-          co_maker_name: coMakerName,
-          principal_amount: principal,
-          interest_rate: rate,
-          interest_type: interestMethod,
-          term_months: term,
-          payment_frequency: frequency,
-          total_payable: totalPayable,
-          maturity_date: maturityDate || undefined,
-          release_date: releasedAt || startDate || undefined,
-        });
-      }
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      toast.success(`${type === "disclosure" ? "Disclosure Statement" : "Promissory Note"} opened`);
-    } catch (err) {
-      console.error("Document generation error:", err);
-      notifyError(err, `We couldn't generate the ${type === "disclosure" ? "disclosure statement" : "promissory note"}. Please try again.`);
-    } finally {
-      setDocLoading(null);
-    }
+  // A release voucher records a disbursement that has happened, and a demand
+  // letter presupposes arrears. Outside those states the entry is shown but
+  // disabled with the reason on it — hiding it only makes staff hunt for it.
+  const isDisbursed = hasServerLoanData;
+  const isInArrears =
+    loan.status === "past_due" ||
+    loan.status === "defaulted" ||
+    (loanSummary?.overdue_amount ?? 0) > 0;
+  const printUnavailable: Partial<Record<PrintableId, string>> = {
+    ...(isDisbursed
+      ? {}
+      : { release_voucher: "Available once the loan is released" }),
+    ...(isInArrears
+      ? {}
+      : { demand_letter: "Available once the loan falls past due" }),
   };
 
   const totalDeductions = loan.total_deductions ?? (loanProcessingFee + loanServiceFee + (loanOtherDeductions > 0 ? loanOtherDeductions : 0));
@@ -3980,23 +3880,22 @@ export default function LoanDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                variant="outline"
-                onClick={() => handleDownloadDocument("disclosure")}
-                disabled={docLoading !== null}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                {docLoading === "disclosure" ? "Loading..." : "Disclosure Statement"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleDownloadDocument("promissory-note")}
-                disabled={docLoading !== null}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                {docLoading === "promissory-note" ? "Loading..." : "Promissory Note"}
-              </Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Open a document on your cooperative&apos;s letterhead, ready to
+                print.
+              </p>
+              <PrintableMenu
+                subjectId={loan.id}
+                unavailable={printUnavailable}
+                ids={[
+                  "disclosure_statement",
+                  "promissory_note",
+                  "release_voucher",
+                  "amortization_schedule",
+                  "demand_letter",
+                ]}
+              />
             </div>
           </CardContent>
         </Card>

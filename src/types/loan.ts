@@ -22,6 +22,26 @@ export type PastDueTransferUnit = "days" | "months" | "amortization_periods";
 
 export type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
+/**
+ * One upfront charge withheld from the principal at release.
+ *
+ * This is what `LoanService::computeDeductions()` persists into
+ * `loans.deductions` and what every consumer reads back — an ARRAY of items,
+ * not a `Record<string, number>` keyed by fee name. The old typing was wrong on
+ * the wire, and the loan detail page had already worked around it with a cast
+ * (see `deductionsArray`) after every fee silently collapsed into "Other
+ * Deductions".
+ *
+ * `amount` is the peso figure actually withheld; `original_value` is what was
+ * configured, which for a percentage fee is the rate, not the peso amount.
+ */
+export interface LoanDeduction {
+  name: string;
+  amount: number;
+  type: "fixed" | "percentage";
+  original_value: number;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -54,7 +74,7 @@ export interface Loan {
   principal_amount: number;
   start_date?: string;
   maturity_date?: string;
-  deductions?: Record<string, number>;
+  deductions?: LoanDeduction[];
   total_deductions?: number;
   net_proceeds?: number;
   penalty_rate?: number;
