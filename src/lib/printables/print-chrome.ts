@@ -1,4 +1,5 @@
 import { siteConfig } from "@/config/site";
+import { buildDocumentReference } from "@/lib/document-reference";
 import { fileUrl, withVersion } from "@/lib/file-url";
 import { formatGeneratedAt } from "@/lib/report-format";
 import { useBrandingStore } from "@/store/branding-store";
@@ -34,23 +35,17 @@ const REFERENCE_PREFIX: Record<PrintableId, string> = {
   member_ledger_card: "MLC",
 };
 
-function pad(n: number, width = 2): string {
-  return String(n).padStart(width, "0");
-}
-
 /**
  * `OR-20260826-0142` — prefix, issue date, issue time.
  *
- * Built from local calendar parts rather than `toISOString()`, which would
- * stamp a document printed on a Manila evening with the previous day's date.
- * On a receipt handed to a member that is not cosmetic: the reference is what
- * the branch quotes back when the payment is queried.
+ * The stamp itself is `buildDocumentReference`, shared with `report-chrome.ts`.
+ * It is built from local calendar parts rather than `toISOString()`, which
+ * would stamp a document printed on a Manila evening with the previous day's
+ * date. On a receipt handed to a member that is not cosmetic: the reference is
+ * what the branch quotes back when the payment is queried.
  */
 export function buildPrintableReference(id: PrintableId, at = new Date()): string {
-  const stamp =
-    `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
-    `-${pad(at.getHours())}${pad(at.getMinutes())}`;
-  return `${REFERENCE_PREFIX[id]}-${stamp}`;
+  return buildDocumentReference(REFERENCE_PREFIX[id], at);
 }
 
 /**
