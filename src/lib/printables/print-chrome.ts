@@ -1,6 +1,6 @@
-import { formatGeneratedAt } from "@/app/(app)/reports/_lib/formatters";
 import { siteConfig } from "@/config/site";
 import { fileUrl, withVersion } from "@/lib/file-url";
+import { formatGeneratedAt } from "@/lib/report-format";
 import { useBrandingStore } from "@/store/branding-store";
 import type { PrintableDocument, PrintableId, PrintableOrg } from "./types";
 

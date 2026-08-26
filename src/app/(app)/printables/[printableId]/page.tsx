@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+// Deep import, not the barrel: re-exporting this one costs every page that
+// imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
+import { SubjectPicker } from "@/components/common/subject-picker";
 import { useAuth } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +24,6 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
-import { SubjectPicker } from "../../reports/_components/subject-picker";
 import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
 import { SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
@@ -209,7 +211,7 @@ export default function PrintableDetailPage() {
 // ---------------------------------------------------------------------------
 // Repayment picker
 //
-// Lives here rather than in `reports/_components/subject-picker.tsx`: that
+// Lives here rather than in `components/common/subject-picker.tsx`: that
 // component is shared with Reports, which has no repayment-scoped report, and
 // widening its union would make every caller handle a case it cannot produce.
 // ---------------------------------------------------------------------------

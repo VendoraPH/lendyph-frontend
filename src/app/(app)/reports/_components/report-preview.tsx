@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { formatCell } from "../_lib/formatters";
+import { formatCell } from "@/lib/report-format";
 import type { ReportDocument, ReportSection } from "../_lib/types";
 
 interface ReportPreviewProps {

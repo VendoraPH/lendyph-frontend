@@ -10,7 +10,7 @@ import {
   formatValue,
   percentOrDash,
   toNumber,
-} from "./formatters";
+} from "@/lib/report-format";
 import type {
   DateRange,
   FieldItem,

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+// Deep import, not the barrel: re-exporting this one costs every page that
+// imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
+import { SubjectPicker } from "@/components/common/subject-picker";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
 import { Button } from "@/components/ui/button";
@@ -52,7 +55,6 @@ import { exportReportToPdf } from "../_lib/report-pdf";
 import { exportReportToDocx } from "../_lib/report-docx";
 import { exportReportToCsv } from "../_lib/report-csv";
 import { ReportPreview } from "../_components/report-preview";
-import { SubjectPicker } from "../_components/subject-picker";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;

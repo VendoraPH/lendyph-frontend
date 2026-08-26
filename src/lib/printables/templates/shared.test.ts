@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatValue } from "@/app/(app)/reports/_lib/formatters";
+import { formatValue } from "@/lib/report-format";
 import {
   BLANK_LINE,
   annualRateLabel,

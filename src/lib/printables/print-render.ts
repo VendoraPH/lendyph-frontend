@@ -1,4 +1,4 @@
-import { DASH, formatValue } from "@/app/(app)/reports/_lib/formatters";
+import { DASH, formatValue } from "@/lib/report-format";
 import { PRINT_STYLES } from "./print-styles";
 import type {
   PrintAlign,

@@ -22,7 +22,7 @@ import {
   formatGeneratedAt,
   formatValue,
   toNumber,
-} from "@/app/(app)/reports/_lib/formatters";
+} from "@/lib/report-format";
 import type { PrintableOrg, PrintField } from "../types";
 
 export { DASH, currencyOrDash, formatCurrency, toNumber };
