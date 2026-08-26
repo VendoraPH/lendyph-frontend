@@ -7,6 +7,7 @@ import {
   CreditCard,
 
   BarChart3,
+  FileStack,
   Settings,
   UserCog,
   History,
@@ -113,6 +114,14 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Reports",
     href: "/reports",
     icon: BarChart3,
+    permission: "reports:view",
+  },
+  {
+    title: "Documents",
+    href: "/printables",
+    icon: FileStack,
+    // Same gate as Reports: both read the whole book — every loan, member and
+    // payment — so they stand or fall on the same permission.
     permission: "reports:view",
   },
   {

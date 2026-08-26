@@ -244,6 +244,24 @@ function buildKpiTable(section: ReportSection): Table | null {
                   }),
                 ],
               }),
+              // The hint qualifies the headline figure ("Withheld from
+              // ₱370,000.00 principal released"). It is on screen, so it
+              // belongs in the document too — a quieter second line under the
+              // label rather than a value the reader has to take on trust.
+              ...(item.hint
+                ? [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: item.hint,
+                          color: MUTED,
+                          italics: true,
+                          size: 14,
+                        }),
+                      ],
+                    }),
+                  ]
+                : []),
             ],
           }),
           new TableCell({
@@ -556,7 +574,12 @@ function buildPageFooter(report: ReportDocument): Footer {
   });
 }
 
-export async function exportReportToDocx(report: ReportDocument): Promise<void> {
+/**
+ * Assemble the .docx and hand back the bytes, without saving. Split from the
+ * download so tests can unzip the real document instead of asserting against
+ * the model that produced it.
+ */
+export async function renderReportDocx(report: ReportDocument): Promise<Blob> {
   const headerTable = buildHeaderTable(report);
 
   const bodyChildren: Array<Paragraph | Table> = [];
@@ -608,7 +631,11 @@ export async function exportReportToDocx(report: ReportDocument): Promise<void> 
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
+  return Packer.toBlob(doc);
+}
+
+export async function exportReportToDocx(report: ReportDocument): Promise<void> {
+  const blob = await renderReportDocx(report);
   const slug = report.meta.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

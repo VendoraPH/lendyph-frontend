@@ -4,6 +4,7 @@ import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Printer, Receipt, Ban, Loader2 } from "lucide-react";
+import { usePrintables } from "@/hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -166,6 +167,9 @@ export default function PaymentReceiptPage({
   const [voiding, setVoiding] = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  // The card below stays the on-screen view; what comes off the printer is the
+  // catalog's Official Receipt — two copies, Borrower's and File.
+  const printables = usePrintables();
 
   const fetchReceipt = useCallback(async () => {
     setLoading(true);
@@ -260,15 +264,29 @@ export default function PaymentReceiptPage({
               Void Payment
             </Button>
           )}
+          {/* Both buttons open the same document, and that is deliberate: an
+              Official Receipt is issued under the payment's own receipt number,
+              so a reprint is the same paper, not a new one. Printing the React
+              card instead — which is what these used to do — produced an
+              on-screen mock-up with no letterhead and only one copy. */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
+            disabled={printables.isPreparing}
+            onClick={() => printables.open("official_receipt", receipt.id)}
           >
-            <Printer className="mr-2 h-4 w-4" />
-            Print Receipt
+            {printables.isPreparing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Printer className="mr-2 h-4 w-4" />
+            )}
+            {printables.isPreparing ? "Preparing…" : "Print Receipt"}
           </Button>
-          <Button size="sm" onClick={() => window.print()}>
+          <Button
+            size="sm"
+            disabled={printables.isPreparing}
+            onClick={() => printables.open("official_receipt", receipt.id)}
+          >
             <Printer className="mr-2 h-4 w-4" />
             Reprint
           </Button>
