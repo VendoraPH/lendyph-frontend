@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { borrowerService, loanService } from "@/services";
+import type { Borrower, Loan } from "@/types";
 import type { ReportSubject } from "../_lib/types";
 
 interface SubjectOption {
@@ -33,6 +34,20 @@ interface SubjectPickerProps {
  * call at a much larger member count, but it would also add a debounce and a
  * request per keystroke for a list that is currently small enough to hold.
  */
+/**
+ * `api.get` unwraps to `response.data.data`, so a paginated list arrives as a
+ * bare array — the `PaginatedResponse<T>` on the service signatures is stale.
+ * Every other list consumer already narrows this way; this picker did not, so
+ * `res?.data` was always undefined and it silently showed "No loan found."
+ * even with released loans present, on both /printables and the two
+ * subject-scoped reports.
+ */
+function rows<T>(res: unknown): T[] {
+  if (Array.isArray(res)) return res as T[];
+  const data = (res as { data?: unknown } | null | undefined)?.data;
+  return Array.isArray(data) ? (data as T[]) : [];
+}
+
 export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) {
   const [options, setOptions] = useState<SubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +67,7 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
         ? loanService
             .list({ per_page: 200, status: "released" })
             .then((res) =>
-              (res?.data ?? []).map((loan) => ({
+              rows<Loan>(res).map((loan) => ({
                 id: loan.id,
                 label:
                   loan.loan_account_number ??
@@ -64,7 +79,7 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
         : borrowerService
             .list({ per_page: 200 })
             .then((res) =>
-              (res?.data ?? []).map((borrower) => ({
+              rows<Borrower>(res).map((borrower) => ({
                 id: borrower.id,
                 label: borrower.full_name,
                 hint: borrower.borrower_code,

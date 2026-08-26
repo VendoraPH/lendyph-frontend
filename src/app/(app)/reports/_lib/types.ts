@@ -11,13 +11,21 @@ export type ReportId =
   | "repayments_list"
   | "due_past_due_list"
   | "statement_of_account"
-  | "subsidiary_ledger";
+  | "subsidiary_ledger"
+  | "cash_flow"
+  | "collection_efficiency"
+  | "portfolio_by_product"
+  | "share_capital"
+  | "performance"
+  | "provisioning";
 
 export type ReportCategory =
   | "operations"
   | "portfolio"
   | "member"
-  | "disbursement";
+  | "disbursement"
+  | "financial"
+  | "performance";
 
 export type ColumnFormat =
   | "text"
@@ -92,6 +100,12 @@ export type ReportSection =
  * those stay pure and testable without a session.
  */
 export interface ReportChrome {
+  /**
+   * Organization name for the letterhead. Left unset by the reports page,
+   * which lets `applyChrome` resolve it from branding settings; supplied only
+   * when a caller already holds a name (a preview, a test).
+   */
+  org?: string | null;
   logoUrl?: string | null;
   /** Same logo as a data URL, for exporters that must embed the bytes. */
   logoData?: string | null;
@@ -107,6 +121,11 @@ export interface ReportDocument {
     subtitle?: string;
     period?: string;
     generatedAt: string;
+    /**
+     * The organization the report is issued by. Builders emit an empty string
+     * — they are pure and have no branding to read — and `applyChrome()` fills
+     * it from branding settings, falling back to `siteConfig.name`.
+     */
     org: string;
     /** Organization logo, resolved from branding settings at generate time. */
     logoUrl?: string | null;
@@ -130,6 +149,57 @@ export interface ReportDocument {
 export interface DateRange {
   from: string;
   to: string;
+}
+
+/**
+ * Widest reporting period the API accepts, in years.
+ *
+ * Mirrors `ReportController::MAX_SPAN_YEARS`. A wider range comes back as a
+ * 422 attributed to whichever date field the caller sent, so the picker should
+ * refuse it up front instead of letting someone press Generate and meet a
+ * validation error. No preset can breach it — Year to Date is the widest — but
+ * the two custom `<input type="date">` fields can.
+ */
+export const MAX_REPORT_SPAN_YEARS = 10;
+
+/**
+ * Parse a `YYYY-MM-DD` value as LOCAL calendar parts.
+ *
+ * `new Date("2016-01-01")` is parsed as UTC midnight, which in Manila (UTC+8)
+ * is the 1st at 08:00 — the same off-by-a-day class of bug `presetRange` and
+ * `buildReference` already document. Everything here stays local so a range
+ * that is exactly ten years wide is judged the same way the user sees it.
+ */
+function parseLocalDate(value: string): Date | null {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!parts) return null;
+  const date = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * True when a range is wider than the API will accept.
+ *
+ * Measured exactly as the server measures it: an open end resolves to today,
+ * and a reversed range is judged on its absolute span. An unparseable or empty
+ * pair is not a violation — that is the request builder's problem, not this
+ * guard's, and blocking Generate over a half-typed date would be worse than
+ * the 422 it prevents.
+ */
+export function exceedsReportSpanCap(
+  range: DateRange,
+  today: Date = new Date()
+): boolean {
+  const from = range.from ? parseLocalDate(range.from) : null;
+  const to = range.to ? parseLocalDate(range.to) : null;
+  if (!from && !to) return false;
+
+  const start = from ?? today;
+  const end = to ?? today;
+  const [lo, hi] = end < start ? [end, start] : [start, end];
+
+  const cap = new Date(lo.getFullYear() + MAX_REPORT_SPAN_YEARS, lo.getMonth(), lo.getDate());
+  return cap < hi;
 }
 
 /**
@@ -185,5 +255,13 @@ export const CATEGORY_META: Record<
   disbursement: {
     label: "Disbursement",
     description: "Loan releases and new originations",
+  },
+  financial: {
+    label: "Financial",
+    description: "Cash position, share capital, and loan loss provisioning",
+  },
+  performance: {
+    label: "Performance",
+    description: "Collection efficiency and account officer productivity",
   },
 };

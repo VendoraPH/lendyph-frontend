@@ -5,5 +5,6 @@ export { RouteGuard } from "./route-guard";
 export { BrandLogo } from "./brand-logo";
 export { PoweredByLendy } from "./powered-by-lendy";
 export { ImagePreviewDialog, type PreviewImage } from "./image-preview-dialog";
+export { PrintableMenu } from "./printable-menu";
 export { TablePagination } from "./table-pagination";
 export type { TablePaginationProps } from "./table-pagination";

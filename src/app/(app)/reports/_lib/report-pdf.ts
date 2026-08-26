@@ -15,6 +15,165 @@ const FOREGROUND: [number, number, number] = [17, 24, 39];
 
 const PAGE_MARGIN_X = 36;
 
+// ---------------------------------------------------------------------------
+// WinAnsi transcoding
+// ---------------------------------------------------------------------------
+//
+// jsPDF's standard-14 fonts are declared with /WinAnsiEncoding, and jsPDF maps
+// into it correctly right up until it meets a code point WinAnsi has no slot
+// for. At that point it gives up on the whole string and re-emits it as raw
+// UTF-16 - and the font still reads those bytes as WinAnsi. One bad character
+// corrupts its entire text run, not just itself:
+//
+//   "\u20B1352,800.00"  ->  20 B1 00 33 00 35 00 32 ...  ->  prints "\u00B1352,800.00"
+//
+// \u20B1 is that character, and it is in every peso figure of all seventeen
+// reports, so every currency line printed with a plus-minus in front of it.
+//
+// So the transcode below only has to do two things: swap \u20B1 for something
+// printable, and make sure nothing else unmappable ever reaches jsPDF and
+// takes a whole line down with it. Punctuation WinAnsi does carry (em dash,
+// bullet, curly quotes) is listed explicitly so it keeps its real glyph rather
+// than being folded away with the genuinely unrepresentable.
+//
+// We deliberately do NOT embed a Unicode font for the sake of one glyph: three
+// faces of a modern sans is ~370 KB (~490 KB base64) in a route bundle that
+// already carries exceljs, docx and jspdf, and even a Latin-1 subset would add
+// a build step plus a new silent-failure mode - any glyph outside the subset
+// renders as a blank box, which is the class of defect this replaces.
+
+/**
+ * Code points above U+00FF that WinAnsi can represent, mapped to their WinAnsi
+ * byte. Doubles as the allowlist `foldChar` checks before treating a character
+ * as unrepresentable, so an em dash keeps its glyph instead of folding to "?".
+ */
+const WIN_ANSI_HIGH: Readonly<Record<string, string>> = {
+  "\u20AC": "\u0080", // euro
+  "\u201A": "\u0082", // single low quote
+  "\u0192": "\u0083", // florin
+  "\u201E": "\u0084", // double low quote
+  "\u2026": "\u0085", // ellipsis
+  "\u2020": "\u0086", // dagger
+  "\u2021": "\u0087", // double dagger
+  "\u02C6": "\u0088", // circumflex
+  "\u2030": "\u0089", // per mille
+  "\u0160": "\u008A", // S caron
+  "\u2039": "\u008B", // single left angle quote
+  "\u0152": "\u008C", // OE
+  "\u017D": "\u008E", // Z caron
+  "\u2018": "\u0091", // left single quote
+  "\u2019": "\u0092", // right single quote
+  "\u201C": "\u0093", // left double quote
+  "\u201D": "\u0094", // right double quote
+  "\u2022": "\u0095", // bullet
+  "\u2013": "\u0096", // en dash
+  "\u2014": "\u0097", // em dash
+  "\u02DC": "\u0098", // small tilde
+  "\u2122": "\u0099", // trade mark
+  "\u0161": "\u009A", // s caron
+  "\u203A": "\u009B", // single right angle quote
+  "\u0153": "\u009C", // oe
+  "\u017E": "\u009E", // z caron
+  "\u0178": "\u009F", // Y diaeresis
+};
+
+/** Punctuation WinAnsi has no slot for, but that has an honest ASCII stand-in. */
+const ASCII_STANDIN: Readonly<Record<string, string>> = {
+  "\u2010": "-", // hyphen
+  "\u2011": "-", // non-breaking hyphen
+  "\u2015": "-", // horizontal bar
+  "\u2212": "-", // minus sign
+  "\u2044": "/", // fraction slash
+};
+
+/**
+ * The peso sign is the one glyph in these reports that WinAnsi cannot express
+ * at all, so no standard-14 font can print it. It becomes its ISO 4217 code,
+ * which is unambiguous on a printed statement. A space already following the
+ * sign is swallowed so "\u20B1 100" does not become "PHP  100".
+ */
+const PESO_SIGN = /\u20B1[ \u00A0]?/g;
+
+/** True for text every standard-14 glyph can already represent. */
+const NON_LATIN1 = /[^\u0000-\u00FF]/;
+
+/** Combining marks left behind by NFKD, which WinAnsi cannot stack. */
+const COMBINING_MARKS = /[\u0300-\u036F]/g;
+
+function foldChar(char: string): string {
+  if (char.charCodeAt(0) <= 0xff) return char;
+  const winAnsi = WIN_ANSI_HIGH[char];
+  if (winAnsi !== undefined) return winAnsi;
+  const standin = ASCII_STANDIN[char];
+  if (standin !== undefined) return standin;
+  // Last resort: decompose (A-macron to A, narrow no-break space to space) and
+  // keep whatever lands inside Latin-1. A visible "?" beats a silent deletion
+  // - silent deletion is how the missing em dashes went unnoticed.
+  const folded = char
+    .normalize("NFKD")
+    .replace(COMBINING_MARKS, "")
+    .split("")
+    .filter((c) => c.charCodeAt(0) <= 0xff)
+    .join("");
+  return folded || "?";
+}
+
+/**
+ * Render a string into something the standard-14 WinAnsi fonts can actually
+ * print. Idempotent: already-safe text is returned untouched.
+ */
+export function toPdfText(value: string): string {
+  const withCurrency = value.replace(PESO_SIGN, "PHP ");
+  // Fast path - the overwhelming majority of report text is Latin-1 already.
+  if (!NON_LATIN1.test(withCurrency)) return withCurrency;
+  return Array.from(withCurrency, foldChar).join("");
+}
+
+function encodeTextArg(text: string | string[]): string | string[] {
+  return Array.isArray(text) ? text.map(toPdfText) : toPdfText(text);
+}
+
+/**
+ * Install the transcode on the instance rather than at each call site.
+ *
+ * jsPDF offers no encoding hook, and jspdf-autotable both draws and measures
+ * straight off the jsPDF instance it is handed — so patching these four
+ * methods is the only seam that covers table cells as well as our own draws.
+ * Measurement goes through the same fold as drawing on purpose: right-aligned
+ * currency columns only line up if the width we measure matches the bytes we
+ * write, and "PHP " is wider than "₱".
+ */
+function installWinAnsiEncoder(doc: jsPDF): void {
+  const text = doc.text.bind(doc);
+  const getTextWidth = doc.getTextWidth.bind(doc);
+  const getStringUnitWidth = doc.getStringUnitWidth.bind(doc);
+  const splitTextToSize = doc.splitTextToSize.bind(doc);
+
+  doc.text = ((
+    value: string | string[],
+    x: number,
+    y: number,
+    options?: Parameters<jsPDF["text"]>[3],
+    transform?: Parameters<jsPDF["text"]>[4]
+  ) => text(encodeTextArg(value), x, y, options, transform)) as jsPDF["text"];
+
+  doc.getTextWidth = ((value: string) =>
+    getTextWidth(toPdfText(String(value)))) as jsPDF["getTextWidth"];
+
+  doc.getStringUnitWidth = ((value: string, options?: unknown) =>
+    getStringUnitWidth(
+      toPdfText(String(value)),
+      options
+    )) as jsPDF["getStringUnitWidth"];
+
+  doc.splitTextToSize = ((value: string, maxlen: number, options?: unknown) =>
+    splitTextToSize(
+      toPdfText(String(value)),
+      maxlen,
+      options
+    )) as jsPDF["splitTextToSize"];
+}
+
 /** Right-aligned text helper — used by the letterhead and both strips. */
 function textRight(doc: jsPDF, text: string, y: number): void {
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -134,12 +293,17 @@ function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number
     y += 16;
   }
 
-  // 4-up grid that wraps. Each card: small label + bold value.
+  // 4-up grid that wraps. Each card: small label + bold value, plus the hint
+  // underneath when the section carries one. The hint is the qualifier that
+  // makes a headline figure readable ("Withheld from ₱370,000.00 principal
+  // released") — dropping it left the printed copy less informative than the
+  // screen it was exported from.
   const cols = 4;
   const gap = 8;
   const totalW = pageWidth - PAGE_MARGIN_X * 2;
   const cardW = (totalW - gap * (cols - 1)) / cols;
-  const cardH = 48;
+  const hasHints = section.items.some((item) => !!item.hint);
+  const cardH = hasHints ? 62 : 48;
 
   section.items.forEach((item, idx) => {
     const col = idx % cols;
@@ -166,6 +330,15 @@ function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
     doc.text(item.value, x + 8, cardY + 34);
+
+    if (item.hint) {
+      doc.setTextColor(...MUTED);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      // Two lines at most: a card is a headline, not a paragraph.
+      const lines = doc.splitTextToSize(item.hint, cardW - 16) as string[];
+      doc.text(lines.slice(0, 2), x + 8, cardY + 45);
+    }
   });
 
   const rowsUsed = Math.ceil(section.items.length / cols);
@@ -350,8 +523,14 @@ function drawNote(doc: jsPDF, section: ReportSection, startY: number): number {
   return startY + lines.length * 12 + 8;
 }
 
-export function exportReportToPdf(report: ReportDocument): void {
+/**
+ * Render the document and hand back the jsPDF instance, without saving. The
+ * save is split off so tests can assert against the bytes we actually emit
+ * rather than against the model that produced them.
+ */
+export function renderReportPdf(report: ReportDocument): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+  installWinAnsiEncoder(doc);
 
   let cursor = drawHeader(doc, report);
 
@@ -379,6 +558,11 @@ export function exportReportToPdf(report: ReportDocument): void {
 
   drawFooter(doc, report);
 
+  return doc;
+}
+
+export function exportReportToPdf(report: ReportDocument): void {
+  const doc = renderReportPdf(report);
   const slug = report.meta.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

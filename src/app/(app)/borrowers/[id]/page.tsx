@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
+import { PrintableMenu } from "@/components/common";
 import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
@@ -145,6 +146,20 @@ export default function BorrowerDetailPage() {
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
         onPhotoUpdate={fetchData}
       />
+
+      {/* Member documents — the same catalog `/printables` serves, opened for
+          the member already on screen instead of re-picking them there. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Open a member document on your cooperative&apos;s letterhead, ready to
+          print.
+        </p>
+        <PrintableMenu
+          subjectId={borrower.id}
+          size="sm"
+          ids={["member_ledger_card", "share_capital_certificate"]}
+        />
+      </div>
 
       <Tabs defaultValue="overview">
         <TabsList variant="line">

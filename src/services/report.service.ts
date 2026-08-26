@@ -40,6 +40,35 @@ export const reportService = {
   disbursements: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.DISBURSEMENTS, { params }),
 
+  // The six financial/performance reports below are `{ success, data }`-wrapped
+  // summaries rather than paginators — there is no envelope worth preserving,
+  // so they use `api.get` and the builders receive the summary object directly.
+  cashFlow: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.CASH_FLOW, { params }),
+
+  collectionEfficiency: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.COLLECTION_EFFICIENCY, { params }),
+
+  portfolioByProduct: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.PORTFOLIO_BY_PRODUCT, { params }),
+
+  // Accepts branch_id: the ledger has no branch column, so the API resolves
+  // the filter through the member's branch and echoes back `branch_scope`.
+  shareCapital: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SHARE_CAPITAL, { params }),
+
+  performance: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.PERFORMANCE, { params }),
+
+  provisioning: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
+
+  // One member's share capital statement: opening balance, entries with a
+  // running balance, period credits/debits, closing balance. Accepts
+  // date_from/date_to to window the entries.
+  shareCapitalStatement: (borrowerId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SHARE_CAPITAL_STATEMENT(borrowerId), { params }),
+
   exportReleases: (params?: Record<string, unknown>) =>
     api.download(API_ENDPOINTS.REPORTS.EXPORT_RELEASES, { params }),
 
