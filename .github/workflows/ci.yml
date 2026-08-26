@@ -102,6 +102,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Nothing had ever audited dependencies here, so 18 advisories accumulated
+      # unseen — 9 of them high. Cleaning that up once only resets the clock;
+      # this is what stops it recurring.
+      #
+      # Fails on high/critical only. Two moderate advisories are knowingly
+      # accepted (exceljs pins uuid ^8.3.0 and no 4.x can widen it; the
+      # vulnerable uuid path needs a caller-supplied `buf`, and exceljs calls
+      # uuidv4() with no arguments inside a conditional-formatting serializer
+      # this app never triggers). Failing on moderate would red every unrelated
+      # PR over that, and a check that cries wolf is one people learn to ignore.
+      - name: Audit npm dependencies
+        run: |
+          npm audit || true
+          npm audit --audit-level=high
+
       # Every NEXT_PUBLIC_* used in src/ must be documented in .env.example.
       # A deployment cannot set a var it has never been told about, and these
       # values are inlined at build time — so an undocumented one becomes a
