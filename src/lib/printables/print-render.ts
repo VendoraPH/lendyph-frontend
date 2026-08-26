@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/lib/html-escape";
 import { DASH, formatValue } from "@/lib/report-format";
 import { PRINT_STYLES } from "./print-styles";
 import type {
@@ -25,27 +26,19 @@ import type {
  * drifted: they carried their own `fmt()`.
  */
 
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
 /**
- * Escape anything that came off the wire.
- *
  * Every value in a `PrintableDocument` — a borrower's name, an address, a
  * branch, a table cell — originates in the API and ends up inside a document
- * the browser executes. A member registered as `<script>…</script>` would
- * otherwise run in the print window, which is same-origin with the app.
- * The single exception is a `paragraph`'s `html`; see its case below.
+ * the browser executes, so all of it goes through `escapeHtml`
+ * (`@/lib/html-escape`). A member registered as `<script>…</script>` would
+ * otherwise run in the print window, which is same-origin with the app. The
+ * single exception is a `paragraph`'s `html`; see its case below.
+ *
+ * Every interpolation in this file is inside a double-quoted attribute or a
+ * text node — the invariant `escapeHtml` documents and depends on. The two
+ * places that would otherwise break it are the `style` attributes, and those
+ * take a validated CSS length rather than an escaped value; see `cssLength`.
  */
-function escapeHtml(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  return String(value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
-}
 
 /**
  * A CSS length a template supplied, or the fallback.
@@ -250,7 +243,7 @@ function renderBlock(block: PrintBlock): string {
       // authored by a template in this repo — that is what the contract in
       // types.ts defines it as — so it carries intentional <strong>/<u>/<ol>
       // markup. Templates escape the API values they interpolate into it with
-      // `templates/shared.ts`'s `escapeHtml`. Never point this at a payload.
+      // the same `escapeHtml` this file uses. Never point this at a payload.
       return `<div class="para${alignClass(block.align, "para")}">${block.html}</div>`;
 
     case "table":

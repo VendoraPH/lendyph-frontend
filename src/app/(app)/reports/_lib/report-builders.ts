@@ -1,3 +1,4 @@
+import { asArray, asRecord, pick, sum } from "@/lib/api-payload";
 import {
   DASH,
   countOrDash,
@@ -28,47 +29,25 @@ import type {
  * the catalog wiring live in `report-catalog.ts`.
  */
 
-/** Rows requested per list report. The API paginates; this is one page. */
+/**
+ * Rows requested per list report. The API paginates; this is one page.
+ *
+ * NOT the same number as `PRINT_PAGE_SIZE` (100) in
+ * `lib/printables/templates/shared.ts`, and the two must not be merged. The
+ * report endpoints this feeds serve the page size they are asked for; the
+ * paginated indexes the printables read clamp it with
+ * `min((int) request('per_page', 15), 100)`, so asking those for 200 returns
+ * 100 and silently truncates the document. Same word, two different server
+ * ceilings.
+ */
 export const LIST_PAGE_SIZE = 200;
 
 // ---------------------------------------------------------------------------
 // Raw payload helpers
+//
+// `pick` / `asRecord` / `asArray` / `sum` live in `@/lib/api-payload`, shared
+// with the printable templates so both read a response the same way.
 // ---------------------------------------------------------------------------
-
-function pick<T = unknown>(
-  obj: Record<string, unknown> | null | undefined,
-  keys: string[]
-): T | null {
-  if (!obj) return null;
-  for (const key of keys) {
-    if (obj[key] !== undefined && obj[key] !== null && obj[key] !== "") {
-      return obj[key] as T;
-    }
-  }
-  return null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return null;
-}
-
-function asArray(value: unknown): Record<string, unknown>[] {
-  if (Array.isArray(value)) return value as Record<string, unknown>[];
-  const obj = asRecord(value);
-  if (!obj) return [];
-  for (const key of ["data", "rows", "items", "results"]) {
-    const inner = obj[key];
-    if (Array.isArray(inner)) return inner as Record<string, unknown>[];
-  }
-  return [];
-}
-
-function sum(rows: Record<string, unknown>[], key: string): number {
-  return rows.reduce((acc, r) => acc + (toNumber(r[key]) ?? 0), 0);
-}
 
 /**
  * Add up sibling fields of a nested block (e.g. outstanding.{principal,

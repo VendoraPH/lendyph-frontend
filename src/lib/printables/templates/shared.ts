@@ -15,6 +15,8 @@
  * same way on a receipt as it does in a report.
  */
 
+import { asRecord, pick, pickNumber } from "@/lib/api-payload";
+import { escapeHtml } from "@/lib/html-escape";
 import {
   DASH,
   currencyOrDash,
@@ -25,7 +27,14 @@ import {
 } from "@/lib/report-format";
 import type { PrintableOrg, PrintField } from "../types";
 
+/**
+ * One import for a template to reach everything it may use, which is why the
+ * shared primitives are re-exported here rather than imported directly by
+ * eight template files.
+ */
 export { DASH, currencyOrDash, formatCurrency, toNumber };
+export { asArray, asRecord, pick, pickNumber, sum } from "@/lib/api-payload";
+export { escapeHtml } from "@/lib/html-escape";
 
 /**
  * Written into prose where a value is missing. A paragraph cannot carry a
@@ -47,6 +56,12 @@ export const BLANK_ORG: PrintableOrg = { name: "", logoUrl: null };
  * enough, which is how a ledger gets silently truncated. A document that reads
  * a list must therefore assume it may have been capped and say so; see
  * `share-capital-certificate.ts`.
+ *
+ * NOT a duplicate of `LIST_PAGE_SIZE` (200) in `reports/_lib/report-builders.ts`,
+ * and the two must not be merged. They were the same number once and this one
+ * was lowered deliberately: the report endpoints serve the page size they are
+ * asked for, these do not. Raising it back to 200 reintroduces the silent
+ * truncation on the Share Capital Certificate.
  */
 export const PRINT_PAGE_SIZE = 100;
 
@@ -64,61 +79,11 @@ export interface PrintableBuildOptions {
 // ---------------------------------------------------------------------------
 // Raw payload readers
 //
-// Same shape as the report builders': the API is read defensively, first key
-// wins, and the aliases behind it are the ones older responses used.
+// `asRecord` / `asArray` / `pick` / `pickNumber` / `sum` live in
+// `@/lib/api-payload` and are re-exported above. The report builders read a
+// response through the same five, so a payload means the same thing on paper
+// as it does on screen.
 // ---------------------------------------------------------------------------
-
-export function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return null;
-}
-
-export function asArray(value: unknown): Record<string, unknown>[] {
-  if (Array.isArray(value)) {
-    return value.filter((v) => v && typeof v === "object") as Record<
-      string,
-      unknown
-    >[];
-  }
-  const obj = asRecord(value);
-  if (!obj) return [];
-  for (const key of ["data", "rows", "items", "results", "entries"]) {
-    if (Array.isArray(obj[key])) {
-      return (obj[key] as unknown[]).filter(
-        (v) => v && typeof v === "object"
-      ) as Record<string, unknown>[];
-    }
-  }
-  return [];
-}
-
-export function pick<T = unknown>(
-  obj: Record<string, unknown> | null | undefined,
-  keys: string[]
-): T | null {
-  if (!obj) return null;
-  for (const key of keys) {
-    const value = obj[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value as T;
-    }
-  }
-  return null;
-}
-
-/** `pick`, coerced to a finite number. */
-export function pickNumber(
-  obj: Record<string, unknown> | null | undefined,
-  keys: string[]
-): number | null {
-  return toNumber(pick(obj, keys));
-}
-
-export function sum(rows: Record<string, unknown>[], key: string): number {
-  return rows.reduce((acc, row) => acc + (toNumber(row[key]) ?? 0), 0);
-}
 
 /**
  * A person's name from either a nested user/borrower object or the flat alias
@@ -215,22 +180,14 @@ export function moneyOrBlank(value: unknown): string {
 }
 
 /**
- * HTML-escape a value before it is interpolated into a `paragraph` block.
+ * Escaped, emphasised, and underlined — how legal prose fills in a blank.
  *
- * `paragraph.html` is authored in this repo, but the values dropped into it are
- * borrower names and addresses that came off the wire. Without this, a member
- * called `<script>` would be executed by the print window.
+ * `escapeHtml` (re-exported above from `@/lib/html-escape`) is what makes it
+ * safe to drop an API value into a `paragraph.html`: that markup is authored in
+ * this repo, but the names and addresses interpolated into it came off the
+ * wire. Every one of those sites is a text node, which is the invariant the
+ * escape assumes.
  */
-export function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/** Escaped, emphasised, and underlined — how legal prose fills in a blank. */
 export function fill(value: unknown): string {
   const text =
     value === null || value === undefined || value === ""
