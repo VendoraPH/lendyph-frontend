@@ -50,10 +50,6 @@ import { reportService } from "@/services";
 import { REPORT_CATALOG } from "../_lib/report-catalog";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
-import { exportReportToExcel } from "../_lib/report-excel";
-import { exportReportToPdf } from "../_lib/report-pdf";
-import { exportReportToDocx } from "../_lib/report-docx";
-import { exportReportToCsv } from "../_lib/report-csv";
 import { ReportPreview } from "../_components/report-preview";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
 
@@ -297,23 +293,43 @@ export default function ReportDetailPage() {
     }
   }
 
+  /**
+   * Every exporter is loaded on demand, and none of them at import time.
+   *
+   * Statically importing the four pulled exceljs, docx, jspdf and
+   * jspdf-autotable into this route's client chunk, so opening any report paid
+   * for all four libraries before a single figure rendered — on a field
+   * officer's mobile data, on every report view, whether or not anything was
+   * ever exported. `await import()` moves that cost to the click that needs it.
+   *
+   * `exportingFormat` already covers the wait: the button spins from the moment
+   * the menu item is chosen, which now spans the chunk fetch as well as the
+   * encode. A failed chunk fetch rejects like any other export failure and
+   * lands in the same catch below.
+   */
   async function handleExport(format: ExportFormat) {
     if (!doc || !report) return;
     setExportingFormat(format);
     try {
       switch (format) {
-        case "excel":
+        case "excel": {
+          const { exportReportToExcel } = await import("../_lib/report-excel");
           await exportReportToExcel(doc);
           toast.success("Excel file downloaded.");
           break;
-        case "pdf":
+        }
+        case "pdf": {
+          const { exportReportToPdf } = await import("../_lib/report-pdf");
           exportReportToPdf(doc);
           toast.success("PDF downloaded.");
           break;
-        case "docx":
+        }
+        case "docx": {
+          const { exportReportToDocx } = await import("../_lib/report-docx");
           await exportReportToDocx(doc);
           toast.success("Word document downloaded.");
           break;
+        }
         case "csv": {
           const backendExporter = reportId ? BACKEND_CSV_EXPORTERS[reportId as ReportId] : undefined;
           if (backendExporter) {
@@ -332,6 +348,7 @@ export default function ReportDetailPage() {
             link.click();
             URL.revokeObjectURL(url);
           } else {
+            const { exportReportToCsv } = await import("../_lib/report-csv");
             exportReportToCsv(doc);
           }
           toast.success("CSV downloaded.");
