@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Image as ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
+import { Building2, Image as ImageIcon, Loader2, Save, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { PermissionGate, RouteGuard } from "@/components/common";
 import { brandingService } from "@/services";
-import { useBrandingStore } from "@/store/branding-store";
+import { toBrandingIdentity, useBrandingStore } from "@/store/branding-store";
 import { compressImage } from "@/lib/image-compress";
 import { fileUrl, withVersion } from "@/lib/file-url";
 import { notifyError } from "@/lib/notify";
@@ -23,16 +24,33 @@ const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5MB — matches the backend cap.
 // step below preserves transparency for PNG/WEBP so logos don't get a black box.
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
+// Mirrors the server-side validation so an over-long value is caught before the
+// request rather than coming back as a 422.
+const MAX_NAME = 255;
+const MAX_ADDRESS = 500;
+const MAX_CONTACT = 255;
+
+/** Empty input → null: the API stores absence as null, never "". */
+const orNull = (value: string): string | null => value.trim() || null;
+
 export default function BrandingSettingsPage() {
   // The logo lives in the shared store so an upload here immediately updates
-  // the sidebar logo (and any other mounted <BrandLogo>) without a reload.
+  // the sidebar logo (and any other mounted <BrandLogo>) without a reload. The
+  // organization name is stored alongside it because report and printable
+  // letterheads read it from the same place.
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const version = useBrandingStore((s) => s.version);
   const updateLogo = useBrandingStore((s) => s.updateLogo);
+  const updateOrganization = useBrandingStore((s) => s.updateOrganization);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [removing, setRemoving] = useState(false);
+
+  const [organizationName, setOrganizationName] = useState("");
+  const [address, setAddress] = useState("");
+  const [contact, setContact] = useState("");
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -46,10 +64,16 @@ export default function BrandingSettingsPage() {
       try {
         const res = await brandingService.get();
         if (cancelled) return;
+        const branding = toBrandingIdentity(res);
         // Read the action off the store instead of subscribing to it: this
         // effect calls it once on mount and never needs to re-run, so the
         // dependency array stays empty.
-        useBrandingStore.getState().hydrate(res?.logo_url ?? null);
+        useBrandingStore.getState().hydrate(branding);
+        // The inputs are uncontrolled by the store on purpose — typing must not
+        // repaint every letterhead on screen before the change is saved.
+        setOrganizationName(branding.organizationName ?? "");
+        setAddress(branding.address ?? "");
+        setContact(branding.contact ?? "");
       } catch (err) {
         if (!cancelled) notifyError(err, "We couldn't load your branding settings. Please try again.");
       } finally {
@@ -129,6 +153,35 @@ export default function BrandingSettingsPage() {
     }
   };
 
+  const handleSaveDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (savingDetails) return;
+    setSavingDetails(true);
+    try {
+      const res = await brandingService.update({
+        organization_name: orNull(organizationName),
+        organization_address: orNull(address),
+        organization_contact: orNull(contact),
+      });
+      const branding = toBrandingIdentity(res);
+      // The mutation returns the same payload the read does, so the store is
+      // updated from the response rather than by refetching it.
+      updateOrganization({
+        organizationName: branding.organizationName,
+        address: branding.address,
+        contact: branding.contact,
+      });
+      setOrganizationName(branding.organizationName ?? "");
+      setAddress(branding.address ?? "");
+      setContact(branding.contact ?? "");
+      toast.success("Organization details saved.");
+    } catch (err) {
+      notifyError(err, "We couldn't save your organization details. Please try again.");
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
   const hasCustomLogo = Boolean(logoUrl);
   const currentSrc = logoUrl
     ? withVersion(fileUrl(logoUrl), version)
@@ -143,10 +196,119 @@ export default function BrandingSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Branding</h1>
           <p className="text-muted-foreground">
-            Set your organization logo. It appears on the sign-in and public
-            registration pages and in the app sidebar.
+            Set your organization name and logo. They appear on the sign-in and
+            public registration pages, in the app sidebar, and on the letterhead
+            of every report and printed document.
           </p>
         </div>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              Organization Details
+            </CardTitle>
+          </CardHeader>
+          <Separator />
+          <CardContent className="pt-6">
+            <PermissionGate
+              permission="settings:update"
+              fallback={
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-sm font-medium">Organization name</dt>
+                    <dd className="text-sm text-muted-foreground">
+                      {organizationName || `Not set — documents show ${siteConfig.name}`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium">Contact</dt>
+                    <dd className="text-sm text-muted-foreground">
+                      {contact || "Not set"}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-sm font-medium">Address</dt>
+                    <dd className="text-sm text-muted-foreground whitespace-pre-line">
+                      {address || "Not set"}
+                    </dd>
+                  </div>
+                </dl>
+              }
+            >
+              <form onSubmit={handleSaveDetails} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="organization-name">Organization name</Label>
+                  <Input
+                    id="organization-name"
+                    value={organizationName}
+                    onChange={(e) => setOrganizationName(e.target.value)}
+                    maxLength={MAX_NAME}
+                    placeholder={siteConfig.name}
+                    disabled={loading || savingDetails}
+                    autoComplete="organization"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Printed at the top of every report, statement, and legal
+                    document. Left blank, documents fall back to{" "}
+                    {siteConfig.name}.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="organization-address">Address</Label>
+                  <Textarea
+                    id="organization-address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    maxLength={MAX_ADDRESS}
+                    rows={2}
+                    placeholder="123 Rizal St., Brgy. Poblacion, Bacolod City 6100"
+                    disabled={loading || savingDetails}
+                    autoComplete="street-address"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Printed under the organization name on every report and
+                    document. This is public — anyone who opens the sign-in page
+                    can read it, so use your office address, never someone&apos;s
+                    home.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="organization-contact">Contact</Label>
+                  <Input
+                    id="organization-contact"
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    maxLength={MAX_CONTACT}
+                    placeholder="(034) 123-4567 / info@example.coop"
+                    disabled={loading || savingDetails}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Phone, email, or both — shown under the organization name on
+                    printed documents. This is public too: anyone who opens the
+                    sign-in page can read it. Use an office line or a shared
+                    inbox, not a staff member&apos;s name and personal mobile.
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={loading || savingDetails}
+                  className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
+                >
+                  {savingDetails ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  {savingDetails ? "Saving…" : "Save details"}
+                </Button>
+              </form>
+            </PermissionGate>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="pb-4">
