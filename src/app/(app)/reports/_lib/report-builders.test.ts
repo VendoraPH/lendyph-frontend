@@ -20,7 +20,7 @@ import {
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
 import { buildReference, resolveOrgName } from "./report-chrome";
-import { DASH, formatValue } from "./formatters";
+import { DASH, formatValue } from "@/lib/report-format";
 import { siteConfig } from "@/config/site";
 import {
   MAX_REPORT_SPAN_YEARS,

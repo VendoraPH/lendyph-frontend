@@ -1,7 +1,44 @@
-import type { ColumnFormat, ReportColumn } from "./types";
+/**
+ * Report and printable formatters — en-PH, accurate to the centavo.
+ *
+ * Lives in `src/lib/` rather than under the reports route because
+ * `src/lib/printables/**` reads it too, and a module in `src/lib/` must not
+ * import from an app route folder. Sharing it is the point, not an accident:
+ * a peso prints the same way on a receipt as it does in a report, and the
+ * hand-written documents drifted precisely because they each carried their own
+ * `fmt()`.
+ *
+ * Deliberately NOT merged into `src/lib/format.ts`, which is whole-peso and
+ * says so; see the note on `currencyFmt` for why a report cannot round.
+ */
 
 /** Shown wherever the API did not send a figure we can display. */
 export const DASH = "—";
+
+/**
+ * How a value is rendered. Report columns and print columns share this
+ * vocabulary so one `formatValue` serves both.
+ */
+export type ColumnFormat =
+  | "text"
+  | "currency"
+  | "number"
+  | "percent"
+  | "date"
+  | "datetime";
+
+/**
+ * The part of a column `formatCell` actually reads.
+ *
+ * `ReportColumn` extends this rather than redeclaring the three fields, so the
+ * formatter's contract has one definition while the presentation fields
+ * (`header`, `width`, `align`) stay with the report document model.
+ */
+export interface FormattableColumn {
+  key: string;
+  format?: ColumnFormat;
+  formatter?: (value: unknown, row: Record<string, unknown>) => string;
+}
 
 // Report money is accurate to the centavo. Rounding to whole pesos made a
 // column of values disagree with its own total — and the Excel export
@@ -115,7 +152,7 @@ export function formatValue(value: unknown, format?: ColumnFormat): string {
 
 export function formatCell(
   row: Record<string, unknown>,
-  column: ReportColumn
+  column: FormattableColumn
 ): string {
   if (column.formatter) {
     return column.formatter(row[column.key], row);

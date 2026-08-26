@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency } from "@/app/(app)/reports/_lib/formatters";
+import { formatCurrency } from "@/lib/report-format";
 import { amountInWords } from "../amount-in-words";
 import { buildPromissoryNoteDoc } from "./promissory-note";
 import {

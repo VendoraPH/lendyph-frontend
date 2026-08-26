@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency } from "@/app/(app)/reports/_lib/formatters";
+import { formatCurrency } from "@/lib/report-format";
 import { buildMemberLedgerCardDoc } from "./member-ledger-card";
 import {
   allFields,

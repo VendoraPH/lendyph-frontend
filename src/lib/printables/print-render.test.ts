@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DASH, formatCurrency } from "@/app/(app)/reports/_lib/formatters";
+import { DASH, formatCurrency } from "@/lib/report-format";
 import { renderPrintable } from "./print-render";
 import type { PrintBlock, PrintableDocument } from "./types";
 

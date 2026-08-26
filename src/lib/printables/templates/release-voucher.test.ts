@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/app/(app)/reports/_lib/formatters";
+import { formatCurrency, formatValue } from "@/lib/report-format";
 import { amountInWords } from "../amount-in-words";
 import { buildReleaseVoucherDoc } from "./release-voucher";
 import { BLANK_LINE } from "./shared";

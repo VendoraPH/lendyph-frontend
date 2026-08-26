@@ -1,7 +1,8 @@
 /**
  * The stylesheet every printable is rendered with.
  *
- * Lifted from `BASE_STYLES` in `loan-document-templates.ts`, which is already
+ * Lifted from `BASE_STYLES` in `loan-document-templates.ts` — removed in the
+ * reporting & printables release; see git history — which was already
  * tuned for the output that matters here: Times New Roman 11pt on a
  * bond-paper-ish margin, an `@media print` block that tightens the padding and
  * hides the toolbar, and the `.doc-header` / `.field-row` / `.section-title` /
@@ -85,12 +86,11 @@ export const PRINT_STYLES = `
   .sig-label { font-size: 8pt; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
   .sig-detail { font-size: 8pt; color: #666; margin-top: 1pt; }
 
-  .legal-text { font-size: 10pt; line-height: 1.6; text-align: justify; margin-top: 10pt; }
-  .legal-text p { margin-bottom: 8pt; text-indent: 24pt; }
-  .legal-text ol { margin-left: 24pt; margin-bottom: 8pt; }
-  .legal-text ol li { margin-bottom: 4pt; }
-
-  .clause-title { font-weight: bold; font-size: 10pt; margin-top: 10pt; margin-bottom: 4pt; }
+  /* .legal-text and .clause-title used to sit here, carried over with the rest
+     of BASE_STYLES. No block kind emits either — legal prose renders as .para
+     and a clause heading as .section-title — so they were dead the day the
+     engine landed. Checked against the rendered markup of all eight documents,
+     not just grepped, before removing. */
 
   .footer {
     margin-top: 24pt; text-align: center;

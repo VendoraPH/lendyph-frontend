@@ -206,3 +206,20 @@ export const SUBJECT_META: Record<
   borrower: { label: "Member", placeholder: "Search member…" },
   repayment: { label: "Payment", placeholder: "Search receipt number…" },
 };
+
+/**
+ * Accent per subject rather than per document, so adding a ninth printable
+ * stays what it should be: one template file and one catalog entry.
+ *
+ * Beside `SUBJECT_META` because the catalog page and the detail page both dress
+ * a document by its subject, and they had drifted into two identical copies of
+ * this table.
+ */
+export const SUBJECT_ACCENT: Record<
+  PrintableSubject,
+  { text: string; bg: string; ring: string }
+> = {
+  loan: { text: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-200" },
+  borrower: { text: "text-purple-600", bg: "bg-purple-50", ring: "ring-purple-200" },
+  repayment: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
+};

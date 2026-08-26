@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileStack, Printer, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
-import { SUBJECT_META } from "@/lib/printables/types";
+import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
 
 /**
@@ -28,19 +28,6 @@ const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
   loan: "Documents issued against a single loan account",
   borrower: "Statements and certificates issued to a member",
   repayment: "Receipts issued for a payment",
-};
-
-/**
- * Accent per subject rather than per document, so adding a ninth printable
- * stays what it should be: one template file and one catalog entry.
- */
-const SUBJECT_ACCENT: Record<
-  PrintableSubject,
-  { text: string; bg: string; ring: string }
-> = {
-  loan: { text: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-200" },
-  borrower: { text: "text-purple-600", bg: "bg-purple-50", ring: "ring-purple-200" },
-  repayment: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
 };
 
 export default function PrintablesPage() {

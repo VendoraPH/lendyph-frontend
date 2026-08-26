@@ -1,5 +1,5 @@
 import { saveAs } from "file-saver";
-import { formatCell } from "./formatters";
+import { formatCell } from "@/lib/report-format";
 import type { ReportDocument } from "./types";
 
 function escape(value: string): string {
