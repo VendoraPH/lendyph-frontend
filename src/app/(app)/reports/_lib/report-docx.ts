@@ -17,7 +17,7 @@ import {
   WidthType,
 } from "docx";
 import { saveAs } from "file-saver";
-import { formatCell } from "./formatters";
+import { formatCell } from "@/lib/report-format";
 import type {
   ReportColumn,
   ReportDocument,

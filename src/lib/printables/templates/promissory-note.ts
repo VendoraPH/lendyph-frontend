@@ -2,8 +2,10 @@
  * Promissory Note — Act No. 2031 (Negotiable Instruments Law).
  *
  * Ported from `generatePromissoryNoteHTML` in
- * `src/lib/loan-document-templates.ts`. Every operative sentence is carried
- * over word for word: the unconditional promise to pay, clauses 1–6, the
+ * `src/lib/loan-document-templates.ts`, removed in the reporting & printables
+ * release; see git history for the original, which is what makes "every
+ * operative sentence is unchanged" checkable. Every operative sentence is
+ * carried over word for word: the unconditional promise to pay, clauses 1–6, the
  * co-maker's solidary undertaking with its primary-liability sentence, the
  * execution clause, the witness lines and the full notarial acknowledgment
  * down to the Doc./Page/Book/Series footer.

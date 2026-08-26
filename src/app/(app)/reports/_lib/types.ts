@@ -1,4 +1,6 @@
 import type { LucideIcon } from "lucide-react";
+import type { SubjectKind } from "@/components/common/subject-picker";
+import type { FormattableColumn } from "@/lib/report-format";
 
 export type ReportId =
   | "daily_collection"
@@ -27,21 +29,24 @@ export type ReportCategory =
   | "financial"
   | "performance";
 
-export type ColumnFormat =
-  | "text"
-  | "currency"
-  | "number"
-  | "percent"
-  | "date"
-  | "datetime";
+/**
+ * Re-exported, not redeclared: `formatValue` in `@/lib/report-format` is what
+ * gives each of these a meaning, and a second copy here could drift from the
+ * switch that implements it.
+ */
+export type { ColumnFormat } from "@/lib/report-format";
 
-export interface ReportColumn {
-  key: string;
+/**
+ * A column of a report table.
+ *
+ * `key`, `format` and `formatter` are the three fields `formatCell` reads, so
+ * they come from `FormattableColumn`; `header`, `width` and `align` are
+ * presentation and belong to the report document model.
+ */
+export interface ReportColumn extends FormattableColumn {
   header: string;
   width?: number;
   align?: "left" | "right" | "center";
-  format?: ColumnFormat;
-  formatter?: (value: unknown, row: Record<string, unknown>) => string;
 }
 
 export interface KpiItem {
@@ -206,8 +211,12 @@ export function exceedsReportSpanCap(
  * Reports that read a single loan or borrower need that id chosen before they
  * can run; the detail page renders the matching picker and blocks Generate
  * until one is set.
+ *
+ * The same union `<SubjectPicker>` accepts, taken from the component rather
+ * than restated, so the report catalog and the picker cannot disagree about
+ * what can be picked.
  */
-export type ReportSubject = "loan" | "borrower";
+export type ReportSubject = SubjectKind;
 
 /** Everything the detail page can vary before asking a report to build. */
 export interface ReportContext {

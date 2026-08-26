@@ -1,5 +1,6 @@
 import { siteConfig } from "@/config/site";
 import { API_BASE_URL } from "@/lib/axios-client";
+import { buildDocumentReference } from "@/lib/document-reference";
 import { useBrandingStore } from "@/store/branding-store";
 import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./types";
 
@@ -43,21 +44,16 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */
 const SIGNATORY_ROLES = ["Prepared by", "Checked by", "Approved by"];
 
-function pad(n: number, width = 2): string {
-  return String(n).padStart(width, "0");
-}
-
 /**
  * `AGE-20260806-0915` — prefix, generation date, generation time.
  *
- * Built from local calendar parts rather than `toISOString()`, which would
- * stamp a Manila-evening report with the previous day's date.
+ * The stamp itself is `buildDocumentReference`, shared with the printables so
+ * a report and a receipt are referenced the same way. It is built from local
+ * calendar parts rather than `toISOString()`, which would stamp a
+ * Manila-evening report with the previous day's date.
  */
 export function buildReference(reportId: ReportId, at = new Date()): string {
-  const stamp =
-    `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
-    `-${pad(at.getHours())}${pad(at.getMinutes())}`;
-  return `${REFERENCE_PREFIX[reportId]}-${stamp}`;
+  return buildDocumentReference(REFERENCE_PREFIX[reportId], at);
 }
 
 /**

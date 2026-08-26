@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { saveAs } from "file-saver";
-import { formatCell } from "./formatters";
+import { formatCell } from "@/lib/report-format";
 import type { ReportDocument, ReportSection } from "./types";
 
 // Match the on-screen preview palette so the PDF feels like the same

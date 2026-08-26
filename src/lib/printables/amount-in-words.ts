@@ -1,9 +1,9 @@
 /**
  * Peso amounts spelled out in words.
  *
- * Extracted verbatim (in behaviour) from `loan-document-templates.ts`, where it
- * existed only to fill the "sum of ____ (PHP ____)" clause of a promissory
- * note. It is a module of its own now because four of the eight printables need
+ * Extracted verbatim (in behaviour) from `loan-document-templates.ts` — removed
+ * in the reporting & printables release; see git history — where it existed
+ * only to fill the "sum of ____ (PHP ____)" clause of a promissory note. It is a module of its own now because four of the eight printables need
  * it — a promissory note, a release voucher, an official receipt and a share
  * capital certificate all state the amount in words, which is what makes the
  * figure legally controlling if the numerals are later altered.

@@ -2,7 +2,9 @@
  * Disclosure Statement — R.A. 3765 (Truth in Lending Act) and BSP Circular
  * No. 730, Series of 2011.
  *
- * Ported from `generateDisclosureHTML` in `src/lib/loan-document-templates.ts`.
+ * Ported from `generateDisclosureHTML` in `src/lib/loan-document-templates.ts`,
+ * removed in the reporting & printables release; see git history for the
+ * original, which is what makes "the legal wording is unchanged" checkable.
  * The statutory wording — the legal reference line, the six numbered sections
  * and the borrower's acknowledgment — is carried over verbatim. Only the
  * carrier changed: blocks instead of a 200-line HTML string.

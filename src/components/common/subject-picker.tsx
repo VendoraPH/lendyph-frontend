@@ -12,7 +12,15 @@ import {
 import { Label } from "@/components/ui/label";
 import { borrowerService, loanService } from "@/services";
 import type { Borrower, Loan } from "@/types";
-import type { ReportSubject } from "../_lib/types";
+
+/**
+ * What this picker can search.
+ *
+ * Reports alias it as `ReportSubject`; printables' `PrintableSubject` is this
+ * plus `repayment`, which has its own picker on the printables detail page —
+ * widening this union would make every caller handle a case it cannot produce.
+ */
+export type SubjectKind = "loan" | "borrower";
 
 interface SubjectOption {
   id: number;
@@ -21,13 +29,14 @@ interface SubjectOption {
 }
 
 interface SubjectPickerProps {
-  subject: ReportSubject;
+  subject: SubjectKind;
   value: number | null;
   onChange: (id: number | null) => void;
 }
 
 /**
- * Loan / borrower selector for the two subject-scoped reports.
+ * Loan / borrower selector for the two subject-scoped reports and for every
+ * loan- or member-scoped printable.
  *
  * Fetches one generous page and filters in the browser, matching how the new
  * loan form sources its borrower list. A server-side search would be the right
