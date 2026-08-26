@@ -17,8 +17,11 @@ function row(values: (string | null | undefined)[]): string {
  * CSV export — simple, plain text. Each section is rendered as its own
  * block with a blank line separator. KPI grids become metric/value pairs;
  * tables get headers + rows + an optional totals row.
+ *
+ * Split from the download so tests can assert against the text we actually
+ * write rather than against the model that produced it.
  */
-export function exportReportToCsv(doc: ReportDocument): void {
+export function renderReportCsv(doc: ReportDocument): string {
   const lines: string[] = [];
 
   // Header block
@@ -39,9 +42,15 @@ export function exportReportToCsv(doc: ReportDocument): void {
       if (section.title) {
         lines.push(row([section.title]));
       }
-      lines.push(row(["Metric", "Value"]));
+      // The hint qualifies the figure on screen ("Withheld from ₱370,000.00
+      // principal released"), so it gets its own column — but only when the
+      // block actually carries one, to keep hint-less reports unchanged.
+      const hasHints = section.items.some((item) => !!item.hint);
+      lines.push(row(hasHints ? ["Metric", "Value", "Note"] : ["Metric", "Value"]));
       for (const item of section.items) {
-        lines.push(row([item.label, item.value]));
+        lines.push(
+          row(hasHints ? [item.label, item.value, item.hint] : [item.label, item.value])
+        );
       }
       lines.push("");
     } else if (section.kind === "table") {
@@ -89,12 +98,23 @@ export function exportReportToCsv(doc: ReportDocument): void {
     }
   }
 
+  return lines.join("\r\n");
+}
+
+/**
+ * Excel ignores the charset in a blob's MIME type when opening a local file
+ * and falls back to the system code page, which turns every ₱ into mojibake.
+ * A BOM is the only signal it honours.
+ */
+const UTF8_BOM = "\uFEFF";
+
+export function exportReportToCsv(doc: ReportDocument): void {
   const slug = doc.meta.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
   const date = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([lines.join("\r\n")], {
+  const blob = new Blob([UTF8_BOM + renderReportCsv(doc)], {
     type: "text/csv;charset=utf-8",
   });
   saveAs(blob, `${slug}-${date}.csv`);

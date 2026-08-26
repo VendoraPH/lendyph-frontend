@@ -164,15 +164,42 @@ function writeKpiGrid(ws: ExcelJS.Worksheet, section: ReportSection): void {
   }
 
   // 2-column KPI table: label | value. Clean, reads like the on-screen grid.
+  //
+  // The value has to be written into column 4, not column 2. Both label and
+  // value are merged bands (1–3 and 4–MAX_COL) and a merge keeps only the
+  // top-left cell of each band: anything in column 2 is discarded when
+  // `mergeCells(row, 1, row, 3)` runs. Writing to 2 and styling 4 is how every
+  // KPI value in every report went missing from the .xlsx while the labels
+  // stayed put.
   section.items.forEach((item) => {
-    const row = ws.addRow([item.label, item.value]);
+    const row = ws.addRow([item.label, null, null, item.value]);
     ws.mergeCells(row.number, 1, row.number, 3);
     ws.mergeCells(row.number, 4, row.number, MAX_COL);
-    row.height = 22;
+    row.height = item.hint ? 34 : 22;
 
     const labelCell = row.getCell(1);
-    labelCell.font = { size: 11, color: { argb: MUTED_ARGB } };
-    labelCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    if (item.hint) {
+      // The hint qualifies the figure ("Withheld from ₱370,000.00 principal
+      // released") and is part of the reading, so it rides under the label as
+      // a second, quieter line rather than being dropped on export.
+      labelCell.value = {
+        richText: [
+          { text: item.label, font: { size: 11, color: { argb: MUTED_ARGB } } },
+          {
+            text: `\n${item.hint}`,
+            font: { size: 9, italic: true, color: { argb: MUTED_ARGB } },
+          },
+        ],
+      };
+    } else {
+      labelCell.font = { size: 11, color: { argb: MUTED_ARGB } };
+    }
+    labelCell.alignment = {
+      vertical: "middle",
+      horizontal: "left",
+      indent: 1,
+      wrapText: !!item.hint,
+    };
     labelCell.fill = {
       type: "pattern",
       pattern: "solid",
@@ -308,8 +335,11 @@ function writeFields(ws: ExcelJS.Worksheet, section: ReportSection): void {
 
   // Values are pre-formatted strings from the builder, so they are written as
   // text rather than coerced — a loan account number is not a number.
+  //
+  // Column 4, for the same reason as the KPI grid: column 2 sits inside the
+  // label's merge band and is discarded the moment the merge is applied.
   section.items.forEach((item) => {
-    const row = ws.addRow([item.label, item.value]);
+    const row = ws.addRow([item.label, null, null, item.value]);
     ws.mergeCells(row.number, 1, row.number, 3);
     ws.mergeCells(row.number, 4, row.number, MAX_COL);
     row.height = 20;
@@ -382,13 +412,46 @@ function writeFooter(ws: ExcelJS.Worksheet, doc: ReportDocument): void {
   ws.headerFooter.oddFooter = `&L&9${footerParts.join(" • ")}&R&9Page &P of &N`;
 }
 
-export async function exportReportToExcel(doc: ReportDocument): Promise<void> {
+/** Excel rejects any of `* ? : \ / [ ]` in a sheet name, and caps it at 31. */
+const FORBIDDEN_SHEET_CHARS = /[*?:\\/[\]]/g;
+const MAX_SHEET_NAME = 31;
+
+/**
+ * Turn a report title into a name Excel will accept.
+ *
+ * "Officer / Branch Performance" used to throw straight out of
+ * `addWorksheet`, so that report had no Excel export at all — the user only
+ * saw "Export failed. Please try again." while the other three formats worked.
+ * Slicing to 28 characters guarded the length limit but not the character set.
+ */
+export function toWorksheetName(title: string): string {
+  const cleaned = title
+    .replace(FORBIDDEN_SHEET_CHARS, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_SHEET_NAME)
+    // Excel also refuses a name that opens or closes on an apostrophe, and the
+    // slice above can leave a dangling separator.
+    .replace(/^['-]+|['\s-]+$/g, "")
+    .trim();
+
+  // "History" is reserved for Excel's own change-tracking sheet.
+  if (!cleaned || cleaned.toLowerCase() === "history") return "Report";
+  return cleaned;
+}
+
+/**
+ * Build the workbook without saving it, so tests can read the real .xlsx back
+ * rather than trusting the model that produced it.
+ */
+export function buildReportWorkbook(doc: ReportDocument): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = doc.meta.org;
   wb.created = new Date();
   wb.title = doc.meta.title;
 
-  const ws = wb.addWorksheet(doc.meta.title.slice(0, 28) || "Report", {
+  const ws = wb.addWorksheet(toWorksheetName(doc.meta.title), {
     pageSetup: {
       paperSize: 9,
       orientation: "landscape",
@@ -424,6 +487,11 @@ export async function exportReportToExcel(doc: ReportDocument): Promise<void> {
     if (!col.width || col.width < 12) col.width = 16;
   });
 
+  return wb;
+}
+
+export async function exportReportToExcel(doc: ReportDocument): Promise<void> {
+  const wb = buildReportWorkbook(doc);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer as BlobPart], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
