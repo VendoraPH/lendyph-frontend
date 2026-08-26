@@ -140,6 +140,17 @@ export const API_ENDPOINTS = {
     AGING: "/reports/aging",
     BORROWERS: "/reports/borrowers",
     DISBURSEMENTS: "/reports/disbursements",
+    CASH_FLOW: "/reports/cash-flow",
+    COLLECTION_EFFICIENCY: "/reports/collection-efficiency",
+    PORTFOLIO_BY_PRODUCT: "/reports/portfolio-by-product",
+    SHARE_CAPITAL: "/reports/share-capital",
+    PERFORMANCE: "/reports/performance",
+    PROVISIONING: "/reports/provisioning",
+    // Running-balance statement for one member. Separate from SHARE_CAPITAL
+    // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
+    // paginator caps at 100 rows and carries no opening/closing balance.
+    SHARE_CAPITAL_STATEMENT: (borrowerId: number) =>
+      `/reports/share-capital-statement/${borrowerId}`,
     EXPORT_RELEASES: "/reports/releases/export",
     EXPORT_REPAYMENTS: "/reports/repayments/export",
     EXPORT_DUE_PAST_DUE: "/reports/due-past-due/export",

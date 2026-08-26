@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { reportService } from "@/services";
 import { REPORT_CATALOG } from "../_lib/report-catalog";
-import { CATEGORY_META } from "../_lib/types";
+import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { exportReportToExcel } from "../_lib/report-excel";
 import { exportReportToPdf } from "../_lib/report-pdf";
@@ -196,8 +196,10 @@ export default function ReportDetailPage() {
 
   const [logoData, setLogoData] = useState<string | null>(null);
 
-  // The store no-ops once loaded, so this is a cheap guard for the case where
-  // Reports is the first page of the session to need the logo.
+  // Warms branding for the case where Reports is the first page of the session
+  // to need it, so the logo is on screen before anyone clicks Generate. The
+  // store no-ops once loaded, so this is cheap — and it is only a head start:
+  // correctness of the letterhead is `applyChrome`'s await, not this effect.
   useEffect(() => {
     loadBranding();
   }, [loadBranding]);
@@ -253,8 +255,13 @@ export default function ReportDetailPage() {
   // Subject-scoped reports cannot run against nothing.
   const missingSubject = !!report.subject && !subjectId;
 
+  // The API caps the reporting period, so a range wider than that is a 422 the
+  // user can see coming. Mirrors `ReportController::assertSpanWithinCap`; only
+  // the two custom date inputs can reach it, since every preset is narrower.
+  const spanTooWide = exceedsReportSpanCap(activeRange);
+
   async function handleGenerate() {
-    if (!report || missingSubject) return;
+    if (!report || missingSubject || spanTooWide) return;
     setGenerating(true);
     try {
       const result = await report.build({
@@ -264,8 +271,16 @@ export default function ReportDetailPage() {
       });
       // Identity is stamped once, here, so the preview and every exported
       // format quote the same reference, logo, and preparer.
+      //
+      // Awaited, and that await is the point: `applyChrome` resolves the
+      // organization name from the branding store, and Generate on a cold page
+      // load can beat the branding fetch. Not waiting stamps `Lendy.PH` into
+      // this cooperative's letterhead permanently — the document keeps the
+      // string, so every PDF/Word/Excel/CSV export of it is wrong too. The
+      // store shares one in-flight promise, so this waits on the request the
+      // effect above already started and never issues a second.
       setDoc(
-        applyChrome(result, {
+        await applyChrome(result, {
           logoUrl,
           logoData,
           preparedBy: user?.full_name ?? user?.username ?? null,
@@ -449,7 +464,7 @@ export default function ReportDetailPage() {
                 </div>
                 <Button
                   onClick={handleGenerate}
-                  disabled={generating || missingSubject}
+                  disabled={generating || missingSubject || spanTooWide}
                   className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                 >
                   {generating ? (
@@ -520,6 +535,13 @@ export default function ReportDetailPage() {
                 {missingSubject && (
                   <p className="text-xs text-muted-foreground pb-2">
                     Select a {report.subject} to generate this report.
+                  </p>
+                )}
+
+                {spanTooWide && (
+                  <p className="text-xs text-destructive pb-2">
+                    The reporting period may not exceed {MAX_REPORT_SPAN_YEARS}{" "}
+                    years. Narrow the date range to generate this report.
                   </p>
                 )}
               </div>

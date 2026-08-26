@@ -33,12 +33,12 @@ export default function ReportsPage() {
     return byCategory;
   }, [query]);
 
-  const orderedCategories: ReportCategory[] = [
-    "operations",
-    "portfolio",
-    "member",
-    "disbursement",
-  ];
+  // Derived from CATEGORY_META rather than listed here, in declaration order.
+  // A hardcoded list silently hides every report in a category someone forgets
+  // to add — which is exactly what happened when `financial` and `performance`
+  // arrived: six new reports built, catalogued and reachable by URL, and five
+  // of them invisible on this page.
+  const orderedCategories = Object.keys(CATEGORY_META) as ReportCategory[];
 
   const hasResults = Array.from(grouped.values()).some((v) => v.length > 0);
 
