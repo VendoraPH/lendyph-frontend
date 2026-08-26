@@ -25,7 +25,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
 import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
-import { SUBJECT_META } from "@/lib/printables/types";
+import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
 
@@ -34,12 +34,6 @@ import { openPrintable } from "@/lib/printables/print-open";
  * the print window IS the preview, rendered by the same `renderPrintable` the
  * paper comes off, so what a member signs is what staff saw.
  */
-
-const SUBJECT_ACCENT = {
-  loan: { text: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-200" },
-  borrower: { text: "text-purple-600", bg: "bg-purple-50", ring: "ring-purple-200" },
-  repayment: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
-} as const;
 
 export default function PrintableDetailPage() {
   const params = useParams();
