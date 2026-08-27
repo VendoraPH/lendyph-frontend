@@ -19,6 +19,11 @@ import { usePublicBranches } from "@/hooks/use-public-branches";
 import { compressImage } from "@/lib/image-compress";
 import { getErrorMessage } from "@/lib/api-error";
 import { isAlreadyRegisteredError } from "@/lib/duplicate-error";
+import {
+  clearRegistrationKey,
+  getOrCreateRegistrationKey,
+  isStaleRegistrationKeyError,
+} from "@/lib/registration-key";
 import { notifyError, notifyValidation } from "@/lib/notify";
 
 // Shown when the backend rejects the submission because this applicant is
@@ -253,7 +258,17 @@ export default function RegisterPage() {
       let borrowerId = created?.id;
       let token = created?.token;
       if (!borrowerId) {
+        // Only reached when we have NOT seen a successful create. `created`
+        // covers the failure we can see (the row exists, an upload failed);
+        // this covers the one we cannot — the response never arrived, so the
+        // row may exist without us knowing. Read lazily, and only here, so an
+        // attempt that short-circuits on `created` never mints a key at all.
+        //
+        // null means no CSPRNG was available: send no key rather than a
+        // guessable one, and simply lose idempotency for this submission.
+        const registrationKey = getOrCreateRegistrationKey();
         const result = await registrationService.submit({
+          registration_uuid: registrationKey ?? undefined,
           first_name: personal.first_name.trim(),
           middle_name: personal.middle_name.trim() || undefined,
           last_name: personal.last_name.trim(),
@@ -350,8 +365,26 @@ export default function RegisterPage() {
         return;
       }
 
+      // The attempt is finished — the next registration from this device is a
+      // different person and must not replay this key.
+      clearRegistrationKey();
       router.push("/register/success");
     } catch (err) {
+      // The server refused the key itself: it belongs to a record it will not
+      // hand back (already reviewed, or older than the submission window).
+      // Drop it so the applicant's next attempt starts clean — otherwise every
+      // retry resends the same dead key and earns the same refusal forever.
+      // The server's own copy already says to start a new registration, so it
+      // is shown as-is rather than replaced.
+      if (isStaleRegistrationKeyError(err)) {
+        clearRegistrationKey();
+        notifyError(
+          err,
+          "We couldn't submit your registration. Please try again."
+        );
+        return;
+      }
+
       // "Already on file" is the most common — and most confusing — rejection.
       // Surface a clear, friendly message instead of the raw duplicate copy
       // (which the leak guard strips down to a vague validation notice).

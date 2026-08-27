@@ -47,12 +47,14 @@ export interface Borrower {
   employer_or_business?: string | null;
   monthly_income?: number | string | null;
   photo_url?: string | null;
-  // The backend can also return "pending" for unapproved registrants on the
-  // shared `/borrowers` list. UI code that consumes the members list should
-  // filter pending records out — they belong on the Pending Registrations
-  // tab. BorrowerStatus itself stays narrow so badge/filter maps that key
-  // off it don't have to grow.
-  status: BorrowerStatus | "pending";
+  // The shared `/borrowers` list also returns applicants who are not members:
+  // "pending" (awaiting review) and "rejected" (soft-rejected — reject used to
+  // hard-delete, so these rows only started existing with the approve/reject
+  // release). Neither is loan-eligible: any picker feeding a loan, collateral
+  // or GCash action must request `members_only=1` rather than filter locally.
+  // BorrowerStatus itself stays narrow so the members status tabs, which can
+  // only ever show the three member states, don't have to grow.
+  status: BorrowerStatus | "pending" | "rejected";
   branch?: BorrowerBranch | null;
   // The list endpoint may return only the FK without the nested relation;
   // keep it so the table can resolve the branch name from the branches list.

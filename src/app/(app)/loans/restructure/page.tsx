@@ -262,7 +262,8 @@ function RestructureLoanInner() {
   useEffect(() => {
     async function fetchData() {
       const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
-        borrowerService.list({ per_page: 200 }),
+        // members_only: a rejected applicant must never be restructurable.
+        borrowerService.list({ members_only: 1, per_page: 200 }),
         loanProductService.list(),
         userService.list(),
       ]);

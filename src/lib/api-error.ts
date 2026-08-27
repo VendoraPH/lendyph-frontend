@@ -34,6 +34,21 @@ export function firstFieldError(err: unknown): string | null {
   return getFieldErrors(err)[0] ?? null;
 }
 
+// Laravel's stock exception bodies are short, plain English with no internals,
+// so `looksHuman` below waves them through — and the framework's wording then
+// beats our own friendlier copy for the same status. "Too Many Attempts." is
+// the one that reached members: it won over STATUS_COPY[429] and shipped
+// verbatim to a toast.
+//
+// Anchored to the WHOLE trimmed string (with an optional trailing period) on
+// purpose. These are also ordinary words, and real prose that merely contains
+// one — "Editing is forbidden while the loan is under review." — must still be
+// shown. Only the bare framework default is rejected, which lets a
+// hand-written body for the same status (e.g. a rate-limit message carrying a
+// retry-time hint) through untouched.
+const FRAMEWORK_BOILERPLATE =
+  /^(too many attempts|unauthenticated|unauthorized|forbidden|server error|not found|this action is unauthorized)\.?$/i;
+
 // Reject strings that are clearly technical or internal rather than user copy,
 // so a raw backend/Axios message can never leak to the UI.
 //
@@ -43,8 +58,11 @@ export function firstFieldError(err: unknown): string | null {
 // user. They must never reach the UI now that 404 can surface a server message.
 function looksHuman(msg: string | undefined): msg is string {
   if (!msg || typeof msg !== "string") return false;
+  const text = msg.trim();
+  if (!text) return false;
+  if (FRAMEWORK_BOILERPLATE.test(text)) return false;
   return !/status code|network error|axios|force=true|sqlstate|exception|undefined|null|econn|timeout of|\bstack\b|no query results|\\|::|\bclass\b|\bat line\b/i.test(
-    msg
+    text
   );
 }
 
@@ -73,7 +91,20 @@ const STATUS_COPY: Record<number, string> = {
 
 const GENERIC = "Something went wrong. Please try again.";
 const OFFLINE = "You appear to be offline. Check your connection and try again.";
+const TIMEOUT =
+  "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again.";
 const VALIDATION = "Please review the highlighted details and try again.";
+
+// Axios puts its failure code on the error itself, NOT under `response` — and a
+// timed-out request has no `response` at all, so this has to read the raw
+// thrown value rather than the narrowed HTTP shape.
+const TIMEOUT_CODES = new Set(["ECONNABORTED", "ETIMEDOUT"]);
+
+function isTimeout(err: unknown): boolean {
+  if (!err || typeof err !== "object" || !("code" in err)) return false;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" && TIMEOUT_CODES.has(code.toUpperCase());
+}
 
 /**
  * Turn any thrown value into a safe, friendly message.
@@ -85,9 +116,15 @@ const VALIDATION = "Please review the highlighted details and try again.";
 export function getErrorMessage(err: unknown, fallback: string = GENERIC): string {
   const http = asHttpError(err);
 
-  // No HTTP response at all → network/offline (or a non-Axios throw).
+  // No HTTP response at all: a genuine offline, a DNS failure, a CORS block —
+  // and a timeout, which axios reports identically. They need opposite advice.
+  // "You appear to be offline" tells someone whose request timed out mid-upload
+  // that nothing was sent, so they resubmit immediately; that is how a member
+  // on a slow mobile connection ended up registered twice. A timeout means the
+  // request left the device and may well have been processed, so say so and ask
+  // them to wait rather than retry.
   if (!http || http.response?.status == null) {
-    return OFFLINE;
+    return isTimeout(err) ? TIMEOUT : OFFLINE;
   }
 
   const status = http.response.status;

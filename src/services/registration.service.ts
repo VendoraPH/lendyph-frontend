@@ -1,6 +1,7 @@
 // src/services/registration.service.ts
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import type { PaginatedResponse } from "@/types";
 
 export type RegistrationStatus = "pending" | "active" | "inactive" | "blacklisted";
 
@@ -40,6 +41,14 @@ export interface RegistrationPayload {
   spouse_occupation?: string;
 
   status?: RegistrationStatus;
+
+  // Client-generated idempotency key (v4 UUID) for the PUBLIC form only; see
+  // src/lib/registration-key.ts. Resending the same key inside the 15-minute
+  // submission window returns the borrower the first attempt created, instead
+  // of rejecting the retry as a duplicate — which is what a lost or timed-out
+  // response used to cost the applicant. Optional: operator creates send
+  // nothing and the backend ignores it for authenticated callers.
+  registration_uuid?: string;
 }
 
 export interface SubmitRegistrationResponse {
@@ -100,12 +109,11 @@ export interface RegistrationValidId {
   created_at?: string;
 }
 
-export interface RegistrationListResponse {
-  data: Registration[];
-  total: number;
-  per_page: number;
-  current_page: number;
-}
+// `/borrowers` answers with a raw Laravel paginator, so the row count lives at
+// `meta.total` — not at the top level. The old flat shape declared here meant
+// every consumer's `res.total` was `undefined` and silently fell back to the
+// length of the current page.
+export type RegistrationListResponse = PaginatedResponse<Registration>;
 
 // Header recognised by the backend when the caller is an unauthenticated
 // public registrant uploading media tied to the borrower row they just
@@ -115,6 +123,18 @@ export interface RegistrationListResponse {
 const SUBMISSION_TOKEN_HEADER = "X-Submission-Token";
 
 export const registrationService = {
+  /**
+   * Create the applicant's borrower row.
+   *
+   * Send `registration_uuid` from the public form: the endpoint treats a repeat
+   * of the same key inside the submission window as the same submission and
+   * replays the original response (row + a fresh submission token). Without it
+   * a retry after a lost response creates a second, orphaned record.
+   *
+   * A 422 whose `errors` name `registration_uuid` means the key is spent, not
+   * that the applicant is a duplicate — the caller must mint a new one before
+   * retrying (see isStaleRegistrationKeyError).
+   */
   submit: (payload: RegistrationPayload) =>
     api.post<SubmitRegistrationResponse>(API_ENDPOINTS.REGISTRATIONS.SUBMIT, payload),
 
@@ -136,8 +156,11 @@ export const registrationService = {
         : undefined
     ),
 
+  // `getRaw`, not `get`: the endpoint returns the paginator itself rather than
+  // the `{ success, data, message }` envelope, and `api.get` would unwrap away
+  // the `meta` this list needs for its true total.
   list: (params?: { status?: RegistrationStatus; page?: number; per_page?: number }) =>
-    api.get<RegistrationListResponse>(API_ENDPOINTS.REGISTRATIONS.LIST, { params }),
+    api.getRaw<RegistrationListResponse>(API_ENDPOINTS.REGISTRATIONS.LIST, { params }),
 
   get: (id: number) =>
     api.get<Registration>(API_ENDPOINTS.REGISTRATIONS.DETAIL(id)),
@@ -151,9 +174,21 @@ export const registrationService = {
   update: (id: number, data: Partial<RegistrationPayload>) =>
     api.put<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
 
+  /**
+   * Approve a pending registration. The endpoint enforces the
+   * `borrowers:approve` permission, that the applicant is still `pending`, and
+   * that at least one valid ID is on file — then stamps approved_by/approved_at.
+   * Rejects with 422 (`errors.status` / `errors.valid_id`) when a gate fails, so
+   * callers must surface the server message rather than generic copy.
+   */
   approve: (id: number) =>
-    api.patch<void>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
+    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
 
-  reject: (id: number) =>
-    api.delete<void>(API_ENDPOINTS.REGISTRATIONS.REJECT(id)),
+  /**
+   * Soft-reject a pending registration: sets status to `rejected` and records
+   * rejection_reason/rejected_by/rejected_at, keeping the applicant on file.
+   * `reason` is required by RejectBorrowerRequest (string, max 1000).
+   */
+  reject: (id: number, data: { reason: string }) =>
+    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.REJECT(id), data),
 };

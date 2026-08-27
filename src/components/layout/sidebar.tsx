@@ -212,7 +212,14 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const { can } = usePermission();
-  const { total: pendingRegistrationsCount } = useRegistrations({ status: "pending" });
+  // `per_page: 1` on purpose: this badge renders one integer off `meta.total`,
+  // which is the count for the whole filtered query at any page size. Pulling
+  // the default 100 BorrowerResource rows to read it also mints 100 signed
+  // photo URLs on every page load.
+  const { total: pendingRegistrationsCount } = useRegistrations({
+    status: "pending",
+    per_page: 1,
+  });
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {

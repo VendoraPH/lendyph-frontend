@@ -86,7 +86,21 @@ export const env = {
   },
   api: {
     baseUrl: getEnvVar("NEXT_PUBLIC_API_URL", "http://localhost:8000/api"),
-    timeout: getNumberEnvVar("NEXT_PUBLIC_API_TIMEOUT", 30000),
+    // Must NOT match the Next proxy's own cap. Every browser call goes through
+    // the `/api/proxy` rewrite, and Next times that hop out separately. With
+    // both at 30000 the two were a dead heat on a slow mobile upload, and when
+    // axios won it produced an error with no `response` — which the UI read as
+    // "you appear to be offline", sending an applicant who had in fact reached
+    // the server straight back to resubmit and register twice.
+    //
+    // This is now deliberately the SHORTER of the two: `experimental.proxyTimeout`
+    // is set to 90 s in next.config.ts, so axios is the deciding party. A lost
+    // response therefore arrives as ECONNABORTED and gets the "may still have
+    // gone through" copy, rather than the proxy's bare 500 — which reads as
+    // definitely-failed for a write that may well have committed. Raising this
+    // means raising proxyTimeout with it, or the proxy silently takes the
+    // decision back.
+    timeout: getNumberEnvVar("NEXT_PUBLIC_API_TIMEOUT", 60000),
   },
   auth: {
     tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendy_access_token"),

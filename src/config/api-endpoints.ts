@@ -36,8 +36,14 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/borrowers/${id}`,
     SUBMIT: "/borrowers",
     UPDATE: (id: number) => `/borrowers/${id}`,
-    APPROVE: (id: number) => `/borrowers/${id}/reactivate`,
-    REJECT: (id: number) => `/borrowers/${id}`,
+    // Registration review has purpose-built endpoints — do NOT point these at
+    // the generic borrower routes. `/reactivate` only flips status to active:
+    // it skips the `borrowers:approve` gate, the must-be-pending check and the
+    // valid-ID KYC gate, and never stamps approved_by/approved_at (which the
+    // nightly registrations:prune job relies on). `DELETE /borrowers/{id}`
+    // hard-deletes the applicant, their pledge, documents and KYC files.
+    APPROVE: (id: number) => `/borrowers/${id}/approve-registration`,
+    REJECT: (id: number) => `/borrowers/${id}/reject`,
   },
   CO_MAKERS: {
     LIST: (borrowerId: number) => `/borrowers/${borrowerId}/co-makers`,
