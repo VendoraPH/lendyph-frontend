@@ -12,8 +12,30 @@ export type ReleaseLoanPayload = {
 };
 
 export const loanService = {
+  /**
+   * `/loans` answers with a raw Laravel paginator (`{ data, links, meta }`),
+   * not the `{ success, data, message }` envelope, so it has to use `getRaw`.
+   * `api.get` unwraps one level and hands back the rows alone, discarding
+   * `meta.total`, `meta.last_page` and `meta.stats` — which is why callers
+   * could not tell a complete list from a clamped first page.
+   *
+   * The static type does not change: `api.get` and `api.getRaw` share a
+   * signature, and both were already declared `PaginatedResponse<Loan>` even
+   * though `api.get` returned a bare array at runtime. TypeScript therefore
+   * flags nothing here, so all seven call sites were checked by hand — every
+   * one already normalises both shapes (`Array.isArray(res) ? res : res.data`),
+   * so they took the array branch before and take the `.data` branch now.
+   *
+   * Accepted params (`LoanController::index()`): `page`, `per_page` (silently
+   * clamped to 100 — asking for more does not fail, it just returns less),
+   * `search`, `status` (one status, a comma-separated list, or the virtual
+   * `active`), `branch_id`, `borrower_id`, `loan_product_id`,
+   * `date_from`/`date_to` (inclusive whole-day on `created_at`), `sort` and
+   * `dir`. `sort` accepts columns only — there is no key for the
+   * schedule-derived `next_due_date` or `overdue_amount`.
+   */
   list: (params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
+    api.getRaw<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
 
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),
