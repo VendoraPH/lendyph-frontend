@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { todayISO } from "@/lib/format";
 import type {
   ReportColumn,
   ReportDocument,
@@ -505,6 +506,6 @@ function buildFilename(doc: ReportDocument): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   return `${slug}-${date}.xlsx`;
 }

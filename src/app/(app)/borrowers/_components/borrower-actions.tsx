@@ -62,6 +62,7 @@ import type {
   ValidIdType,
   EmploymentType,
 } from "@/types";
+import { formatDateISO } from "@/lib/format";
 import { formatDate, generateBorrowerCode, buildFullName } from "./utils";
 
 // ── Types ──
@@ -288,10 +289,9 @@ export function BorrowerFormTabs({
                   }
                   onSelect={(date) => {
                     if (date) {
-                      update(
-                        "birthdate",
-                        date.toISOString().split("T")[0]!
-                      );
+                      // The picker hands back local midnight of the day the
+                      // user clicked; toISOString() stored the day before it.
+                      update("birthdate", formatDateISO(date));
                     }
                   }}
                   fromYear={1940}
@@ -580,8 +580,13 @@ export function AddBorrowerDialog({
       status: "active",
       total_loans: 0,
       total_outstanding: 0,
-      created_at: new Date().toISOString().split("T")[0]!,
-      updated_at: new Date().toISOString().split("T")[0]!,
+      // Timestamps, not calendar dates: every reader treats these as instants
+      // (formatDateTime, formatTime, `new Date(x).getTime()` for sorting), so
+      // a bare YYYY-MM-DD rendered as 12:00 AM and sorted at UTC midnight.
+      // Keep the full ISO-8601 instant — this is the one place toISOString()
+      // is the right answer.
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
     onAdd(newBorrower);
     resetForm();

@@ -82,6 +82,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { formatDateISO } from "@/lib/format";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -156,10 +157,6 @@ function formatDate(date: Date): string {
     month: "short",
     day: "numeric",
   });
-}
-
-function formatDateISO(date: Date): string {
-  return date.toISOString().split("T")[0];
 }
 
 interface AmortizationRow {
