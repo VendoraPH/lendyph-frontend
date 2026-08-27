@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { collateralLock, holdersSentence, isLocked } from "@/lib/collateral-lock";
 import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { borrowerService } from "@/services/borrower.service";
@@ -116,6 +117,21 @@ export function CollateralForm({ initial, mode }: Props) {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Lock state of the record being edited, straight off `GET /collaterals/{id}`.
+   *
+   * Editing an amount here rewrites the appraised value of security a live loan
+   * is relying on. The attached loan keeps its own `snapshot_value`, so the
+   * change does not retroactively move that loan's security status — but it does
+   * change what every later attach and every valuation screen reads, and the
+   * operator should know a live loan is involved before they touch it. Create
+   * mode has no record yet, so there is nothing to report.
+   */
+  const initialLock = useMemo(
+    () => (mode === "edit" && initial ? collateralLock(initial) : null),
+    [mode, initial],
+  );
 
   const selectedBorrower = useMemo(
     () => borrowers.find((b) => b.id === borrowerId) ?? null,
@@ -247,6 +263,30 @@ export function CollateralForm({ initial, mode }: Props) {
       </CardHeader>
 
       <CardContent className="space-y-6 pt-6">
+        {initialLock && isLocked(initialLock) && (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          >
+            <Shield
+              className="mt-0.5 size-5 shrink-0 text-amber-600"
+              aria-hidden="true"
+            />
+            <div className="text-sm">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                {initialLock.state === "unknown"
+                  ? "This collateral's lock state could not be confirmed"
+                  : "This collateral is securing an active loan"}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                {holdersSentence(initialLock)} Editing its appraised value here
+                does not change what that loan was booked at, but it does change
+                what every later valuation reads.
+              </p>
+            </div>
+          </div>
+        )}
+
         {memberShortfall && (
           <IncompleteListNotice
             shown={memberShortfall.shown}

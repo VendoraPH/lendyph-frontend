@@ -49,19 +49,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { borrowerService } from "@/services/borrower.service";
-import { loanService } from "@/services/loan.service";
 import {
   collateralService,
   collateralTypeService,
 } from "@/services";
 import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  collateralLock,
+  holdersSentence,
+  isLocked,
+  lockLabel,
+} from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
 import type {
   Borrower,
   Collateral,
   CollateralType,
   CollateralWithMeta,
-  Loan,
 } from "@/types";
 
 export default function CollateralListingPage() {
@@ -95,41 +99,28 @@ export default function CollateralListingPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [collateralRows, typeRows, memberDrain, loanRes] =
-        await Promise.all([
-          collateralService.list(),
-          collateralTypeService.list(),
-          // members_only: collateral belongs to members, not to applicants.
-          // Drained across pages: this used to ask for `per_page: 9999`, which
-          // BorrowerController clamps to 100 without saying so, and every member
-          // past the hundredth rendered as a bare "Member #<id>".
-          borrowerService.listAll({ members_only: 1 }),
-          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
-          // any status. See collateralService.buildActiveLoanIndex(); this is
-          // knowingly wrong and is NOT fixable here. Do not "fix" it by paging:
-          // that turns the per-loan attachment fan-out below into one request
-          // per active loan in the co-op.
-          loanService.list(),
-        ]);
+      // No loan list, and no per-loan attachment fan-out. `GET /collaterals`
+      // now carries `active_loans` per row, so the lock question is answered by
+      // the one request that fetches the rows. This screen used to issue
+      // `1 + ceil(N/100) + N` requests to derive an index that never worked.
+      const [collateralRows, typeRows, memberDrain] = await Promise.all([
+        collateralService.list(),
+        collateralTypeService.list(),
+        // members_only: collateral belongs to members, not to applicants.
+        // Drained across pages: this used to ask for `per_page: 9999`, which
+        // BorrowerController clamps to 100 without saying so, and every member
+        // past the hundredth rendered as a bare "Member #<id>".
+        borrowerService.listAll({ members_only: 1 }),
+      ]);
       const borrowers: Borrower[] = memberDrain.rows;
       setMemberShortfall(
         memberDrain.truncated
           ? { shown: borrowers.length, total: memberDrain.total }
           : null,
       );
-      const loans: Loan[] = Array.isArray(loanRes)
-        ? (loanRes as Loan[])
-        : ((loanRes as { data?: Loan[] }).data ?? []);
 
       const typeById = new Map(typeRows.map((t) => [t.id, t]));
       const borrowerById = new Map(borrowers.map((b) => [b.id, b]));
-      const activeLoanIndex = await collateralService.buildActiveLoanIndex(
-        loans.map((l) => ({
-          id: l.id,
-          status: String(l.status),
-          loan_account_number: l.loan_account_number,
-        })),
-      );
 
       // For share-capital collaterals, pull the live balance once per borrower.
       const scBorrowerIds = new Set<number>();
@@ -151,13 +142,12 @@ export default function CollateralListingPage() {
         const effective_value = isShareCapital
           ? (scBalances.get(c.borrower_id) ?? 0)
           : c.amount;
-        const active = activeLoanIndex.get(c.id);
         return {
           ...c,
           type: t,
           borrower_name: borrowerById.get(c.borrower_id)?.full_name,
-          active_loan_id: active?.loan_id,
-          active_loan_account_number: active?.loan_account_number,
+          // No loan context on this screen, so every active holder counts.
+          lock: collateralLock(c),
           effective_value,
         };
       });
@@ -216,14 +206,14 @@ export default function CollateralListingPage() {
       if (existing) {
         existing.items.push(c);
         existing.total += c.effective_value;
-        if (c.active_loan_id) existing.taggedCount += 1;
+        if (isLocked(c.lock)) existing.taggedCount += 1;
       } else {
         map.set(c.borrower_id, {
           borrowerId: c.borrower_id,
           borrowerName: c.borrower_name ?? `Member #${c.borrower_id}`,
           items: [c],
           total: c.effective_value,
-          taggedCount: c.active_loan_id ? 1 : 0,
+          taggedCount: isLocked(c.lock) ? 1 : 0,
         });
       }
     }
@@ -300,8 +290,12 @@ export default function CollateralListingPage() {
               <p className="text-xs font-medium text-muted-foreground">
                 Tagged to Active Loans
               </p>
+              {/* Counts `unknown` alongside `held`, deliberately. An unconfirmed
+                  lock is not an available collateral, and on a lending co-op
+                  over-reporting what is spoken for is the safe direction to be
+                  wrong in. The per-row badges still say which is which. */}
               <p className="text-2xl font-bold text-green-600">
-                {collaterals.filter((c) => c.active_loan_id).length}
+                {collaterals.filter((c) => isLocked(c.lock)).length}
               </p>
             </CardContent>
           </Card>
@@ -447,11 +441,16 @@ export default function CollateralListingPage() {
                                 {formatCurrency(c.effective_value)}
                               </TableCell>
                               <TableCell>
-                                {c.active_loan_id ? (
-                                  <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
-                                    Tagged to loan{" "}
-                                    {c.active_loan_account_number ??
-                                      `#${c.active_loan_id}`}
+                                {isLocked(c.lock) ? (
+                                  <Badge
+                                    className={
+                                      c.lock.state === "unknown"
+                                        ? "bg-muted text-muted-foreground hover:bg-muted"
+                                        : "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15"
+                                    }
+                                    title={holdersSentence(c.lock) ?? undefined}
+                                  >
+                                    {lockLabel(c.lock)}
                                   </Badge>
                                 ) : (
                                   <Badge variant="outline">Available</Badge>
@@ -480,32 +479,33 @@ export default function CollateralListingPage() {
                                         e.stopPropagation();
                                         setDeleting(c);
                                       }}
-                                      disabled={Boolean(c.active_loan_id)}
+                                      disabled={isLocked(c.lock)}
                                       title={
-                                        c.active_loan_id
-                                          ? "Cannot delete — currently tagged to an active loan"
-                                          : "Delete"
+                                        holdersSentence(c.lock) ??
+                                        "Delete"
                                       }
                                       aria-label="Delete"
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </PermissionGate>
-                                  {c.active_loan_id && (
+                                  {/* One link per holder. A collateral on two
+                                      active loans has two loans worth opening,
+                                      and a single arrow could only reach one. */}
+                                  {c.lock.holders.map((holder) => (
                                     <Button
+                                      key={holder.id}
                                       variant="ghost"
                                       size="icon-sm"
                                       nativeButton={false}
                                       render={
-                                        <Link
-                                          href={`/loans/${c.active_loan_id}`}
-                                        />
+                                        <Link href={`/loans/${holder.id}`} />
                                       }
-                                      aria-label="Go to loan"
+                                      aria-label={`Go to loan ${holder.loan_account_number ?? `#${holder.id}`}`}
                                     >
                                       <ArrowRight className="h-4 w-4" />
                                     </Button>
-                                  )}
+                                  ))}
                                 </div>
                               </TableCell>
                             </TableRow>

@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { ShieldCheck } from "lucide-react";
-import { collateralService, collateralTypeService } from "@/services";
+import { collateralService } from "@/services";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
-import type { Collateral, CollateralType, LoanCollateral } from "@/types";
+import type { CollateralType, LoanCollateral } from "@/types";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/lib/utils";
 
@@ -17,9 +17,15 @@ interface LoanCollateralsCardProps {
 }
 
 interface AttachedRow {
+  /**
+   * The attached collateral itself. `GET /loans/{id}/collaterals` returns full
+   * `CollateralResource` rows, so there is nothing left to look up: the detail
+   * fields and `collateral_type` are already here.
+   */
   link: LoanCollateral;
-  collateral?: Collateral;
   type?: CollateralType;
+  /** What the collateral was booked at when attached, from the pivot. */
+  snapshotValue: number;
 }
 
 export function LoanCollateralsCard({
@@ -35,25 +41,19 @@ export function LoanCollateralsCard({
     (async () => {
       setLoading(true);
       try {
-        const [links, types] = await Promise.all([
-          collateralService.listForLoan(loanId),
-          collateralTypeService.list(),
-        ]);
-        const typeById = new Map(types.map((t) => [t.id, t]));
-        const collaterals = await Promise.all(
-          links.map((l) =>
-            collateralService.detail(l.collateral_id).catch(() => null),
-          ),
-        );
+        // One request. This used to fetch the collateral-type list plus one
+        // `GET /collaterals/{id}` per attachment — and every one of those was
+        // `/collaterals/undefined`, because it keyed off a `collateral_id` the
+        // payload does not carry. The rows ARE the collaterals, with their type
+        // eager-loaded, so both extra round trips were fetching data already in
+        // hand.
+        const links = await collateralService.listForLoan(loanId);
         if (cancelled) return;
-        const enriched: AttachedRow[] = links.map((link, i) => {
-          const c = collaterals[i] ?? undefined;
-          return {
-            link,
-            collateral: c ?? undefined,
-            type: c ? typeById.get(c.collateral_type_id) : undefined,
-          };
-        });
+        const enriched: AttachedRow[] = links.map((link) => ({
+          link,
+          type: link.collateral_type,
+          snapshotValue: link.pivot?.snapshot_value ?? link.amount,
+        }));
         setRows(enriched);
       } catch {
         if (!cancelled) setRows([]);
@@ -67,7 +67,7 @@ export function LoanCollateralsCard({
   }, [loanId]);
 
   const totalValue = useMemo(
-    () => rows.reduce((sum, r) => sum + r.link.snapshot_value, 0),
+    () => rows.reduce((sum, r) => sum + r.snapshotValue, 0),
     [rows],
   );
 
@@ -113,9 +113,9 @@ export function LoanCollateralsCard({
           </p>
         ) : (
           <div className="space-y-2">
-            {rows.map(({ link, collateral, type }) => (
+            {rows.map(({ link, type, snapshotValue }) => (
               <div
-                key={link.collateral_id}
+                key={link.id}
                 className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
               >
                 <div className="flex flex-1 flex-wrap items-center gap-2">
@@ -123,7 +123,7 @@ export function LoanCollateralsCard({
                     {type?.name ?? "Unknown"}
                   </Badge>
                   <span className="text-sm font-medium">
-                    {collateral?.detail_value ?? `#${link.collateral_id}`}
+                    {link.detail_value ?? `#${link.id}`}
                   </span>
                   {type?.source === "share_capital" && (
                     <span className="text-xs text-muted-foreground">
@@ -132,7 +132,7 @@ export function LoanCollateralsCard({
                   )}
                 </div>
                 <span className="text-sm font-semibold tabular-nums">
-                  {formatCurrency(link.snapshot_value)}
+                  {formatCurrency(snapshotValue)}
                 </span>
               </div>
             ))}

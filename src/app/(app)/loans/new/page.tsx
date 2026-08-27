@@ -3,6 +3,12 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import {
+  collateralLock,
+  holdersSentence,
+  isLocked as isCollateralLocked,
+  lockLabel,
+} from "@/lib/collateral-lock";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -480,26 +486,12 @@ function NewLoanApplicationInner() {
     let cancelled = false;
     (async () => {
       try {
-        const [collateralRows, loanRes] = await Promise.all([
-          collateralService.list({ borrower_id: borrowerId }),
-          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
-          // any status, so a collateral pledged to an older active loan is
-          // offered here as available. See
-          // collateralService.buildActiveLoanIndex(); this is knowingly wrong
-          // and is NOT fixable here. Do not "fix" it by paging: that turns the
-          // per-loan attachment fan-out into one request per active loan.
-          loanService.list(),
-        ]);
-        const loans: Loan[] = Array.isArray(loanRes)
-          ? (loanRes as Loan[])
-          : ((loanRes as { data?: Loan[] }).data ?? []);
-        const activeIndex = await collateralService.buildActiveLoanIndex(
-          loans.map((l) => ({
-            id: l.id,
-            status: String(l.status),
-            loan_account_number: l.loan_account_number,
-          })),
-        );
+        // One request. `active_loans` on each row is the server's answer to
+        // "is this already pledged", across the whole active loan book — no
+        // loan list to page and no per-loan attachment fan-out to bound.
+        const collateralRows = await collateralService.list({
+          borrower_id: borrowerId,
+        });
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsScBalance = collateralRows.some(
           (c) =>
@@ -511,14 +503,12 @@ function NewLoanApplicationInner() {
         const enriched: CollateralWithMeta[] = collateralRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
           const isShareCapital = t?.source === "share_capital";
-          const active = activeIndex.get(c.id);
-          const lockedToOtherLoan =
-            active && active.loan_id !== editLoanId ? active : undefined;
           return {
             ...c,
             type: t,
-            active_loan_id: lockedToOtherLoan?.loan_id,
-            active_loan_account_number: lockedToOtherLoan?.loan_account_number,
+            // In edit mode the loan being edited is not a conflict with itself —
+            // the user must be able to keep the security it already holds.
+            lock: collateralLock(c, { exceptLoanId: editLoanId }),
             effective_value: isShareCapital ? scBalance : c.amount,
           };
         });
@@ -543,11 +533,19 @@ function NewLoanApplicationInner() {
         const links = await collateralService.listForLoan(editLoanId);
         if (cancelled) return;
         const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
+        // Rows are CollateralResource objects: the collateral id is `id`, and
+        // the booked amount is under `pivot`. They were read as `collateral_id`
+        // and `snapshot_value`, which the endpoint has never sent — so this
+        // prefill silently produced an empty list and edit mode looked as
+        // though the loan had no collateral attached.
         const prefilled = links
           .map((link) => {
-            const c = byId.get(link.collateral_id);
+            const c = byId.get(link.id);
             return c
-              ? { collateral: c, snapshot_value: link.snapshot_value }
+              ? {
+                  collateral: c,
+                  snapshot_value: link.pivot?.snapshot_value ?? c.effective_value,
+                }
               : null;
           })
           .filter(
@@ -771,7 +769,7 @@ function NewLoanApplicationInner() {
     return availableCollaterals.map((c) => ({
       collateral: c,
       isSelected: selectedIds.has(c.id),
-      isLocked: Boolean(c.active_loan_id),
+      isLocked: isCollateralLocked(c.lock),
     }));
   }, [availableCollaterals, selectedCollaterals]);
 
@@ -924,19 +922,22 @@ function NewLoanApplicationInner() {
           );
           await Promise.all(
             existingLinks
-              .filter((l) => !selectedIds.has(l.collateral_id))
-              .map((l) =>
-                collateralService.detachFromLoan(updated.id, l.collateral_id),
-              ),
+              .filter((l) => !selectedIds.has(l.id))
+              .map((l) => collateralService.detachFromLoan(updated.id, l.id)),
           );
+          // Re-attaching one the loan already holds is a 422, so skip those:
+          // `attach()` rejects a duplicate rather than treating it as a no-op.
+          const alreadyAttached = new Set(existingLinks.map((l) => l.id));
           await Promise.all(
-            selectedCollaterals.map((s) =>
-              collateralService.attachToLoan(
-                updated.id,
-                s.collateral.id,
-                s.snapshot_value,
+            selectedCollaterals
+              .filter((s) => !alreadyAttached.has(s.collateral.id))
+              .map((s) =>
+                collateralService.attachToLoan(
+                  updated.id,
+                  s.collateral.id,
+                  s.snapshot_value,
+                ),
               ),
-            ),
           );
         } catch {
           toast.warning("Loan updated but some collaterals failed to sync");
@@ -2094,10 +2095,15 @@ function NewLoanApplicationInner() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {isLocked && (
-                        <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
-                          Tagged to loan{" "}
-                          {c.active_loan_account_number ??
-                            `#${c.active_loan_id}`}
+                        <Badge
+                          className={
+                            c.lock.state === "unknown"
+                              ? "bg-muted text-muted-foreground hover:bg-muted"
+                              : "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15"
+                          }
+                          title={holdersSentence(c.lock) ?? undefined}
+                        >
+                          {lockLabel(c.lock)}
                         </Badge>
                       )}
                       {isSelected && !isLocked && (
