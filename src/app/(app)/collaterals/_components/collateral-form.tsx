@@ -80,7 +80,11 @@ export function CollateralForm({ initial, mode }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([borrowerService.list({ per_page: 9999 }), collateralTypeService.list()])
+    // members_only: keeps pending/rejected applicants out of the owner picker.
+    Promise.all([
+      borrowerService.list({ members_only: 1, per_page: 9999 }),
+      collateralTypeService.list(),
+    ])
       .then(([bRes, tRes]) => {
         if (cancelled) return;
         const borrowerList = Array.isArray(bRes)

@@ -356,7 +356,10 @@ function NewLoanApplicationInner() {
 
       const [borrowersResult, productsResult, usersResult, feesResult, loanResult] =
         await Promise.allSettled([
-          borrowerService.list({ per_page: 200 }),
+          // members_only: pending and rejected applicants are not loan-eligible,
+          // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
+          // server-side status gate behind this picker.
+          borrowerService.list({ members_only: 1, per_page: 200 }),
           loanProductService.list(),
           userService.list(),
           feeService.list(),
