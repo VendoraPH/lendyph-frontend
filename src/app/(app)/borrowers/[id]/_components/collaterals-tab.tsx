@@ -15,18 +15,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PermissionGate } from "@/components/common";
-import {
-  collateralService,
-  collateralTypeService,
-  loanService,
-} from "@/services";
+import { collateralService, collateralTypeService } from "@/services";
 import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  collateralLock,
+  holdersSentence,
+  isLocked,
+  lockLabel,
+} from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
 import type {
   Collateral,
   CollateralType,
   CollateralWithMeta,
-  Loan,
 } from "@/types";
 
 interface CollateralsTabProps {
@@ -40,24 +41,17 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [collaterals, types, loanRes] = await Promise.all([
+      // The borrower's loan list is no longer fetched: it was only ever there to
+      // derive lock state, and it could not do that correctly. `active_loans`
+      // comes back on the collateral rows themselves — and it spans the whole
+      // active book, so a collateral this member pledged to somebody else's loan
+      // (which the API permits) is now visible here rather than invisible.
+      const [collaterals, types] = await Promise.all([
         collateralService.list({ borrower_id: borrowerId }),
         collateralTypeService.list(),
-        loanService.list({ borrower_id: borrowerId }),
       ]);
 
-      const loans: Loan[] = Array.isArray(loanRes)
-        ? (loanRes as Loan[])
-        : ((loanRes as { data?: Loan[] }).data ?? []);
-
       const typeById = new Map(types.map((t) => [t.id, t]));
-      const activeLoanIndex = await collateralService.buildActiveLoanIndex(
-        loans.map((l) => ({
-          id: l.id,
-          status: String(l.status),
-          loan_account_number: l.loan_account_number,
-        })),
-      );
 
       const needsBalance = collaterals.some(
         (c: Collateral) =>
@@ -70,12 +64,10 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       const enriched: CollateralWithMeta[] = collaterals.map((c) => {
         const t = typeById.get(c.collateral_type_id);
         const isShareCapital = t?.source === "share_capital";
-        const active = activeLoanIndex.get(c.id);
         return {
           ...c,
           type: t,
-          active_loan_id: active?.loan_id,
-          active_loan_account_number: active?.loan_account_number,
+          lock: collateralLock(c),
           effective_value: isShareCapital ? scBalance : c.amount,
         };
       });
@@ -183,11 +175,16 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
                       {formatCurrency(c.effective_value)}
                     </TableCell>
                     <TableCell>
-                      {c.active_loan_id ? (
-                        <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
-                          Tagged to loan{" "}
-                          {c.active_loan_account_number ??
-                            `#${c.active_loan_id}`}
+                      {isLocked(c.lock) ? (
+                        <Badge
+                          className={
+                            c.lock.state === "unknown"
+                              ? "bg-muted text-muted-foreground hover:bg-muted"
+                              : "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15"
+                          }
+                          title={holdersSentence(c.lock) ?? undefined}
+                        >
+                          {lockLabel(c.lock)}
                         </Badge>
                       ) : (
                         <Badge variant="outline">Available</Badge>

@@ -16,6 +16,12 @@ import {
 
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import {
+  collateralLock,
+  holdersSentence,
+  isLocked as isCollateralLocked,
+  lockLabel,
+} from "@/lib/collateral-lock";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -411,26 +417,11 @@ function RestructureLoanInner() {
     let cancelled = false;
     (async () => {
       try {
-        const [collRows, loanRes] = await Promise.all([
-          collateralService.list({ borrower_id: borrowerId }),
-          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
-          // any status, so a collateral pledged to an older active loan is
-          // offered here as available. See
-          // collateralService.buildActiveLoanIndex(); this is knowingly wrong
-          // and is NOT fixable here. Do not "fix" it by paging: that turns the
-          // per-loan attachment fan-out into one request per active loan.
-          loanService.list(),
-        ]);
-        const loans: Loan[] = Array.isArray(loanRes)
-          ? (loanRes as Loan[])
-          : ((loanRes as { data?: Loan[] }).data ?? []);
-        const activeIndex = await collateralService.buildActiveLoanIndex(
-          loans.map((l) => ({
-            id: l.id,
-            status: String(l.status),
-            loan_account_number: l.loan_account_number,
-          })),
-        );
+        // One request. `active_loans` on each row answers the lock question
+        // across the whole active book — no loan list, no per-loan fan-out.
+        const collRows = await collateralService.list({
+          borrower_id: borrowerId,
+        });
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsSc = collRows.some(
           (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
@@ -439,13 +430,12 @@ function RestructureLoanInner() {
         const enriched: CollateralWithMeta[] = collRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
           const isShare = t?.source === "share_capital";
-          const active = activeIndex.get(c.id);
-          const lockedToOther = active && active.loan_id !== sourceLoanId ? active : undefined;
           return {
             ...c,
             type: t,
-            active_loan_id: lockedToOther?.loan_id,
-            active_loan_account_number: lockedToOther?.loan_account_number,
+            // The loan being restructured holds its own collateral; that is not
+            // a conflict, it is the security carrying over to the replacement.
+            lock: collateralLock(c, { exceptLoanId: sourceLoanId }),
             effective_value: isShare ? scBalance : c.amount,
           };
         });
@@ -466,10 +456,20 @@ function RestructureLoanInner() {
         const links = await collateralService.listForLoan(sourceLoanId);
         if (cancelled) return;
         const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
+        // Rows are CollateralResource objects — collateral id is `id`, booked
+        // amount is under `pivot`. Read as `collateral_id`/`snapshot_value`
+        // they were both undefined, so the source loan's collaterals never
+        // carried into the restructure form.
         const prefilled = links
           .map((link) => {
-            const c = byId.get(link.collateral_id);
-            return c ? { collateral: c, snapshot_value: link.snapshot_value } : null;
+            const c = byId.get(link.id);
+            return c
+              ? {
+                  collateral: c,
+                  snapshot_value:
+                    link.pivot?.snapshot_value ?? c.effective_value,
+                }
+              : null;
           })
           .filter((v): v is { collateral: CollateralWithMeta; snapshot_value: number } => v !== null);
         if (!cancelled) setSelectedCollaterals(prefilled);
@@ -571,7 +571,7 @@ function RestructureLoanInner() {
     return availableCollaterals.map((c) => ({
       collateral: c,
       isSelected: selectedIds.has(c.id),
-      isLocked: Boolean(c.active_loan_id),
+      isLocked: isCollateralLocked(c.lock),
     }));
   }, [availableCollaterals, selectedCollaterals]);
 
@@ -721,13 +721,24 @@ function RestructureLoanInner() {
 
       const newLoan = await loanService.restructure(sourceLoanId, payload);
 
-      // Attach collaterals to the new loan
+      // Attach the picked collaterals to the new loan — skipping any the API
+      // already carried over. `LoanService::restructure()` is gaining that
+      // carry-over, and `attach()` answers 422 for a collateral the loan
+      // already holds, so attaching blind would turn the happy path into
+      // "some collaterals failed to attach". Today this reads an empty list
+      // and behaves exactly as before.
       if (selectedCollaterals.length > 0 && newLoan.id) {
         try {
+          const carried = await collateralService
+            .listForLoan(newLoan.id)
+            .catch(() => []);
+          const alreadyHeld = new Set(carried.map((l) => l.id));
           await Promise.all(
-            selectedCollaterals.map((s) =>
-              collateralService.attachToLoan(newLoan.id, s.collateral.id, s.snapshot_value),
-            ),
+            selectedCollaterals
+              .filter((s) => !alreadyHeld.has(s.collateral.id))
+              .map((s) =>
+                collateralService.attachToLoan(newLoan.id, s.collateral.id, s.snapshot_value),
+              ),
           );
         } catch {
           toast.warning("Restructure created but some collaterals failed to attach.");
@@ -1211,13 +1222,23 @@ function RestructureLoanInner() {
 
             {/* Collaterals */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">
-                  Collaterals
-                  <Badge variant="outline" className="ml-2 text-xs">
-                    {securityStatusLabel(securityStatus)}
-                  </Badge>
-                </CardTitle>
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">
+                    Collaterals
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      {securityStatusLabel(securityStatus)}
+                    </Badge>
+                  </CardTitle>
+                  {/* The source loan's security carries over to the replacement
+                      rather than being released — say so, because the picker
+                      below now shows those same collaterals as held and an
+                      operator could otherwise read that as a conflict. */}
+                  <p className="text-sm text-muted-foreground">
+                    The source loan&rsquo;s collaterals carry over to the
+                    replacement loan. Restructuring does not release them.
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1309,8 +1330,21 @@ function RestructureLoanInner() {
                             {isSelected && <Check className="h-3 w-3 text-white" />}
                           </div>
                           <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
-                          {isLocked && !isSelected && (
-                            <Badge variant="outline" className="text-[10px]">Locked</Badge>
+                          {/* Shown even when selected. A collateral carried over
+                              from the source loan can ALSO be held by a third
+                              active loan, and that is exactly the case
+                              `attach()` will refuse with a 422 — so the conflict
+                              has to be visible before submit, not after. Still
+                              clickable when selected, so the operator can drop
+                              it and proceed. */}
+                          {isLocked && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px]"
+                              title={holdersSentence(collateral.lock) ?? undefined}
+                            >
+                              {lockLabel(collateral.lock) ?? "Locked"}
+                            </Badge>
                           )}
                         </div>
                         <span className="text-muted-foreground">
