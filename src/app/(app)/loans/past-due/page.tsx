@@ -208,21 +208,28 @@ const mapRow = (raw: RawPastDueRow): PastDueLoan => {
   };
 };
 
-// Some Laravel reports return rows directly; others wrap them in a paginated
-// envelope with `{ data: [...] }`. Handle both transparently.
-const extractRows = (resp: unknown): RawPastDueRow[] => {
-  if (Array.isArray(resp)) return resp as RawPastDueRow[];
-  if (resp && typeof resp === "object") {
-    const r = resp as { data?: unknown };
-    if (Array.isArray(r.data)) return r.data as RawPastDueRow[];
-    // Double-wrapped: { data: { data: [...] } } — defensive
-    if (r.data && typeof r.data === "object") {
-      const inner = (r.data as { data?: unknown }).data;
-      if (Array.isArray(inner)) return inner as RawPastDueRow[];
-    }
-  }
-  return [];
+// Row extraction moved to `reportService.duePastDueAll`, which has to read the
+// `{ data, meta }` envelope anyway to know when it has reached the last page.
+
+/** HTTP status of a failed request, or null when it never got a response. */
+const statusOf = (err: unknown): number | null => {
+  if (!err || typeof err !== "object" || !("response" in err)) return null;
+  const status = (err as { response?: { status?: unknown } }).response?.status;
+  return typeof status === "number" ? status : null;
 };
+
+/**
+ * Was this request rejected because of what WE sent?
+ *
+ * 401/403/429 are 4xx that a person can act on — sign in again, ask for access,
+ * wait — and they say nothing about the code. The rest of the 4xx range means
+ * the server understood the request and refused it as malformed, which no
+ * amount of retrying changes. Telling those two apart in the console is the
+ * whole point: `per_page: 9999` shipped a guaranteed 422 that read, to anyone
+ * skimming the logs, exactly like an intermittent network failure.
+ */
+const isMalformedRequest = (status: number | null): boolean =>
+  status !== null && status >= 400 && status < 500 && ![401, 403, 429].includes(status);
 
 // If the backend returns one row per overdue *schedule period* instead of
 // one row per loan, multiple rows can share the same loan_id. Aggregate
@@ -266,6 +273,16 @@ export default function PastDueLoansPage() {
   const [loans, setLoans] = useState<PastDueLoan[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Rows fetched so far / rows the server says there are. Drives the progress
+  // line, because collecting the full set can take several requests.
+  const [progress, setProgress] = useState<{ loaded: number; total: number | null } | null>(null);
+  // A load that failed must not fall through to the empty state: "all members
+  // are current" is an assertion this screen has no basis to make when the
+  // request never returned.
+  const [failed, setFailed] = useState(false);
+  // True when the page walk stopped before the last page, so the figures below
+  // are a floor rather than the whole arrears book.
+  const [partial, setPartial] = useState(false);
   const [search, setSearch] = useState("");
   const [bucket, setBucket] = useState<AgingBucket>("all");
   const [sortKey, setSortKey] = useState<SortKey>("daysPastDue");
@@ -274,17 +291,48 @@ export default function PastDueLoansPage() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
+    setProgress(null);
     try {
-      const res = await reportService.duePastDue({ per_page: 9999 });
-      const mapped = extractRows(res).map(mapRow);
-      setLoans(aggregateByLoan(mapped));
+      // Every page, not one big one. Rows are amortization schedules ordered by
+      // due date, so a loan's periods are spread across the whole set and
+      // aggregateByLoan() under-reports days past due and amounts owed for any
+      // loan whose periods it cannot all see.
+      const { rows, complete } = await reportService.duePastDueAll(
+        undefined,
+        (loaded, total) => setProgress({ loaded, total }),
+      );
+      setLoans(aggregateByLoan((rows as RawPastDueRow[]).map(mapRow)));
+      setFailed(false);
+      setPartial(!complete);
     } catch (err) {
-      console.error("Failed to load past-due loans:", err);
-      notifyError(err, "We couldn't load past due loans. Please try again.");
+      const status = statusOf(err);
+      if (isMalformedRequest(status)) {
+        // Deliberately not the same line as a network blip. A 4xx here means the
+        // request we built was invalid, so it will fail identically every time —
+        // whoever reads this next should go looking for a client-side bug, not a
+        // flaky connection.
+        console.error(
+          `Past due loans: the API rejected our request with HTTP ${status}. ` +
+            "The request itself is malformed, so retrying sends the same invalid " +
+            "call and will fail the same way — this is a client-side bug, not a " +
+            "transient failure.",
+          err,
+        );
+      } else {
+        console.error(
+          `Past due loans: request did not complete${status ? ` (HTTP ${status})` : " (no response)"}. ` +
+            "Likely transient — a retry may succeed.",
+          err,
+        );
+      }
+      notifyError(err, "We couldn't load past due loans.");
       setLoans([]);
+      setFailed(true);
+      setPartial(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setProgress(null);
     }
   }, []);
 
@@ -345,6 +393,10 @@ export default function PastDueLoansPage() {
     };
   }, [sorted]);
 
+  // A failed load has no figures to show. Rendering the zeroed totals would
+  // print "0 members past due / ₱0.00" over a cooperative's real arrears.
+  const figuresUnavailable = loading || failed;
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -404,7 +456,7 @@ export default function PastDueLoansPage() {
                     Members Past Due
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {loading ? "—" : totals.memberCount}
+                    {figuresUnavailable ? "—" : totals.memberCount}
                   </p>
                 </div>
               </div>
@@ -421,7 +473,7 @@ export default function PastDueLoansPage() {
                     Past Due Loans
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {loading ? "—" : totals.loanCount}
+                    {figuresUnavailable ? "—" : totals.loanCount}
                   </p>
                 </div>
               </div>
@@ -438,7 +490,7 @@ export default function PastDueLoansPage() {
                     Total Past Due
                   </p>
                   <p className="text-xl font-bold tabular-nums text-red-600">
-                    {loading ? "—" : formatCurrency(totals.pastDueSum)}
+                    {figuresUnavailable ? "—" : formatCurrency(totals.pastDueSum)}
                   </p>
                 </div>
               </div>
@@ -455,7 +507,7 @@ export default function PastDueLoansPage() {
                     Outstanding Balance
                   </p>
                   <p className="text-xl font-bold tabular-nums">
-                    {loading ? "—" : formatCurrency(totals.outstandingSum)}
+                    {figuresUnavailable ? "—" : formatCurrency(totals.outstandingSum)}
                   </p>
                 </div>
               </div>
@@ -497,13 +549,61 @@ export default function PastDueLoansPage() {
           </CardContent>
         </Card>
 
+        {/* Partial-set warning — only when the page walk stopped early. */}
+        {partial && !loading ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              This list is incomplete — not every past due payment could be
+              loaded, so the totals below are a minimum, not the full amount.
+              Refresh to try again.
+            </p>
+          </div>
+        ) : null}
+
         {/* Table */}
         <Card>
           <CardContent className="p-0">
             {loading ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <div
+                className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
                 <Loader2 className="h-6 w-6 animate-spin" />
                 <p className="text-sm">Loading past due loans…</p>
+                {progress && progress.total !== null && progress.total > 0 ? (
+                  <p className="text-xs tabular-nums">
+                    {progress.loaded.toLocaleString("en-PH")} of{" "}
+                    {progress.total.toLocaleString("en-PH")} scheduled payments
+                  </p>
+                ) : null}
+              </div>
+            ) : failed ? (
+              // Never the empty state on failure. Telling a collections officer
+              // "all members are current" when the request errored is a false
+              // all-clear on the one screen whose job is to say who is behind.
+              <div
+                className="flex flex-col items-center justify-center gap-3 py-16 text-center"
+                role="alert"
+              >
+                <AlertTriangle className="h-8 w-8 text-red-600" />
+                <div>
+                  <p className="text-sm font-medium">
+                    We couldn&apos;t load past due loans.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    This list is unavailable right now — it is not a sign that
+                    every member is current.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => load()}>
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  Try again
+                </Button>
               </div>
             ) : sorted.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">

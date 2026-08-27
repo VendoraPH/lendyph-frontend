@@ -17,6 +17,7 @@ import type { Loan } from "@/types/loan";
 import {
   loanBorrowerName,
   loanProductName,
+  loanTerm,
   type LoanSortKey,
   type SortDir,
 } from "./utils";
@@ -126,7 +127,7 @@ export function LoanTable({
                 {formatCurrency(loan.principal_amount)}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {loan.term ?? loan.term_months ?? 0}mo /{" "}
+                {loanTerm(loan) ?? 0}mo /{" "}
                 {(PAYMENT_FREQUENCY_LABELS[
                   (loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS
                 ] ??
