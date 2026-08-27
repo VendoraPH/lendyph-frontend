@@ -52,6 +52,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { todayISO } from "@/lib/format";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
 
 // ---------------------------------------------------------------------------
@@ -290,9 +291,10 @@ export default function PaymentsPage() {
   const [lastReceiptId, setLastReceiptId] = useState<number | null>(null);
 
   // Form state
-  const [paymentDate, setPaymentDate] = useState(
-    () => new Date().toISOString().split("T")[0]
-  );
+  // The posted payment_date must be the cashier's calendar day. Deriving it
+  // from toISOString() booked every payment taken before 08:00 Manila against
+  // yesterday — see todayISO().
+  const [paymentDate, setPaymentDate] = useState(todayISO);
   const [amountPaid, setAmountPaid] = useState<number | "">("");
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -432,7 +434,7 @@ export default function PaymentsPage() {
       try {
         const res = await repaymentService.preview(selectedLoan.id, {
           amount_paid: fullDue,
-          payment_date: new Date().toISOString().split("T")[0],
+          payment_date: todayISO(),
         });
         if (cancelled) return;
         const principal =
@@ -523,7 +525,7 @@ export default function PaymentsPage() {
     setRemarks("");
     setPaymentMethod("cash");
     setCollectedBy(defaultCollector);
-    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentDate(todayISO());
     setLastReceiptId(null);
     setDialogOpen(true);
   }
@@ -535,7 +537,7 @@ export default function PaymentsPage() {
     setReferenceNumber("");
     setRemarks("");
     setCollectedBy(defaultCollector);
-    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentDate(todayISO());
     setDialogOpen(false);
   }
 

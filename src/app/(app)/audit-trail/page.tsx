@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDateISO, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction, AuditModule } from "@/types";
 
 // ── Constants ──
@@ -324,7 +325,7 @@ export default function AuditTrailPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
 
   const filteredLogs = useMemo(() => {
     const sorted = [...logs].sort(
@@ -363,7 +364,7 @@ export default function AuditTrailPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `audit-logs-${todayISO()}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -411,8 +412,12 @@ export default function AuditTrailPage() {
             <p className="text-xs text-muted-foreground">Today</p>
             <p className="text-2xl font-bold">
               {
-                logs.filter((l) =>
-                  l.created_at.startsWith(todayStr)
+                // created_at is an instant, so a string prefix match compared
+                // the server's rendering of it against a local calendar day —
+                // wrong for every log written before 08:00 Manila if the API
+                // serialises UTC. Parse it, then compare local calendar days.
+                logs.filter(
+                  (l) => formatDateISO(new Date(l.created_at)) === todayStr
                 ).length
               }
             </p>

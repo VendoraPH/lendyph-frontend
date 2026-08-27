@@ -1,3 +1,5 @@
+import { formatDateISO } from "./format";
+
 export const BINHS_PENALTY_RATE = 0.2;
 
 export interface BinhsInput {
@@ -23,13 +25,30 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** `YYYY-MM-DD`, optionally followed by a time. */
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/**
+ * A due date is a calendar date, so it is parsed and serialised entirely in
+ * local terms. `new Date("2026-08-26")` is specified to parse as UTC *midnight*
+ * — 08:00 in Manila — and the month arithmetic below runs on local getters, so
+ * mixing the two only happened to agree east of UTC. Reading the Y/M/D parts
+ * directly keeps the schedule on the day the user picked in every timezone.
+ */
+function parseLocalDate(value: string): Date | null {
+  const parts = DATE_ONLY.exec(value.trim());
+  if (!parts) return null;
+  const d = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function addMonthsISO(startDate: string, months: number): string {
-  const d = new Date(startDate);
-  if (Number.isNaN(d.getTime())) return startDate;
+  const d = parseLocalDate(startDate);
+  if (!d) return startDate;
   const day = d.getDate();
   d.setMonth(d.getMonth() + months);
   if (d.getDate() < day) d.setDate(0);
-  return d.toISOString().slice(0, 10);
+  return formatDateISO(d);
 }
 
 export function isValidBinhsInput(input: BinhsInput): boolean {

@@ -22,16 +22,19 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateISO } from "@/lib/format";
 import type { GCashIncomeReport, GCashPendingItem } from "@/types";
 import { PaidButton } from "./paid-button";
 
+// First and last day of the current month. Both bounds are built at LOCAL
+// midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
+// default range opened on the last day of the *previous* month and stopped a
+// day short of month end, every hour of every day. Serialise local parts.
 function defaultRange(): { start: string; end: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: iso(start), end: iso(end) };
+  return { start: formatDateISO(start), end: formatDateISO(end) };
 }
 
 export function ReportsTab() {

@@ -62,3 +62,16 @@ export function formatDateISO(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Today's calendar date as `YYYY-MM-DD`, in the user's own timezone.
+ *
+ * The one correct way to answer "what is today?" — `new Date().toISOString()`
+ * is not it. Between 00:00 and 07:59 in Manila (UTC+8) the UTC instant still
+ * falls on the previous day, so a cashier opening the payment form at 07:00
+ * posted the receipt against yesterday. Reach for this for defaults, filters
+ * and export filenames; use `formatDateISO` when you already hold a `Date`.
+ */
+export function todayISO(): string {
+  return formatDateISO(new Date());
+}

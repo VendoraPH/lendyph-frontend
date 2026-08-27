@@ -1,5 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { Borrower, BorrowerLedgerEntry, PaginatedResponse } from "@/types";
 
 /** A valid-ID entry as returned grouped (front/back pair) by the API. */
@@ -24,6 +25,31 @@ export const borrowerService = {
     api.getRaw<PaginatedResponse<Borrower>>(API_ENDPOINTS.BORROWERS.LIST, {
       params,
     }),
+
+  /**
+   * Every borrower matching `params`, across as many pages as it takes.
+   *
+   * For the screens that need the whole membership at once rather than a page of
+   * it — the member pickers and the id-to-name maps behind the collateral and
+   * loan forms. Those asked for `per_page: 9999` (and `per_page: 200`), which
+   * `BorrowerController::index()` clamps to `min(per_page, 100)` without
+   * complaining: a co-op with 130 members got 100 of them, in a response that
+   * looked complete, and the other 30 were simply not in the picker. Nobody can
+   * see a member who is not on the list, so the failure presented as "that
+   * person is not registered" rather than as a bug.
+   *
+   * Returns a `DrainResult`, NOT a row array, on purpose. `truncated` is part of
+   * the answer and the caller has to decide what to show for it; handing back a
+   * bare array would let a screen go back to rendering an incomplete list as if
+   * it were the whole thing, which is the bug itself.
+   *
+   * `page` and `per_page` are set by the drain — passing them in `params` has no
+   * effect.
+   */
+  listAll: (params?: Record<string, unknown>): Promise<DrainResult<Borrower>> =>
+    fetchAllPages<Borrower>(({ page, per_page }) =>
+      borrowerService.list({ ...params, page, per_page }),
+    ),
 
   detail: (id: number) =>
     api.get<Borrower>(API_ENDPOINTS.BORROWERS.DETAIL(id)),
