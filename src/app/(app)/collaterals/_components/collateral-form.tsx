@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { borrowerService } from "@/services/borrower.service";
@@ -77,20 +78,32 @@ export function CollateralForm({ initial, mode }: Props) {
   );
   const [scBalance, setScBalance] = useState<number | null>(null);
   const [scBalanceLoading, setScBalanceLoading] = useState(false);
+  // Set only when the member drain gave up with pages outstanding, i.e. the
+  // owner picker below is knowingly missing people. Null means complete.
+  const [memberShortfall, setMemberShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     // members_only: keeps pending/rejected applicants out of the owner picker.
+    // Drained across pages rather than asked for in one `per_page: 9999` gulp:
+    // BorrowerController clamps that to 100 silently, so on a co-op with more
+    // than 100 members the picker simply had no entry for the rest — which
+    // reads as "that member is not registered", not as a bug.
     Promise.all([
-      borrowerService.list({ members_only: 1, per_page: 9999 }),
+      borrowerService.listAll({ members_only: 1 }),
       collateralTypeService.list(),
     ])
-      .then(([bRes, tRes]) => {
+      .then(([memberDrain, tRes]) => {
         if (cancelled) return;
-        const borrowerList = Array.isArray(bRes)
-          ? bRes
-          : (bRes as { data?: Borrower[] }).data ?? [];
-        setBorrowers(borrowerList as Borrower[]);
+        setBorrowers(memberDrain.rows);
+        setMemberShortfall(
+          memberDrain.truncated
+            ? { shown: memberDrain.rows.length, total: memberDrain.total }
+            : null,
+        );
         setTypes(tRes.filter((t) => t.is_visible));
       })
       .catch(() => {
@@ -234,6 +247,15 @@ export function CollateralForm({ initial, mode }: Props) {
       </CardHeader>
 
       <CardContent className="space-y-6 pt-6">
+        {memberShortfall && (
+          <IncompleteListNotice
+            shown={memberShortfall.shown}
+            total={memberShortfall.total}
+            noun="members"
+            consequence="Some members are missing from the picker below and cannot be selected."
+          />
+        )}
+
         {/* ── Section: Member ─────────────────────────────────────── */}
         <div className="space-y-2">
           <Label htmlFor="collateral-member">

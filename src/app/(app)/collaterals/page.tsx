@@ -17,6 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { RouteGuard, PermissionGate } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +72,12 @@ export default function CollateralListingPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [deleting, setDeleting] = useState<CollateralWithMeta | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  // Set only when the member drain gave up with pages outstanding, so the
+  // borrower-name lookup below is knowingly short. Null means complete.
+  const [memberShortfall, setMemberShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
   // Members whose nested collateral rows are expanded in the table.
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(
     new Set(),
@@ -88,17 +95,28 @@ export default function CollateralListingPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [collateralRows, typeRows, borrowerRes, loanRes] =
+      const [collateralRows, typeRows, memberDrain, loanRes] =
         await Promise.all([
           collateralService.list(),
           collateralTypeService.list(),
           // members_only: collateral belongs to members, not to applicants.
-          borrowerService.list({ members_only: 1, per_page: 9999 }),
+          // Drained across pages: this used to ask for `per_page: 9999`, which
+          // BorrowerController clamps to 100 without saying so, and every member
+          // past the hundredth rendered as a bare "Member #<id>".
+          borrowerService.listAll({ members_only: 1 }),
+          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
+          // any status. See collateralService.buildActiveLoanIndex(); this is
+          // knowingly wrong and is NOT fixable here. Do not "fix" it by paging:
+          // that turns the per-loan attachment fan-out below into one request
+          // per active loan in the co-op.
           loanService.list(),
         ]);
-      const borrowers: Borrower[] = Array.isArray(borrowerRes)
-        ? (borrowerRes as Borrower[])
-        : ((borrowerRes as { data?: Borrower[] }).data ?? []);
+      const borrowers: Borrower[] = memberDrain.rows;
+      setMemberShortfall(
+        memberDrain.truncated
+          ? { shown: borrowers.length, total: memberDrain.total }
+          : null,
+      );
       const loans: Loan[] = Array.isArray(loanRes)
         ? (loanRes as Loan[])
         : ((loanRes as { data?: Loan[] }).data ?? []);
@@ -250,6 +268,15 @@ export default function CollateralListingPage() {
             </Button>
           </PermissionGate>
         </div>
+
+        {memberShortfall && (
+          <IncompleteListNotice
+            shown={memberShortfall.shown}
+            total={memberShortfall.total}
+            noun="members"
+            consequence="Members whose record could not be loaded are listed by their member number instead of their name."
+          />
+        )}
 
         {/* Summary */}
         <div className="grid gap-4 sm:grid-cols-3">

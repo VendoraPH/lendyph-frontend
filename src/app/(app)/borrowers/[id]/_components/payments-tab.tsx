@@ -6,7 +6,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, todayISO } from "@/lib/format";
 import type { Payment, Loan } from "@/types";
 
 function formatDate(dateStr: string): string {
@@ -41,7 +41,7 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
   const nextDueDates = ongoingLoans.map((l) => l.next_due_date).filter(Boolean).sort();
   const nextDueDate = nextDueDates[0];
 
-  const today = new Date().toISOString().split("T")[0]!;
+  const today = todayISO();
   const overdueLoans = ongoingLoans.filter((l) => l.next_due_date && l.next_due_date < today);
   const overdueAmount = overdueLoans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
 
