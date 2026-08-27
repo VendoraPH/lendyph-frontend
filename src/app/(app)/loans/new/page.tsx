@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -345,6 +346,12 @@ function NewLoanApplicationInner() {
   // Configured fees (Settings → Fees) that auto-apply to the selected product,
   // e.g. a percentage "Insurance Premium" scoped to Cash Advance + Salary Loan.
   const [fees, setFees] = useState<Fee[]>([]);
+  // Set only when the member drain gave up with pages outstanding, i.e. the
+  // member picker is knowingly missing people. Null means complete.
+  const [memberShortfall, setMemberShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   // ── Fetch borrowers, products, users — and the loan when editing ──
   useEffect(() => {
@@ -356,7 +363,10 @@ function NewLoanApplicationInner() {
           // members_only: pending and rejected applicants are not loan-eligible,
           // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
           // server-side status gate behind this picker.
-          borrowerService.list({ members_only: 1, per_page: 200 }),
+          // Drained across pages. `per_page: 200` was clamped to 100 by
+          // BorrowerController without a word, so member 101 onwards could not
+          // be picked and could not be lent to from this screen at all.
+          borrowerService.listAll({ members_only: 1 }),
           loanProductService.list(),
           userService.list(),
           feeService.list(),
@@ -371,10 +381,13 @@ function NewLoanApplicationInner() {
       }
 
       if (borrowersResult.status === "fulfilled") {
-        const borrowerData = Array.isArray(borrowersResult.value)
-          ? borrowersResult.value
-          : (borrowersResult.value as { data: Borrower[] }).data ?? [];
-        setBorrowers(borrowerData);
+        const memberDrain = borrowersResult.value;
+        setBorrowers(memberDrain.rows);
+        setMemberShortfall(
+          memberDrain.truncated
+            ? { shown: memberDrain.rows.length, total: memberDrain.total }
+            : null,
+        );
       } else {
         toast.error("We couldn't load members. Please try again.");
       }
@@ -469,6 +482,12 @@ function NewLoanApplicationInner() {
       try {
         const [collateralRows, loanRes] = await Promise.all([
           collateralService.list({ borrower_id: borrowerId }),
+          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
+          // any status, so a collateral pledged to an older active loan is
+          // offered here as available. See
+          // collateralService.buildActiveLoanIndex(); this is knowingly wrong
+          // and is NOT fixable here. Do not "fix" it by paging: that turns the
+          // per-loan attachment fan-out into one request per active loan.
           loanService.list(),
         ]);
         const loans: Loan[] = Array.isArray(loanRes)
@@ -1029,6 +1048,15 @@ function NewLoanApplicationInner() {
           )}
         </div>
       </div>
+
+      {memberShortfall && (
+        <IncompleteListNotice
+          shown={memberShortfall.shown}
+          total={memberShortfall.total}
+          noun="members"
+          consequence="Some members are missing from the member and co-maker pickers below and cannot be selected."
+        />
+      )}
 
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
