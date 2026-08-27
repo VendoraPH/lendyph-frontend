@@ -12,6 +12,7 @@ import {
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteGuard } from "@/components/common";
 import { loanService } from "@/services";
+import { formatDateISO } from "@/lib/format";
 import type { BinhsInput } from "@/lib/binhs";
 import { BinhsInputForm } from "./binhs-input-form";
 import { BinhsIdealTab } from "./binhs-ideal-tab";
@@ -21,7 +22,7 @@ import { BinhsCustomTab } from "./binhs-custom-tab";
 function defaultStartDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().slice(0, 10);
+  return formatDateISO(d);
 }
 
 const DEFAULT_INPUT: BinhsInput = {
