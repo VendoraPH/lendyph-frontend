@@ -49,8 +49,10 @@ import {
   ArrowRight,
   Users,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchAllActiveLoans } from "./_lib/active-loans";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -236,6 +238,44 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
 }
 
 // ---------------------------------------------------------------------------
+// Summary card
+// ---------------------------------------------------------------------------
+
+/**
+ * One figure at the top of the screen.
+ *
+ * `value` is pre-formatted so a count and a peso amount can share the card, and
+ * null means "not known" — rendered as an em dash rather than 0. A zero here
+ * would read as a statement about the coop's portfolio; a load that failed is
+ * in no position to make one.
+ */
+function SummaryCard({
+  label,
+  value,
+  icon,
+  iconBg,
+}: {
+  label: string;
+  value: string | null;
+  icon: React.ReactNode;
+  iconBg: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-3">
+          <div className={cn("rounded-lg p-2.5", iconBg)}>{icon}</div>
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold">{value ?? "—"}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -263,27 +303,35 @@ export default function PaymentsPage() {
   // API-loaded loans
   const [apiLoans, setApiLoans] = useState<ActiveLoan[]>([]);
   const [loading, setLoading] = useState(true);
+  // `meta.total` for the same `status=active` query — how many active loans
+  // exist, which is not necessarily how many are in `apiLoans`. Null until a
+  // response says otherwise, so the cards can decline to state a figure the API
+  // has not confirmed rather than printing a confident 0.
+  const [activeLoanTotal, setActiveLoanTotal] = useState<number | null>(null);
+  // Set only when the page guard stopped the fetch with pages outstanding.
+  // Rendered, never swallowed — see the notice below the header.
+  const [truncated, setTruncated] = useState(false);
+  // A failed load must not look like an empty one. Without this the table falls
+  // back to "No active loans found", which tells a cashier standing in front of
+  // a member that the member has nothing to pay.
+  const [error, setError] = useState<string | null>(null);
 
   const fetchLoans = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await loanService.list({ per_page: 500 });
-      const allLoans = Array.isArray(response)
-        ? (response as unknown as Loan[])
-        : Array.isArray(response?.data)
-        ? response.data
-        : [];
-      const ACTIVE_STATUSES = new Set([
-        "current",
-        "past_due",
-        "released",
-        "ongoing",
-      ]);
-      const activeLoans = allLoans.filter((l) => ACTIVE_STATUSES.has(l.status));
-      setApiLoans(activeLoans.map(mapLoanToActiveLoan));
+      const result = await fetchAllActiveLoans((params) =>
+        loanService.list(params),
+      );
+      setApiLoans(result.loans.map(mapLoanToActiveLoan));
+      setActiveLoanTotal(result.total);
+      setTruncated(result.truncated);
     } catch (err) {
       console.error("Failed to load active loans", err);
       setApiLoans([]);
+      setActiveLoanTotal(null);
+      setTruncated(false);
+      setError("We couldn't load the active loans.");
       notifyError(err, "We couldn't load the active loans. Please try again.");
     } finally {
       setLoading(false);
@@ -555,9 +603,24 @@ export default function PaymentsPage() {
 
   const needsReference = paymentMethod !== "cash";
 
-  // Stats
+  // Stats.
+  //
+  // Both of these are aggregates over `overdue_amount` / `outstanding_balance`,
+  // which LoanResource derives per row from the loaded amortization schedules.
+  // There is no server-side equivalent — `meta.stats` is a GROUP BY status row
+  // count — so they are only meaningful because `apiLoans` is now the complete
+  // active set. If that ever stops being true the `truncated` notice says so;
+  // do not reintroduce a partial fetch and leave these summing a page.
   const overdueCount = apiLoans.filter((l) => l.overdue_amount > 0).length;
   const totalOutstanding = apiLoans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+  // The count of active loans is the one figure the server can state directly,
+  // so prefer `meta.total` over the row count: they agree normally, and when
+  // they don't, the server is right and the notice explains the gap.
+  const activeLoanCount = activeLoanTotal ?? apiLoans.length;
+  // Nothing has been confirmed yet, so state nothing. A zero here reads as
+  // "this coop has no loans out", which a failed request is in no position to
+  // claim.
+  const statsKnown = !(error && apiLoans.length === 0);
 
   return (
     <RouteGuard permission="payments:view" pageName="Payments">
@@ -582,47 +645,50 @@ export default function PaymentsPage() {
         )}
       </div>
 
+      {/* The list is knowingly incomplete — say so where it cannot be missed.
+          This is the state the old `per_page: 500` produced silently. */}
+      {truncated && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              This list is incomplete
+              {activeLoanTotal != null
+                ? ` — showing ${apiLoans.length} of ${activeLoanTotal} active loans.`
+                : "."}
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              Some borrowers will not appear below, and the figures above count
+              only the loans shown. Please report this so the payments screen can
+              be paged properly.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-brand-orange/10 p-2.5">
-                <Users className="size-5 text-brand-orange" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active Loans</p>
-                <p className="text-2xl font-bold">{apiLoans.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-destructive/10 p-2.5">
-                <AlertCircle className="size-5 text-destructive" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Overdue</p>
-                <p className="text-2xl font-bold">{overdueCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-500/10 p-2.5">
-                <Banknote className="size-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Outstanding</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalOutstanding)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <SummaryCard
+          label="Active Loans"
+          value={statsKnown ? String(activeLoanCount) : null}
+          icon={<Users className="size-5 text-brand-orange" />}
+          iconBg="bg-brand-orange/10"
+        />
+        <SummaryCard
+          label="Overdue"
+          value={statsKnown ? String(overdueCount) : null}
+          icon={<AlertCircle className="size-5 text-destructive" />}
+          iconBg="bg-destructive/10"
+        />
+        <SummaryCard
+          label="Total Outstanding"
+          value={statsKnown ? formatCurrency(totalOutstanding) : null}
+          icon={<Banknote className="size-5 text-blue-600" />}
+          iconBg="bg-blue-500/10"
+        />
       </div>
 
       {/* Borrower Loan List */}
@@ -647,6 +713,26 @@ export default function PaymentsPage() {
             <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
               <Loader2 className="size-4 animate-spin" />
               Loading loans...
+            </div>
+          ) : error ? (
+            // Deliberately NOT the empty state. "No active loans found" after a
+            // failed request tells a cashier the member in front of them has
+            // nothing to pay, which is a different and much worse claim than
+            // "we could not check".
+            <div
+              role="alert"
+              className="flex flex-col items-center justify-center py-12 text-center"
+            >
+              <AlertTriangle className="mb-3 size-8 text-destructive/60" />
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLoans}
+                className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
+              >
+                Retry
+              </Button>
             </div>
           ) : sortedLoans.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
