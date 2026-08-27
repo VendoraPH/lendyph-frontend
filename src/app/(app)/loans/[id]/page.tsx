@@ -123,7 +123,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatRate } from "@/lib/format";
+import { formatDateISO, formatRate } from "@/lib/format";
 import {
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
@@ -177,17 +177,6 @@ const formatDateObj = (date: Date) =>
     month: "short",
     day: "numeric",
   });
-
-// Format a Date as YYYY-MM-DD using the LOCAL calendar day. Using toISOString()
-// here shifts UTC+8 (PHT) dates back a day for any local time before 08:00,
-// so a picked/"today" date could post as the previous day. Build from local
-// Y/M/D parts to keep the calendar date the user actually selected.
-const formatDateISO = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
 
 // ── Amortization Schedule Helpers ──
 

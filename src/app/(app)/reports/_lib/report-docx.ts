@@ -17,6 +17,7 @@ import {
   WidthType,
 } from "docx";
 import { saveAs } from "file-saver";
+import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
 import type {
   ReportColumn,
@@ -640,6 +641,6 @@ export async function exportReportToDocx(report: ReportDocument): Promise<void> 
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   saveAs(blob, `${slug}-${date}.docx`);
 }

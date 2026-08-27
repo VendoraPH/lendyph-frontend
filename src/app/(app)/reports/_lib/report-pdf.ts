@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { saveAs } from "file-saver";
+import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
 import type { ReportDocument, ReportSection } from "./types";
 
@@ -567,7 +568,7 @@ export function exportReportToPdf(report: ReportDocument): void {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   const blob = doc.output("blob");
   saveAs(blob, `${slug}-${date}.pdf`);
 }

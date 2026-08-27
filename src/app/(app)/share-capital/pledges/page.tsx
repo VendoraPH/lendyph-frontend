@@ -45,7 +45,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, todayISO } from "@/lib/format";
 
 interface LocalPledge {
   id: number;
@@ -292,7 +292,7 @@ export default function PledgeEntryPage() {
     try {
       await shareCapitalService.ledgerCreate({
         borrower_id: pledge.borrowerId,
-        date: new Date().toISOString().split("T")[0],
+        date: todayISO(),
         description: `Manual ${manualTransaction} entry`,
         type: manualTransaction,
         amount,
