@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -153,77 +153,123 @@ function PendingRegistrationsTab() {
   );
 }
 
+/** Global per-status member counts, read from the list response's `meta.stats`. */
+interface MemberStats {
+  active: number;
+  inactive: number;
+  blacklisted: number;
+  pending: number;
+}
+
+const EMPTY_STATS: MemberStats = {
+  active: 0,
+  inactive: 0,
+  blacklisted: 0,
+  pending: 0,
+};
+
 export default function BorrowersPage() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<MemberStats>(EMPTY_STATS);
   const { branches } = usePublicBranches();
   const branchNameById = useMemo(
     () => new Map(branches.map((b) => [b.id, b.name])),
     [branches]
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  // Pagination state
+  // Pagination state. The server does the slicing — these are request params,
+  // not indexes into a local array.
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
 
   type MainTab = "members" | "registrations";
   const [mainTab, setMainTab] = useState<MainTab>("members");
-  const { total: pendingCount } = useRegistrations({ status: "pending" });
+
+  // Search is a server query now, so wait for the admin to stop typing.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Guards against out-of-order responses: fast typing or rapid page clicks can
+  // land an older request last and repaint the wrong rows.
+  const requestIdRef = useRef(0);
 
   const fetchBorrowers = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    // When we clamp we immediately refetch, so `loading` must stay true through
+    // the hand-off — otherwise `finally` clears it and React paints one frame of
+    // the old rows under a pre-delete total.
+    let clamping = false;
     try {
       setLoading(true);
-      const res = await borrowerService.list();
-      setBorrowers(Array.isArray(res) ? res : res.data ?? []);
+      setError(null);
+      // `members_only` drops pending + rejected applicants server-side — they
+      // belong on the Pending Registrations tab, not in the members list.
+      const res = await borrowerService.list({
+        members_only: 1,
+        page: currentPage,
+        per_page: rowsPerPage,
+        ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(debouncedSearch && { search: debouncedSearch }),
+      });
+      if (requestId !== requestIdRef.current) return;
+      const rows = res.data ?? [];
+
+      // Totals and counts are authoritative on every response, so apply them
+      // before the clamp check — otherwise the page we are about to re-request
+      // leaves the cards and the paginator showing pre-delete numbers.
+      setTotal(res.meta?.total ?? rows.length);
+      const s = res.meta?.stats;
+      setStats({
+        active: s?.active ?? 0,
+        inactive: s?.inactive ?? 0,
+        blacklisted: s?.blacklisted ?? 0,
+        pending: s?.pending ?? 0,
+      });
+
+      // A bulk delete on the last page can leave `currentPage` past `last_page`,
+      // which the server answers with zero rows. Fall back to the last page that
+      // still has rows — dumping someone who deleted on page 7 back to page 1
+      // loses their place. `currentPage - 1` bounds it so the value strictly
+      // decreases even if the server reports a nonsense `last_page`, which
+      // guarantees this converges instead of looping.
+      if (rows.length === 0 && currentPage > 1) {
+        const lastPage = res.meta?.last_page ?? 1;
+        clamping = true;
+        setCurrentPage(Math.max(1, Math.min(lastPage, currentPage - 1)));
+        return;
+      }
+
+      setBorrowers(rows);
     } catch {
-      toast.error("We couldn't load the borrowers. Please try again.");
+      if (requestId === requestIdRef.current) {
+        // The toast is transient; without an error state the screen falls back
+        // to the "No members yet" empty state, which tells the admin their
+        // members are gone.
+        setError("We couldn't load the members. Please try again.");
+        toast.error("We couldn't load the borrowers. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current && !clamping) setLoading(false);
     }
-  }, []);
+  }, [currentPage, rowsPerPage, statusFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchBorrowers();
   }, [fetchBorrowers]);
 
-  // Pending applicants belong on the Pending Registrations tab — they
-  // must not leak into the Members list or its "All" count.
-  const members = useMemo(
-    () => borrowers.filter((b) => b.status !== "pending"),
-    [borrowers]
-  );
-
-  // Counts for filter tabs
-  const activeCount = members.filter((b) => b.status === "active").length;
-  const inactiveCount = members.filter((b) => b.status === "inactive").length;
-  const blacklistedCount = members.filter(
-    (b) => b.status === "blacklisted"
-  ).length;
-
-  // Filtering logic
-  const filteredBorrowers = members.filter((b) => {
-    if (statusFilter !== "all" && b.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        b.full_name.toLowerCase().includes(q) ||
-        b.borrower_code.toLowerCase().includes(q) ||
-        (b.contact_number ?? "").includes(q) ||
-        (b.email ?? "").toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
-
-  // Pagination logic (applied after filtering)
-  const totalResults = filteredBorrowers.length;
-  const totalPages = Math.ceil(totalResults / rowsPerPage);
-  const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
-  const startIndex = (safeCurrentPage - 1) * rowsPerPage;
-  const endIndex = Math.min(startIndex + rowsPerPage, totalResults);
-  const paginatedBorrowers = filteredBorrowers.slice(startIndex, endIndex);
+  // `stats` counts every member in the database, so the tab counts stay stable
+  // while paging or filtering — unlike `total`, which tracks the active filters.
+  const memberCount = stats.active + stats.inactive + stats.blacklisted;
+  const pendingCount = stats.pending;
+  const hasFilters = statusFilter !== "all" || debouncedSearch !== "";
 
   // Reset to page 1 when filters change
   function handleSearchChange(value: string) {
@@ -321,7 +367,7 @@ export default function BorrowersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Total Members</p>
-                <p className="text-2xl font-bold">{members.length}</p>
+                <p className="text-2xl font-bold">{memberCount}</p>
               </div>
               <div className="rounded-full bg-brand-blue/10 p-2.5">
                 <Users className="h-5 w-5 text-brand-blue" />
@@ -335,7 +381,7 @@ export default function BorrowersPage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Active</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {activeCount}
+                  {stats.active}
                 </p>
               </div>
               <div className="rounded-full bg-green-500/10 p-2.5">
@@ -350,7 +396,7 @@ export default function BorrowersPage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Inactive</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {inactiveCount}
+                  {stats.inactive}
                 </p>
               </div>
               <div className="rounded-full bg-red-500/10 p-2.5">
@@ -364,7 +410,7 @@ export default function BorrowersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Blacklisted</p>
-                <p className="text-2xl font-bold">{blacklistedCount}</p>
+                <p className="text-2xl font-bold">{stats.blacklisted}</p>
               </div>
               <div className="rounded-full bg-muted p-2.5">
                 <AlertTriangle className="h-5 w-5 text-muted-foreground" />
@@ -420,10 +466,10 @@ export default function BorrowersPage() {
             statusFilter={statusFilter}
             onStatusFilterChange={handleStatusFilterChange}
             counts={{
-              all: members.length,
-              active: activeCount,
-              inactive: inactiveCount,
-              blacklisted: blacklistedCount,
+              all: memberCount,
+              active: stats.active,
+              inactive: stats.inactive,
+              blacklisted: stats.blacklisted,
             }}
           />
         </div>
@@ -432,19 +478,32 @@ export default function BorrowersPage() {
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
-          ) : members.length === 0 ? (
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <button
+                onClick={fetchBorrowers}
+                className="mt-3 inline-flex items-center rounded-md border border-brand-orange/50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange/5 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : borrowers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">
-                No members yet
+                {hasFilters ? "No members match your filters" : "No members yet"}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Click &quot;Add Member&quot; to create the first profile.
+                {hasFilters
+                  ? "Try a different search term or status tab."
+                  : 'Click "Add Member" to create the first profile.'}
               </p>
             </div>
           ) : (
             <BorrowerTable
-              borrowers={paginatedBorrowers}
+              borrowers={borrowers}
               branchNameById={branchNameById}
               onToggleStatus={handleToggleStatus}
               onDelete={handleDelete}
@@ -454,9 +513,9 @@ export default function BorrowersPage() {
           )}
 
           <TablePagination
-            page={safeCurrentPage}
+            page={currentPage}
             perPage={rowsPerPage}
-            total={totalResults}
+            total={total}
             onPageChange={setCurrentPage}
             onPerPageChange={handleRowsPerPageChange}
           />

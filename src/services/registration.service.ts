@@ -1,6 +1,7 @@
 // src/services/registration.service.ts
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import type { PaginatedResponse } from "@/types";
 
 export type RegistrationStatus = "pending" | "active" | "inactive" | "blacklisted";
 
@@ -100,12 +101,11 @@ export interface RegistrationValidId {
   created_at?: string;
 }
 
-export interface RegistrationListResponse {
-  data: Registration[];
-  total: number;
-  per_page: number;
-  current_page: number;
-}
+// `/borrowers` answers with a raw Laravel paginator, so the row count lives at
+// `meta.total` — not at the top level. The old flat shape declared here meant
+// every consumer's `res.total` was `undefined` and silently fell back to the
+// length of the current page.
+export type RegistrationListResponse = PaginatedResponse<Registration>;
 
 // Header recognised by the backend when the caller is an unauthenticated
 // public registrant uploading media tied to the borrower row they just
@@ -136,8 +136,11 @@ export const registrationService = {
         : undefined
     ),
 
+  // `getRaw`, not `get`: the endpoint returns the paginator itself rather than
+  // the `{ success, data, message }` envelope, and `api.get` would unwrap away
+  // the `meta` this list needs for its true total.
   list: (params?: { status?: RegistrationStatus; page?: number; per_page?: number }) =>
-    api.get<RegistrationListResponse>(API_ENDPOINTS.REGISTRATIONS.LIST, { params }),
+    api.getRaw<RegistrationListResponse>(API_ENDPOINTS.REGISTRATIONS.LIST, { params }),
 
   get: (id: number) =>
     api.get<Registration>(API_ENDPOINTS.REGISTRATIONS.DETAIL(id)),
