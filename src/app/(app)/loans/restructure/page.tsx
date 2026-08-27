@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { RouteGuard } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -257,20 +258,34 @@ function RestructureLoanInner() {
 
   const [submitting, setSubmitting] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
+  // Set only when the member drain gave up with pages outstanding, i.e. the
+  // borrower picker is knowingly missing people. Null means complete.
+  const [memberShortfall, setMemberShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   // ── Load seed data on mount ──
   useEffect(() => {
     async function fetchData() {
       const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
         // members_only: a rejected applicant must never be restructurable.
-        borrowerService.list({ members_only: 1, per_page: 200 }),
+        // Drained across pages. `per_page: 200` was clamped to 100 by
+        // BorrowerController without a word, so member 101 onwards could not be
+        // picked and their loans could not be restructured from this screen.
+        borrowerService.listAll({ members_only: 1 }),
         loanProductService.list(),
         userService.list(),
       ]);
 
       if (borrowersRes.status === "fulfilled") {
-        const raw = borrowersRes.value;
-        setBorrowers(Array.isArray(raw) ? raw : (raw as { data: Borrower[] }).data ?? []);
+        const memberDrain = borrowersRes.value;
+        setBorrowers(memberDrain.rows);
+        setMemberShortfall(
+          memberDrain.truncated
+            ? { shown: memberDrain.rows.length, total: memberDrain.total }
+            : null,
+        );
       }
       if (productsRes.status === "fulfilled") {
         const raw = productsRes.value;
@@ -398,6 +413,12 @@ function RestructureLoanInner() {
       try {
         const [collRows, loanRes] = await Promise.all([
           collateralService.list({ borrower_id: borrowerId }),
+          // FIXME(collateral-lock): unscoped and unpaged — the first 15 loans of
+          // any status, so a collateral pledged to an older active loan is
+          // offered here as available. See
+          // collateralService.buildActiveLoanIndex(); this is knowingly wrong
+          // and is NOT fixable here. Do not "fix" it by paging: that turns the
+          // per-loan attachment fan-out into one request per active loan.
           loanService.list(),
         ]);
         const loans: Loan[] = Array.isArray(loanRes)
@@ -758,6 +779,15 @@ function RestructureLoanInner() {
             </p>
           </div>
         </div>
+
+        {memberShortfall && (
+          <IncompleteListNotice
+            shown={memberShortfall.shown}
+            total={memberShortfall.total}
+            noun="members"
+            consequence="Some members are missing from the borrower picker below and cannot be selected."
+          />
+        )}
 
         {/* ── Step 1: Source Loan Selection ── */}
         <Card>
