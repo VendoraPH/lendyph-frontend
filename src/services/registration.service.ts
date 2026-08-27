@@ -41,6 +41,14 @@ export interface RegistrationPayload {
   spouse_occupation?: string;
 
   status?: RegistrationStatus;
+
+  // Client-generated idempotency key (v4 UUID) for the PUBLIC form only; see
+  // src/lib/registration-key.ts. Resending the same key inside the 15-minute
+  // submission window returns the borrower the first attempt created, instead
+  // of rejecting the retry as a duplicate — which is what a lost or timed-out
+  // response used to cost the applicant. Optional: operator creates send
+  // nothing and the backend ignores it for authenticated callers.
+  registration_uuid?: string;
 }
 
 export interface SubmitRegistrationResponse {
@@ -115,6 +123,18 @@ export type RegistrationListResponse = PaginatedResponse<Registration>;
 const SUBMISSION_TOKEN_HEADER = "X-Submission-Token";
 
 export const registrationService = {
+  /**
+   * Create the applicant's borrower row.
+   *
+   * Send `registration_uuid` from the public form: the endpoint treats a repeat
+   * of the same key inside the submission window as the same submission and
+   * replays the original response (row + a fresh submission token). Without it
+   * a retry after a lost response creates a second, orphaned record.
+   *
+   * A 422 whose `errors` name `registration_uuid` means the key is spent, not
+   * that the applicant is a duplicate — the caller must mint a new one before
+   * retrying (see isStaleRegistrationKeyError).
+   */
   submit: (payload: RegistrationPayload) =>
     api.post<SubmitRegistrationResponse>(API_ENDPOINTS.REGISTRATIONS.SUBMIT, payload),
 
