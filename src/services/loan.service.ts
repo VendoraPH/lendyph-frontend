@@ -12,8 +12,24 @@ export type ReleaseLoanPayload = {
 };
 
 export const loanService = {
+  /**
+   * `/loans` returns a raw Laravel paginator (`{ data, links, meta }`), not the
+   * `{ success, data, message }` envelope, so it must use `getRaw` — `api.get`
+   * unwraps to `data` and throws away `meta.total`, `meta.last_page` and
+   * `meta.stats`, which is what forced the list screen to paginate, filter and
+   * count client-side over one 15-row page.
+   *
+   * Note the static type is identical either way (`api.get` and `api.getRaw`
+   * share a signature), so TypeScript will not flag a caller that assumes the
+   * old unwrapped array — every one of them was checked by hand when this moved.
+   *
+   * Params the API accepts: `page`, `per_page` (clamped to 100), `search`,
+   * `status` (comma-separated for a multi-status filter), `branch_id`,
+   * `borrower_id`, `loan_product_id`, `date_from`/`date_to` (inclusive,
+   * whole-day, on `created_at`), and `sort`/`dir`.
+   */
   list: (params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
+    api.getRaw<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
 
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),

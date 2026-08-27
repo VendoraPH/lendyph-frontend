@@ -27,14 +27,11 @@ import { LoanFilters } from "./_components/loan-filters";
 import {
   FILTER_TABS,
   ACTIVE_STATUSES,
-  matchesTab,
-  matchesSearch,
-  matchesDateRange,
-  loanProductId,
-  compareLoans,
   numOrNull,
   dateOrNull,
+  isoDateOrNull,
   clampOneOf,
+  tabFromParam,
   type FilterTab,
   type LoanSortKey,
   type SortDir,
@@ -51,8 +48,50 @@ const SORT_KEYS: LoanSortKey[] = [
   "created_at",
 ];
 
+/**
+ * Global loan counts by status, read straight from the list response's
+ * `meta.stats`. Deliberately an open record rather than a fixed shape: the API
+ * reports every status it knows about — including legacy ones such as `ongoing`
+ * and `restructured` that have no tab of their own — and each consumer here
+ * only reads the keys it needs.
+ *
+ * These counts ignore the request's own `status`/`search`/product/date filters,
+ * which is exactly why the KPI cards and tab badges can be driven from the same
+ * request that fetches one page of rows.
+ */
+type LoanStats = Record<string, number>;
+
+/**
+ * Keys in `meta.stats` that are roll-ups of other keys, not statuses of their
+ * own: `active` is released + current + ongoing + past_due. Summing the record
+ * blind would count those rows twice, so the "All" total skips them.
+ */
+const AGGREGATE_STAT_KEYS = new Set(["all", "active"]);
+
+function allCountFromStats(stats: LoanStats): number {
+  if (typeof stats.all === "number") return stats.all;
+  let sum = 0;
+  for (const [key, value] of Object.entries(stats)) {
+    if (!AGGREGATE_STAT_KEYS.has(key)) sum += value;
+  }
+  return sum;
+}
+
+function activeCountFromStats(stats: LoanStats): number {
+  // Prefer the server's aggregate. The fallback re-adds the same four statuses
+  // the "active" tab filters on, so the card still agrees with the table when
+  // talking to an API build that predates the aggregate.
+  if (typeof stats.active === "number") return stats.active;
+  return ACTIVE_STATUSES.reduce((sum, status) => sum + (stats[status] ?? 0), 0);
+}
+
 // Clickable KPI card. When `active` is true the card is visually "pressed"
 // so it's obvious that it drives the filter below.
+//
+// `value` is null while no counts are known (first load, or a load that
+// failed before any response). It renders as an em dash rather than 0 —
+// a zero here reads as "this coop has no loans", which is a statement of
+// fact we are in no position to make.
 function StatCard({
   label,
   value,
@@ -63,7 +102,7 @@ function StatCard({
   onClick,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   valueClassName?: string;
   icon: React.ReactNode;
   iconBg: string;
@@ -86,7 +125,9 @@ function StatCard({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>{value}</p>
+            <p className={cn("text-2xl font-bold", valueClassName)}>
+              {value ?? "—"}
+            </p>
           </div>
           <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
         </div>
@@ -101,15 +142,21 @@ export default function LoansPage() {
   const searchParams = useSearchParams();
 
   // ── URL → state (derived every render, cheap) ──
-  const tab = clampOneOf<FilterTab>(
-    (searchParams.get("tab") as FilterTab) ?? "all",
-    ["all", "active", ...FILTER_TABS.filter((t) => t.value !== "all").map((t) => t.value)] as FilterTab[],
-    "all",
-  );
+  // Everything the request depends on is read back out of the URL, so a deep
+  // link, a browser Back, and a click on a filter all take the same path.
+  // Aliases legacy values and falls back to "all" for anything unrecognised —
+  // see tabFromParam for the `?tab=` contract.
+  const tab = tabFromParam(searchParams.get("tab"));
   const q = searchParams.get("q") ?? "";
-  const productId = numOrNull(searchParams.get("product_id"));
-  const dateFrom = dateOrNull(searchParams.get("from"));
-  const dateTo = dateOrNull(searchParams.get("to"));
+  // `loan_product_id` is validated as an integer server-side, and a hand-typed
+  // `?product_id=2.5` would come back a 422 rather than a filtered list.
+  const productIdRaw = numOrNull(searchParams.get("product_id"));
+  const productId = productIdRaw == null ? null : Math.trunc(productIdRaw);
+  // Kept as validated `YYYY-MM-DD` strings, not Dates: these feed both the
+  // request and a dependency array, and a fresh Date object every render would
+  // re-trigger the fetch effect forever.
+  const dateFromParam = isoDateOrNull(searchParams.get("from"));
+  const dateToParam = isoDateOrNull(searchParams.get("to"));
   const sortKey = clampOneOf<LoanSortKey>(
     (searchParams.get("sort") as LoanSortKey) ?? "created_at",
     SORT_KEYS,
@@ -120,16 +167,38 @@ export default function LoansPage() {
     ["asc", "desc"],
     "desc",
   );
-  const page = Math.max(1, numOrNull(searchParams.get("page")) ?? 1);
+  // Floored, not just clamped: `?page=2.5` is a number, and the paginator wants
+  // an integer.
+  const page = Math.max(1, Math.floor(numOrNull(searchParams.get("page")) ?? 1));
   const perPage = clampOneOf<number>(
     numOrNull(searchParams.get("per_page")) ?? 10,
     PER_PAGE_OPTIONS,
     10,
   );
 
+  const dateFrom = useMemo(() => dateOrNull(dateFromParam), [dateFromParam]);
+  const dateTo = useMemo(() => dateOrNull(dateToParam), [dateToParam]);
+
+  // "active" is a virtual tab with no status of its own. It goes to the API
+  // verbatim: `status=active` is the API's own shorthand for the set, expanded
+  // there from the same constant `meta.stats.active` is summed from, so the
+  // rows and the KPI card cannot disagree. Spelling the four statuses out here
+  // would work too, and would be a second copy of that definition — the copy
+  // that goes stale the day the set changes.
+  //
+  // Every other tab value IS its status, so it goes to the API as-is: the
+  // Current tab sends `status=ongoing`, and its badge reads `stats.ongoing`.
+  // Nothing here reads `stats.current` or `stats.past_due` — neither is a
+  // status any row can hold, and both are on their way out of `meta.stats`.
+  const statusParam = tab === "all" ? null : tab;
+  const search = q.trim();
+
   // ── Local-only state (not in URL) ──
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<LoanStats>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [searchDraft, setSearchDraft] = useState(q);
@@ -166,22 +235,97 @@ export default function LoansPage() {
     [router, pathname],
   );
 
-  // ── Fetch loans + products in parallel on mount ──
+  // Page 1 is the default, so it stays out of the URL — keeps shared links tidy
+  // and keeps a single canonical URL per view.
+  const goToPage = useCallback(
+    (next: number) => {
+      updateParams({ page: next === 1 ? null : String(next) });
+    },
+    [updateParams],
+  );
+
+  // Guards against out-of-order responses: fast typing or rapid page clicks can
+  // land an older request last and repaint the wrong rows.
+  const requestIdRef = useRef(0);
+
+  const fetchLoans = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    // When we clamp we immediately refetch, so `loading` must stay true through
+    // the hand-off — otherwise `finally` clears it and React paints one frame of
+    // the previous page's rows under the new totals.
+    let clamping = false;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await loanService.list({
+        page,
+        per_page: perPage,
+        sort: sortKey,
+        dir: sortDir,
+        ...(statusParam && { status: statusParam }),
+        ...(search && { search }),
+        ...(productId != null && { loan_product_id: productId }),
+        ...(dateFromParam && { date_from: dateFromParam }),
+        ...(dateToParam && { date_to: dateToParam }),
+      });
+      if (requestId !== requestIdRef.current) return;
+      const rows = res.data ?? [];
+
+      // Totals and counts are authoritative on every response, so apply them
+      // before the clamp check — otherwise the page we are about to re-request
+      // leaves the cards and the paginator showing the previous numbers.
+      setTotal(res.meta?.total ?? rows.length);
+      // Replaced only when the response actually carries counts. Defaulting to
+      // `{}` would blank the KPI cards back to em dashes on any response that
+      // omitted `stats`, which is worse than keeping the last figures the API
+      // did confirm.
+      if (res.meta?.stats) setStats(res.meta.stats);
+
+      // A deep link (or a loan changing status under an active filter) can put
+      // `page` past `last_page`, which the server answers with zero rows. Fall
+      // back to the last page that still has rows rather than dumping someone
+      // who was on page 7 back to page 1. `page - 1` bounds it so the value
+      // strictly decreases even if the server reports a nonsense `last_page`,
+      // which guarantees this converges instead of looping.
+      if (rows.length === 0 && page > 1) {
+        const lastPage = res.meta?.last_page ?? 1;
+        clamping = true;
+        goToPage(Math.max(1, Math.min(lastPage, page - 1)));
+        return;
+      }
+
+      setLoans(rows);
+    } catch {
+      if (requestId === requestIdRef.current) {
+        // The toast is transient; without an error state the table falls back to
+        // its "No loan applications found." row, which tells the officer their
+        // loans are gone.
+        setError("We couldn't load the loans. Please try again.");
+        toast.error("We couldn't load loans. Please try again.");
+      }
+    } finally {
+      if (requestId === requestIdRef.current && !clamping) setLoading(false);
+    }
+  }, [
+    page,
+    perPage,
+    sortKey,
+    sortDir,
+    statusParam,
+    search,
+    productId,
+    dateFromParam,
+    dateToParam,
+    goToPage,
+  ]);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
+
+  // ── Products for the filter dropdown: load once ──
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await loanService.list();
-        if (cancelled) return;
-        const data = Array.isArray(res) ? res : (res.data ?? []);
-        setLoans(data);
-      } catch {
-        if (!cancelled) toast.error("We couldn't load loans. Please try again.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
     (async () => {
       try {
         setProductsLoading(true);
@@ -200,6 +344,9 @@ export default function LoansPage() {
   }, []);
 
   // ── Debounce searchDraft → URL ──
+  // The URL is the single source of truth for the request, so debouncing the
+  // write here is what keeps this to one request per settled search box rather
+  // than one per keystroke.
   useEffect(() => {
     if (searchDraft === q) return;
     const t = setTimeout(() => {
@@ -218,47 +365,14 @@ export default function LoansPage() {
     setSearchDraft((current) => (current === q ? current : q));
   }, [q]);
 
-  // ── Counts from unfiltered loans (KPI cards + tab badges) ──
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: loans.length };
-    for (const loan of loans) {
-      counts[loan.status] = (counts[loan.status] ?? 0) + 1;
-    }
-    counts.active = loans.filter((l) => ACTIVE_STATUSES.includes(l.status)).length;
-    return counts;
-  }, [loans]);
-
-  const summaryStats = useMemo(
-    () => ({
-      total: loans.length,
-      forReview: loans.filter((l) => l.status === "for_review").length,
-      active: statusCounts.active ?? 0,
-      rejected: loans.filter((l) => l.status === "rejected").length,
-    }),
-    [loans, statusCounts.active],
-  );
-
-  // ── Filter → sort → slice pipeline ──
-  const filtered = useMemo(() => {
-    return loans.filter(
-      (l) =>
-        matchesTab(l, tab) &&
-        (productId == null || loanProductId(l) === productId) &&
-        matchesDateRange(l, dateFrom, dateTo) &&
-        matchesSearch(l, q),
-    );
-  }, [loans, tab, productId, dateFrom, dateTo, q]);
-
-  const sorted = useMemo(
-    () => [...filtered].sort((a, b) => compareLoans(a, b, sortKey, sortDir)),
-    [filtered, sortKey, sortDir],
-  );
-
-  const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
-  const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * perPage;
-  const pageRows = sorted.slice(startIndex, startIndex + perPage);
+  // ── Counts (KPI cards + tab badges) come from meta.stats, so they describe
+  //    every loan in the coop — not just the page currently on screen. ──
+  // `stats` is only ever replaced by a successful response, so once counts are
+  // known they survive a later failure. Until then there is nothing to show and
+  // the cards say so, instead of printing a zero the API never confirmed.
+  const countsKnown = Object.keys(stats).length > 0;
+  const allCount = allCountFromStats(stats);
+  const activeCount = activeCountFromStats(stats);
 
   // ── Handlers ──
   function handleTabChange(next: FilterTab) {
@@ -287,10 +401,6 @@ export default function LoansPage() {
 
   function handlePerPageChange(next: number) {
     updateParams({ per_page: next === 10 ? null : String(next) });
-  }
-
-  function handlePageChange(next: number) {
-    updateParams({ page: next === 1 ? null : String(next) });
   }
 
   const productOptions = useMemo(
@@ -331,7 +441,7 @@ export default function LoansPage() {
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Total Applications"
-            value={summaryStats.total}
+            value={countsKnown ? allCount : null}
             valueClassName=""
             icon={<FileText className="h-5 w-5 text-brand-blue" />}
             iconBg="bg-brand-blue/10"
@@ -340,7 +450,7 @@ export default function LoansPage() {
           />
           <StatCard
             label="Pending Approval"
-            value={summaryStats.forReview}
+            value={countsKnown ? (stats.for_review ?? 0) : null}
             valueClassName="text-amber-600"
             icon={<Clock className="h-5 w-5 text-amber-600" />}
             iconBg="bg-amber-500/10"
@@ -349,7 +459,7 @@ export default function LoansPage() {
           />
           <StatCard
             label="Active Loans"
-            value={summaryStats.active}
+            value={countsKnown ? activeCount : null}
             valueClassName="text-green-600"
             icon={<Banknote className="h-5 w-5 text-green-600" />}
             iconBg="bg-green-500/10"
@@ -358,7 +468,7 @@ export default function LoansPage() {
           />
           <StatCard
             label="Rejected"
-            value={summaryStats.rejected}
+            value={countsKnown ? (stats.rejected ?? 0) : null}
             valueClassName="text-red-600"
             icon={<XCircle className="h-5 w-5 text-red-600" />}
             iconBg="bg-red-500/10"
@@ -390,7 +500,11 @@ export default function LoansPage() {
                     : "bg-muted text-muted-foreground",
                 )}
               >
-                {statusCounts[t.value] ?? 0}
+                {!countsKnown
+                  ? "—"
+                  : t.value === "all"
+                    ? allCount
+                    : (stats[t.value] ?? 0)}
               </span>
             </button>
           ))}
@@ -400,7 +514,7 @@ export default function LoansPage() {
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-medium">
-              Loan Applications ({total})
+              Loan Applications{countsKnown ? ` (${total})` : ""}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -421,10 +535,26 @@ export default function LoansPage() {
               <div className="flex items-center justify-center py-12">
                 <Spinner className="size-6 text-brand-orange" />
               </div>
+            ) : error ? (
+              <div
+                role="alert"
+                className="flex flex-col items-center justify-center py-12 text-center"
+              >
+                <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
+                <p className="text-sm text-muted-foreground">{error}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchLoans}
+                  className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
+                >
+                  Retry
+                </Button>
+              </div>
             ) : (
               <>
                 <LoanTable
-                  loans={pageRows}
+                  loans={loans}
                   sort={{ key: sortKey, dir: sortDir }}
                   onSortChange={handleSortChange}
                   onRowClick={(id) => router.push(`/loans/${id}`)}
@@ -438,10 +568,10 @@ export default function LoansPage() {
                   }
                 />
                 <TablePagination
-                  page={safePage}
+                  page={page}
                   perPage={perPage}
                   total={total}
-                  onPageChange={handlePageChange}
+                  onPageChange={goToPage}
                   onPerPageChange={handlePerPageChange}
                 />
               </>
