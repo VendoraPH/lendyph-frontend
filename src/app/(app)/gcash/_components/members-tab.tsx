@@ -42,6 +42,9 @@ export function MembersTab() {
       setLoading(true);
       try {
         const res = await borrowerService.list({
+          // Every row here renders Cash In / Cash Out, so non-members
+          // (pending, rejected) must not reach the table at all.
+          members_only: 1,
           search: debounced || undefined,
           per_page: 25,
         });

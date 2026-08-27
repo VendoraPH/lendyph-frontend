@@ -11,9 +11,22 @@ import { formatValidationMessage } from "./validation-message";
 
 export { formatValidationMessage } from "./validation-message";
 
-/** Show a friendly, guarded message for any thrown value. */
-export function notifyError(err: unknown, fallback?: string): void {
-  toast.error(getErrorMessage(err, fallback));
+/**
+ * Show a friendly, guarded message for any thrown value.
+ *
+ * `description` is for context the error itself can't carry — e.g. telling the
+ * operator which part of a multi-step save did succeed. It is plain copy the
+ * caller writes, never anything derived from the error.
+ */
+export function notifyError(
+  err: unknown,
+  fallback?: string,
+  description?: string
+): void {
+  toast.error(
+    getErrorMessage(err, fallback),
+    description ? { description } : undefined
+  );
 }
 
 /** Confirm an action succeeded. `message` states what happened, plainly. */

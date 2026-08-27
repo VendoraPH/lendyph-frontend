@@ -11,9 +11,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -84,8 +94,29 @@ export function BorrowerTable({
   // Sorting state
   const [sort, setSort] = useState<SortState>({ key: null, direction: null });
 
-  // Row selection state
+  // Row selection state.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  // A selection must never outlive the rows it points at. Now that paging is
+  // server-side the `borrowers` prop swaps underneath this component on every
+  // page / filter / search change, and any carried-over id would sit in the
+  // selection with no visible tick — "Delete Selected" is an irreversible hard
+  // delete, so that would delete members the admin never saw. Reset during
+  // render (React's "adjusting state when a prop changes") rather than in an
+  // effect, so no frame is ever painted with a stale selection.
+  const rowKey = borrowers.map((b) => b.id).join(",");
+  const [prevRowKey, setPrevRowKey] = useState(rowKey);
+  if (rowKey !== prevRowKey) {
+    setPrevRowKey(rowKey);
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
+  }
+
+  // Signed photo URLs expire; remember the ones that 404/403 so the initials
+  // show through instead of a broken-image glyph. Keyed by URL, not by row, so
+  // a freshly minted URL for the same member renders again on the next fetch.
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
 
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState<
@@ -172,6 +203,34 @@ export function BorrowerTable({
 
   return (
     <div className="space-y-2">
+      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedCount} member{selectedCount === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes {selectedCount} member
+              {selectedCount === 1 ? "" : "s"} and every record attached to
+              them. It cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                onBulkDelete(selectedArray);
+                setSelectedIds(new Set());
+                setConfirmBulkDelete(false);
+              }}
+            >
+              Delete {selectedCount} member{selectedCount === 1 ? "" : "s"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Toolbar: column visibility + bulk actions */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -194,10 +253,7 @@ export function BorrowerTable({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => {
-                  onBulkDelete(selectedArray);
-                  setSelectedIds(new Set());
-                }}
+                onClick={() => setConfirmBulkDelete(true)}
               >
                 <Trash2 data-icon="inline-start" />
                 Delete Selected
@@ -289,15 +345,46 @@ export function BorrowerTable({
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar size="sm">
-                      {borrower.photo ? (
-                        <AvatarImage
-                          src={borrower.photo}
-                          alt={borrower.full_name}
-                        />
-                      ) : null}
                       <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xs font-semibold">
                         {getInitials(borrower.full_name)}
                       </AvatarFallback>
+                      {borrower.photo && !failedPhotos.has(borrower.photo) ? (
+                        // Deliberately a native <img> rather than <AvatarImage>.
+                        // base-ui's AvatarImage probes every src with a detached
+                        // `new window.Image()` on mount and renders nothing until
+                        // that resolves, and the probe forwards only
+                        // referrerPolicy/crossOrigin/sizes/srcSet — never
+                        // `loading`. So an AvatarImage fetches eagerly no matter
+                        // what, and a page of 100 rows fired 100 absolute signed
+                        // URLs at the API host in one burst (613 in production),
+                        // tripping the rate limiter and locking the admin out.
+                        // A plain lazy <img> layered over the fallback initials
+                        // defers each fetch until the row nears the viewport.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={borrower.photo}
+                          // Decorative: the member's name is rendered as text
+                          // immediately beside it, so alt text would just double
+                          // up in a screen reader.
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          onError={() => {
+                            // Declarative, not `style.display = "none"`: rows are
+                            // keyed by id, so an in-place refetch reuses this DOM
+                            // node and only swaps `src`. An imperative hide would
+                            // outlive the URL it was set for and keep the member
+                            // hidden forever — and because a display:none image
+                            // never intersects the viewport, `loading="lazy"`
+                            // would stop it ever re-fetching to recover.
+                            const url = borrower.photo;
+                            if (url) {
+                              setFailedPhotos((prev) => new Set(prev).add(url));
+                            }
+                          }}
+                          className="absolute inset-0 aspect-square size-full rounded-full object-cover"
+                        />
+                      ) : null}
                     </Avatar>
                     <div>
                       <p className="font-medium">{borrower.full_name}</p>

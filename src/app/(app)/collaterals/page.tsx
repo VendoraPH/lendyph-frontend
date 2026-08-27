@@ -92,7 +92,8 @@ export default function CollateralListingPage() {
         await Promise.all([
           collateralService.list(),
           collateralTypeService.list(),
-          borrowerService.list({ per_page: 9999 }),
+          // members_only: collateral belongs to members, not to applicants.
+          borrowerService.list({ members_only: 1, per_page: 9999 }),
           loanService.list(),
         ]);
       const borrowers: Borrower[] = Array.isArray(borrowerRes)

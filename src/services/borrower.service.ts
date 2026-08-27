@@ -14,8 +14,14 @@ export interface BorrowerValidId {
 }
 
 export const borrowerService = {
+  /**
+   * `/borrowers` returns a raw Laravel paginator (`{ data, links, meta }`), not the
+   * `{ success, data, message }` envelope, so it must use `getRaw` — `api.get`
+   * unwraps to `data` and throws away `meta.total` / `meta.stats`, which is what
+   * forced every caller to paginate and count client-side over one 15-row page.
+   */
   list: (params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<Borrower>>(API_ENDPOINTS.BORROWERS.LIST, {
+    api.getRaw<PaginatedResponse<Borrower>>(API_ENDPOINTS.BORROWERS.LIST, {
       params,
     }),
 

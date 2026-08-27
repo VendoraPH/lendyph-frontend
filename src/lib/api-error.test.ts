@@ -38,11 +38,39 @@ test("413 maps to file-too-large copy", () => {
   );
 });
 
-test("429 maps to rate-limit copy", () => {
+test("429 with no body maps to rate-limit copy", () => {
   assert.equal(
     getErrorMessage(httpErr(429)),
     "Too many attempts. Please wait a moment and try again."
   );
+});
+
+// The no-body case above is why the friendly 429 copy went unnoticed as dead
+// code: in production the throttler DOES send a body, and Laravel's stock
+// "Too Many Attempts." is short, plain English that the leak guard let through,
+// so the framework string reached the toast instead.
+test("429 replaces Laravel's stock 'Too Many Attempts.' with the friendly copy", () => {
+  assert.equal(
+    getErrorMessage(httpErr(429, { message: "Too Many Attempts." })),
+    "Too many attempts. Please wait a moment and try again."
+  );
+});
+
+test("429 still shows a human backend explanation verbatim", () => {
+  const err = httpErr(429, {
+    message: "Too many registration attempts. Please try again in 5 minutes.",
+  });
+  assert.equal(
+    getErrorMessage(err),
+    "Too many registration attempts. Please try again in 5 minutes."
+  );
+});
+
+test("the boilerplate guard is anchored — real prose containing 'forbidden' survives", () => {
+  const err = httpErr(403, {
+    message: "Editing is forbidden while this loan is under review.",
+  });
+  assert.equal(getErrorMessage(err), "Editing is forbidden while this loan is under review.");
 });
 
 test("500 maps to server copy, ignoring any raw backend message", () => {
@@ -55,6 +83,30 @@ test("500 maps to server copy, ignoring any raw backend message", () => {
 test("no response (offline) maps to connection copy", () => {
   assert.equal(
     getErrorMessage({ message: "Network Error" }),
+    "You appear to be offline. Check your connection and try again."
+  );
+});
+
+// A timeout also arrives with no `response`, but the advice is the opposite of
+// offline: the request DID leave the device and may have been processed. Telling
+// someone mid-upload they are offline is what produced duplicate registrations.
+test("an axios timeout warns the submission may have gone through", () => {
+  assert.equal(
+    getErrorMessage({ code: "ECONNABORTED", message: "timeout of 30000ms exceeded" }),
+    "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again."
+  );
+});
+
+test("a connect timeout (ETIMEDOUT) gets the same warning", () => {
+  assert.equal(
+    getErrorMessage({ code: "ETIMEDOUT", message: "connect ETIMEDOUT" }),
+    "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again."
+  );
+});
+
+test("a non-timeout code with no response is still offline", () => {
+  assert.equal(
+    getErrorMessage({ code: "ERR_NETWORK", message: "Network Error" }),
     "You appear to be offline. Check your connection and try again."
   );
 });
@@ -140,4 +192,15 @@ test("404 rejects a model-binding message even without a class path", () => {
   // the backslash guard alone would let this through.
   const err = httpErr(404, { message: "No query results for model Loan 42" });
   assert.equal(getErrorMessage(err), "We couldn't find what you were looking for.");
+});
+
+test("Laravel's other stock bodies never beat our own copy", () => {
+  assert.equal(
+    getErrorMessage(httpErr(403, { message: "This action is unauthorized." })),
+    "You don't have permission to do that."
+  );
+  assert.equal(
+    getErrorMessage(httpErr(404, { message: "Not Found" })),
+    "We couldn't find what you were looking for."
+  );
 });
