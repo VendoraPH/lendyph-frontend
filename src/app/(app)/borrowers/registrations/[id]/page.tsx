@@ -89,8 +89,12 @@ export default function RegistrationReviewPage() {
       await registrationService.approve(registrationId);
       toast.success("Registration approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
-    } catch {
-      toast.error("We couldn't approve the registration. Please try again.");
+    } catch (err) {
+      // Approval is gated server-side (still pending + at least one valid ID on
+      // file). Those 422s explain exactly what is missing, so surface the
+      // server's wording — a generic "please try again" sends the operator
+      // round in circles looking for a fault that isn't there.
+      notifyError(err, "We couldn't approve the registration. Please try again.");
     } finally {
       setApproving(false);
     }
@@ -167,26 +171,81 @@ export default function RegistrationReviewPage() {
     }
   }
 
+  // Re-read the valid IDs the server actually holds. Run after any failed
+  // save: drafts still carry `id: null` for entries syncValidIds has already
+  // uploaded, so re-pressing Save & Approve would upload them a second time.
+  // Re-seeding from the server clears that.
+  async function reloadValidIds() {
+    try {
+      const ids = await registrationService.listValidIds(registrationId);
+      const fresh = Array.isArray(ids) ? ids : [];
+      setValidIds(fresh);
+      setIdDrafts(fresh.map(draftFromServer));
+    } catch {
+      // Best-effort — leaving the editor as it stands beats emptying it.
+    }
+  }
+
   async function handleSaveEdit() {
     setSavingEdit(true);
+    // Which step we're on. Each one commits before the next begins, so a
+    // failure has to name the step that actually failed — claiming "nothing
+    // was saved" after `update()` has already landed pushes the operator into
+    // re-submitting edits that are stored, which is how duplicates get made.
+    let phase: "details" | "ids" | "approve" = "details";
     try {
       await registrationService.update(registrationId, draft);
+      phase = "ids";
       await syncValidIds();
+      phase = "approve";
       await registrationService.approve(registrationId);
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
-      notifyError(err, "We couldn't save and approve this registration. Please try again.");
+      if (phase === "details") {
+        notifyError(err, "We couldn't save this registration. Please try again.");
+      } else if (phase === "ids") {
+        notifyError(
+          err,
+          "We couldn't finish updating the valid IDs. Please try again.",
+          "The rest of your changes were saved."
+        );
+      } else {
+        // Only the approval gate refused — the applicant is no longer pending,
+        // or still has no valid ID on file. Stay in edit mode so the operator
+        // can fix the cause rather than losing the screen.
+        notifyError(
+          err,
+          "We couldn't approve this registration. Please try again.",
+          "Your changes were saved — only the approval didn't go through."
+        );
+      }
+      // Any failure past `update()` can leave the editor out of step with the
+      // server: syncValidIds deletes and re-uploads entry by entry, so a
+      // half-finished run leaves drafts still marked new that are already
+      // stored. Re-seed from the server before any retry — skipping this is
+      // what puts two copies of the same ID on an applicant's file.
+      await reloadValidIds();
     } finally {
       setSavingEdit(false);
     }
   }
 
-  async function handleReject() {
-    await registrationService.reject(registrationId);
-    toast.success("Registration rejected.");
-    setRejectOpen(false);
-    router.push("/borrowers");
+  async function handleReject(reason: string) {
+    // RejectDialog only clears its submitting flag; without this catch a failed
+    // reject looked to the operator like nothing happened at all.
+    try {
+      await registrationService.reject(registrationId, { reason });
+      toast.success("Registration rejected. The record was kept, not deleted.");
+      setRejectOpen(false);
+      router.push("/borrowers");
+    } catch (err) {
+      notifyError(err, "We couldn't reject this registration. Please try again.");
+      // Re-throw purely as a signal: the dialog stays open and keeps the typed
+      // reason for a retry. The message is already on screen, so RejectDialog
+      // swallows this rather than reporting it twice.
+      throw err;
+    }
   }
 
   function openValidId(item: RegistrationValidId, label: string) {

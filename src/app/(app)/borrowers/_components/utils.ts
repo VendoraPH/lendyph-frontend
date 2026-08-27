@@ -1,10 +1,14 @@
-import type { BorrowerStatus } from "@/types";
+import type { Borrower } from "@/types";
 
-export const statusBadgeColor: Record<BorrowerStatus | "pending", string> = {
+// Keyed off `Borrower["status"]` rather than a hand-written union: a new status
+// on the model then fails the build here instead of silently rendering
+// `className={undefined}`, which is how `rejected` slipped through unstyled.
+export const statusBadgeColor: Record<Borrower["status"], string> = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
   blacklisted: "bg-gray-900 text-white border-gray-700",
   pending: "bg-amber-100 text-amber-700 border-amber-200",
+  rejected: "bg-muted text-muted-foreground border-border line-through",
 };
 
 export function generateBorrowerCode(count: number): string {

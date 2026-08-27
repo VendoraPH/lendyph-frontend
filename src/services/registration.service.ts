@@ -154,9 +154,21 @@ export const registrationService = {
   update: (id: number, data: Partial<RegistrationPayload>) =>
     api.put<Registration>(API_ENDPOINTS.REGISTRATIONS.UPDATE(id), data),
 
+  /**
+   * Approve a pending registration. The endpoint enforces the
+   * `borrowers:approve` permission, that the applicant is still `pending`, and
+   * that at least one valid ID is on file — then stamps approved_by/approved_at.
+   * Rejects with 422 (`errors.status` / `errors.valid_id`) when a gate fails, so
+   * callers must surface the server message rather than generic copy.
+   */
   approve: (id: number) =>
-    api.patch<void>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
+    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
 
-  reject: (id: number) =>
-    api.delete<void>(API_ENDPOINTS.REGISTRATIONS.REJECT(id)),
+  /**
+   * Soft-reject a pending registration: sets status to `rejected` and records
+   * rejection_reason/rejected_by/rejected_at, keeping the applicant on file.
+   * `reason` is required by RejectBorrowerRequest (string, max 1000).
+   */
+  reject: (id: number, data: { reason: string }) =>
+    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.REJECT(id), data),
 };
