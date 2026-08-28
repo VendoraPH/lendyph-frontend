@@ -123,8 +123,15 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDateISO, formatRate } from "@/lib/format";
 import {
+  formatDate,
+  formatDateISO,
+  formatDateObj,
+  formatDateTime,
+  formatRate,
+} from "@/lib/format";
+import {
+  LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
@@ -155,28 +162,6 @@ const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
     maximumFractionDigits: 2,
   }).format(parseFloat(String(amount ?? 0)) || 0);
 
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
-const formatDateTime = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-const formatDateObj = (date: Date) =>
-  date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 
 // ── Amortization Schedule Helpers ──
 
@@ -327,19 +312,12 @@ function generateSchedule(
 }
 
 // ── Status Colors ──
-
-const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
-  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
-  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
-  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
-  closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-};
+//
+// Loan status colours are NOT here: they live once, in LOAN_STATUS_COLORS
+// (`@/constants`), keyed off `LoanStatus`. This file used to keep its own copy
+// and it had already drifted — it was missing `ongoing`, so a released loan on
+// a schedule drew an unstyled badge on the one screen you open to check it.
+// Adjustment statuses below are a different vocabulary and stay local.
 
 const adjustmentStatusColors: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
@@ -2677,7 +2655,7 @@ export default function LoanDetailPage({
                 </span>
                 <Badge
                   variant="outline"
-                  className={cn("text-sm px-3 py-1", statusColors[loan.status])}
+                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
                   {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
                 </Badge>
@@ -2693,7 +2671,7 @@ export default function LoanDetailPage({
               {!loan.loan_account_number && (
                 <Badge
                   variant="outline"
-                  className={cn("text-sm px-3 py-1", statusColors[loan.status])}
+                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
                   {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
                 </Badge>
