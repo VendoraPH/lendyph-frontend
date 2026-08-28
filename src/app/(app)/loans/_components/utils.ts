@@ -10,10 +10,44 @@ import type { LoanStatus, Loan } from "@/types/loan";
 // being a client-side slice, and a stale second implementation of "what counts
 // as active" is exactly how a table and its KPI cards drift apart.
 
-// "active" is a virtual tab value (not a real status) used when the Active
-// Loans KPI card is clicked — it matches any post-release, not-yet-completed
-// status so the table reflects what's still in the portfolio.
-export type FilterTab = "all" | "active" | LoanStatus;
+/**
+ * `?status=` values the API accepts that NO ROW CAN HOLD.
+ *
+ * Both are resolved server-side and both agree with their own `meta.stats`
+ * entry, so a tab built on either cannot disagree with the badge above it:
+ *
+ *  - `active` expands to `Loan::ACTIVE_STATUSES` — a `whereIn` on
+ *    `loans.status`, so it is a set of statuses.
+ *  - `past_due` does NOT expand to statuses at all. It resolves to
+ *    `Loan::scopePastDue()`: a COLLECTIBLE loan (`released`, `ongoing` or
+ *    `defaulted`) holding an unpaid amortization schedule that is past its due
+ *    date AND past the loan's `grace_period_days`. It is derived from the
+ *    schedule, so it is a subquery rather than a status.
+ *
+ * The two OVERLAP and neither contains the other. `past_due` reaches
+ * `defaulted` loans, which are collectible but not active; `active` holds
+ * loans with nothing late. So the badges are free to disagree, they do not sum
+ * to the book total, and nothing in this module or the screen above it may
+ * imply otherwise.
+ *
+ * Listed here, once, because `AGGREGATE_STAT_KEYS` on the loans page has to
+ * skip exactly these when it sums `meta.stats` into the All count — counting a
+ * roll-up alongside the statuses it rolls up is a double count.
+ */
+export const VIRTUAL_TAB_VALUES = ["active", "past_due"] as const;
+
+export type VirtualTabValue = (typeof VIRTUAL_TAB_VALUES)[number];
+
+/**
+ * Every value the tab strip and `?tab=` share.
+ *
+ * `past_due` is a member of `LoanStatus` too, as a legacy union member kept so
+ * responses from older backends still parse — but that is not why it is here.
+ * It is here as a virtual value, and the two meanings must not be confused: no
+ * loan row carries `past_due` as its status, and adding it to the
+ * `loans.status` enum is explicitly the wrong repair.
+ */
+export type FilterTab = "all" | VirtualTabValue | LoanStatus;
 
 /**
  * The statuses the Active Loans card stands for.
@@ -42,6 +76,22 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   // `status=current` — a value no row can hold — so it read 0 and returned
   // nothing while rows badged "Current" sat in the table underneath it.
   { value: "ongoing", label: "Current" },
+  // Past due is a FILTER, not a status — see VIRTUAL_TAB_VALUES. It sends
+  // `status=past_due`, which the API resolves through Loan::scopePastDue(), and
+  // its badge reads `meta.stats.past_due`, which is counted through that same
+  // scope. Both narrow by branch and borrower together, so the tab and the badge
+  // cannot drift.
+  //
+  // This is the difference from the tab that was removed. That one filtered
+  // `status=past_due` when nothing resolved it, so it matched no row, read 0
+  // forever, and sat above an empty table — the same shape as the old `current`
+  // tab documented above. The value looks identical; what changed is that there
+  // is now something on the other end of it.
+  //
+  // It deliberately overlaps Released, Current and the Active card, and it
+  // reaches `defaulted` loans that no other tab shows. The tab counts are not a
+  // partition and never were.
+  { value: "past_due", label: "Past Due" },
   { value: "completed", label: "Completed" },
 ];
 
@@ -60,12 +110,16 @@ export const TAB_VALUES: FilterTab[] = [
  * `?tab=` values this screen used to accept, mapped to what they mean now.
  *
  * The page keeps its whole state in the URL, so those URLs are bookmarked and
- * shared and cannot simply stop working:
- *   - `current` was a rename, not a removal — it now points at `ongoing`, the
- *     status that was always behind the "Current" label, so an old link lands
- *     on the tab it meant rather than on All.
- *   - `past_due` has no successor. There is no status to point it at, so it is
- *     absent here on purpose and falls through to the All fallback below.
+ * shared and cannot simply stop working. `current` was a rename, not a removal
+ * — it points at `ongoing`, the status that was always behind the "Current"
+ * label, so an old link lands on the tab it meant rather than on All.
+ *
+ * `past_due` is deliberately NOT aliased, and its absence now means the
+ * opposite of what it used to. It was absent because there was nothing to point
+ * it at; it is absent now because it needs no alias — it is a live tab value
+ * again, so `tabFromParam` resolves it to itself through TAB_VALUES. A
+ * bookmarked Past Due link from before the tab was removed lands back on Past
+ * Due, which is where it always meant to go.
  */
 const LEGACY_TAB_ALIASES: Record<string, FilterTab> = {
   current: "ongoing",
