@@ -89,10 +89,14 @@ function AvatarImage({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- next/image cannot
-    // take an arbitrary absolute signed URL from the API host without a
-    // remotePatterns entry per deployment, and would proxy every member photo
-    // through the Next server for no benefit. A plain lazy <img> is the point.
+    // next/image cannot take an arbitrary absolute signed URL from the API host
+    // without a remotePatterns entry per deployment, and would proxy every member
+    // photo through the Next server for no benefit. A plain lazy <img> is the point.
+    //
+    // The directive must be the LAST comment line before the element: it targets
+    // the next LINE, not the next statement, so a multi-line rationale placed
+    // after it silently suppresses nothing.
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       data-slot="avatar-image"
       // Decorative by default: at every call site the person's name is rendered
