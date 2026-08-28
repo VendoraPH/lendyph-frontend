@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -178,6 +180,19 @@ export default function SubsidiaryLedgerPage() {
   // ── Data state ──
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set only when the drain gave up with pages outstanding. Everything on this
+  // screen is an aggregate over the whole book — per-member balances, the grand
+  // totals, and a running balance per entry — so a short read moves every one
+  // of them without changing how the screen looks.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
+  // Distinct from "the ledger is empty". The toast below is transient, so
+  // without this the screen settles into an empty subsidiary ledger that reads
+  // as "this co-op holds no share capital" — the same failure-looks-like-zero
+  // shape as the balance bug.
+  const [failed, setFailed] = useState(false);
 
   // ── View state ──
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
@@ -199,10 +214,17 @@ export default function SubsidiaryLedgerPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await shareCapitalService.ledgerList({ per_page: 9999 });
-      const entries = Array.isArray(res) ? res : Array.isArray(res.data) ? res.data : [];
-      setLedgerData(entries.map(toLedgerEntry));
+      // Drained across pages. This asked for `per_page: 9999`, which the API
+      // clamps to 100 in silence — so the subsidiary ledger for an entire
+      // co-op was the hundred most recent entries, and every member summary and
+      // grand total on the page was computed from that slice.
+      const { rows, truncated, total } = await shareCapitalService.ledgerListAll();
+      setLedgerData(rows.map(toLedgerEntry));
+      setShortfall(truncated ? { shown: rows.length, total } : null);
+      setFailed(false);
     } catch {
+      setShortfall(null);
+      setFailed(true);
       toast.error("We couldn't load the ledger data. Please try again.");
     } finally {
       setLoading(false);
@@ -341,6 +363,37 @@ export default function SubsidiaryLedgerPage() {
   return (
     <RouteGuard permission="share_capital:view" pageName="Subsidiary Ledger">
       <div className="space-y-6">
+        {failed && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          >
+            <AlertTriangle
+              className="mt-0.5 size-5 shrink-0 text-amber-600"
+              aria-hidden="true"
+            />
+            <div className="text-sm">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                The subsidiary ledger could not be loaded
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                No member balances are shown below. That is a failure to read the
+                ledger, not a co-op with no share capital — do not reconcile
+                against this screen until it loads.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {shortfall && (
+          <IncompleteListNotice
+            shown={shortfall.shown}
+            total={shortfall.total}
+            noun="ledger entries"
+            consequence="Every balance on this page — each member's, the grand totals, and the running balance in the detail view — is computed only from the entries that loaded, so none of them can be relied on."
+          />
+        )}
+
         {/* ── Header ── */}
         <div className="flex items-center gap-3">
           {selectedMember && (

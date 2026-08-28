@@ -15,8 +15,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PermissionGate } from "@/components/common";
+import { ShareCapitalUnavailableNotice } from "@/components/common/share-capital-unavailable-notice";
 import { collateralService, collateralTypeService } from "@/services";
-import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+  hasShareCapitalBalance,
+  type ShareCapitalBalance,
+} from "@/utils/share-capital";
+import {
+  collateralValue,
+  sumKnownCollateralValues,
+  type CollateralValueRow,
+} from "@/utils/collateral-value";
 import {
   collateralLock,
   holdersSentence,
@@ -35,8 +46,11 @@ interface CollateralsTabProps {
 }
 
 export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
-  const [rows, setRows] = useState<CollateralWithMeta[]>([]);
+  const [rows, setRows] = useState<CollateralValueRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Null when this member has no share-capital collateral, so no balance was
+  // ever needed and there is nothing to warn about.
+  const [scBalance, setScBalance] = useState<ShareCapitalBalance | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,23 +71,30 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
         (c: Collateral) =>
           typeById.get(c.collateral_type_id)?.source === "share_capital",
       );
-      const scBalance = needsBalance
+      // Only asked for when a share-capital row is actually present — this is
+      // a whole-ledger drain, not a single request.
+      const balance = needsBalance
         ? await getShareCapitalBalance(borrowerId)
-        : 0;
+        : null;
+      setScBalance(balance);
 
-      const enriched: CollateralWithMeta[] = collaterals.map((c) => {
+      const enriched: CollateralValueRow[] = collaterals.map((c) => {
         const t = typeById.get(c.collateral_type_id);
-        const isShareCapital = t?.source === "share_capital";
         return {
           ...c,
           type: t,
           lock: collateralLock(c),
-          effective_value: isShareCapital ? scBalance : c.amount,
+          // A share-capital row is worth the balance, so a balance we could not
+          // read leaves it with no value. It used to inherit the old function's
+          // `0` fallback, which stated — on a member's own record — that their
+          // share capital was worth nothing.
+          ...collateralValue(c, t, balance),
         };
       });
       setRows(enriched);
     } catch {
       setRows([]);
+      setScBalance(null);
     } finally {
       setLoading(false);
     }
@@ -83,10 +104,16 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
     load();
   }, [load]);
 
-  const totalValue = useMemo(
-    () => rows.reduce((s, r) => s + r.effective_value, 0),
+  // Rows whose value is unknown are LEFT OUT of the total rather than counted
+  // as zero, and the card says how many — a total that quietly absorbs an
+  // unknown as 0 is exactly the shape of the bug this replaces.
+  const { total: totalValue, unknownCount } = useMemo(
+    () => sumKnownCollateralValues(rows),
     [rows],
   );
+
+  const balanceProblem =
+    scBalance && !hasShareCapitalBalance(scBalance) ? scBalance : null;
 
   if (loading) {
     return (
@@ -116,6 +143,11 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
         </PermissionGate>
       </div>
 
+      <ShareCapitalUnavailableNotice
+        result={balanceProblem}
+        consequence="Their share-capital collaterals are shown without a value and left out of the total below."
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardContent className="py-4">
@@ -133,6 +165,12 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
             <p className="text-2xl font-bold tabular-nums text-brand-orange">
               {formatCurrency(totalValue)}
             </p>
+            {unknownCount > 0 && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+                Excludes {unknownCount} collateral
+                {unknownCount === 1 ? "" : "s"} whose value could not be read.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -172,7 +210,13 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
                       {c.detail_value}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(c.effective_value)}
+                      {c.value_unknown ? (
+                        <span className="text-amber-700 dark:text-amber-500">
+                          {SHARE_CAPITAL_UNAVAILABLE_LABEL}
+                        </span>
+                      ) : (
+                        formatCurrency(c.effective_value)
+                      )}
                     </TableCell>
                     <TableCell>
                       {isLocked(c.lock) ? (

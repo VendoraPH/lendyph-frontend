@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { borrowerService, loanService } from "@/services";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { Borrower, Loan } from "@/types";
 
 /**
@@ -38,29 +39,27 @@ interface SubjectPickerProps {
  * Loan / borrower selector for the two subject-scoped reports and for every
  * loan- or member-scoped printable.
  *
- * Fetches one generous page and filters in the browser, matching how the new
- * loan form sources its borrower list. A server-side search would be the right
- * call at a much larger member count, but it would also add a debounce and a
- * request per keystroke for a list that is currently small enough to hold.
+ * Drains every page and filters in the browser, matching how the new loan form
+ * sources its borrower list. A server-side search would be the right call at a
+ * much larger member count, but it would also add a debounce and a request per
+ * keystroke for a list that is currently small enough to hold.
+ *
+ * It used to ask for `per_page: 200`, twice, which both controllers clamp to
+ * 100 without a word. Nobody can pick an option that is not on the list, so
+ * that failure never presented as a bug: it presented as "that member is not
+ * registered" and "that loan does not exist", on the screens where you go to
+ * print somebody's paperwork.
  */
-/**
- * `api.get` unwraps to `response.data.data`, so a paginated list arrives as a
- * bare array — the `PaginatedResponse<T>` on the service signatures is stale.
- * Every other list consumer already narrows this way; this picker did not, so
- * `res?.data` was always undefined and it silently showed "No loan found."
- * even with released loans present, on both /printables and the two
- * subject-scoped reports.
- */
-function rows<T>(res: unknown): T[] {
-  if (Array.isArray(res)) return res as T[];
-  const data = (res as { data?: unknown } | null | undefined)?.data;
-  return Array.isArray(data) ? (data as T[]) : [];
-}
-
 export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) {
   const [options, setOptions] = useState<SubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the drain gave up with pages outstanding, so this picker is
+  // knowingly missing rows. Null means complete.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,39 +70,53 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
     // is meaningless once the picker is showing borrowers.
     onChange(null);
 
-    const request =
+    const request: Promise<{
+      options: SubjectOption[];
+      truncated: boolean;
+      shown: number;
+      total: number | null;
+    }> =
       subject === "loan"
         ? loanService
-            .list({ per_page: 200, status: "released" })
-            .then((res) =>
-              rows<Loan>(res).map((loan) => ({
+            .listAll({ status: "released" })
+            .then(({ rows, truncated, total }) => ({
+              options: rows.map((loan: Loan) => ({
                 id: loan.id,
                 label:
                   loan.loan_account_number ??
                   loan.application_number ??
                   `Loan #${loan.id}`,
                 hint: loan.borrower?.full_name ?? loan.borrower?.name,
-              }))
-            )
+              })),
+              truncated,
+              shown: rows.length,
+              total,
+            }))
         : borrowerService
-            .list({ per_page: 200 })
-            .then((res) =>
-              rows<Borrower>(res).map((borrower) => ({
+            .listAll()
+            .then(({ rows, truncated, total }) => ({
+              options: rows.map((borrower: Borrower) => ({
                 id: borrower.id,
                 label: borrower.full_name,
                 hint: borrower.borrower_code,
-              }))
-            );
+              })),
+              truncated,
+              shown: rows.length,
+              total,
+            }));
 
     request
-      .then((list) => {
-        if (!cancelled) setOptions(list);
+      .then(({ options, truncated, shown, total }) => {
+        if (cancelled) return;
+        setOptions(options);
+        setShortfall(truncated ? { shown, total } : null);
       })
       .catch(() => {
         if (!cancelled) {
           setError(
             `Unable to load ${subject === "loan" ? "loans" : "borrowers"}.`
           );
+          setShortfall(null);
         }
       })
       .finally(() => {
@@ -165,6 +178,15 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun={subject === "loan" ? "loans" : "members"}
+          consequence={`A ${noun.toLowerCase()} missing from this list cannot be selected, so nothing can be produced for them here.`}
+          className="mt-2"
+        />
+      )}
     </div>
   );
 }

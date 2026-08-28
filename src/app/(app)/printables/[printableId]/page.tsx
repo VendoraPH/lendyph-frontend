@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
@@ -237,17 +238,31 @@ function RepaymentPicker({
   const [options, setOptions] = useState<RepaymentOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the drain gave up with pages outstanding, so this picker is
+  // knowingly missing payments. Null means complete.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     repaymentService
-      // One generous page, filtered in the browser — the same trade-off
-      // `SubjectPicker` makes, and the same reason: no debounce, no request
-      // per keystroke.
-      .listAll({ per_page: 200 })
-      .then((res) => {
+      // Drained across pages, filtered in the browser — the same trade-off
+      // `SubjectPicker` makes, and the same reason: no debounce, no request per
+      // keystroke. It asked for `per_page: 200`, which the server clamps to
+      // 100 in silence.
+      //
+      // The clamp was the smaller of the two bugs here. `listAll` was an
+      // `api.get`, which unwraps the paginator to a bare array, so `res?.data`
+      // was `undefined` on EVERY response and this picker rendered "No payment
+      // found." with a full book of payments behind it. Identical to the bug
+      // `SubjectPicker` documents having had, in the file next door.
+      .listAll()
+      .then(({ rows: repayments, truncated, total }) => {
         if (cancelled) return;
-        const rows = (res?.data ?? []) as unknown as RepaymentListRow[];
+        const rows = repayments as unknown as RepaymentListRow[];
+        setShortfall(truncated ? { shown: rows.length, total } : null);
         setOptions(
           rows.map((row) => ({
             id: row.id,
@@ -266,7 +281,10 @@ function RepaymentPicker({
         );
       })
       .catch(() => {
-        if (!cancelled) setError("Unable to load payments.");
+        if (!cancelled) {
+          setError("Unable to load payments.");
+          setShortfall(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -319,6 +337,15 @@ function RepaymentPicker({
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="payments"
+          consequence="A payment missing from this list cannot be selected, so its receipt cannot be printed from here."
+          className="mt-2"
+        />
+      )}
     </div>
   );
 }

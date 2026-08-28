@@ -27,6 +27,7 @@ import { LoanFilters } from "./_components/loan-filters";
 import {
   FILTER_TABS,
   ACTIVE_STATUSES,
+  VIRTUAL_TAB_VALUES,
   numOrNull,
   dateOrNull,
   isoDateOrNull,
@@ -62,11 +63,24 @@ const SORT_KEYS: LoanSortKey[] = [
 type LoanStats = Record<string, number>;
 
 /**
- * Keys in `meta.stats` that are roll-ups of other keys, not statuses of their
- * own: `active` is released + current + ongoing + past_due. Summing the record
- * blind would count those rows twice, so the "All" total skips them.
+ * Keys in `meta.stats` that are NOT statuses of their own, and so must never be
+ * added into a total alongside the statuses they overlap.
+ *
+ * Derived from `VIRTUAL_TAB_VALUES` rather than typed out, so a virtual filter
+ * cannot be added to the tab strip without also being excluded here. That
+ * mattered immediately: `past_due` is a live `meta.stats` key now, it counts
+ * `released`, `ongoing` AND `defaulted` loans that are already counted under
+ * their own keys, and summing the record blind would have inflated "Total
+ * Applications" by every overdue loan in the book.
+ *
+ *  - `active` = the sum of `Loan::ACTIVE_STATUSES` (released + ongoing).
+ *  - `past_due` = `Loan::scopePastDue()`, which cuts ACROSS statuses instead of
+ *    partitioning alongside them.
+ *
+ * `all` is here for the case where the API ever sends a total of its own; today
+ * it does not, and `allCountFromStats` falls back to summing the real statuses.
  */
-const AGGREGATE_STAT_KEYS = new Set(["all", "active"]);
+const AGGREGATE_STAT_KEYS = new Set<string>(["all", ...VIRTUAL_TAB_VALUES]);
 
 function allCountFromStats(stats: LoanStats): number {
   if (typeof stats.all === "number") return stats.all;
@@ -179,17 +193,24 @@ export default function LoansPage() {
   const dateFrom = useMemo(() => dateOrNull(dateFromParam), [dateFromParam]);
   const dateTo = useMemo(() => dateOrNull(dateToParam), [dateToParam]);
 
-  // "active" is a virtual tab with no status of its own. It goes to the API
-  // verbatim: `status=active` is the API's own shorthand for the set, expanded
-  // there from the same constant `meta.stats.active` is summed from, so the
-  // rows and the KPI card cannot disagree. Spelling the four statuses out here
-  // would work too, and would be a second copy of that definition — the copy
-  // that goes stale the day the set changes.
+  // Two tab values are virtual — `active` and `past_due` (VIRTUAL_TAB_VALUES).
+  // Both go to the API verbatim, because both are the API's OWN shorthand and
+  // both are resolved there from the same definition their `meta.stats` entry
+  // is counted through, so the rows and the badge above them cannot disagree:
   //
-  // Every other tab value IS its status, so it goes to the API as-is: the
-  // Current tab sends `status=ongoing`, and its badge reads `stats.ongoing`.
-  // Nothing here reads `stats.current` or `stats.past_due` — neither is a
-  // status any row can hold, and both are on their way out of `meta.stats`.
+  //   - `status=active` expands to Loan::ACTIVE_STATUSES server-side. Spelling
+  //     those statuses out here would work today and would be a second copy of
+  //     the definition — the copy that goes stale the day the set changes.
+  //   - `status=past_due` resolves to Loan::scopePastDue(). It CANNOT be
+  //     spelled out here at any price: it is derived from the amortization
+  //     schedule (an unpaid installment past its due date and past the loan's
+  //     `grace_period_days`), so there is no set of statuses that expresses it
+  //     and no way for this client to compute it from a loan row.
+  //
+  // Every other tab value IS its status, so it goes as-is: the Current tab
+  // sends `status=ongoing` and its badge reads `stats.ongoing`. Nothing reads
+  // `stats.current` — that one is not a status any row can hold and is absent
+  // from `meta.stats` on purpose.
   const statusParam = tab === "all" ? null : tab;
   const search = q.trim();
 
