@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS } from "@/constants";
 import type { Registration, RegistrationPayload } from "@/services/registration.service";
 import { usePublicBranches } from "@/hooks/use-public-branches";
-import { formatCurrency } from "@/app/(app)/borrowers/_components/utils";
+import { formatCurrency } from "@/lib/format";
 
 interface Props {
   registration: Registration;
@@ -199,7 +199,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 label="Monthly Income"
                 value={
                   r.monthly_income != null
-                    ? formatCurrency(Number(r.monthly_income))
+                    ? formatCurrency(r.monthly_income)
                     : undefined
                 }
               />
@@ -207,7 +207,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 label="Pledge Amount"
                 value={
                   r.pledge_amount != null
-                    ? formatCurrency(Number(r.pledge_amount))
+                    ? formatCurrency(r.pledge_amount)
                     : undefined
                 }
               />

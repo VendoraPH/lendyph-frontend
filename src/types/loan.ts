@@ -14,7 +14,18 @@ export type LoanStatus =
   | "completed"
   | "defaulted"
   | "restructured"
-  | "closed";
+  | "closed"
+  // `void` is a reserved WORD, not a reserved string: it is legal both as a
+  // union member here and as an object key in the maps below, and the compiler
+  // treats it like any other literal. Verified, because the reserved-word
+  // instinct is exactly why it kept being left out.
+  //
+  // Set by `LoanService::voidLoan()` — a draft struck from the record. It is in
+  // the `loans.status` enum and `LoanController::index()` reports a count for
+  // it, but no frontend map had a key for it, so it rendered as an unstyled
+  // pill reading "void". Adding it here is what makes that a build error
+  // everywhere instead: the label and colour maps are keyed off this union.
+  | "void";
 
 // Unit for Past Due Transfer config on LoanProduct: how the value is
 // interpreted when deciding when a missed payment becomes past_due.

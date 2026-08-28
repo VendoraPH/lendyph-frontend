@@ -29,7 +29,21 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
   const fetchLedger = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await borrowerService.ledger(borrowerId, { per_page: 200 });
+      // No `per_page`, deliberately. `BorrowerController::ledger()` is not a
+      // paginated endpoint at all: it builds the entries in memory from the
+      // member's loans and repayments and answers
+      // `response()->json(['data' => $withBalance])` — no paginator, no `meta`,
+      // no clamp. The `per_page: 200` that used to be here was read by nothing
+      // on either side. It was still worth removing rather than leaving: it
+      // read as a bound on a list that has none, so the next person to audit
+      // this file would either "fix" it to 100 or drain an endpoint that
+      // returns everything in one response already.
+      //
+      // Note the running balance comes back precomputed and cumulative over
+      // the WHOLE ledger, which is another reason this must never be paged
+      // client-side: a slice of it would carry balances that do not start at
+      // the slice.
+      const res = await borrowerService.ledger(borrowerId);
       const items = Array.isArray(res)
         ? (res as BorrowerLedgerEntry[])
         : (res as PaginatedResponse<BorrowerLedgerEntry>)?.data ?? [];

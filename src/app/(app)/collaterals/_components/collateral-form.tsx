@@ -46,7 +46,13 @@ import {
   collateralService,
   collateralTypeService,
 } from "@/services";
-import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+  hasShareCapitalBalance,
+  shareCapitalUnavailableReason,
+  type ShareCapitalBalance,
+} from "@/utils/share-capital";
 import { formatCurrency } from "@/utils/format";
 import type { Borrower, Collateral, CollateralType } from "@/types";
 
@@ -77,7 +83,9 @@ export function CollateralForm({ initial, mode }: Props) {
   const [amount, setAmount] = useState<string>(
     initial ? String(initial.amount ?? 0) : "",
   );
-  const [scBalance, setScBalance] = useState<number | null>(null);
+  // Null until a share-capital type is picked with a member selected. Any
+  // non-"ok" status means this form must not book a value.
+  const [scBalance, setScBalance] = useState<ShareCapitalBalance | null>(null);
   const [scBalanceLoading, setScBalanceLoading] = useState(false);
   // Set only when the member drain gave up with pages outstanding, i.e. the
   // owner picker below is knowingly missing people. Null means complete.
@@ -145,11 +153,19 @@ export function CollateralForm({ initial, mode }: Props) {
 
   const isShareCapital = selectedType?.source === "share_capital";
 
-  // Guard against NaN/undefined balances reaching the formatter (which
-  // produces the "-₱NaN" display bug).
-  const safeScBalance = Number.isFinite(scBalance)
-    ? (scBalance as number)
-    : 0;
+  /**
+   * The share capital balance, or null when there is no figure to state.
+   *
+   * There is deliberately no `?? 0` here. A share-capital collateral's amount
+   * IS this balance, so booking 0 against an unreadable ledger writes a
+   * permanent appraisal of "worth nothing" for a member who may well hold a
+   * six-figure balance — and it used to, because a failed request and a genuine
+   * zero were the same value.
+   */
+  const scBalanceKnown =
+    scBalance !== null && hasShareCapitalBalance(scBalance) ? scBalance : null;
+  const scBalanceProblem =
+    scBalance !== null && !hasShareCapitalBalance(scBalance) ? scBalance : null;
 
   // When share-capital type is selected and borrower is known, fetch the balance.
   useEffect(() => {
@@ -159,11 +175,13 @@ export function CollateralForm({ initial, mode }: Props) {
     }
     let cancelled = false;
     setScBalanceLoading(true);
-    getShareCapitalBalance(borrowerId).then((bal) => {
+    getShareCapitalBalance(borrowerId).then((result) => {
       if (cancelled) return;
-      const clean = Number.isFinite(bal) ? bal : 0;
-      setScBalance(clean);
-      setAmount(String(clean));
+      setScBalance(result);
+      // The amount field is only filled from a balance we trust. Left empty
+      // otherwise, so `canSubmit` blocks on it rather than the form quietly
+      // proposing a number nobody computed.
+      setAmount(hasShareCapitalBalance(result) ? String(result.balance) : "");
       setScBalanceLoading(false);
     });
     return () => {
@@ -177,7 +195,12 @@ export function CollateralForm({ initial, mode }: Props) {
     typeId !== null &&
     detailValue.trim().length > 0 &&
     !Number.isNaN(numericAmount) &&
-    numericAmount > 0;
+    numericAmount > 0 &&
+    // A share-capital collateral cannot be registered against a balance we
+    // could not read in full. Refusing to save is the point: the alternative
+    // is a stored appraisal derived from part of a ledger, which nothing
+    // downstream can tell apart from a real one.
+    !(isShareCapital && (scBalanceLoading || scBalanceKnown === null));
 
   // Normalize a detail value (cert no., title no., plate, etc.) for duplicate
   // comparison: trim + collapse whitespace + uppercase. Different cashiers
@@ -438,13 +461,23 @@ export function CollateralForm({ initial, mode }: Props) {
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Loading balance…
                     </div>
+                  ) : scBalanceProblem ? (
+                    <div className="space-y-0.5" role="alert">
+                      <p className="text-xl font-semibold tabular-nums text-amber-700 dark:text-amber-500">
+                        {SHARE_CAPITAL_UNAVAILABLE_LABEL}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {shareCapitalUnavailableReason(scBalanceProblem)} This
+                        collateral cannot be saved until it can be read in full.
+                      </p>
+                    </div>
                   ) : (
                     <div className="space-y-0.5">
                       <p className="text-xs text-muted-foreground">
                         Total share balance (auto-derived)
                       </p>
                       <p className="text-xl font-semibold text-brand-orange tabular-nums">
-                        {formatCurrency(safeScBalance)}
+                        {formatCurrency(scBalanceKnown?.balance ?? 0)}
                       </p>
                     </div>
                   )}

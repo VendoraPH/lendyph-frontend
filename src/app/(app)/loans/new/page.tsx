@@ -27,7 +27,14 @@ import {
   userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
-import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+} from "@/utils/share-capital";
+import {
+  collateralValue,
+  type CollateralValueRow,
+} from "@/utils/collateral-value";
 import {
   computeSecurityStatus,
   securityStatusLabel,
@@ -319,14 +326,14 @@ function NewLoanApplicationInner() {
   // Collaterals already persisted to mock storage and registered against
   // the chosen borrower. Re-fetched whenever the borrower changes.
   const [availableCollaterals, setAvailableCollaterals] = useState<
-    CollateralWithMeta[]
+    CollateralValueRow[]
   >([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
   // Collaterals the user has chosen to attach to THIS loan, with the
   // value snapshotted at attach time so post-attach ledger drift doesn't
   // silently move security status.
   const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralWithMeta; snapshot_value: number }[]
+    { collateral: CollateralValueRow; snapshot_value: number }[]
   >([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
@@ -499,17 +506,21 @@ function NewLoanApplicationInner() {
         );
         const scBalance = needsScBalance
           ? await getShareCapitalBalance(borrowerId)
-          : 0;
-        const enriched: CollateralWithMeta[] = collateralRows.map((c) => {
+          : null;
+        const enriched: CollateralValueRow[] = collateralRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
-          const isShareCapital = t?.source === "share_capital";
           return {
             ...c,
             type: t,
             // In edit mode the loan being edited is not a conflict with itself —
             // the user must be able to keep the security it already holds.
             lock: collateralLock(c, { exceptLoanId: editLoanId }),
-            effective_value: isShareCapital ? scBalance : c.amount,
+            // `value_unknown` when this is a share-capital collateral whose
+            // ledger could not be read in full. Attaching such a row would
+            // write its value onto the loan as `snapshot_value` — a permanent
+            // appraisal derived from part of a ledger — so the picker refuses
+            // it below rather than booking one.
+            ...collateralValue(c, t, scBalance),
           };
         });
         if (!cancelled) setAvailableCollaterals(enriched);
@@ -552,7 +563,7 @@ function NewLoanApplicationInner() {
             (
               v,
             ): v is {
-              collateral: CollateralWithMeta;
+              collateral: CollateralValueRow;
               snapshot_value: number;
             } => v !== null,
           );
@@ -770,6 +781,10 @@ function NewLoanApplicationInner() {
       collateral: c,
       isSelected: selectedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
+      // Not selectable: there is no value to attach it at. Refusing here is
+      // the point — the alternative is a loan secured at a figure nobody
+      // computed, which nothing downstream can tell from a real appraisal.
+      isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
 
@@ -2062,11 +2077,11 @@ function NewLoanApplicationInner() {
             </div>
           ) : (
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-              {pickerRows.map(({ collateral: c, isSelected, isLocked }) => (
+              {pickerRows.map(({ collateral: c, isSelected, isLocked, isValueUnknown }) => (
                 <button
                   key={c.id}
                   type="button"
-                  disabled={isSelected || isLocked}
+                  disabled={isSelected || isLocked || isValueUnknown}
                   onClick={() => {
                     setSelectedCollaterals((prev) => [
                       ...prev,
@@ -2080,8 +2095,9 @@ function NewLoanApplicationInner() {
                     "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
                     !isSelected &&
                       !isLocked &&
+                      !isValueUnknown &&
                       "hover:border-primary/40 hover:bg-muted/40",
-                    (isSelected || isLocked) && "opacity-60",
+                    (isSelected || isLocked || isValueUnknown) && "opacity-60",
                   )}
                 >
                   <div className="flex flex-1 flex-col gap-1">
@@ -2109,13 +2125,25 @@ function NewLoanApplicationInner() {
                       {isSelected && !isLocked && (
                         <Badge variant="outline">Already attached</Badge>
                       )}
-                      {c.type?.source === "share_capital" && (
+                      {c.type?.source === "share_capital" && !isValueUnknown && (
                         <span>Live share-capital balance</span>
+                      )}
+                      {isValueUnknown && (
+                        <span className="text-amber-700 dark:text-amber-500">
+                          Share capital ledger unreadable — cannot be attached
+                        </span>
                       )}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums">
-                    {formatCurrency(c.effective_value)}
+                  <span
+                    className={cn(
+                      "text-sm font-semibold tabular-nums",
+                      isValueUnknown && "text-amber-700 dark:text-amber-500",
+                    )}
+                  >
+                    {isValueUnknown
+                      ? SHARE_CAPITAL_UNAVAILABLE_LABEL
+                      : formatCurrency(c.effective_value)}
                   </span>
                 </button>
               ))}

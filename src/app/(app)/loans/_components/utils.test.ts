@@ -4,6 +4,7 @@ import {
   ACTIVE_STATUSES,
   FILTER_TABS,
   TAB_VALUES,
+  VIRTUAL_TAB_VALUES,
   tabFromParam,
   isoDateOrNull,
   dateOrNull,
@@ -28,10 +29,13 @@ test("legacy ?tab=current lands on the tab it meant, not on All", () => {
   assert.equal(tabFromParam("current"), "ongoing");
 });
 
-test("the removed ?tab=past_due falls back to All", () => {
-  // No successor status exists, so a bookmarked Past Due link has to land
-  // somewhere real rather than on a selected-but-invisible tab.
-  assert.equal(tabFromParam("past_due"), "all");
+test("?tab=past_due lands on the Past Due tab again", () => {
+  // This used to fall back to All, because nothing resolved `status=past_due`
+  // and a tab pointing at it read 0 forever. The API resolves it now
+  // (Loan::scopePastDue()), so a bookmark from before the tab was removed lands
+  // where it always meant to.
+  assert.equal(tabFromParam("past_due"), "past_due");
+  assert.ok(FILTER_TABS.some((t) => t.value === "past_due"));
 });
 
 test("unknown, empty and missing tab values fall back to All", () => {
@@ -47,14 +51,48 @@ test("tabFromParam only ever returns a value the tab strip can show", () => {
   }
 });
 
-test("no tab points at a status the loans.status enum has no member for", () => {
-  const dead = ["current", "past_due"];
+test("every tab is either a storable status or a resolvable virtual value", () => {
+  // `current` is neither: no row can hold it and the API resolves nothing for
+  // it, which is exactly the shape of the tab that read 0 forever. `past_due`
+  // is also not a storable status, but it IS resolved server-side, so it is
+  // allowed here only by way of VIRTUAL_TAB_VALUES.
+  const notStorable = ["current", "past_due"];
   for (const { value } of FILTER_TABS) {
-    assert.ok(!dead.includes(value), `${value} is not a storable status`);
+    const virtual = (VIRTUAL_TAB_VALUES as readonly string[]).includes(value);
+    assert.ok(
+      !notStorable.includes(value) || virtual,
+      `${value} is neither a storable status nor a virtual filter`,
+    );
   }
-  // The same two must not be claimed by the active set the KPI fallback sums.
+  assert.ok(!FILTER_TABS.some((t) => t.value === "current"));
+
+  // The active set the KPI fallback SUMS must still be storable statuses only —
+  // it adds up `meta.stats` keys, so a phantom member would contribute 0 and
+  // quietly understate the card.
   for (const status of ACTIVE_STATUSES) {
-    assert.ok(!dead.includes(status), `${status} is not a storable status`);
+    assert.ok(!notStorable.includes(status), `${status} is not a storable status`);
+  }
+});
+
+test("past_due is not a subset of active, and nothing may assume it is", () => {
+  // `past_due` reaches `defaulted` loans, which are collectible but NOT active,
+  // so the two counts overlap without either containing the other. If this ever
+  // becomes a subset relationship it is a backend change, not a tidy-up here.
+  assert.ok(!ACTIVE_STATUSES.includes("defaulted" as never));
+  assert.ok((VIRTUAL_TAB_VALUES as readonly string[]).includes("past_due"));
+  assert.ok((VIRTUAL_TAB_VALUES as readonly string[]).includes("active"));
+});
+
+test("both virtual values are tab values, so neither can be summed as a status", () => {
+  // AGGREGATE_STAT_KEYS on the loans page is derived from VIRTUAL_TAB_VALUES.
+  // Anything in the tab strip that is a roll-up MUST be listed there, or the
+  // "All" total double-counts the rows it overlaps.
+  for (const virtual of VIRTUAL_TAB_VALUES) {
+    assert.ok(
+      virtual === "active" || FILTER_TABS.some((t) => t.value === virtual),
+      `${virtual} should be reachable from the UI`,
+    );
+    assert.ok(TAB_VALUES.includes(virtual));
   }
 });
 
