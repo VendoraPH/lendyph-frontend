@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { RouteGuard, PermissionGate } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { ShareCapitalUnavailableNotice } from "@/components/common/share-capital-unavailable-notice";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +54,17 @@ import {
   collateralService,
   collateralTypeService,
 } from "@/services";
-import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+  hasShareCapitalBalance,
+  type ShareCapitalBalance,
+} from "@/utils/share-capital";
+import {
+  collateralValue,
+  sumKnownCollateralValues,
+  type CollateralValueRow,
+} from "@/utils/collateral-value";
 import {
   collateralLock,
   holdersSentence,
@@ -69,12 +80,18 @@ import type {
 } from "@/types";
 
 export default function CollateralListingPage() {
-  const [collaterals, setCollaterals] = useState<CollateralWithMeta[]>([]);
+  const [collaterals, setCollaterals] = useState<CollateralValueRow[]>([]);
+  // How many members' share capital ledgers could not be read in full, and one
+  // of them to explain WHY. Their collaterals have no value, as distinct from a
+  // value of zero.
+  const [unreadableBalances, setUnreadableBalances] = useState(0);
+  const [firstUnreadableBalance, setFirstUnreadableBalance] =
+    useState<ShareCapitalBalance | null>(null);
   const [types, setTypes] = useState<CollateralType[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [deleting, setDeleting] = useState<CollateralWithMeta | null>(null);
+  const [deleting, setDeleting] = useState<CollateralValueRow | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   // Set only when the member drain gave up with pages outstanding, so the
   // borrower-name lookup below is knowingly short. Null means complete.
@@ -128,32 +145,38 @@ export default function CollateralListingPage() {
         const t = typeById.get(c.collateral_type_id);
         if (t?.source === "share_capital") scBorrowerIds.add(c.borrower_id);
       }
-      const scBalances = new Map<number, number>();
+      const scBalances = new Map<number, ShareCapitalBalance>();
       await Promise.all(
         Array.from(scBorrowerIds).map(async (bid) => {
-          const bal = await getShareCapitalBalance(bid);
-          scBalances.set(bid, bal);
+          scBalances.set(bid, await getShareCapitalBalance(bid));
         }),
       );
+      const unreadable = Array.from(scBalances.values()).filter(
+        (b) => !hasShareCapitalBalance(b),
+      );
+      setUnreadableBalances(unreadable.length);
+      setFirstUnreadableBalance(unreadable[0] ?? null);
 
-      const enriched: CollateralWithMeta[] = collateralRows.map((c) => {
+      const enriched: CollateralValueRow[] = collateralRows.map((c) => {
         const t = typeById.get(c.collateral_type_id);
-        const isShareCapital = t?.source === "share_capital";
-        const effective_value = isShareCapital
-          ? (scBalances.get(c.borrower_id) ?? 0)
-          : c.amount;
         return {
           ...c,
           type: t,
           borrower_name: borrowerById.get(c.borrower_id)?.full_name,
           // No loan context on this screen, so every active holder counts.
           lock: collateralLock(c),
-          effective_value,
+          // `?? 0` is deliberately gone. A share-capital collateral is worth
+          // its member's balance, so an unreadable ledger leaves the row with
+          // no value — it used to silently appraise at ₱0.00 and drag the
+          // totals down with it.
+          ...collateralValue(c, t, scBalances.get(c.borrower_id) ?? null),
         };
       });
       setCollaterals(enriched);
       setTypes(typeRows);
     } catch {
+      setUnreadableBalances(0);
+      setFirstUnreadableBalance(null);
       toast.error("We couldn't load the collaterals. Please try again.");
     } finally {
       setLoading(false);
@@ -181,8 +204,11 @@ export default function CollateralListingPage() {
     });
   }, [collaterals, search, typeFilter]);
 
-  const totalValue = useMemo(
-    () => filtered.reduce((sum, c) => sum + c.effective_value, 0),
+  // Unknown values are LEFT OUT rather than counted as 0 — a headline total
+  // that absorbs an unknown as zero is the same silent wrongness as the
+  // clamped ledger it came from.
+  const { total: totalValue, unknownCount: unknownInFilter } = useMemo(
+    () => sumKnownCollateralValues(filtered),
     [filtered],
   );
 
@@ -196,8 +222,9 @@ export default function CollateralListingPage() {
       {
         borrowerId: number;
         borrowerName: string;
-        items: CollateralWithMeta[];
+        items: CollateralValueRow[];
         total: number;
+        unknownCount: number;
         taggedCount: number;
       }
     >();
@@ -205,14 +232,16 @@ export default function CollateralListingPage() {
       const existing = map.get(c.borrower_id);
       if (existing) {
         existing.items.push(c);
-        existing.total += c.effective_value;
+        if (c.value_unknown) existing.unknownCount += 1;
+        else existing.total += c.effective_value;
         if (isLocked(c.lock)) existing.taggedCount += 1;
       } else {
         map.set(c.borrower_id, {
           borrowerId: c.borrower_id,
           borrowerName: c.borrower_name ?? `Member #${c.borrower_id}`,
           items: [c],
-          total: c.effective_value,
+          total: c.value_unknown ? 0 : c.effective_value,
+          unknownCount: c.value_unknown ? 1 : 0,
           taggedCount: isLocked(c.lock) ? 1 : 0,
         });
       }
@@ -258,6 +287,12 @@ export default function CollateralListingPage() {
             </Button>
           </PermissionGate>
         </div>
+
+        <ShareCapitalUnavailableNotice
+          result={firstUnreadableBalance}
+          memberCount={unreadableBalances}
+          consequence="Those collaterals are shown without a value and left out of the totals, so do not appraise against them until they load."
+        />
 
         {memberShortfall && (
           <IncompleteListNotice
@@ -307,6 +342,13 @@ export default function CollateralListingPage() {
               <p className="text-2xl font-bold tabular-nums text-brand-orange">
                 {formatCurrency(totalValue)}
               </p>
+              {unknownInFilter > 0 && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+                  Excludes {unknownInFilter} collateral
+                  {unknownInFilter === 1 ? "" : "s"} whose share capital balance
+                  could not be read.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -400,7 +442,23 @@ export default function CollateralListingPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold tabular-nums">
-                            {formatCurrency(group.total)}
+                            {group.unknownCount === group.items.length ? (
+                              <span className="font-normal text-amber-700 dark:text-amber-500">
+                                {SHARE_CAPITAL_UNAVAILABLE_LABEL}
+                              </span>
+                            ) : (
+                              <>
+                                {formatCurrency(group.total)}
+                                {group.unknownCount > 0 && (
+                                  <span
+                                    className="ml-1 font-normal text-amber-700 dark:text-amber-500"
+                                    title={`${group.unknownCount} of this member's collaterals have no readable value and are excluded from this total.`}
+                                  >
+                                    +?
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </TableCell>
                           <TableCell>
                             {group.taggedCount === 0 ? (
@@ -438,7 +496,13 @@ export default function CollateralListingPage() {
                               </TableCell>
                               <TableCell />
                               <TableCell className="text-right text-xs tabular-nums">
-                                {formatCurrency(c.effective_value)}
+                                {c.value_unknown ? (
+                                  <span className="text-amber-700 dark:text-amber-500">
+                                    {SHARE_CAPITAL_UNAVAILABLE_LABEL}
+                                  </span>
+                                ) : (
+                                  formatCurrency(c.effective_value)
+                                )}
                               </TableCell>
                               <TableCell>
                                 {isLocked(c.lock) ? (

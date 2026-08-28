@@ -77,7 +77,14 @@ import {
   loanService,
   userService,
 } from "@/services";
-import { getShareCapitalBalance } from "@/utils/share-capital";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+} from "@/utils/share-capital";
+import {
+  collateralValue,
+  type CollateralValueRow,
+} from "@/utils/collateral-value";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
 import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
@@ -88,7 +95,7 @@ import {
   LOAN_STATUS_LABELS,
 } from "@/constants";
 
-import type { Borrower, CollateralType, CollateralWithMeta, Loan, User } from "@/types";
+import type { Borrower, CollateralType, Loan, LoanStatus, User } from "@/types";
 import type { LoanProduct } from "@/types/loan";
 
 // ── Local types ──────────────────────────────────────────────────────────────
@@ -208,7 +215,37 @@ function computeAmortization(
 
 // ── Active statuses eligible for restructure ─────────────────────────────────
 
-const ELIGIBLE_STATUSES = ["current", "past_due", "released", "ongoing"];
+/**
+ * The statuses `POST /loans/{loan}/restructure` will actually accept.
+ *
+ * The API's own gate is `LoanService::assertRestructureInvariants()`:
+ *
+ *     if (! in_array($sourceLoan->status, ['released', 'ongoing'], true)) {
+ *         throw ValidationException::withMessages([
+ *             'status' => ['Only released or ongoing loans can be restructured.'],
+ *         ]);
+ *     }
+ *
+ * This list used to be `["current", "past_due", "released", "ongoing"]`. Two of
+ * those are not members of the `loans.status` enum and no row can ever hold
+ * them, so they widened this filter by exactly nothing — they were noise that
+ * read as intent, and the parallel constant in `loans/_components/utils.ts` had
+ * already been cleaned for the same reason.
+ *
+ * Note the annotation is documentation here, not a guard: the frontend
+ * `LoanStatus` union still carries `current` and `past_due` as legacy members
+ * (see `src/types/loan.ts`), so `["current", ...]` would still compile. Removing
+ * them from that union is what would make this a build error, and it belongs
+ * with the type, not here.
+ *
+ * NOT wired to `ACTIVE_STATUSES` in `loans/_components/utils.ts` even though the
+ * two sets are identical today. That constant mirrors `Loan::ACTIVE_STATUSES`,
+ * which the API expands `status=active` from; this one mirrors a literal array
+ * written out separately in the restructure guard. They are two different rules
+ * that happen to agree, and coupling them would silently move this filter the
+ * day the active set changes.
+ */
+const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -255,10 +292,10 @@ function RestructureLoanInner() {
   const [policyExceptionDetails, setPolicyExceptionDetails] = useState("");
 
   // ── Collaterals ──
-  const [availableCollaterals, setAvailableCollaterals] = useState<CollateralWithMeta[]>([]);
+  const [availableCollaterals, setAvailableCollaterals] = useState<CollateralValueRow[]>([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
   const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralWithMeta; snapshot_value: number }[]
+    { collateral: CollateralValueRow; snapshot_value: number }[]
   >([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
@@ -267,6 +304,13 @@ function RestructureLoanInner() {
   // Set only when the member drain gave up with pages outstanding, i.e. the
   // borrower picker is knowingly missing people. Null means complete.
   const [memberShortfall, setMemberShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
+  // Same, for the selected member's loan list: set only when that drain gave up
+  // with pages outstanding, so the "which loan to restructure" picker is
+  // knowingly missing loans. Null means complete.
+  const [loanShortfall, setLoanShortfall] = useState<{
     shown: number;
     total: number | null;
   } | null>(null);
@@ -317,13 +361,22 @@ function RestructureLoanInner() {
       return;
     }
     setLoadingLoans(true);
+    // Drained across pages, like the member fetch above. `per_page: 200` was
+    // clamped to 100 by LoanController without a word, so a member past their
+    // hundredth loan simply had no restructurable loans on this screen — which
+    // reads as "there is nothing to restructure", not as a bug. The filter runs
+    // client-side because `?status=` cannot express "eligible for restructure";
+    // that set is a guard in LoanService, not a query the API exposes.
     loanService
-      .list({ borrower_id: borrowerId, per_page: 200 })
-      .then((res) => {
-        const all: Loan[] = Array.isArray(res) ? res : (res as { data: Loan[] }).data ?? [];
-        setBorrowerLoans(all.filter((l) => ELIGIBLE_STATUSES.includes(l.status)));
+      .listAll({ borrower_id: borrowerId })
+      .then(({ rows, truncated, total }) => {
+        setBorrowerLoans(rows.filter((l) => ELIGIBLE_STATUSES.includes(l.status)));
+        setLoanShortfall(truncated ? { shown: rows.length, total } : null);
       })
-      .catch(() => setBorrowerLoans([]))
+      .catch(() => {
+        setBorrowerLoans([]);
+        setLoanShortfall(null);
+      })
       .finally(() => setLoadingLoans(false));
   }, [borrowerId]);
 
@@ -426,17 +479,19 @@ function RestructureLoanInner() {
         const needsSc = collRows.some(
           (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
         );
-        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId) : 0;
-        const enriched: CollateralWithMeta[] = collRows.map((c) => {
+        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId) : null;
+        const enriched: CollateralValueRow[] = collRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
-          const isShare = t?.source === "share_capital";
           return {
             ...c,
             type: t,
             // The loan being restructured holds its own collateral; that is not
             // a conflict, it is the security carrying over to the replacement.
             lock: collateralLock(c, { exceptLoanId: sourceLoanId }),
-            effective_value: isShare ? scBalance : c.amount,
+            // `value_unknown` when a share-capital ledger could not be read in
+            // full. The picker refuses those rows rather than carrying an
+            // appraisal nobody computed onto the replacement loan.
+            ...collateralValue(c, t, scBalance),
           };
         });
         if (!cancelled) setAvailableCollaterals(enriched);
@@ -471,7 +526,7 @@ function RestructureLoanInner() {
                 }
               : null;
           })
-          .filter((v): v is { collateral: CollateralWithMeta; snapshot_value: number } => v !== null);
+          .filter((v): v is { collateral: CollateralValueRow; snapshot_value: number } => v !== null);
         if (!cancelled) setSelectedCollaterals(prefilled);
       } catch {
         // Non-blocking
@@ -572,6 +627,8 @@ function RestructureLoanInner() {
       collateral: c,
       isSelected: selectedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
+      // No value to snapshot onto the replacement loan, so it cannot be picked.
+      isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
 
@@ -797,6 +854,15 @@ function RestructureLoanInner() {
             total={memberShortfall.total}
             noun="members"
             consequence="Some members are missing from the borrower picker below and cannot be selected."
+          />
+        )}
+
+        {loanShortfall && (
+          <IncompleteListNotice
+            shown={loanShortfall.shown}
+            total={loanShortfall.total}
+            noun="loans"
+            consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
           />
         )}
 
@@ -1296,10 +1362,10 @@ function RestructureLoanInner() {
                       No collaterals found for this borrower.
                     </p>
                   ) : (
-                    pickerRows.map(({ collateral, isSelected, isLocked }) => (
+                    pickerRows.map(({ collateral, isSelected, isLocked, isValueUnknown }) => (
                       <button
                         key={collateral.id}
-                        disabled={isLocked && !isSelected}
+                        disabled={(isLocked && !isSelected) || (isValueUnknown && !isSelected)}
                         onClick={() => {
                           if (isSelected) {
                             setSelectedCollaterals((prev) =>
@@ -1318,6 +1384,7 @@ function RestructureLoanInner() {
                             ? "border-brand-orange bg-brand-orange/5"
                             : "hover:bg-muted/50",
                           isLocked && !isSelected && "opacity-50 cursor-not-allowed",
+                          isValueUnknown && !isSelected && "opacity-50 cursor-not-allowed",
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -1347,8 +1414,16 @@ function RestructureLoanInner() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-muted-foreground">
-                          {formatCurrency(collateral.effective_value ?? collateral.amount)}
+                        <span
+                          className={
+                            isValueUnknown
+                              ? "text-amber-700 dark:text-amber-500"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {isValueUnknown
+                            ? SHARE_CAPITAL_UNAVAILABLE_LABEL
+                            : formatCurrency(collateral.effective_value ?? collateral.amount)}
                         </span>
                       </button>
                     ))

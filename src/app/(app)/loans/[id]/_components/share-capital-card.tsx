@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -9,8 +9,13 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import { Landmark, ChevronDown, Loader2, ExternalLink } from "lucide-react";
-import { shareCapitalService } from "@/services";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import {
+  SHARE_CAPITAL_UNAVAILABLE_LABEL,
+  getShareCapitalBalance,
+  hasShareCapitalBalance,
+  shareCapitalUnavailableReason,
+  type ShareCapitalBalance,
+} from "@/utils/share-capital";
 
 interface ShareCapitalCardProps {
   borrowerId: number | null | undefined;
@@ -27,27 +32,24 @@ function formatCurrency(amount: number): string {
 }
 
 export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapitalCardProps) {
-  const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
+  // This card's entire job is one figure, so it asks for exactly that rather
+  // than re-summing a ledger it fetched itself. The credits/debits loop that
+  // used to live here was the fourth copy of the same arithmetic, over a
+  // `per_page: 9999` page the API clamps to 100 — so on a long-standing member
+  // it printed the sum of their hundred most recent entries and called it
+  // "Current Balance".
+  const [result, setResult] = useState<ShareCapitalBalance | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
     if (!borrowerId) return;
     let cancelled = false;
     setLoading(true);
-    setError(false);
-    shareCapitalService
-      .ledgerList({ borrower_id: borrowerId, per_page: 9999 })
-      .then((res) => {
-        if (cancelled) return;
-        const items =
-          (res as { data?: ShareCapitalLedgerEntry[] }).data ??
-          (res as unknown as ShareCapitalLedgerEntry[]);
-        setEntries(Array.isArray(items) ? items : []);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
+    setResult(null);
+    getShareCapitalBalance(borrowerId)
+      .then((next) => {
+        if (!cancelled) setResult(next);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -56,17 +58,6 @@ export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapit
       cancelled = true;
     };
   }, [borrowerId]);
-
-  const balance = useMemo(() => {
-    let credits = 0;
-    let debits = 0;
-    for (const e of entries) {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      if (e.type === "credit") credits += amt;
-      else debits += amt;
-    }
-    return credits - debits;
-  }, [entries]);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -89,16 +80,24 @@ export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapit
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Loading share capital…
               </div>
-            ) : error ? (
-              <p className="text-xs text-muted-foreground">
-                Could not load share capital.
-              </p>
+            ) : result === null || !hasShareCapitalBalance(result) ? (
+              <div role="alert">
+                <p className="text-xs text-muted-foreground">Current Balance</p>
+                <p className="text-lg font-semibold tabular-nums text-amber-700 dark:text-amber-500">
+                  {SHARE_CAPITAL_UNAVAILABLE_LABEL}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {result === null
+                    ? "The share capital ledger could not be loaded, so this member's balance is unknown — which is not the same as zero."
+                    : shareCapitalUnavailableReason(result)}
+                </p>
+              </div>
             ) : (
               <>
                 <div>
                   <p className="text-xs text-muted-foreground">Current Balance</p>
                   <p className="text-lg font-semibold text-brand-orange tabular-nums">
-                    {formatCurrency(balance)}
+                    {formatCurrency(result.balance)}
                   </p>
                 </div>
                 <Link
