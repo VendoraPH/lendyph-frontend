@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { getInitials } from "@/lib/initials";
 import { auditService } from "@/services";
 import {
   Table,
@@ -40,7 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDateISO, todayISO } from "@/lib/format";
+import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction, AuditModule } from "@/types";
 
 // ── Constants ──
@@ -101,32 +102,6 @@ const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
 
 // ── Helpers ──
 
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(dateStr: string) {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 // ── Detail Drawer ──
 
@@ -158,7 +133,7 @@ function AuditDetailDrawer({
           {/* User Info */}
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-orange text-white text-sm font-semibold">
-              {getInitials(log.user?.full_name ?? "?")}
+              {getInitials(log.user?.full_name)}
             </div>
             <div className="min-w-0">
               <p className="font-medium text-sm">{log.user?.full_name ?? "System"}</p>
@@ -552,7 +527,7 @@ export default function AuditTrailPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            {getInitials(log.user?.full_name ?? "?")}
+                            {getInitials(log.user?.full_name)}
                           </div>
                           <div>
                             <p className="text-sm font-medium">
