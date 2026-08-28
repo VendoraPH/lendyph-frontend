@@ -3,7 +3,22 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { PaginatedResponse } from "@/types";
 
-export type RegistrationStatus = "pending" | "active" | "inactive" | "blacklisted";
+/**
+ * Every status `/borrowers` can hold, mirroring the API's own enum
+ * (BorrowerResource: `active | inactive | blacklisted | pending | rejected`).
+ *
+ * `rejected` was missing here, and that single omission is what made a rejected
+ * application unreachable: `reject()` writes the status happily, but
+ * `useRegistrations({ status: "rejected" })` would not type-check, so no screen
+ * could ever ask for one. Keep this list exhaustive against the API enum — it
+ * is the type every registration query is keyed on.
+ */
+export type RegistrationStatus =
+  | "pending"
+  | "active"
+  | "inactive"
+  | "blacklisted"
+  | "rejected";
 
 export interface RegistrationPayload {
   // Required identity
@@ -92,7 +107,32 @@ export interface Registration {
   photo_url?: string | null;
   photo?: string | null;
   status: RegistrationStatus;
+
+  // ── Review outcome (BorrowerResource) ──
+  // Only populated once an admin has decided. `rejection_reason` was declared
+  // long before anything rendered it; `rejected_at` / `rejected_by` were not
+  // declared at all, so "who rejected this, and when" was unanswerable in the
+  // UI even though the API has been sending both since the reject endpoint
+  // shipped.
   rejection_reason?: string | null;
+  rejected_at?: string | null;
+  /**
+   * The reviewer's *user id*, not their name — BorrowerResource returns the raw
+   * FK (`'rejected_by' => $this->rejected_by`) and does not load the
+   * `rejectedByUser` relation the model defines. Resolving it needs
+   * `users:view`, which a `borrowers:approve` reviewer does not necessarily
+   * hold, so the UI must be able to render from the id alone.
+   */
+  rejected_by?: number | null;
+  /**
+   * Present only once the API starts including the reviewer relation, the way
+   * LoanResource already does for `rejected_by_user`. Declared now so the UI
+   * upgrades from "Reviewer #7" to a real name with no frontend change.
+   */
+  rejected_by_user?: { id: number; full_name?: string; name?: string } | null;
+  approved_at?: string | null;
+  approved_by?: number | null;
+
   submitted_at: string;
 }
 

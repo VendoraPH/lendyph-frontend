@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -431,20 +432,35 @@ export default function PaymentHistoryPage() {
   const [statusTab, setStatusTab] = useState<string>("all");
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  // Set only when the drain gave up with pages outstanding, i.e. this screen is
+  // knowingly missing payments. Null means complete.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await repaymentService.listAll({ per_page: 100 });
-      const rows = Array.isArray(res)
-        ? (res as unknown as Repayment[])
-        : Array.isArray(res?.data)
-        ? res.data
-        : [];
+      // Drained across pages. This asked for `per_page: 100` — exactly the
+      // server's ceiling, so it was never clamped and never looked wrong, and
+      // that was the trap: a co-op with 101 payments got 100 of them in a
+      // response shaped identically to a complete one, and payment #101 could
+      // not be found, filtered to, or voided from this screen. Sitting ON the
+      // limit is worse than sitting above it, because nothing is even
+      // theoretically available to notice.
+      //
+      // The whole set is needed rather than a page of it: the search box, the
+      // date range and the status tabs below all filter in the browser, so a
+      // server-side page would silently scope every one of them to whatever
+      // happened to load.
+      const { rows, truncated, total } = await repaymentService.listAll();
       setPayments(rows.map(mapRepaymentToRow));
+      setShortfall(truncated ? { shown: rows.length, total } : null);
     } catch (err) {
       console.error("Failed to load payment history", err);
       setPayments([]);
+      setShortfall(null);
       notifyError(err, "We couldn't load the payment history. Please try again.");
     } finally {
       setLoading(false);
@@ -519,6 +535,15 @@ export default function PaymentHistoryPage() {
           View and manage all payment transactions
         </p>
       </div>
+
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="payments"
+          consequence="The totals below, the search box and the status tabs all describe only the payments that loaded, and a payment that is missing cannot be voided from this screen."
+        />
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">

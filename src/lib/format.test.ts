@@ -12,7 +12,14 @@ process.env.TZ = "Asia/Manila";
 
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { formatDateISO, todayISO } from "./format";
+import {
+  formatDate,
+  formatDateFull,
+  formatDateISO,
+  formatDateLong,
+  formatTime,
+  todayISO,
+} from "./format";
 
 /** 00:30 on 7 Aug 2026 in Manila — 16:30 on the 6th in UTC. */
 const AT_0030_MANILA = Date.UTC(2026, 7, 6, 16, 30);
@@ -119,4 +126,78 @@ test("outside the 00:00-07:59 window the old code was already right", () => {
     assert.equal(before, todayISO());
     assert.equal(todayISO(), "2026-08-07");
   });
+});
+
+// ── formatDateLong / formatDateFull / formatTime ───────────────────────────
+//
+// These belong in THIS file, not a new one, because they need the same Manila
+// pin: a weekday name and a wall-clock time are both properties of the zone.
+// On a UTC runner "Friday, August 28" is Thursday evening and "1:30 PM" is
+// 5:30 AM.
+
+/** 13:30 on Friday 28 Aug 2026 in Manila — 05:30 UTC the same day. */
+const FRI_1330_MANILA = Date.UTC(2026, 7, 28, 5, 30);
+/** 00:30 on Friday 28 Aug 2026 in Manila — still the 27th in UTC. */
+const FRI_0030_MANILA = Date.UTC(2026, 7, 27, 16, 30);
+
+test("formatDateLong spells the month out", () => {
+  assert.equal(formatDateLong(new Date(FRI_1330_MANILA)), "August 28, 2026");
+});
+
+test("formatDateLong accepts an ISO string as well as a Date", () => {
+  // The whole reason it takes `string | Date`: the split signature on
+  // formatDate/formatDateObj is what produced the duplicate copies.
+  assert.equal(
+    formatDateLong(new Date(FRI_1330_MANILA).toISOString()),
+    formatDateLong(new Date(FRI_1330_MANILA))
+  );
+});
+
+test("formatDateLong keeps the calendar day before 08:00 Manila", () => {
+  // The same boundary formatDateISO exists for: 00:30 Manila is still the 27th
+  // in UTC, and the reader must still see the 28th.
+  assert.equal(formatDateLong(new Date(FRI_0030_MANILA)), "August 28, 2026");
+});
+
+test("formatDateFull leads with the weekday", () => {
+  assert.equal(
+    formatDateFull(new Date(FRI_1330_MANILA)),
+    "Friday, August 28, 2026"
+  );
+});
+
+test("formatDateFull reports the weekday of the LOCAL day, not the UTC one", () => {
+  // 00:30 Friday in Manila is 16:30 Thursday in UTC. A dashboard header saying
+  // "Thursday" over Friday's collections is the same bug class as the ledger's.
+  assert.equal(
+    formatDateFull(new Date(FRI_0030_MANILA)),
+    "Friday, August 28, 2026"
+  );
+});
+
+test("formatTime renders a 12-hour wall clock", () => {
+  assert.equal(formatTime(new Date(FRI_1330_MANILA)), "1:30 PM");
+});
+
+test("formatTime renders midnight-hour times as AM, not 00", () => {
+  assert.equal(formatTime(new Date(FRI_0030_MANILA)), "12:30 AM");
+});
+
+test("en-US and en-PH are interchangeable for these patterns", () => {
+  // The call sites being consolidated were split between the two locales by
+  // habit, not intent. Asserted rather than assumed, because it is the reason
+  // moving them to the en-PH helpers is a zero-diff change.
+  const d = new Date(FRI_1330_MANILA);
+  assert.equal(
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    formatDate(d.toISOString())
+  );
+  assert.equal(
+    d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+    formatDateLong(d)
+  );
+  assert.equal(
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+    formatTime(d)
+  );
 });

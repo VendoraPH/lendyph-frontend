@@ -19,7 +19,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getInitials } from "@/app/(app)/borrowers/_components/utils";
+import { getInitials } from "@/lib/initials";
 import { fileUrl, urlToFile } from "@/lib/file-url";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { RegistrationInfoCards } from "./_components/registration-info-cards";
@@ -277,6 +277,9 @@ export default function RegistrationReviewPage() {
   }
 
   const fullName = `${registration.first_name} ${registration.last_name}`;
+  // Drives the copy and hides the review controls: this page is reachable
+  // from the Rejected tab, where the decision has already been made.
+  const isRejected = registration.status === "rejected";
 
   return (
     <RouteGuard permission="borrowers:approve" pageName="Review Registration">
@@ -314,10 +317,11 @@ export default function RegistrationReviewPage() {
             </button>
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold tracking-tight truncate">
-                Review Registration — {fullName}
+                {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} · Pending verification
+                Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
+                {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
               </p>
             </div>
           </div>

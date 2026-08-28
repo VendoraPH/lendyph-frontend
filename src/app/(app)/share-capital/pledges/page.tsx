@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -89,19 +91,33 @@ export default function PledgeEntryPage() {
   const [pledges, setPledges] = useState<LocalPledge[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Set only when the drain gave up with pages outstanding. This screen is a
+  // worksheet — an operator filters it, ticks rows and posts a bulk entry
+  // against the selection — so a missing row is not an under-reported total, it
+  // is a member silently left out of a posting run that then looks complete.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
+  // Distinct from "there are no pledges". This is a posting worksheet, so an
+  // empty one after a failed request invites an operator to conclude there is
+  // nothing to post rather than that nothing loaded.
+  const [failed, setFailed] = useState(false);
 
   const fetchPledges = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await shareCapitalService.pledgeList({ per_page: 9999 });
-      const raw = res as unknown;
-      const pledgeArr = Array.isArray(raw)
-        ? (raw as Pledge[])
-        : Array.isArray((raw as Record<string, unknown>)?.data)
-          ? ((raw as Record<string, unknown>).data as Pledge[])
-          : [];
-      setPledges(pledgeArr.map(toLocalPledge));
+      // Drained across pages. `per_page: 9999` was clamped to 100, so on a
+      // co-op with more members than that the bulk-posting worksheet simply had
+      // no row for the rest — and a bulk entry run against "all selected"
+      // reported success for everyone it could see.
+      const { rows, truncated, total } = await shareCapitalService.pledgeListAll();
+      setPledges(rows.map(toLocalPledge));
+      setShortfall(truncated ? { shown: rows.length, total } : null);
+      setFailed(false);
     } catch {
+      setShortfall(null);
+      setFailed(true);
       toast.error("We couldn't load the pledges. Please try again.");
     } finally {
       setLoading(false);
@@ -385,6 +401,37 @@ export default function PledgeEntryPage() {
   return (
     <RouteGuard permission="share_capital:view" pageName="Pledge Entry">
       <div className="space-y-6">
+        {failed && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          >
+            <AlertTriangle
+              className="mt-0.5 size-5 shrink-0 text-amber-600"
+              aria-hidden="true"
+            />
+            <div className="text-sm">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                The pledge worksheet could not be loaded
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                No members are listed below. That is a failure to read the pledges,
+                not a co-op with none — a bulk entry must not be posted from
+                this screen until it loads.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {shortfall && (
+          <IncompleteListNotice
+            shown={shortfall.shown}
+            total={shortfall.total}
+            noun="pledges"
+            consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+          />
+        )}
+
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
           <p className="text-muted-foreground">

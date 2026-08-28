@@ -9,7 +9,6 @@ import {
   UserCheck,
   UserX,
   AlertTriangle,
-  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -21,157 +20,72 @@ import {
   type StatusFilter,
 } from "./_components/borrower-filters";
 import { BorrowerTable } from "./_components/borrower-table";
+import { RegistrationsTab } from "./_components/registrations-tab";
 import { useRegistrations } from "@/hooks/use-registrations";
-import type { Registration } from "@/services/registration.service";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { fileUrl } from "@/lib/file-url";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatCurrency, getInitials, statusBadgeColor } from "./_components/utils";
 import { usePublicBranches } from "@/hooks/use-public-branches";
 
-function PendingRegistrationsTab() {
-  const { registrations, loading, error } = useRegistrations({ status: "pending" });
-  const { branches } = usePublicBranches();
-  const branchNameById = useMemo(
-    () => new Map(branches.map((b) => [b.id, b.name])),
-    [branches]
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
-        <p className="text-sm text-muted-foreground">{error}</p>
-      </div>
-    );
-  }
-
-  if (registrations.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <ClipboardList className="h-10 w-10 text-muted-foreground/40 mb-3" />
-        <p className="text-sm font-medium text-muted-foreground">No pending registrations</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">
-          New applications will appear here for review.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Member</TableHead>
-            <TableHead>Contact</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead className="text-right">Income</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="w-24" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {registrations.map((reg: Registration) => {
-            const fullName = [reg.first_name, reg.middle_name, reg.last_name]
-              .filter(Boolean)
-              .join(" ");
-            const branchName =
-              reg.branch_id != null ? branchNameById.get(reg.branch_id) : undefined;
-            const photoSrc = fileUrl(reg.photo_url ?? reg.photo);
-            return (
-              <TableRow key={reg.id} className="hover:bg-muted/50">
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar size="sm">
-                      {photoSrc ? (
-                        <AvatarImage src={photoSrc} alt={fullName} />
-                      ) : null}
-                      <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                        {getInitials(fullName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{fullName}</p>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        PEND-{String(reg.id).padStart(4, "0")}
-                      </p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {reg.contact_number || "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {branchName || "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {reg.email || "—"}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-brand-orange font-medium">
-                  {reg.monthly_income
-                    ? formatCurrency(Number(reg.monthly_income))
-                    : "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className={statusBadgeColor.pending}>
-                    pending
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link
-                    href={`/borrowers/registrations/${reg.id}`}
-                    className="inline-flex items-center rounded-md border border-brand-orange/50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange/5 transition-colors"
-                  >
-                    Review
-                  </Link>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-/** Global per-status member counts, read from the list response's `meta.stats`. */
+/**
+ * Global member counts, read from the list response's `meta.stats`.
+ *
+ * Members only. `pending` and `rejected` used to live here too, which is how
+ * the Pending Registrations badge ended up counted by a different query than
+ * the table it labels. Application counts now come from the application query
+ * itself — see `pending` / `rejected` below.
+ */
 interface MemberStats {
   active: number;
   inactive: number;
   blacklisted: number;
-  pending: number;
 }
 
-const EMPTY_STATS: MemberStats = {
-  active: 0,
-  inactive: 0,
-  blacklisted: 0,
-  pending: 0,
-};
+/**
+ * Summary card.
+ *
+ * `value` is null while no counts are known — a first load that failed, or one
+ * that has not answered yet. It renders as an em dash rather than 0, matching
+ * the loans page: "a zero here reads as 'this coop has no loans', which is a
+ * statement of fact we are in no position to make." Same applies to members —
+ * four zeros under a table that is simultaneously showing "we couldn't load
+ * the members" told the admin their membership had been wiped.
+ */
+function StatCard({
+  label,
+  value,
+  valueClassName,
+  icon,
+  iconBg,
+}: {
+  label: string;
+  value: number | null;
+  valueClassName?: string;
+  icon: React.ReactNode;
+  iconBg: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className={cn("text-2xl font-bold", valueClassName)}>
+              {value ?? "—"}
+            </p>
+          </div>
+          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type MainTab = "members" | "pending" | "rejected";
 
 export default function BorrowersPage() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<MemberStats>(EMPTY_STATS);
+  // null, not zeroes: "we do not know yet" is a different thing from "none".
+  const [stats, setStats] = useState<MemberStats | null>(null);
   const { branches } = usePublicBranches();
   const branchNameById = useMemo(
     () => new Map(branches.map((b) => [b.id, b.name])),
@@ -188,8 +102,50 @@ export default function BorrowersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
 
-  type MainTab = "members" | "registrations";
   const [mainTab, setMainTab] = useState<MainTab>("members");
+
+  // ── Registrations (applications, not members) ──
+  // One page size for both application tabs; a page cursor each.
+  const [regPerPage, setRegPerPage] = useState(10);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [rejectedPage, setRejectedPage] = useState(1);
+
+  // Always live, even on the members tab: this one query feeds BOTH the tab
+  // badge and the tab's table, so the badge is the count of exactly the rows
+  // the table pages through — true by construction rather than by two server
+  // queries happening to agree. It used to read `meta.stats.pending` from the
+  // members request instead, and `meta.stats` is branch-scoped when a
+  // `branch_id` filter is in play while this query is not, so the two were one
+  // filter away from silently disagreeing.
+  const pending = useRegistrations({
+    status: "pending",
+    page: pendingPage,
+    per_page: regPerPage,
+  });
+
+  // Rejected applications are an archive, not a work queue: no badge needs
+  // their count, so the query stays parked until the tab is actually opened.
+  const rejected = useRegistrations({
+    status: "rejected",
+    page: rejectedPage,
+    per_page: regPerPage,
+    enabled: mainTab === "rejected",
+  });
+
+  // A second reviewer working the queue can shrink `total` under this cursor.
+  // TablePagination clamps for DISPLAY only — it never calls back — so with,
+  // say, page 3 of a queue that has dropped to 5 rows, both arrows compute to
+  // disabled and the tab strands on an empty table it cannot leave. The members
+  // list already solves this server-side in fetchBorrowers; these tabs snap the
+  // cursor back during render instead (React's "adjusting state when a prop
+  // changes"), which converges because `lastPage` is a fixed value from the
+  // response rather than a function of the page we are correcting.
+  if (!pending.loading && pendingPage > pending.lastPage) {
+    setPendingPage(pending.lastPage);
+  }
+  if (!rejected.loading && mainTab === "rejected" && rejectedPage > rejected.lastPage) {
+    setRejectedPage(rejected.lastPage);
+  }
 
   // Search is a server query now, so wait for the admin to stop typing.
   useEffect(() => {
@@ -211,7 +167,7 @@ export default function BorrowersPage() {
       setLoading(true);
       setError(null);
       // `members_only` drops pending + rejected applicants server-side — they
-      // belong on the Pending Registrations tab, not in the members list.
+      // belong on the application tabs, not in the members list.
       const res = await borrowerService.list({
         members_only: 1,
         page: currentPage,
@@ -226,13 +182,17 @@ export default function BorrowersPage() {
       // before the clamp check — otherwise the page we are about to re-request
       // leaves the cards and the paginator showing pre-delete numbers.
       setTotal(res.meta?.total ?? rows.length);
+      // Only ever replaced by a response that actually carries counts. An API
+      // build that omits `stats` should leave the last known figures standing,
+      // not zero them.
       const s = res.meta?.stats;
-      setStats({
-        active: s?.active ?? 0,
-        inactive: s?.inactive ?? 0,
-        blacklisted: s?.blacklisted ?? 0,
-        pending: s?.pending ?? 0,
-      });
+      if (s) {
+        setStats({
+          active: s.active ?? 0,
+          inactive: s.inactive ?? 0,
+          blacklisted: s.blacklisted ?? 0,
+        });
+      }
 
       // A bulk delete on the last page can leave `currentPage` past `last_page`,
       // which the server answers with zero rows. Fall back to the last page that
@@ -267,8 +227,10 @@ export default function BorrowersPage() {
 
   // `stats` counts every member in the database, so the tab counts stay stable
   // while paging or filtering — unlike `total`, which tracks the active filters.
-  const memberCount = stats.active + stats.inactive + stats.blacklisted;
-  const pendingCount = stats.pending;
+  // null propagates: an unknown total must not render as 0.
+  const memberCount = stats
+    ? stats.active + stats.inactive + stats.blacklisted
+    : null;
   const hasFilters = statusFilter !== "all" || debouncedSearch !== "";
 
   // Reset to page 1 when filters change
@@ -282,9 +244,34 @@ export default function BorrowersPage() {
     setCurrentPage(1);
   }
 
+  /**
+   * Clearing resets search and status in ONE state update, so React batches it
+   * into a single render and `fetchBorrowers` is rebuilt once — one request.
+   *
+   * `setDebouncedSearch("")` is the load-bearing line. Without it the status
+   * reset lands immediately while the 300ms debounce still holds the old term,
+   * so the first request reads "all statuses, still searching for X" — visibly
+   * wrong rows — and a second request 300ms later corrects it. Writing the
+   * debounced value directly skips the timer for a value we already know.
+   */
+  function handleClearFilters() {
+    setSearch("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setCurrentPage(1);
+  }
+
   function handleRowsPerPageChange(value: number) {
     setRowsPerPage(value);
     setCurrentPage(1);
+  }
+
+  // Page size is shared by both application tabs, so reset both cursors —
+  // leaving one on page 9 under a new page size points it past the end.
+  function handleRegPerPageChange(value: number) {
+    setRegPerPage(value);
+    setPendingPage(1);
+    setRejectedPage(1);
   }
 
   const handleToggleStatus = async (id: number) => {
@@ -336,6 +323,23 @@ export default function BorrowersPage() {
     }
   };
 
+  const MAIN_TABS: {
+    value: MainTab;
+    label: string;
+    badge?: number;
+    /** Read after the number by a screen reader, so it is per-tab. */
+    badgeLabel?: string;
+  }[] = [
+    { value: "members", label: "Active Members" },
+    {
+      value: "pending",
+      label: "Pending Registrations",
+      badge: pending.total,
+      badgeLabel: "awaiting review",
+    },
+    { value: "rejected", label: "Rejected" },
+  ];
+
   return (
     <RouteGuard permission="borrowers:view" pageName="Members">
     <div className="space-y-6">
@@ -362,114 +366,93 @@ export default function BorrowersPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Members</p>
-                <p className="text-2xl font-bold">{memberCount}</p>
-              </div>
-              <div className="rounded-full bg-brand-blue/10 p-2.5">
-                <Users className="h-5 w-5 text-brand-blue" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {stats.active}
-                </p>
-              </div>
-              <div className="rounded-full bg-green-500/10 p-2.5">
-                <UserCheck className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Inactive</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {stats.inactive}
-                </p>
-              </div>
-              <div className="rounded-full bg-red-500/10 p-2.5">
-                <UserX className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Blacklisted</p>
-                <p className="text-2xl font-bold">{stats.blacklisted}</p>
-              </div>
-              <div className="rounded-full bg-muted p-2.5">
-                <AlertTriangle className="h-5 w-5 text-muted-foreground" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Total Members"
+          value={memberCount}
+          icon={<Users className="h-5 w-5 text-brand-blue" />}
+          iconBg="bg-brand-blue/10"
+        />
+        <StatCard
+          label="Active"
+          value={stats?.active ?? null}
+          valueClassName="text-green-600"
+          icon={<UserCheck className="h-5 w-5 text-green-600" />}
+          iconBg="bg-green-500/10"
+        />
+        <StatCard
+          label="Inactive"
+          value={stats?.inactive ?? null}
+          valueClassName="text-red-600"
+          icon={<UserX className="h-5 w-5 text-red-600" />}
+          iconBg="bg-red-500/10"
+        />
+        <StatCard
+          label="Blacklisted"
+          value={stats?.blacklisted ?? null}
+          icon={<AlertTriangle className="h-5 w-5 text-muted-foreground" />}
+          iconBg="bg-muted"
+        />
       </div>
 
       {/* Main tab switcher */}
-      <div className="flex border-b border-border">
-        <button
-          onClick={() => setMainTab("members")}
-          className={cn(
-            "px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
-            mainTab === "members"
-              ? "border-brand-orange text-brand-orange"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Active Members
-        </button>
-        <button
-          onClick={() => setMainTab("registrations")}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
-            mainTab === "registrations"
-              ? "border-brand-orange text-brand-orange"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Pending Registrations
-          {pendingCount > 0 && (
-            <span className={cn(
-              "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold",
-              mainTab === "registrations"
-                ? "bg-brand-orange text-white"
-                : "bg-amber-100 text-amber-700"
-            )}>
-              {pendingCount}
-            </span>
-          )}
-        </button>
+      <div
+        className="flex border-b border-border"
+        role="group"
+        aria-label="Members and applications"
+      >
+        {MAIN_TABS.map((tab) => {
+          const selected = mainTab === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              aria-pressed={selected}
+              id={`${tab.value}-tab`}
+              aria-controls={`${tab.value}-panel`}
+              onClick={() => setMainTab(tab.value)}
+              className={cn(
+                "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
+                selected
+                  ? "border-brand-orange text-brand-orange"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.label}
+              {tab.badge != null && tab.badge > 0 && (
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold",
+                    selected
+                      ? "bg-brand-orange text-white"
+                      : "bg-amber-100 text-amber-700"
+                  )}
+                >
+                  {tab.badge}
+                  {tab.badgeLabel ? (
+                    <span className="sr-only"> {tab.badgeLabel}</span>
+                  ) : null}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filters + Table */}
       {mainTab === "members" && (
-      <Card>
+      <Card id="members-panel" role="region" aria-labelledby="members-tab">
         <div className="p-6 pb-0">
           <BorrowerFilters
             search={search}
             onSearchChange={handleSearchChange}
             statusFilter={statusFilter}
             onStatusFilterChange={handleStatusFilterChange}
+            onClearFilters={handleClearFilters}
             counts={{
               all: memberCount,
-              active: stats.active,
-              inactive: stats.inactive,
-              blacklisted: stats.blacklisted,
+              active: stats?.active ?? null,
+              inactive: stats?.inactive ?? null,
+              blacklisted: stats?.blacklisted ?? null,
             }}
           />
         </div>
@@ -523,10 +506,42 @@ export default function BorrowersPage() {
       </Card>
       )}
 
-      {mainTab === "registrations" && (
-        <Card>
-          <CardContent className="pt-0">
-            <PendingRegistrationsTab />
+      {mainTab === "pending" && (
+        <Card id="pending-panel" role="region" aria-labelledby="pending-tab">
+          <CardContent className="pt-6">
+            <RegistrationsTab
+              status="pending"
+              registrations={pending.registrations}
+              total={pending.total}
+              loading={pending.loading}
+              error={pending.error}
+              page={pendingPage}
+              perPage={regPerPage}
+              onPageChange={setPendingPage}
+              onPerPageChange={handleRegPerPageChange}
+              onRetry={pending.refresh}
+              branchNameById={branchNameById}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {mainTab === "rejected" && (
+        <Card id="rejected-panel" role="region" aria-labelledby="rejected-tab">
+          <CardContent className="pt-6">
+            <RegistrationsTab
+              status="rejected"
+              registrations={rejected.registrations}
+              total={rejected.total}
+              loading={rejected.loading}
+              error={rejected.error}
+              page={rejectedPage}
+              perPage={regPerPage}
+              onPageChange={setRejectedPage}
+              onPerPageChange={handleRegPerPageChange}
+              onRetry={rejected.refresh}
+              branchNameById={branchNameById}
+            />
           </CardContent>
         </Card>
       )}

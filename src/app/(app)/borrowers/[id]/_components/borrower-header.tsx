@@ -10,6 +10,12 @@ import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { getInitials } from "@/lib/initials";
+// The module-wide map, keyed off `Borrower["status"]`. The copy that used to
+// live here was `Record<string, string>` and had only the three member
+// statuses, so a `pending` or `rejected` borrower opened by URL drew an
+// unstyled pill — the same drift that hid `rejected` from the status tabs.
+import { statusBadgeColor } from "@/app/(app)/borrowers/_components/utils";
 import {
   Dialog,
   DialogContent,
@@ -19,15 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const statusBadgeColor: Record<string, string> = {
-  active: "bg-green-100 text-green-700 border-green-200",
-  inactive: "bg-red-100 text-red-700 border-red-200",
-  blacklisted: "bg-gray-900 text-white border-gray-700",
-};
-
-function getInitials(name: string): string {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-}
 
 interface BorrowerHeaderProps {
   borrower: Borrower;

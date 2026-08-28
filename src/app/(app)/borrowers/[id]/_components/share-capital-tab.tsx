@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter,
 } from "@/components/ui/table";
-import { Loader2, Landmark } from "lucide-react";
+import { Loader2, Landmark, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
@@ -24,15 +26,37 @@ interface ShareCapitalTabProps {
 export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set only when the drain gave up with pages outstanding. This tab prints a
+  // running balance per row, so a short ledger is not merely a short table:
+  // every balance in the Balance column is accumulated from the first entry
+  // shown, and if that is not the first entry that EXISTS then every figure in
+  // the column is wrong, including the closing one.
+  const [shortfall, setShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
+  // Distinct from `entries.length === 0`, and that distinction is the whole
+  // point: a failed request used to land in the same state as a member who has
+  // never contributed, so the screen said "No share capital entries found" and
+  // showed a ₱0.00 balance for somebody holding six figures.
+  const [failed, setFailed] = useState(false);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await shareCapitalService.ledgerList({ borrower_id: borrowerId, per_page: 9999 });
-      const items = res.data ?? res as unknown as ShareCapitalLedgerEntry[];
-      setEntries(Array.isArray(items) ? items : []);
+      // Drained across pages. `per_page: 9999` was clamped to 100, so a member
+      // with a longer ledger saw their hundred most recent entries under a
+      // "Share Capital Balance" card that summed only those.
+      const { rows, truncated, total } = await shareCapitalService.ledgerListAll({
+        borrower_id: borrowerId,
+      });
+      setEntries(rows);
+      setShortfall(truncated ? { shown: rows.length, total } : null);
+      setFailed(false);
     } catch {
       setEntries([]);
+      setShortfall(null);
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -74,8 +98,46 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     );
   }
 
+  if (failed) {
+    return (
+      <div className="space-y-4">
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle
+            className="mt-0.5 size-5 shrink-0 text-amber-600"
+            aria-hidden="true"
+          />
+          <div className="text-sm">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              This member&rsquo;s share capital ledger could not be loaded
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              Their balance is unknown, which is not the same as zero — so
+              nothing is shown here rather than a ₱0.00 that would read as
+              &ldquo;this member has no share capital&rdquo;.
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={fetchEntries}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="share capital entries"
+          consequence="The totals and the running Balance column below are computed from only the entries that loaded, so every figure in them is understated or overstated by the entries that did not."
+        />
+      )}
+
       {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>

@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -42,7 +42,8 @@ import {
   UserX,
 } from "lucide-react";
 import type { Borrower } from "@/types";
-import { statusBadgeColor, getInitials } from "./utils";
+import { statusBadgeColor } from "./utils";
+import { getInitials } from "@/lib/initials";
 import { BorrowerActionsCell } from "./borrower-actions";
 
 interface BorrowerTableProps {
@@ -112,11 +113,6 @@ export function BorrowerTable({
     setSelectedIds(new Set());
     setConfirmBulkDelete(false);
   }
-
-  // Signed photo URLs expire; remember the ones that 404/403 so the initials
-  // show through instead of a broken-image glyph. Keyed by URL, not by row, so
-  // a freshly minted URL for the same member renders again on the next fetch.
-  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
 
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState<
@@ -348,42 +344,8 @@ export function BorrowerTable({
                       <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-xs font-semibold">
                         {getInitials(borrower.full_name)}
                       </AvatarFallback>
-                      {borrower.photo && !failedPhotos.has(borrower.photo) ? (
-                        // Deliberately a native <img> rather than <AvatarImage>.
-                        // base-ui's AvatarImage probes every src with a detached
-                        // `new window.Image()` on mount and renders nothing until
-                        // that resolves, and the probe forwards only
-                        // referrerPolicy/crossOrigin/sizes/srcSet — never
-                        // `loading`. So an AvatarImage fetches eagerly no matter
-                        // what, and a page of 100 rows fired 100 absolute signed
-                        // URLs at the API host in one burst (613 in production),
-                        // tripping the rate limiter and locking the admin out.
-                        // A plain lazy <img> layered over the fallback initials
-                        // defers each fetch until the row nears the viewport.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={borrower.photo}
-                          // Decorative: the member's name is rendered as text
-                          // immediately beside it, so alt text would just double
-                          // up in a screen reader.
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          onError={() => {
-                            // Declarative, not `style.display = "none"`: rows are
-                            // keyed by id, so an in-place refetch reuses this DOM
-                            // node and only swaps `src`. An imperative hide would
-                            // outlive the URL it was set for and keep the member
-                            // hidden forever — and because a display:none image
-                            // never intersects the viewport, `loading="lazy"`
-                            // would stop it ever re-fetching to recover.
-                            const url = borrower.photo;
-                            if (url) {
-                              setFailedPhotos((prev) => new Set(prev).add(url));
-                            }
-                          }}
-                          className="absolute inset-0 aspect-square size-full rounded-full object-cover"
-                        />
+                      {borrower.photo ? (
+                        <AvatarImage src={borrower.photo} alt="" />
                       ) : null}
                     </Avatar>
                     <div>

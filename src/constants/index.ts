@@ -1,37 +1,3 @@
-export const LOAN_STATUS = {
-  DRAFT: "draft",
-  FOR_REVIEW: "for_review",
-  APPROVED: "approved",
-  REJECTED: "rejected",
-  RELEASED: "released",
-  CURRENT: "current",
-  PAST_DUE: "past_due",
-  ONGOING: "ongoing",
-  COMPLETED: "completed",
-  DEFAULTED: "defaulted",
-  RESTRUCTURED: "restructured",
-  CLOSED: "closed",
-} as const;
-
-export const LOAN_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  for_review: "For Review",
-  approved: "Approved",
-  rejected: "Rejected",
-  released: "Released",
-  current: "Current",
-  past_due: "Past Due",
-  // Legacy — older backend versions may still emit "ongoing" for a loan
-  // that has been released and is on an amortization schedule. Display it
-  // the same as "current" so the UI stays consistent until backend
-  // migration.
-  ongoing: "Current",
-  completed: "Completed",
-  defaulted: "Defaulted",
-  restructured: "Restructured",
-  closed: "Closed",
-};
-
 export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
   extension: "Extension",
   restructure: "Restructure",
@@ -126,11 +92,6 @@ export const CIVIL_STATUS_OPTIONS = [
   { value: "divorced", label: "Divorced" },
 ] as const;
 
-export const GENDER_OPTIONS = [
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-] as const;
-
 export const VALID_ID_OPTIONS = [
   { value: "philippine_id", label: "Philippine National ID (PhilSys)" },
   { value: "drivers_license", label: "Driver's License" },
@@ -156,14 +117,6 @@ export const RELATIONSHIP_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
-export const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: "employed", label: "Employed" },
-  { value: "self_employed", label: "Self-Employed / Business Owner" },
-  { value: "ofw", label: "OFW" },
-  { value: "unemployed", label: "Unemployed" },
-  { value: "retired", label: "Retired" },
-] as const;
-
 export const SUFFIX_OPTIONS = [
   { value: "", label: "None" },
   { value: "Jr.", label: "Jr." },
@@ -173,25 +126,11 @@ export const SUFFIX_OPTIONS = [
   { value: "V", label: "V" },
 ] as const;
 
-export const PHILIPPINE_PROVINCES = [
-  "Metro Manila",
-  "Cebu",
-  "Davao del Sur",
-  "Bulacan",
-  "Pampanga",
-  "Laguna",
-  "Cavite",
-  "Rizal",
-  "Batangas",
-  "Pangasinan",
-  "Iloilo",
-  "Negros Occidental",
-  "Zamboanga del Sur",
-  "Leyte",
-  "Bukidnon",
-] as const;
-
-
+export {
+  LOAN_STATUS,
+  LOAN_STATUS_LABELS,
+  LOAN_STATUS_COLORS,
+} from "./loan-status";
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
 export type { Branch } from "./branches";

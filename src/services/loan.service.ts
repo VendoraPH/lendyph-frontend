@@ -1,5 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { Loan, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 
@@ -39,6 +40,37 @@ export const loanService = {
    */
   list: (params?: Record<string, unknown>) =>
     api.getRaw<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
+
+  /**
+   * Every loan matching `params`, across as many pages as it takes.
+   *
+   * For the screens that have to hold the whole set rather than a page of it —
+   * the ones filtering or aggregating on something `?status=` cannot express.
+   * The restructure form is the case in hand: "eligible for restructure" is a
+   * guard inside `LoanService::assertRestructureInvariants()`, not a query
+   * parameter, so the filter has to run client-side and therefore has to see
+   * every row. It asked for `per_page: 200`, which `LoanController::index()`
+   * clamps to `min(max(per_page, 1), 100)` in silence, so a member past their
+   * hundredth loan had loans that could not be restructured from that screen at
+   * all — presented as "this member has nothing to restructure".
+   *
+   * Prefer a server-side filter where one exists. `?status=active` and
+   * `?status=past_due` both exist and both agree with their `meta.stats` entry,
+   * so a screen wanting either should page normally and read the badge rather
+   * than drain and count.
+   *
+   * Returns a `DrainResult`, NOT a row array, for the reason spelled out on
+   * `borrowerService.listAll`: `truncated` is part of the answer, and handing
+   * back a bare array would let a screen render an incomplete list as if it
+   * were whole.
+   *
+   * `page` and `per_page` are set by the drain — passing them in `params` has
+   * no effect.
+   */
+  listAll: (params?: Record<string, unknown>): Promise<DrainResult<Loan>> =>
+    fetchAllPages<Loan>(({ page, per_page }) =>
+      loanService.list({ ...params, page, per_page }),
+    ),
 
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),
