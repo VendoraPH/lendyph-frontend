@@ -8,24 +8,17 @@ import {
 } from "@/components/ui/table";
 import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lucide-react";
 import type { CoMaker, Loan, LoanSchedule } from "@/types";
-import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
+import {
+  LOAN_STATUS_COLORS,
+  LOAN_STATUS_LABELS,
+  PAYMENT_FREQUENCY_LABELS,
+} from "@/constants";
 import { loanService } from "@/services";
 import { formatCurrency } from "@/lib/format";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
-
-const loanStatusColor: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-800",
-  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
-  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
-  rejected: "bg-red-100 text-red-500 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-};
 
 const scheduleStatusColor: Record<string, string> = {
   paid: "bg-green-100 text-green-700 border-green-200",
@@ -168,7 +161,7 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                         {loan.maturity_date ? formatDate(loan.maturity_date) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={loanStatusColor[loan.status]}>
+                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
                           {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
                         </Badge>
                       </TableCell>

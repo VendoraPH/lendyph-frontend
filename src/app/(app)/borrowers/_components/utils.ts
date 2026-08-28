@@ -11,43 +11,29 @@ export const statusBadgeColor: Record<Borrower["status"], string> = {
   rejected: "bg-muted text-muted-foreground border-border line-through",
 };
 
-export function generateBorrowerCode(count: number): string {
-  const year = new Date().getFullYear();
-  const seq = String(count + 1).padStart(4, "0");
-  return `BRW-${year}${seq}`;
-}
-
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-  }).format(amount);
-}
-
-export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-export function buildFullName(form: {
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  suffix: string;
-}): string {
-  const middle = form.middle_name ? ` ${form.middle_name.charAt(0)}.` : "";
-  const suffix = form.suffix ? ` ${form.suffix}` : "";
-  return `${form.first_name}${middle} ${form.last_name}${suffix}`.trim();
+/**
+ * Who rejected an application, as something you can put in front of a person.
+ *
+ * BorrowerResource sends `rejected_by` as a bare user id and does not load the
+ * `rejectedByUser` relation the model defines, so an id is usually all there
+ * is. Turning it into a name would mean a `/users` lookup, which needs
+ * `users:view` — a permission a registration reviewer does not necessarily
+ * hold — so this degrades to the id rather than firing a request that 403s.
+ *
+ * The `rejected_by_user` branch goes live the day the API starts sending the
+ * relation, the way LoanResource already does for loans; no UI change needed.
+ * Returns null when nothing was recorded, so callers choose their own wording.
+ *
+ * Typed structurally rather than against `Registration` so a `Borrower` row
+ * carrying the same three fields can use it too.
+ */
+export function reviewerLabel(source: {
+  rejected_by?: number | null;
+  rejected_by_user?: { full_name?: string; name?: string } | null;
+}): string | null {
+  const user = source.rejected_by_user;
+  if (user?.full_name) return user.full_name;
+  if (user?.name) return user.name;
+  if (source.rejected_by != null) return `Reviewer #${source.rejected_by}`;
+  return null;
 }
