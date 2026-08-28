@@ -502,7 +502,7 @@ function deriveStepsFromLoanStatus(
 
 const VISIBLE_LOAN_COUNT = 3;
 
-function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
+function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
   const [activeLoansOpen, setActiveLoansOpen] = useState(loanStatus !== "released");
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
@@ -525,7 +525,9 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
               <FileText className="h-4 w-4 text-muted-foreground" />
               Borrower&rsquo;s Active Loans
               <Badge variant="outline" className="text-xs font-normal">
-                {loading ? "Loading..." : `${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
+                {loading
+                  ? "Loading..."
+                  : `${truncated ? "at least " : ""}${loans.length} loan${loans.length !== 1 ? "s" : ""}`}
               </Badge>
               <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
             </CardTitle>
@@ -533,11 +535,26 @@ function BorrowerActiveLoans({ loans, loading, approvalSteps, loanStatus, loan }
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-3">
+        {/* An incomplete list of someone's debts must never read as an absence
+            of debt. Rendered above the rows (and above the empty state) so it is
+            impossible to approve off this card without seeing it. */}
+        {!loading && truncated && (
+          <div
+            role="status"
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200"
+          >
+            <span className="font-medium">This list may be incomplete.</span>{" "}
+            We couldn&rsquo;t confirm all of this borrower&rsquo;s existing loans.
+            Check their profile before approving.
+          </div>
+        )}
         {loading ? (
           <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
         ) : loans.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            No other active loans for this borrower.
+            {truncated
+              ? "No other active loans were returned — see the notice above."
+              : "No other active loans for this borrower."}
           </p>
         ) : (
           <>
@@ -1252,6 +1269,10 @@ export default function LoanDetailPage({
   // see the borrower's existing obligations before approving.
   const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
   const [borrowerLoansLoading, setBorrowerLoansLoading] = useState(false);
+  // The drain hit its page guard, or the request failed outright. Either way the
+  // list below is knowingly incomplete and must say so rather than read as "no
+  // other debt" — the approver is making a credit decision on it.
+  const [borrowerLoansTruncated, setBorrowerLoansTruncated] = useState(false);
   // Chain configuration fetched from the approval-workflow service
   const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
 
@@ -1666,30 +1687,34 @@ export default function LoanDetailPage({
 
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
+  //
+  // The status filter runs on the SERVER (see `obligationsForBorrower`). It used
+  // to ask for `per_page: 50` and filter the reply here, which meant it only
+  // ever examined the borrower's 50 newest loans: a member whose recent history
+  // is a run of `completed` loans pushed every live one off that page and the
+  // card rendered "No other active loans" over real, outstanding debt.
   useEffect(() => {
     if (!loan) return;
     const borrowerId = loan.borrower?.id ?? loan.borrower_id;
     if (!borrowerId) return;
     let cancelled = false;
     setBorrowerLoansLoading(true);
+    setBorrowerLoansTruncated(false);
     loanService
-      .list({ borrower_id: borrowerId, per_page: 50 })
-      .then((result) => {
+      .obligationsForBorrower(borrowerId)
+      .then(({ rows, truncated }) => {
         if (cancelled) return;
-        const items = Array.isArray(result)
-          ? result
-          : (result as { data?: Loan[] }).data ?? [];
-        // Exclude the current loan and only show active ones
-        setBorrowerLoans(
-          items.filter(
-            (l) =>
-              l.id !== loan.id &&
-              ["released", "ongoing", "for_review", "approved"].includes(l.status)
-          )
-        );
+        // Every row here is already an obligation; the only thing left to drop
+        // is the loan being viewed, which is display logic rather than a filter.
+        setBorrowerLoans(rows.filter((l) => l.id !== loan.id));
+        setBorrowerLoansTruncated(truncated);
       })
       .catch(() => {
-        if (!cancelled) setBorrowerLoans([]);
+        if (cancelled) return;
+        setBorrowerLoans([]);
+        // A failed read is not "no obligations". Reuse the same banner so the
+        // card never presents an empty list as a confirmed absence of debt.
+        setBorrowerLoansTruncated(true);
       })
       .finally(() => {
         if (!cancelled) setBorrowerLoansLoading(false);
@@ -3338,6 +3363,7 @@ export default function LoanDetailPage({
         <BorrowerActiveLoans
           loans={borrowerLoans}
           loading={borrowerLoansLoading}
+          truncated={borrowerLoansTruncated}
           approvalSteps={approvalSteps}
           loanStatus={loan.status}
           loan={loan}

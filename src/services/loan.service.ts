@@ -12,6 +12,43 @@ export type ReleaseLoanPayload = {
   insurance_remaining_balance?: number;
 };
 
+/**
+ * The statuses that count as "this borrower already owes us something", as one
+ * `?status=` value.
+ *
+ * Sent to the server rather than filtered in the client, because the two are
+ * not interchangeable: the endpoint orders by `created_at DESC` and paginates,
+ * so a client-side filter only ever sees the newest page. A member whose most
+ * recent loans are all `completed` pushed every live loan off that page, and the
+ * approval screen told the approver they had none — a credit decision made on a
+ * truncated set.
+ *
+ * Deliberately NOT `?status=active`, even though that shorthand exists and
+ * `LoanController::index()` recommends it. `Loan::ACTIVE_STATUSES` is
+ * `['released', 'ongoing']` — money already out the door. An approver assessing
+ * new exposure also has to see what is already committed but not yet released
+ * (`approved`) and what is queued behind this application (`for_review`);
+ * `active` silently drops both. Verified against the sibling repo, not guessed:
+ * `Loan::ACTIVE_STATUSES` (app/Models/Loan.php:74) and `Loan::scopeForStatus()`
+ * (:400), which splits on ",", expands the virtual `active`, and resolves the
+ * rest as a `whereIn`.
+ *
+ * A STRING, not an array, and that is load-bearing: `index()` validates
+ * `'status' => ['nullable', 'string']`, so axios serialising an array into
+ * `status[]=released&status[]=ongoing` is a 422 and an empty screen — the same
+ * blank list this exists to fix, with a different cause.
+ */
+export const BORROWER_OBLIGATION_STATUSES = [
+  "released",
+  "ongoing",
+  "for_review",
+  "approved",
+] as const;
+
+/** `BORROWER_OBLIGATION_STATUSES` in the comma-separated form `?status=` wants. */
+export const BORROWER_OBLIGATION_STATUS_PARAM =
+  BORROWER_OBLIGATION_STATUSES.join(",");
+
 export const loanService = {
   /**
    * `/loans` answers with a raw Laravel paginator (`{ data, links, meta }`),
@@ -71,6 +108,30 @@ export const loanService = {
     fetchAllPages<Loan>(({ page, per_page }) =>
       loanService.list({ ...params, page, per_page }),
     ),
+
+  /**
+   * Every loan on which `borrowerId` still owes something — the borrower's
+   * existing obligations, for the approver looking at a new application.
+   *
+   * A DRAIN rather than a page, chosen rather than defaulted. Once
+   * `BORROWER_OBLIGATION_STATUSES` is applied server-side the result is a
+   * member's concurrent obligations, which is single digits in practice and
+   * bounded by the co-op's own multiple-loan policy — so this costs exactly one
+   * request until someone holds more than `MAX_PER_PAGE` live loans at once, and
+   * stays correct if they ever do. The alternative is a page size, and any page
+   * size here is a number nobody can justify: too small silently hides debt,
+   * "big enough" is the guess that produced this bug and the four before it.
+   *
+   * Returns `DrainResult`, not `Loan[]`, for the reason on
+   * `borrowerService.listAll`: `truncated` is part of the answer. On a credit
+   * screen especially, an incomplete list of someone's debts that does not
+   * admit it is worse than no list — the caller must render it.
+   */
+  obligationsForBorrower: (borrowerId: number): Promise<DrainResult<Loan>> =>
+    loanService.listAll({
+      borrower_id: borrowerId,
+      status: BORROWER_OBLIGATION_STATUS_PARAM,
+    }),
 
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),
