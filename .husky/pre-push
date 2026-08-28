@@ -2,17 +2,43 @@
 
 echo "🔍 Running pre-push checks..."
 
-# Pull latest development into the current branch before pushing
+# Keep the branch current with development before pushing.
+#
+# This used to run a bare `git rebase origin/development` on every non-main,
+# non-development branch, unconditionally. Two problems, both of which cost a
+# `--no-verify` this week:
+#
+#   1. A plain rebase FLATTENS merge commits. Replaying an integration branch
+#      that has merged development (or a sibling feature branch) drops the merge
+#      and replays every commit underneath it, so conflicts that were resolved
+#      once in the merge come back one commit at a time, in a rebase, on push.
+#      `--rebase-merges` replays the merge commits as merge commits instead.
+#   2. It rebased even when there was nothing to rebase onto. If
+#      origin/development is already an ancestor of HEAD, the branch is up to
+#      date by definition and the rebase is pure risk: it rewrites every local
+#      commit for no change in content, which is enough to reintroduce conflicts
+#      on a branch that had none.
+#
+# So: skip entirely when already current, and use --rebase-merges when not.
+# A hook that cannot be satisfied is a hook that gets bypassed, and a bypassed
+# hook does not run the typecheck and build below either — which is the part
+# that actually protects the branch.
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ "$CURRENT_BRANCH" != "development" ] && [ "$CURRENT_BRANCH" != "main" ]; then
-  echo "🔄 Pulling latest development into $CURRENT_BRANCH..."
+  echo "🔄 Checking $CURRENT_BRANCH against development..."
   git fetch origin development
-  if ! git rebase origin/development; then
-    echo "❌ Rebase onto development failed. Resolve conflicts and try again."
-    git rebase --abort
-    exit 1
+
+  if git merge-base --is-ancestor origin/development HEAD; then
+    echo "✅ Already contains origin/development — nothing to rebase."
+  else
+    echo "🔄 Rebasing onto origin/development (preserving merges)..."
+    if ! git rebase --rebase-merges origin/development; then
+      echo "❌ Rebase onto development failed. Resolve conflicts and try again."
+      git rebase --abort
+      exit 1
+    fi
+    echo "✅ Branch is up-to-date with development."
   fi
-  echo "✅ Branch is up-to-date with development."
 fi
 
 echo "📝 TypeScript check..."
