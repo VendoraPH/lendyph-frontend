@@ -1,3 +1,22 @@
+// Every assertion in this file is Manila-relative — the hours below (07:00,
+// 08:00, 09:00) are the boundary either side of UTC+8 midnight, and a
+// `due_date` of "2026-08-25" is a calendar day, not an instant. Leave the zone
+// to whoever runs the suite and the file measures something different on every
+// machine: on a UTC runner the 07:00 and 09:00 cases fall on the SAME side of
+// the boundary, so the test that exists to prove printing an hour earlier does
+// not change the amount demanded stops distinguishing them and passes without
+// exercising the bug. CI sets no TZ, so that runner is the CI runner.
+//
+// How: assigning `process.env.TZ` makes Node re-read the zone (it notifies V8,
+// which drops its cached offset), and `node:test` runs each test file in its
+// own process, so this cannot leak into a sibling suite. The first test asserts
+// the pin actually took — without that guard this file would quietly pass on a
+// UTC CI box while testing nothing. It is deliberately not left to the machine:
+// this repo's dev boxes are already Asia/Manila, which is exactly how the bug
+// survived review the first time. Same pattern, same reason, as
+// `src/lib/format.test.ts`.
+process.env.TZ = "Asia/Manila";
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatCurrency, formatValue } from "@/lib/report-format";
@@ -16,6 +35,17 @@ import {
 
 /** Fixed "today" so the cure period and days-late figures are deterministic. */
 const NOW = new Date(2026, 7, 26);
+
+test("the suite is pinned to Manila (UTC+8), not the machine's zone", () => {
+  // `NOW` is built with the local-time `Date` constructor, so its UTC offset is
+  // the machine's. Asserting on it checks the pin against the very value the
+  // rest of the file dates from, rather than against an unrelated instant.
+  assert.equal(
+    NOW.getTimezoneOffset(),
+    -480,
+    "TZ pin did not take effect — every hour-of-day assertion below would be vacuous"
+  );
+});
 
 /** What `ReportService::statementOfAccount()` returns. */
 const PAYLOAD = {
