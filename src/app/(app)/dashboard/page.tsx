@@ -23,6 +23,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert, Landmark } from "lucide-react";
+import { getInitials } from "@/lib/initials";
+import { formatDateFull } from "@/lib/format";
+import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
 import type { ShareCapitalLedgerEntry } from "@/types";
@@ -74,12 +77,6 @@ interface RecentTransactionItem {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getInitials(name: string) {
-  const parts = name.split(" ").filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 // ---------------------------------------------------------------------------
 // View models — what the UI renders, after mapping the API response
@@ -210,21 +207,28 @@ export default function DashboardPage() {
   useEffect(() => {
     setMounted(true);
 
-    // Share capital — existing, kept as-is
-    shareCapitalService
-      .ledgerList({ per_page: 9999 })
-      .then((res) => {
-        const entries = (res.data ?? res as unknown as ShareCapitalLedgerEntry[]);
-        const items = Array.isArray(entries) ? entries : [];
+    // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
+    // the whole ledger. It used to ask for `per_page: 9999`, which the API
+    // silently clamps to 100: the headline figure on the front page of the app
+    // was the sum of the hundred most recent entries, in a response shaped
+    // exactly like a complete one. Drained page by page instead.
+    fetchAllPages<ShareCapitalLedgerEntry>((params) =>
+      shareCapitalService.ledgerList(params)
+    )
+      .then(({ rows, truncated }) => {
         let total = 0;
-        for (const e of items) {
+        for (const e of rows) {
           // Defensive coercion — bad/missing amounts shouldn't poison the running
           // total with NaN (which would propagate to "₱NaN" in the UI).
           const amount = Number(e.amount);
           if (!Number.isFinite(amount)) continue;
           total += e.type === "credit" ? amount : -amount;
         }
-        setShareCapitalTotal(formatCompactCurrency(Number.isFinite(total) ? total : 0));
+        const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
+        // The drain hit its runaway guard, so this is a floor rather than the
+        // total. Say so with a "+" instead of presenting a short sum as final —
+        // quietly rounding down is the bug this whole change is about.
+        setShareCapitalTotal(truncated ? `${compact}+` : compact);
       })
       .catch(() => {
         setShareCapitalTotal("—");
@@ -375,7 +379,7 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-base font-semibold">Expected Daily Collection vs Actual Collection</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                {formatDateFull(new Date())}
               </p>
             </div>
             <Badge variant="outline" className={collectionRate >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : collectionRate >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>

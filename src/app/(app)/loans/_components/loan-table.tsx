@@ -12,7 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, ArrowUpDown, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { LOAN_STATUS_LABELS, PAYMENT_FREQUENCY_LABELS } from "@/constants";
+import {
+  LOAN_STATUS_COLORS,
+  LOAN_STATUS_LABELS,
+  PAYMENT_FREQUENCY_LABELS,
+} from "@/constants";
 import type { Loan } from "@/types/loan";
 import {
   loanBorrowerName,
@@ -21,23 +25,6 @@ import {
   type LoanSortKey,
   type SortDir,
 } from "./utils";
-
-// Status pill colors — kept identical to the previous inline render to
-// avoid any visual diff in this task.
-const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
-  approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
-  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
-  current: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  past_due: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
-  completed: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-  defaulted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  restructured: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-800",
-  closed: "bg-gray-200 text-gray-500 border-gray-300 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
-};
 
 export interface LoanTableProps {
   loans: Loan[];
@@ -136,7 +123,7 @@ export function LoanTable({
                   "—"}
               </TableCell>
               <TableCell>
-                <Badge variant="outline" className={statusColors[loan.status]}>
+                <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
                   {loan.is_restructure && loan.status !== "restructured"
                     ? `Restructured — ${LOAN_STATUS_LABELS[loan.status] ?? loan.status}`
                     : (LOAN_STATUS_LABELS[loan.status] ?? loan.status)}

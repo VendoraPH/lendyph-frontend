@@ -16,6 +16,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
+import { getInitials } from "@/lib/initials";
 import { useAuth } from "@/hooks/use-auth";
 import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
@@ -57,15 +58,6 @@ const ROLE_BADGE_CLASS: Record<Role, string> = {
   bod6: "bg-sky-100 text-sky-700 border-sky-200",
   bod7: "bg-sky-100 text-sky-700 border-sky-200",
 };
-
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((n) => n[0].toUpperCase())
-    .join("");
-}
 
 // ── Profile Card ──
 

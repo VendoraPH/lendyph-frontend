@@ -75,3 +75,67 @@ export function formatDateISO(date: Date): string {
 export function todayISO(): string {
   return formatDateISO(new Date());
 }
+
+// ---------------------------------------------------------------------------
+// Long / time forms
+// ---------------------------------------------------------------------------
+//
+// These take `string | Date` rather than following the existing
+// `formatDate(string)` + `formatDateObj(Date)` split. That split is why there
+// were three separate copies of the same short-date formatter in the loan
+// detail page alone — every caller holding the wrong one of the two types
+// wrote its own instead of converting. One entry point per format, and the
+// conversion happens here.
+
+/** `new Date(string)` unless it already is one. */
+function toDate(value: string | Date): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+/**
+ * "August 28, 2026" — the long form.
+ *
+ * For headers and review screens where a date is read rather than scanned:
+ * the registration detail page, printable headings. Use `formatDate` for
+ * tables, where "Aug 28, 2026" scans better in a column.
+ *
+ * Note `en-US` and `en-PH` produce identical output for this pattern (and for
+ * every other pattern in this file), so call sites that reached for `en-US` by
+ * habit can move here with no visual change at all.
+ */
+export function formatDateLong(date: string | Date): string {
+  return toDate(date).toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * "Friday, August 28, 2026" — long form with the weekday.
+ *
+ * Only worth it where the day of the week is the point, e.g. a dashboard
+ * panel reporting on *today's* collections.
+ */
+export function formatDateFull(date: string | Date): string {
+  return toDate(date).toLocaleDateString("en-PH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * "1:30 PM" — the time on its own, for when the date is rendered beside it.
+ *
+ * `formatDateTime` gives you both in one string; this is the split form the
+ * audit trail uses, where date and time sit in separate columns.
+ */
+export function formatTime(date: string | Date): string {
+  return toDate(date).toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
