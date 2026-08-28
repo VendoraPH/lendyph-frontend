@@ -32,6 +32,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
 import { borrowerService } from "@/services/borrower.service";
+import { MAX_PER_PAGE } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -389,9 +390,29 @@ export default function NewBorrowerPage() {
       // Wider per_page than a typed page because the list endpoint returns
       // the first N matches of the search string — surnames like "Dela Cruz"
       // easily fill a small page.
+      //
+      // MAX_PER_PAGE (100), not a hand-picked 50: the 50 was already serving
+      // the intent above — "as many candidates as we can get in one request" —
+      // it was just guessing at what that meant. 100 is the actual ceiling
+      // (`BorrowerController::index()` does `min(per_page, 100)`), so this is
+      // twice the candidate pool for the same single request, and the number
+      // now names the constraint instead of a preference.
+      //
+      // Deliberately NOT drained, and this is the one `per_page` on this branch
+      // that should stay a single request. It is a soft pre-flight warning, not
+      // a gate: it runs on submit, and `borrowers:create` on the API is what
+      // actually refuses a duplicate — see the catch below, which swallows a
+      // network failure and lets the backend decide precisely because this is
+      // advisory. Draining every "Dela Cruz" in the co-op to raise a dialog the
+      // user can click through would be a request storm in exchange for a
+      // slightly better hint.
+      //
+      // What it costs: a true duplicate sitting past the hundredth match for
+      // this name is not warned about client-side. That is a missed warning,
+      // not a missed check.
       const res = await borrowerService.list({
         search: `${form.first_name.trim()} ${form.last_name.trim()}`,
-        per_page: 50,
+        per_page: MAX_PER_PAGE,
       });
       list = Array.isArray(res)
         ? (res as unknown as Candidate[])
