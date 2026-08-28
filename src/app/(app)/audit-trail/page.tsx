@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { RouteGuard } from "@/components/common";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { RouteGuard, TablePagination } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction, AuditModule } from "@/types";
 
@@ -263,76 +264,148 @@ function AuditDetailDrawer({
 
 // ── Main Page ──
 
+/**
+ * Page sizes offered here, and the reason they start at 25 rather than the
+ * shared default of 10: this is a chronological event feed that people scan, and
+ * the top option is `MAX_PER_PAGE` because the server refuses to serve more
+ * (`min(per_page, 100)`) — offering 200 would silently hand back 100.
+ */
+const PER_PAGE_OPTIONS = [25, 50, MAX_PER_PAGE] as const;
+const DEFAULT_PER_PAGE = 25;
+
 export default function AuditTrailPage() {
+  // `searchDraft` is what the box shows; `search` is what has been sent. Keeping
+  // them apart is what makes the debounce one request per settled query instead
+  // of one per keystroke.
+  const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(DEFAULT_PER_PAGE);
   const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
 
+  // Guards against out-of-order responses: rapid page clicks or a fast-changing
+  // filter can land an older request last and repaint the previous page's rows
+  // underneath the newer page number.
+  const requestIdRef = useRef(0);
+
   const fetchLogs = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    // A clamp re-requests immediately, so `loading` has to stay true across the
+    // hand-off or the table paints one frame of the old rows under new totals.
+    let clamping = false;
     try {
       setLoading(true);
-      const params: Record<string, unknown> = { per_page: 100 };
+      const params: Record<string, unknown> = { page, per_page: perPage };
       if (actionFilter !== "all") params.action = actionFilter;
       if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      // Sent to the server, not applied here. Filtering the fetched page
+      // client-side would search one page of an unbounded log and report
+      // "no results" for events that exist — the same truncation as the table,
+      // one layer along. `buildQuery()` searches action, auditable_type,
+      // description and the user's name; the export already relied on it.
+      if (search) params.search = search;
       const res = await auditService.list(params);
-      if (Array.isArray(res)) {
-        setLogs(res);
-        setMeta(null);
-      } else if (res && typeof res === "object" && "data" in res) {
-        setLogs((res as { data: AuditLog[] }).data ?? []);
-        setMeta((res as { meta: typeof meta }).meta ?? null);
-      } else {
-        setLogs([]);
+      if (requestId !== requestIdRef.current) return;
+      const rows = res?.data ?? [];
+      const nextMeta = res?.meta ?? null;
+
+      // Applied before the clamp check: the paginator and the total card must
+      // describe the response we just got, not the one we are about to replace.
+      setMeta(nextMeta);
+
+      // A filter change (or a deep link) can leave `page` past `last_page`,
+      // which the server answers with zero rows. Step back to a page that has
+      // some rather than dumping someone on an empty table. Bounded by
+      // `page - 1` so it strictly decreases and cannot loop on a nonsense
+      // `last_page`.
+      if (rows.length === 0 && page > 1) {
+        clamping = true;
+        setPage(Math.max(1, Math.min(nextMeta?.last_page ?? 1, page - 1)));
+        return;
       }
+
+      setLogs(rows);
     } catch {
-      toast.error("We couldn't load the audit logs. Please try again.");
-      setLogs([]);
+      if (requestId === requestIdRef.current) {
+        toast.error("We couldn't load the audit logs. Please try again.");
+        setLogs([]);
+        setMeta(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current && !clamping) setLoading(false);
     }
-  }, [actionFilter, moduleFilter]);
+  }, [actionFilter, moduleFilter, search, page, perPage]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
+  // ── Debounce the search box, and reset to page 1 with it ──
+  useEffect(() => {
+    if (searchDraft.trim() === search) return;
+    const t = setTimeout(() => {
+      setSearch(searchDraft.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchDraft, search]);
+
   const todayStr = todayISO();
 
-  const filteredLogs = useMemo(() => {
-    const sorted = [...logs].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-    if (!search.trim()) return sorted;
-    const q = search.toLowerCase();
-    return sorted.filter(
-      (log) =>
-        log.description.toLowerCase().includes(q) ||
-        (log.user?.full_name?.toLowerCase().includes(q) ?? false) ||
-        log.module.toLowerCase().includes(q) ||
-        (log.target?.label.toLowerCase().includes(q) ?? false)
-    );
-  }, [logs, search]);
+  // Every filter resets to page 1: page 4 of "all modules" is rarely page 4 of
+  // "loans", and staying put lands on rows the user never asked for — or on an
+  // empty page that looks like an empty log.
+  // `string | null`: the Select clears to null when its value is deselected.
+  const changeModuleFilter = (value: string | null) => {
+    setModuleFilter(value ?? "all");
+    setPage(1);
+  };
+  const changeActionFilter = (value: string | null) => {
+    setActionFilter(value ?? "all");
+    setPage(1);
+  };
+  const changePerPage = (next: number) => {
+    setPerPage(next);
+    setPage(1);
+  };
 
   const hasFilters =
-    search || moduleFilter !== "all" || actionFilter !== "all";
+    searchDraft || moduleFilter !== "all" || actionFilter !== "all";
 
   const clearFilters = () => {
+    setSearchDraft("");
     setSearch("");
     setModuleFilter("all");
     setActionFilter("all");
+    setPage(1);
   };
 
+  // `meta.total` is the number of rows MATCHING THE FILTER, across all pages —
+  // which is what the paginator has to divide and what the card has to show.
+  // Falling back to the page length keeps both honest if a response omits meta.
+  const total = meta?.total ?? logs.length;
+
   const [exporting, setExporting] = useState(false);
+  /**
+   * Exports every row matching the CURRENT FILTERS — not the current page.
+   *
+   * `/audit-logs/export` is its own endpoint and is deliberately unpaginated
+   * server-side, so `page`/`per_page` are correctly absent below: adding them
+   * would narrow the file to what is on screen while the button still says
+   * "Export". The filters are passed so the CSV matches what the user is
+   * looking at, `search` included — which is now the same server-side search
+   * the table runs, so the two cannot disagree.
+   */
   const handleExport = async () => {
     setExporting(true);
     try {
       const params: Record<string, unknown> = {};
-      if (search.trim()) params.search = search.trim();
+      if (search) params.search = search;
       if (actionFilter !== "all") params.action = actionFilter;
       if (moduleFilter !== "all") params.auditable_type = moduleFilter;
       const blob = await auditService.export(params);
@@ -374,18 +447,33 @@ export default function AuditTrailPage() {
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/*
+        Summary Cards.
+
+        Only the first of these can see the whole log: `meta.total` is counted
+        server-side over every matching row. The other three are computed from
+        `logs`, which is now ONE page — so they are labelled as one page. That
+        labelling is the point of this change, not decoration: an unqualified
+        "Active Users: 4" beside a paginated table is the same lie as a correct
+        total beside a truncated one, and the server offers no per-filter
+        equivalent to compute them from.
+      */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Total Events</p>
-            <p className="text-2xl font-bold">{meta?.total ?? logs.length}</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {total.toLocaleString()}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {hasFilters ? "matching filters" : "all time"}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Today</p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold tabular-nums">
               {
                 // created_at is an instant, so a string prefix match compared
                 // the server's rendering of it against a local calendar day —
@@ -396,14 +484,16 @@ export default function AuditTrailPage() {
                 ).length
               }
             </p>
+            <p className="text-[10px] text-muted-foreground">on this page</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Active Users</p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold tabular-nums">
               {new Set(logs.filter((l) => l.user).map((l) => l.user.id)).size}
             </p>
+            <p className="text-[10px] text-muted-foreground">on this page</p>
           </CardContent>
         </Card>
         <Card>
@@ -411,13 +501,14 @@ export default function AuditTrailPage() {
             <p className="text-xs text-muted-foreground">
               Critical Actions
             </p>
-            <p className="text-2xl font-bold text-red-600">
+            <p className="text-2xl font-bold text-red-600 tabular-nums">
               {
                 logs.filter((l) =>
                   ["deleted", "voided", "rejected"].includes(l.action)
                 ).length
               }
             </p>
+            <p className="text-[10px] text-muted-foreground">on this page</p>
           </CardContent>
         </Card>
       </div>
@@ -426,19 +517,22 @@ export default function AuditTrailPage() {
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-sm font-medium">
-            Activity Log ({filteredLogs.length})
+            {/* The count of every matching row, not of the visible page — the
+                paginator underneath says which slice of it is on screen. */}
+            Activity Log ({total.toLocaleString()})
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search logs..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
                 className="pl-9 h-9"
+                aria-label="Search audit logs"
               />
             </div>
-            <Select value={moduleFilter} onValueChange={(v) => setModuleFilter(v ?? "all")}>
+            <Select value={moduleFilter} onValueChange={changeModuleFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Module" />
               </SelectTrigger>
@@ -451,7 +545,7 @@ export default function AuditTrailPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={(v) => setActionFilter(v ?? "all")}>
+            <Select value={actionFilter} onValueChange={changeActionFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Action" />
               </SelectTrigger>
@@ -498,7 +592,7 @@ export default function AuditTrailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLogs.map((log) => {
+                {logs.map((log) => {
                   const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
                   return (
                     <TableRow
@@ -563,18 +657,35 @@ export default function AuditTrailPage() {
                     </TableRow>
                   );
                 })}
-                {filteredLogs.length === 0 && (
+                {logs.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      No audit logs found.
+                      {hasFilters
+                        ? "No audit logs match these filters."
+                        : "No audit logs found."}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            {/*
+              An audit log only grows, so this paginates rather than draining:
+              there is no page count at which "fetch everything" stops being a
+              growing number of requests and a growing amount of memory for a
+              screen that shows a screenful. `TablePagination` is controlled and
+              does no slicing — `logs` is already the server's page.
+            */}
+            <TablePagination
+              page={meta?.current_page ?? page}
+              perPage={meta?.per_page ?? perPage}
+              total={total}
+              perPageOptions={PER_PAGE_OPTIONS}
+              onPageChange={setPage}
+              onPerPageChange={changePerPage}
+            />
           </div>
           )}
         </CardContent>
