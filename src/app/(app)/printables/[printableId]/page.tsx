@@ -9,7 +9,6 @@ import { RouteGuard } from "@/components/common";
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { LoanSubjectPicker } from "./_components/loan-subject-picker";
-import { useAuth } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -48,7 +47,6 @@ export default function PrintableDetailPage() {
   // held here so the empty state below knows to get out of the table's way.
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [opening, setOpening] = useState(false);
-  const { user } = useAuth();
 
   if (!printable) {
     return (
@@ -75,10 +73,6 @@ export default function PrintableDetailPage() {
   const Icon = printable.icon;
   const accent = SUBJECT_ACCENT[printable.subject];
   const subjectLabel = SUBJECT_META[printable.subject].label;
-  // Every document is issued BY a branch, and the one issuing it is the branch
-  // of the person printing it — the subject pickers carry no branch of their own.
-  const branchLabel = user?.branch?.name ?? null;
-
   async function handleOpen() {
     if (!printable || !subjectId) return;
     setOpening(true);
@@ -86,7 +80,7 @@ export default function PrintableDetailPage() {
       // Letterhead is resolved per open rather than held in state: branding can
       // change under a long-lived session, and the store's shared in-flight
       // fetch makes the repeat calls free.
-      const org = await resolvePrintableOrg(branchLabel);
+      const org = await resolvePrintableOrg();
       const doc = applyPrintChrome(await printable.build({ subjectId, org }));
 
       switch (openPrintable(doc)) {

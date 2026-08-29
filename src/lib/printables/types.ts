@@ -36,17 +36,16 @@ export type PrintableSubject = "loan" | "borrower" | "repayment";
  * Letterhead identity.
  *
  * Lendyph is single-tenant-per-deployment, so this is the one cooperative the
- * instance belongs to — resolved at build time from branding settings, never
- * hardcoded. `name` falling back to `siteConfig.name` is the renderer's job,
- * not the template's.
+ * instance belongs to — resolved at open time from branding settings, never
+ * hardcoded. Both `name` and `logoUrl` are null on a deployment that has not
+ * filled its branding in, and the renderer drops whichever is missing rather
+ * than substituting the product's own identity.
  */
 export interface PrintableOrg {
-  name: string;
+  name: string | null;
   logoUrl: string | null;
   address?: string | null;
   contact?: string | null;
-  /** Branch the document was issued by, when the subject has one. */
-  branchLabel?: string | null;
 }
 
 export type PrintAlign = "left" | "right" | "center";

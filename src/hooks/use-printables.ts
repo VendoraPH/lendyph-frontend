@@ -9,7 +9,6 @@ import {
 } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
 import type { PrintableDefinition, PrintableId } from "@/lib/printables/types";
-import { useAuth } from "./use-auth";
 
 /**
  * Open a catalog document from wherever the work happens — a loan, a payment,
@@ -35,13 +34,7 @@ export interface UsePrintablesResult {
 }
 
 export function usePrintables(): UsePrintablesResult {
-  const { user } = useAuth();
   const [pendingId, setPendingId] = useState<PrintableId | null>(null);
-
-  // Every document is issued BY a branch, and the one issuing it is the branch
-  // of the person printing it — a loan's own branch is the member's, not the
-  // counter's.
-  const branchLabel = user?.branch?.name ?? null;
 
   const open = useCallback(
     async (id: PrintableId, subjectId: number) => {
@@ -53,7 +46,7 @@ export function usePrintables(): UsePrintablesResult {
         // Resolved per open rather than held in state: branding can change
         // under a long-lived session, and the store's shared in-flight fetch
         // makes the repeat calls free.
-        const org = await resolvePrintableOrg(branchLabel);
+        const org = await resolvePrintableOrg();
         const doc = applyPrintChrome(await printable.build({ subjectId, org }));
 
         switch (openPrintable(doc)) {
@@ -85,7 +78,7 @@ export function usePrintables(): UsePrintablesResult {
         setPendingId(null);
       }
     },
-    [branchLabel]
+    []
   );
 
   const menu = useCallback(
