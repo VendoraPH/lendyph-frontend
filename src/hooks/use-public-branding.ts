@@ -12,6 +12,9 @@ import { useBrandingStore } from "@/store/branding-store";
 export function usePublicBranding() {
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loading = useBrandingStore((s) => s.loading);
+  // `loaded` is what separates "no logo configured" from "not asked yet", and
+  // only the first of those is safe to render a fallback for.
+  const loaded = useBrandingStore((s) => s.loaded);
   const version = useBrandingStore((s) => s.version);
 
   useEffect(() => {
@@ -21,5 +24,5 @@ export function usePublicBranding() {
     void useBrandingStore.getState().load();
   }, []);
 
-  return { logoUrl, loading, version };
+  return { logoUrl, loading, loaded, version };
 }
