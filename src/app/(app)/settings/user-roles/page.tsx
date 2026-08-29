@@ -50,6 +50,7 @@ import {
   PowerOff,
   Zap,
   Smartphone,
+  FileSpreadsheet,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -196,6 +197,20 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Configure tiered charge rates",
     ],
   },
+  // Required by `Record<UIModule, ModuleMeta>` the moment `imports` joined the
+  // `Module` union — this catalog is exhaustive, so the module cannot exist
+  // without a description here. Which is the point: this screen is where an
+  // admin reads what a permission actually lets someone do.
+  imports: {
+    label: "Data Import",
+    description:
+      "One-time CSV migration of an existing member and loan book into Lendyph.",
+    icon: FileSpreadsheet,
+    features: [
+      "Upload member and loan CSVs and run the migration",
+      "Creates members AND loans in bulk, with no approval chain",
+    ],
+  },
 };
 
 // Applicable actions per module — only the actions that make sense for each area
@@ -212,6 +227,10 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   audit_logs: ["view", "export"],
   auto_pay: ["view", "process", "toggle"],
   gcash: ["view", "transact", "settings"],
+  // `process` only. There is no `imports:view`: the page has nothing to look at
+  // without running one, so a view-only grant would be a link to an empty
+  // wizard, and the template literal `Module:Action` type would happily mint it.
+  imports: ["process"],
 };
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BrandLogo } from "@/components/common";
-import { StepIndicator } from "./_components/step-indicator";
+import { StepIndicator } from "@/components/common/step-indicator";
 import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
 import type { StepSpouseData } from "./_components/step-spouse";
