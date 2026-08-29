@@ -24,17 +24,33 @@ const ACTIVITY_EVENTS = [
   "mousemove",
 ] as const;
 
-const WARNING_BEFORE_MS = 60 * 1000; // Show warning 1 minute before timeout
+// How long the idle warning stands before the session actually ends. One
+// minute was easy to miss when the dialog opened behind a glance away from
+// the screen; two gives a real chance to click Stay Signed In.
+const WARNING_BEFORE_MS = 2 * 60 * 1000;
+
+// mousemove fires dozens of times a second. Rebuilding the timers that often
+// is pure waste, so ignore activity that lands within this window of the last
+// reset — the idle deadline is minutes away, a second of slack costs nothing.
+const ACTIVITY_THROTTLE_MS = 1000;
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated, clearAuth } = useAuthStore();
   const [showWarning, setShowWarning] = useState(false);
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(WARNING_BEFORE_MS / 1000);
+  // The session is already dead server-side, but the user has not been moved
+  // off the page yet — they get told first, and leave on their own click.
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastActivityRef = useRef(0);
+  // Read by the activity listener. Kept in a ref so that showing the warning
+  // does not change the listener effect's dependencies — re-running it tore
+  // down the very countdown the warning had just started.
+  const showWarningRef = useRef(false);
 
   const timeoutMs = env.auth.sessionTimeout * 60 * 1000; // Convert minutes to ms
 
@@ -51,7 +67,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const performLogout = useCallback(
     (reason: "inactivity" | "token_expired" = "inactivity") => {
       clearTimers();
+      showWarningRef.current = false;
       setShowWarning(false);
+      setSessionExpired(false);
       tokenManager.clearTokens();
       clearAuth();
       toast.info(
@@ -68,22 +86,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated || isRememberMe) return;
 
     clearTimers();
+    showWarningRef.current = false;
     setShowWarning(false);
+    lastActivityRef.current = Date.now();
 
     // Set warning timer (fires 1 min before timeout)
     warningRef.current = setTimeout(() => {
+      showWarningRef.current = true;
       setShowWarning(true);
-      setCountdown(60);
+      setCountdown(WARNING_BEFORE_MS / 1000);
 
-      // Start countdown
+      // Count down for display only. The logout itself is owned by the
+      // absolute timer below, which fires at the same moment — running it
+      // from inside a state updater made it a side effect React is free to
+      // replay.
       countdownRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            performLogout("inactivity");
-            return 0;
-          }
-          return prev - 1;
-        });
+        setCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
       }, 1000);
     }, timeoutMs - WARNING_BEFORE_MS);
 
@@ -94,6 +112,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, isRememberMe, timeoutMs, performLogout, clearTimers]);
 
   const handleStaySignedIn = () => {
+    showWarningRef.current = false;
     setShowWarning(false);
     resetTimer();
     // Token refresh happens on-demand: the next API call will auto-refresh
@@ -111,9 +130,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated || isRememberMe) return;
 
     const handleActivity = () => {
-      if (!showWarning) {
-        resetTimer();
-      }
+      // While the warning is up the only way back is the dialog's own button,
+      // so a stray mousemove must not silently extend the session.
+      if (showWarningRef.current) return;
+      if (Date.now() - lastActivityRef.current < ACTIVITY_THROTTLE_MS) return;
+      resetTimer();
     };
 
     ACTIVITY_EVENTS.forEach((event) => {
@@ -130,28 +151,72 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       });
       clearTimers();
     };
-  }, [isAuthenticated, isRememberMe, showWarning, resetTimer, clearTimers]);
+  }, [isAuthenticated, isRememberMe, resetTimer, clearTimers]);
 
-  // Listen for forced logout from the 401 interceptor. When the axios
-  // client's token refresh fails, it dispatches "auth:session-expired"
-  // instead of hard-redirecting. We handle it here so the user sees a
-  // proper toast and the auth state is cleaned up gracefully.
+  // Listen for forced logout from the 401 interceptor, which fires when the
+  // token refresh is rejected outright. This used to log out on the spot: the
+  // page vanished mid-keystroke and a toast explained it afterwards, from the
+  // login screen. Now the session ends with a dialog the user dismisses, so
+  // being signed out is something they are told about rather than something
+  // they discover. The auth store is left alone until they click, because
+  // clearing it drops them straight back to /login via the app layout.
   useEffect(() => {
     const handleSessionExpired = () => {
-      performLogout("token_expired");
+      clearTimers();
+      showWarningRef.current = false;
+      setShowWarning(false);
+      setSessionExpired(true);
     };
 
     window.addEventListener("auth:session-expired", handleSessionExpired);
     return () => {
       window.removeEventListener("auth:session-expired", handleSessionExpired);
     };
-  }, [performLogout]);
+  }, [clearTimers]);
 
-  if (!isAuthenticated) return <>{children}</>;
+  const handleSignInAgain = () => {
+    setSessionExpired(false);
+    tokenManager.clearTokens();
+    clearAuth();
+    router.replace("/login");
+  };
+
+  if (!isAuthenticated && !sessionExpired) return <>{children}</>;
 
   return (
     <>
       {children}
+
+      {/* Session ended by the server — no countdown, nothing to save. It is
+          modal and has no dismiss path other than the button, so the user
+          cannot half-read it and carry on typing into a dead session. */}
+      <Dialog open={sessionExpired} onOpenChange={() => {}}>
+        <DialogContent size="sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Timer className="h-5 w-5 text-brand-orange" />
+              Session Expired
+            </DialogTitle>
+            <DialogDescription>
+              You have been signed out because your session expired. Sign in
+              again to pick up where you left off.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-center py-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-brand-orange">
+              <LogOut className="h-7 w-7 text-brand-orange" />
+            </div>
+          </div>
+
+          <Button
+            className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            onClick={handleSignInAgain}
+          >
+            Sign In Again
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showWarning} onOpenChange={(open) => {
         if (!open) handleStaySignedIn();

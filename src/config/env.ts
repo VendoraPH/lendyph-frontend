@@ -108,7 +108,9 @@ export const env = {
       "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
       "lendy_refresh_token",
     ),
-    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 30),
+    // Minutes of genuine inactivity before the idle warning appears. Thirty
+    // was short enough that reading a long loan page counted as idling.
+    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 60),
   },
   storage: {
     url: getEnvVar("NEXT_PUBLIC_STORAGE_URL", "http://localhost:8000/storage"),
