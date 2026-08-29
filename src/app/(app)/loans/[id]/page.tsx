@@ -135,7 +135,6 @@ import {
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
-  PAYMENT_FREQUENCY_OPTIONS,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
 } from "@/constants";
@@ -953,9 +952,6 @@ export default function LoanDetailPage({
   const [adjNewValues, setAdjNewValues] = useState("");
   // User-friendly adjustment fields
   const [adjNewBalance, setAdjNewBalance] = useState("");
-  const [adjNewInterestRate, setAdjNewInterestRate] = useState("");
-  const [adjNewTerm, setAdjNewTerm] = useState("");
-  const [adjNewFrequency, setAdjNewFrequency] = useState<string | null>(null);
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
 
 
@@ -2503,9 +2499,6 @@ export default function LoanDetailPage({
   /** Clear only the type-specific value fields — used when the type changes mid-form. */
   const resetAdjustmentValueFields = () => {
     setAdjNewBalance("");
-    setAdjNewInterestRate("");
-    setAdjNewTerm("");
-    setAdjNewFrequency(null);
     setAdjAdditionalMonths("");
   };
 
@@ -2523,11 +2516,6 @@ export default function LoanDetailPage({
       const delta = Number((target - current).toFixed(2));
       if (delta === 0) { toast.error("That is already the outstanding balance"); return; }
       newValues.adjustment_amount = delta;
-    } else if (adjType === "restructure") {
-      if (adjNewInterestRate) newValues.interest_rate = parseFloat(adjNewInterestRate);
-      if (adjNewTerm) newValues.term = parseInt(adjNewTerm);
-      if (adjNewFrequency) newValues.frequency = adjNewFrequency;
-      if (Object.keys(newValues).length === 0) { toast.error("Please fill in at least one field to restructure"); return; }
     } else if (adjType === "penalty_waiver") {
       // The API waives a schedule's penalty in full — there is no partial
       // amount waiver — so it takes `waive_all` or a list of `schedule_ids`,
@@ -5649,7 +5637,6 @@ export default function LoanDetailPage({
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="restructure">Restructure</SelectItem>
                   <SelectItem value="penalty_waiver">Penalty Waiver</SelectItem>
                   <SelectItem value="balance_adjustment">Balance Adjustment</SelectItem>
                   <SelectItem value="term_extension">Term Extension</SelectItem>
@@ -5678,54 +5665,6 @@ export default function LoanDetailPage({
                   onChange={(e) => setAdjNewBalance(e.target.value)}
                 />
               </div>
-            )}
-            {adjType === "restructure" && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="adj-new-rate">New Interest Rate (%)</Label>
-                    <Input
-                      id="adj-new-rate"
-                      type="number"
-                      placeholder={String(loan.interest_rate ?? "")}
-                      step="0.1"
-                      value={adjNewInterestRate}
-                      onChange={(e) => setAdjNewInterestRate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="adj-new-term">New Term (months)</Label>
-                    <Input
-                      id="adj-new-term"
-                      type="number"
-                      placeholder={String(loanTerm ?? "")}
-                      value={adjNewTerm}
-                      onChange={(e) => setAdjNewTerm(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>New Payment Frequency</Label>
-                  <Select value={adjNewFrequency ?? null} onValueChange={(v) => setAdjNewFrequency(v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Keep current frequency">
-                        {(value: string | null) =>
-                          value
-                            ? (PAYMENT_FREQUENCY_LABELS[value as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? value)
-                            : "Keep current frequency"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
             )}
             {adjType === "penalty_waiver" && (
               // The API waives a schedule's penalty in full — there is no
