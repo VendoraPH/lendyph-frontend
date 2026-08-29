@@ -32,6 +32,12 @@ export type ImportFileKind = "customers" | "loans";
  *  data did not land when it did. */
 export interface ImportCounts {
   total: number;
+  /** Staging verdicts. `pending` is a row that has been staged but not yet
+   *  processed — so the buckets below only reconcile against `total` once the
+   *  run is closed. */
+  valid: number;
+  invalid: number;
+  pending: number;
   imported: number;
   matched_existing: number;
   already_imported: number;
@@ -40,6 +46,12 @@ export interface ImportCounts {
 }
 
 export interface ImportFileStatus {
+  /** The declared file, echoed back. This is the ONLY description a resuming
+   *  admin has of what they originally picked — a File handle cannot survive a
+   *  reload, so these three are what `sameFile()` compares against. */
+  original_filename: string;
+  size_bytes: number;
+  sha256: string;
   chunk_size: number;
   total_chunks: number;
   received_chunks: number;
@@ -112,7 +124,9 @@ export interface ProductMappingResponse {
 export type ImportIssueSeverity = "error" | "warning";
 
 export interface ImportRowIssue {
-  file: ImportFileKind;
+  /** The uploaded FILENAME, not the kind — the API sends both. */
+  file: string;
+  file_kind: ImportFileKind;
   /** Physical line as the admin's spreadsheet shows it, header included. */
   row_number: number;
   account_no: string | null;
@@ -138,6 +152,17 @@ export interface ImportErrorPageMeta {
   stats?: {
     total_issues: number;
     by_severity: Record<ImportIssueSeverity, number>;
-    by_category: Array<{ category: string; count: number; sample_messages: string[]; distinct_messages_truncated: boolean }>;
+    by_category: Array<{
+      category: string;
+      severity: ImportIssueSeverity;
+      count: number;
+      /** One representative message, not a list — plus how many distinct ones
+       *  were collapsed into this group. The reservoir is bounded on purpose:
+       *  messages interpolate the offending cell, so keying a map by full text
+       *  was a memory-exhaustion bug on a large file. */
+      label: string;
+      distinct_messages: number;
+      distinct_messages_truncated: boolean;
+    }>;
   };
 }

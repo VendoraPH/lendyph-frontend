@@ -80,6 +80,12 @@ export const api = {
     return response.data;
   },
 
+  /** DELETE without unwrapping nested `data` — for endpoints that answer flat. */
+  rawDelete: async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+    const response = await axiosClient.delete<T>(url, config);
+    return response.data;
+  },
+
   /** GET without unwrapping nested `data` — for endpoints that return a raw Laravel paginator ({data, links, meta}) instead of the {success, data, message} envelope */
   getRaw: async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
     const response = await axiosClient.get<T>(url, config);

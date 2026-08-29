@@ -42,9 +42,15 @@ export interface CreateRunResponse {
 }
 
 export const dataImportService = {
-  /** api.get — the envelope carries no meta worth keeping. */
+  /** rawPost, NOT post. This endpoint answers FLAT — `{message, run, chunk_size}`
+   *  with no `data` wrapper — while `api.post` returns `response.data.data`.
+   *  Using `post` here resolves to `undefined` and TypeScript cannot see it,
+   *  because both helpers are declared `Promise<T>`. That is the same trap the
+   *  `get`/`getRaw` note describes, and this method fell into it: the call
+   *  still OPENS a real run server-side and then loses its id — and an
+   *  un-cancellable open run 409s every future import for that cooperative. */
   createRun: (input: CreateRunInput) =>
-    api.post<CreateRunResponse>(API_ENDPOINTS.DATA_IMPORT.RUNS, input),
+    api.rawPost<CreateRunResponse>(API_ENDPOINTS.DATA_IMPORT.RUNS, input),
 
   /** Status poll. Server-clock `seconds_since_last_advance` lives here — never
    *  compute staleness from the client's own poll time. */
@@ -52,11 +58,14 @@ export const dataImportService = {
     api.get<ImportRunStatus>(API_ENDPOINTS.DATA_IMPORT.RUN(runId)),
 
   /** Discovery for a reattach when localStorage is gone (cleared browser, other
-   *  device). Returns null when the coop has no open run. */
+   *  device) — without it, an abandoned run is invisible AND blocks every
+   *  future import, since run creation 409s while one is open.
+   *
+   *  Answers flat as `{run: … | null}`. NOTE this endpoint is being added; it
+   *  did not exist when this client was first written, and calling it against
+   *  an older API yields 405 (only POST is routed at that path). */
   activeRun: () =>
-    api.get<ImportRunStatus | null>(API_ENDPOINTS.DATA_IMPORT.RUNS, {
-      params: { active: 1 },
-    }),
+    api.getRaw<{ run: ImportRunStatus | null }>(API_ENDPOINTS.DATA_IMPORT.RUNS),
 
   /** One chunk. `config` carries `onUploadProgress` and an AbortSignal — the
    *  shared `api.upload` spreads config before setting headers, so no plumbing
@@ -75,13 +84,19 @@ export const dataImportService = {
       config
     ),
 
+  /** rawPost — flat body, same reason as createRun. */
   assemble: (runId: number | string) =>
-    api.post<ImportRunStatus>(API_ENDPOINTS.DATA_IMPORT.ASSEMBLE(runId), {}),
+    api.rawPost<{ message: string; run: ImportRunStatus }>(
+      API_ENDPOINTS.DATA_IMPORT.ASSEMBLE(runId),
+      {}
+    ),
 
   /** Cancel. Frees the coop to start a new run — run creation 409s while one is
    *  open, so without this an abandoned upload blocks every future import. */
   cancel: (runId: number | string) =>
-    api.delete<ImportRunStatus>(API_ENDPOINTS.DATA_IMPORT.RUN(runId)),
+    api.rawDelete<{ message: string; run: ImportRunStatus; cancelled: boolean }>(
+      API_ENDPOINTS.DATA_IMPORT.RUN(runId)
+    ),
 
   productMapping: (runId: number | string) =>
     api.get<ProductMappingResponse>(API_ENDPOINTS.DATA_IMPORT.PRODUCT_MAPPING(runId)),
