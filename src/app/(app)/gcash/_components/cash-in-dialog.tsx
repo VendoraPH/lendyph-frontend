@@ -19,18 +19,20 @@ import { gcashService } from "@/services/gcash.service";
 import { useGCashTiers } from "@/hooks/use-gcash-tiers";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency } from "@/lib/format";
+import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
+import type { GCashParty } from "@/types";
 
 interface Props {
   open: boolean;
   onOpenChange(open: boolean): void;
-  borrower: { id: number; full_name: string; borrower_code?: string };
+  party: GCashParty;
   onCreated?(): void;
 }
 
 export function CashInDialog({
   open,
   onOpenChange,
-  borrower,
+  party,
   onCreated,
 }: Props) {
   const { resolveCharge, loading: tiersLoading } = useGCashTiers();
@@ -64,7 +66,7 @@ export function CashInDialog({
     setSubmitting(true);
     try {
       const tx = await gcashService.createTransaction({
-        borrower_id: borrower.id,
+        ...gcashPartyPayload(party),
         type: "cash_in",
         amount: amountNum,
         is_pending: isPending,
@@ -84,10 +86,10 @@ export function CashInDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cash In — {borrower.full_name}</DialogTitle>
+          <DialogTitle>Cash In — {party.full_name}</DialogTitle>
           <DialogDescription>
-            Records a GCash Cash In on behalf of this member. Member pays{" "}
-            <span className="font-medium">Amount + Charge</span>.
+            Records a GCash Cash In on behalf of this {gcashPartyNoun(party)}.
+            They pay <span className="font-medium">Amount + Charge</span>.
           </DialogDescription>
         </DialogHeader>
 
@@ -132,8 +134,8 @@ export function CashInDialog({
                 Pending Payment
               </Label>
               <p className="text-xs text-muted-foreground">
-                Member received GCash on credit and owes the cash. Income is
-                deferred until you click Paid.
+                They received GCash on credit and still owe the cash. Income
+                is deferred until you click Paid.
               </p>
             </div>
           </div>
