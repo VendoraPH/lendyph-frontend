@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { siteConfig } from "@/config/site";
 import { useBrandingStore } from "@/store/branding-store";
 import {
   applyPrintChrome,
@@ -95,16 +94,15 @@ test("the letterhead reads the configured organization", async () => {
     contact: "(053) 555-0100",
   });
 
-  const org = await resolvePrintableOrg("Main");
+  const org = await resolvePrintableOrg();
 
   assert.equal(org.name, "Binhs Multi-Purpose Cooperative");
   assert.equal(org.logoUrl, "https://api.example.test/storage/branding/logo.png");
   assert.equal(org.address, "Poblacion, Binhs, Leyte");
   assert.equal(org.contact, "(053) 555-0100");
-  assert.equal(org.branchLabel, "Main");
 });
 
-test("an unset organization name falls back to the product name", async () => {
+test("an unset organization name is left unset, never the product name", async () => {
   useBrandingStore.setState({
     loaded: true,
     loading: false,
@@ -116,11 +114,30 @@ test("an unset organization name falls back to the product name", async () => {
 
   const org = await resolvePrintableOrg();
 
-  assert.equal(org.name, siteConfig.name);
+  assert.equal(org.name, null);
   assert.equal(org.logoUrl, null);
   assert.equal(org.address, null);
   assert.equal(org.contact, null);
-  assert.equal(org.branchLabel, null);
+});
+
+test("a configured logo with no name letterheads as the logo alone", async () => {
+  // The shape a deployment is actually in after uploading a logo in branding
+  // settings and leaving the organization fields blank. Captioning that logo
+  // with the product's name would print `Lendy.PH` on the cooperative's
+  // disclosure statement.
+  useBrandingStore.setState({
+    loaded: true,
+    loading: false,
+    logoUrl: "https://api.example.test/storage/branding/logo.png",
+    organizationName: null,
+    address: null,
+    contact: null,
+  });
+
+  const org = await resolvePrintableOrg();
+
+  assert.equal(org.name, null);
+  assert.equal(org.logoUrl, "https://api.example.test/storage/branding/logo.png");
 });
 
 test("a whitespace-only organization name is not a name", async () => {
@@ -132,10 +149,9 @@ test("a whitespace-only organization name is not a name", async () => {
     contact: "   ",
   });
 
-  const org = await resolvePrintableOrg("  ");
+  const org = await resolvePrintableOrg();
 
-  assert.equal(org.name, siteConfig.name);
+  assert.equal(org.name, null);
   assert.equal(org.address, null);
   assert.equal(org.contact, null);
-  assert.equal(org.branchLabel, null);
 });

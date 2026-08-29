@@ -1,4 +1,3 @@
-import { siteConfig } from "@/config/site";
 import { buildDocumentReference } from "@/lib/document-reference";
 import { fileUrl, withVersion } from "@/lib/file-url";
 import { formatGeneratedAt } from "@/lib/report-format";
@@ -95,16 +94,15 @@ interface BrandingLetterheadState {
 /**
  * Absolute URL for the letterhead logo, or null.
  *
- * A printable is rendered into a `blob:` document, and a blob URL has an opaque
- * path — a relative `src` inside it has nothing to resolve against and the logo
- * silently fails to load. So the URL is made absolute here, in the one function
- * that is allowed to know about the browser, rather than in the renderer.
+ * A printable is written into a blank tab, which has no URL of its own — a
+ * relative `src` inside it has nothing to resolve against and the logo silently
+ * fails to load. So the URL is made absolute here, in the one function that is
+ * allowed to know about the browser, rather than in the renderer.
  *
  * There is deliberately no fallback to the bundled `Lendy.PH` asset that
  * `<BrandLogo>` uses. This is single-tenant-per-deployment: printing the
  * product's own logo on another cooperative's promissory note is worse than
- * printing no logo at all, and the letterhead degrades to the organization name
- * perfectly well.
+ * printing no logo at all.
  */
 function absoluteLogoUrl(raw: string | null | undefined, version = 0): string | null {
   const resolved = fileUrl(raw);
@@ -127,14 +125,15 @@ function absoluteLogoUrl(raw: string | null | undefined, version = 0): string | 
  * `load()` is the store's own shared-inFlight fetch, so calling this from a
  * print button costs one request no matter how many printables are opened, and
  * nothing if the sidebar logo has already loaded it. It never rejects; a failed
- * read leaves every field null and the document still prints, headed by
- * `siteConfig.name`.
+ * read leaves every field null and the document still prints, unheaded.
  *
- * @param branchLabel Branch the document is issued by, when the subject has one.
+ * The name is subject to the same rule as the logo above, and for the same
+ * reason: whatever branding settings hold, never the product's own name. A
+ * deployment that has uploaded a logo but not filled in a name gets a
+ * letterhead of just the logo — which is the branding it configured — instead
+ * of that logo captioned `Lendy.PH`.
  */
-export async function resolvePrintableOrg(
-  branchLabel?: string | null
-): Promise<PrintableOrg> {
+export async function resolvePrintableOrg(): Promise<PrintableOrg> {
   try {
     await useBrandingStore.getState().load();
   } catch {
@@ -145,10 +144,9 @@ export async function resolvePrintableOrg(
   const state = useBrandingStore.getState() as BrandingLetterheadState;
 
   return {
-    name: trimmed(state.organizationName) ?? siteConfig.name,
+    name: trimmed(state.organizationName),
     logoUrl: absoluteLogoUrl(state.logoUrl, state.version ?? 0),
     address: trimmed(state.address),
     contact: trimmed(state.contact),
-    branchLabel: trimmed(branchLabel),
   };
 }
