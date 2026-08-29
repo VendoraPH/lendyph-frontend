@@ -46,6 +46,7 @@ import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
 import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -504,7 +505,7 @@ const VISIBLE_LOAN_COUNT = 3;
 
 function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
-  const [activeLoansOpen, setActiveLoansOpen] = useState(loanStatus !== "released");
+  const [activeLoansOpen, setActiveLoansOpen] = useState(false);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
 
@@ -3197,14 +3198,11 @@ export default function LoanDetailPage({
       {/* Loan Details Cards */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Card 1: Loan Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Loan Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <CollapsibleCard
+          title="Loan Information"
+          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+          contentClassName="space-y-4"
+        >
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">
@@ -3356,8 +3354,7 @@ export default function LoanDetailPage({
                 </span>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
 
         {/* Card 2: Borrower's Active Loans */}
         <BorrowerActiveLoans
@@ -3482,14 +3479,14 @@ export default function LoanDetailPage({
         </Collapsible>
 
         {/* Share Capital — current balance for the loan's member */}
-        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} defaultOpen={loan.status !== "released"} />
+        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
 
         {/* Auto-Pay Status Card */}
         {["released", "current"].includes(loan.status) && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Auto-Pay</CardTitle>
-              {loan.auto_pay_enabled ? (
+          <CollapsibleCard
+            title="Auto-Pay"
+            headerExtra={
+              loan.auto_pay_enabled ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
                   ● Enabled
                 </span>
@@ -3497,9 +3494,10 @@ export default function LoanDetailPage({
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
                   ○ Disabled
                 </span>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+              )
+            }
+            contentClassName="space-y-3 text-sm"
+          >
               {loan.auto_pay_enabled && (
                 <>
                   <div className="flex justify-between">
@@ -3527,8 +3525,7 @@ export default function LoanDetailPage({
               >
                 {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
               </Button>
-            </CardContent>
-          </Card>
+          </CollapsibleCard>
         )}
 
         {/* Card 4: Workflow History */}
@@ -3554,17 +3551,19 @@ export default function LoanDetailPage({
 
       {/* Release Details — only for released+ loans */}
       {isLocked && loan.release_date && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Unlock className="h-4 w-4 text-cyan-600" />
+        <CollapsibleCard
+          icon={<Unlock className="h-4 w-4 text-cyan-600" />}
+          title={
+            <>
               Release Details
               {loanSummary && (
                 <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
                   Server-verified
                 </Badge>
               )}
-            </CardTitle>
+            </>
+          }
+          headerExtra={
             <Button
               variant="outline"
               size="sm"
@@ -3573,8 +3572,8 @@ export default function LoanDetailPage({
               <FileText className="mr-2 h-4 w-4" />
               Statement of Account
             </Button>
-          </CardHeader>
-          <CardContent>
+          }
+        >
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Release Date</p>
@@ -3637,8 +3636,7 @@ export default function LoanDetailPage({
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
       )}
 
 
@@ -3865,14 +3863,10 @@ export default function LoanDetailPage({
 
       {/* Loan Documents — only for approved+ loans */}
       {loan.status !== "draft" && loan.status !== "for_review" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Generated Documents
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <CollapsibleCard
+          title="Generated Documents"
+          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+        >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
                 Open a document on your cooperative&apos;s letterhead, ready to
@@ -3890,8 +3884,7 @@ export default function LoanDetailPage({
                 ]}
               />
             </div>
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Attached documents — available for every loan, including drafts so
@@ -3901,14 +3894,12 @@ export default function LoanDetailPage({
       {/* Ledger — shown for every status that has server-side repayment data
           (incl. current / past_due), matching the Adjustments & History card. */}
       {hasServerLoanData && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                Ledger
-              </CardTitle>
-              <div className="flex items-center gap-2">
+        <CollapsibleCard
+          title="Ledger"
+          icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
+          contentClassName="p-0"
+          headerExtra={
+            <>
                 {["released", "ongoing"].includes(loan.status) && (
                   <Button
                     size="sm"
@@ -3934,10 +3925,9 @@ export default function LoanDetailPage({
                     Record Payment
                   </Button>
                 )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
+            </>
+          }
+        >
             {repaymentsLoading || ledgerEntriesLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner className="size-5 text-muted-foreground" />
@@ -4070,22 +4060,18 @@ export default function LoanDetailPage({
                 );
               })()
             )}
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Adjustments & Extension History — shown for every status that has
           server-side loan data (incl. current / past_due), matching the set
           fetchAdjustments loads for. */}
       {hasServerLoanData && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Adjustments &amp; History
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+        <CollapsibleCard
+          title={<>Adjustments &amp; History</>}
+          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+          contentClassName="p-0"
+        >
             {adjustmentsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner className="size-5 text-muted-foreground" />
@@ -4159,8 +4145,7 @@ export default function LoanDetailPage({
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* ── Dialogs ── */}
