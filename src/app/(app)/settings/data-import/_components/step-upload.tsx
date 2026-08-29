@@ -62,22 +62,11 @@ import {
 /* The seam                                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Structurally identical to `ImportFiles` in ./data-import-view, which owns the
- * shared vocabulary. Declared here so this file compiles on its own branch;
- * TypeScript is structural, so the shell's type satisfies it unchanged and the
- * declaration can be replaced with an import at merge.
- */
-export interface ImportFiles {
-  customers: File | null;
-  loans: File | null;
-}
-
-/** The same `Pick` the shell makes, off the same source, so the two cannot drift. */
-export type PrecheckOutcome = Pick<
-  ImportSession,
-  "hasHeaderRow" | "dateFormat" | "productMap"
->;
+// `ImportFiles` and `PrecheckOutcome` are owned by ./data-import-view, which
+// holds the wizard's shared vocabulary. They were declared locally so this file
+// compiled on its own branch; now that both are on one branch they are imported,
+// so there is one definition rather than two that agree until someone edits one.
+import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
 
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
