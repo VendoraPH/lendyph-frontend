@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ACTIVE_LOAN_STATUSES,
+  isActiveLoanStatus,
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
@@ -89,4 +91,51 @@ test("the legacy `ongoing` status is still labelled and styled", () => {
   // Older backends emit it, and it is what the "Current" filter tab sends.
   assert.equal(LOAN_STATUS_LABELS.ongoing, "Current");
   assert.equal(LOAN_STATUS_COLORS.ongoing, LOAN_STATUS_COLORS.current);
+});
+
+// ── the active / inactive partition ────────────────────────────────────────
+//
+// The printables loan picker filters a member's loans by it, and "active" is
+// the default view — a status that falls out of the partition silently
+// disappears from the list staff print from.
+
+test("every status is either active or inactive, and never both", () => {
+  const active = ALL_STATUSES.filter(isActiveLoanStatus);
+  const inactive = ALL_STATUSES.filter((s) => !isActiveLoanStatus(s));
+  assert.equal(active.length + inactive.length, ALL_STATUSES.length);
+  assert.deepEqual(sorted(active), sorted([...ACTIVE_LOAN_STATUSES]));
+});
+
+test("a released loan on a schedule is active under either spelling", () => {
+  // `ongoing` is the legacy spelling of `current`; a backend still emitting it
+  // must not park live loans in the "Closed" tab.
+  assert.ok(isActiveLoanStatus(LOAN_STATUS.CURRENT));
+  assert.ok(isActiveLoanStatus(LOAN_STATUS.ONGOING));
+  assert.ok(isActiveLoanStatus(LOAN_STATUS.RELEASED));
+  assert.ok(isActiveLoanStatus(LOAN_STATUS.PAST_DUE));
+});
+
+test("loans that never released, and loans that finished, are inactive", () => {
+  for (const status of [
+    LOAN_STATUS.DRAFT,
+    LOAN_STATUS.FOR_REVIEW,
+    LOAN_STATUS.APPROVED,
+    LOAN_STATUS.REJECTED,
+    LOAN_STATUS.VOID,
+    LOAN_STATUS.COMPLETED,
+    LOAN_STATUS.DEFAULTED,
+    LOAN_STATUS.RESTRUCTURED,
+    LOAN_STATUS.CLOSED,
+  ]) {
+    assert.equal(isActiveLoanStatus(status), false, `${status} should be inactive`);
+  }
+});
+
+test("an unknown or absent status reads as inactive rather than throwing", () => {
+  // List rows come off the API; a status the union has not caught up with
+  // should fall out of the "Active" tab, not break the filter.
+  assert.equal(isActiveLoanStatus(undefined), false);
+  assert.equal(isActiveLoanStatus(null), false);
+  assert.equal(isActiveLoanStatus(""), false);
+  assert.equal(isActiveLoanStatus("some_future_status"), false);
 });

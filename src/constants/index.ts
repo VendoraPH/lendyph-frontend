@@ -130,6 +130,8 @@ export {
   LOAN_STATUS,
   LOAN_STATUS_LABELS,
   LOAN_STATUS_COLORS,
+  ACTIVE_LOAN_STATUSES,
+  isActiveLoanStatus,
 } from "./loan-status";
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";

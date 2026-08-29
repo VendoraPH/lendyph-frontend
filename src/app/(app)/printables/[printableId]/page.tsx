@@ -8,6 +8,7 @@ import { RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
+import { LoanSubjectPicker } from "./_components/loan-subject-picker";
 import { useAuth } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +44,9 @@ export default function PrintableDetailPage() {
   const printable = useMemo(() => findPrintable(printableId), [printableId]);
 
   const [subjectId, setSubjectId] = useState<number | null>(null);
+  // Only the loan picker uses this — it selects the member first — but it is
+  // held here so the empty state below knows to get out of the table's way.
+  const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [opening, setOpening] = useState(false);
   const { user } = useAuth();
 
@@ -177,27 +181,42 @@ export default function PrintableDetailPage() {
         {/* Subject picker */}
         <Card>
           <CardContent className="p-4 sm:p-5">
-            <div className="flex flex-wrap items-end gap-4">
-              {printable.subject === "repayment" ? (
-                <RepaymentPicker value={subjectId} onChange={setSubjectId} />
-              ) : (
-                <SubjectPicker
-                  subject={printable.subject}
-                  value={subjectId}
-                  onChange={setSubjectId}
-                />
-              )}
+            {printable.subject === "loan" ? (
+              // Two steps, not one: the member by name, then their loan off a
+              // table. See `LoanSubjectPicker`.
+              <LoanSubjectPicker
+                borrowerId={borrowerId}
+                onBorrowerChange={setBorrowerId}
+                value={subjectId}
+                onChange={setSubjectId}
+              />
+            ) : (
+              <div className="flex flex-wrap items-end gap-4">
+                {printable.subject === "repayment" ? (
+                  <RepaymentPicker value={subjectId} onChange={setSubjectId} />
+                ) : (
+                  <SubjectPicker
+                    subject={printable.subject}
+                    value={subjectId}
+                    onChange={setSubjectId}
+                  />
+                )}
 
-              {!subjectId && (
-                <p className="text-xs text-muted-foreground pb-2">
-                  Select a {subjectLabel.toLowerCase()} to open this document.
-                </p>
-              )}
-            </div>
+                {!subjectId && (
+                  <p className="text-xs text-muted-foreground pb-2">
+                    Select a {subjectLabel.toLowerCase()} to open this document.
+                  </p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <EmptyState title={printable.title} subjectLabel={subjectLabel} />
+        {/* The loan table is the guidance once a member is chosen — repeating
+            "choose a loan above" under it would only push it off the fold. */}
+        {!(printable.subject === "loan" && borrowerId) && (
+          <EmptyState title={printable.title} subjectLabel={subjectLabel} />
+        )}
       </div>
     </RouteGuard>
   );
