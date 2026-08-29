@@ -92,6 +92,21 @@ export const CIVIL_STATUS_OPTIONS = [
   { value: "divorced", label: "Divorced" },
 ] as const;
 
+/**
+ * The two values `Gender` (src/types/borrower.ts) allows, with the labels the
+ * borrower forms already render.
+ *
+ * Added because it was the one option list this file was missing: the new,
+ * edit and public-registration forms each hard-coded the same pair of radio
+ * items, so there was no shared vocabulary for the CSV import to validate the
+ * required Gender column against. Promoting it here rather than keeping a
+ * private copy in the importer is the point — one list, one place.
+ */
+export const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+] as const;
+
 export const VALID_ID_OPTIONS = [
   { value: "philippine_id", label: "Philippine National ID (PhilSys)" },
   { value: "drivers_license", label: "Driver's License" },
@@ -117,10 +132,21 @@ export const RELATIONSHIP_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
+/**
+ * Dropdown affordance, NOT a contract: `borrowers.suffix` is `varchar(20)`
+ * validated `nullable|string|max:20`, so any suffix a member actually uses is
+ * legal. Offer these, normalise to them where they match, but never reject a
+ * value for being absent from the list.
+ *
+ * `II` was missing until the CSV import went looking for it — as it is from the
+ * client's own Data Dictionary. A good reminder that the enum lists in a spec
+ * sheet are the values someone remembered, not the values that exist.
+ */
 export const SUFFIX_OPTIONS = [
   { value: "", label: "None" },
   { value: "Jr.", label: "Jr." },
   { value: "Sr.", label: "Sr." },
+  { value: "II", label: "II" },
   { value: "III", label: "III" },
   { value: "IV", label: "IV" },
   { value: "V", label: "V" },
