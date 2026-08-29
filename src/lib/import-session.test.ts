@@ -6,8 +6,10 @@ import {
   missingChunks,
   planChunks,
 } from "./import-chunks";
+import type { ImportFileKind } from "@/types/data-import";
 import {
   IMPORT_SESSION_TTL_MS,
+  IMPORT_SESSION_VERSION,
   clearImportSession,
   isImportSession,
   loadImportSession,
@@ -42,13 +44,17 @@ const MEMBERS = {
 };
 
 const SESSION: ImportSession = {
+  version: IMPORT_SESSION_VERSION,
   sessionId: "imp_9f3c2b",
   branchId: 2,
   productMap: { "SALARY LOAN": 4, "EMERGENCY LOAN": 7 },
-  hasHeaderRow: true,
-  dateFormat: "dd/MM/yyyy",
+  // Per file, and deliberately DIFFERENT per file: this coop's members export
+  // carries a header row and its loans export does not. One boolean for both is
+  // the bug the shape exists to make impossible.
+  hasHeaderRow: { customers: true, loans: false },
+  dateFormat: { customers: { birth_date: "dd/MM/yyyy" }, loans: { release_date: "MM/dd/yyyy" } },
   chunkSize: IMPORT_CHUNK_SIZE,
-  files: { members: MEMBERS, loans: { ...MEMBERS, name: "binhs-loans.csv", size: 20480 } },
+  files: { customers: MEMBERS, loans: { ...MEMBERS, name: "binhs-loans.csv", size: 20480 } },
   startedAt: 1_756_400_000_000,
 };
 
@@ -134,7 +140,7 @@ test("a shape from an older release is discarded rather than half-resumed", () =
   // and throws inside a mount effect, and the admin cannot get past the screen.
   const broken = {
     ...SESSION,
-    files: { members: { ...MEMBERS, uploadedChunks: null } },
+    files: { customers: { ...MEMBERS, uploadedChunks: null } },
   };
   const storage = fakeStore({ [STORAGE_KEY]: JSON.stringify(broken) });
   assert.equal(loadImportSession({ storage }), null);
@@ -182,10 +188,10 @@ test("a store that throws on getItem degrades to 'no resume', not to a crash", (
 
 test("a store that throws on setItem still lets the import run", () => {
   assert.doesNotThrow(() => saveImportSession(SESSION, { storage: hostile }));
-  assert.doesNotThrow(() => record(SESSION, "members", 0, { storage: hostile }));
+  assert.doesNotThrow(() => record(SESSION, "customers", 0, { storage: hostile }));
   // The in-memory session is still correct — only the crash-recovery path is lost.
-  const updated = record(SESSION, "members", 0, { storage: hostile });
-  assert.deepEqual(updated.files.members.uploadedChunks, [0]);
+  const updated = record(SESSION, "customers", 0, { storage: hostile });
+  assert.deepEqual(updated.files.customers!.uploadedChunks, [0]);
 });
 
 test("a store that throws on removeItem does not break cancelling an import", () => {
@@ -244,14 +250,14 @@ test("each acknowledged chunk is persisted immediately, not batched", () => {
   session = record(session, "loans", 0, { storage });
   // Whatever is on disk at this instant is what a crash right here would leave.
   const onDisk = loadImportSession({ storage, now: SESSION.startedAt })!;
-  assert.deepEqual(onDisk.files.loans.uploadedChunks, [0]);
+  assert.deepEqual(onDisk.files.loans!.uploadedChunks, [0]);
 });
 
 test("a chunk acknowledged twice is not counted twice", () => {
   const storage = fakeStore();
-  const once = record(SESSION, "members", 0, { storage });
-  const twice = record(once, "members", 0, { storage });
-  assert.deepEqual(twice.files.members.uploadedChunks, [0]);
+  const once = record(SESSION, "customers", 0, { storage });
+  const twice = record(once, "customers", 0, { storage });
+  assert.deepEqual(twice.files.customers!.uploadedChunks, [0]);
   assert.equal(twice, once, "an already-known chunk is a no-op");
 });
 
@@ -259,20 +265,20 @@ test("out-of-order acknowledgements are kept ascending", () => {
   const storage = fakeStore();
   let session = SESSION;
   for (const index of [2, 0, 1]) session = record(session, "loans", index, { storage });
-  assert.deepEqual(session.files.loans.uploadedChunks, [0, 1, 2]);
+  assert.deepEqual(session.files.loans!.uploadedChunks, [0, 1, 2]);
 });
 
 test("an unknown slot is left alone rather than invented", () => {
   const storage = fakeStore();
-  const same = record(SESSION, "collaterals", 0, { storage });
+  const same = record(SESSION, "collaterals" as ImportFileKind, 0, { storage });
   assert.equal(same, SESSION);
   assert.equal(storage.map.size, 0);
 });
 
 test("recording a chunk does not disturb the other file's progress", () => {
   const storage = fakeStore();
-  const session = record(SESSION, "members", 0, { storage });
-  assert.deepEqual(session.files.loans.uploadedChunks, []);
+  const session = record(SESSION, "customers", 0, { storage });
+  assert.deepEqual(session.files.loans!.uploadedChunks, []);
 });
 
 // --- the whole point ----------------------------------------------------------
@@ -296,11 +302,12 @@ test("a dropped connection mid-upload resumes at the gap, not from zero", () => 
 
   // ...the link drops and the tab is closed. Nothing is left but the store.
   const resumed = loadImportSession({ storage, now: SESSION.startedAt + 5000 })!;
-  assert.ok(sameFile(resumed.files.loans, file), "the admin re-picked the same file");
-  assert.deepEqual(missingChunks(plan, resumed.files.loans.uploadedChunks), [3, 4]);
+  assert.ok(sameFile(resumed.files.loans!, file), "the admin re-picked the same file");
+  assert.deepEqual(missingChunks(plan, resumed.files.loans!.uploadedChunks), [3, 4]);
   // And the answers came back with it, so nothing is re-asked.
   assert.equal(resumed.branchId, 2);
-  assert.equal(resumed.dateFormat, "dd/MM/yyyy");
+  assert.deepEqual(resumed.dateFormat, SESSION.dateFormat);
+  assert.deepEqual(resumed.hasHeaderRow, SESSION.hasHeaderRow);
   assert.deepEqual(resumed.productMap, SESSION.productMap);
 });
 
@@ -309,7 +316,7 @@ test("resuming a different file into a half-uploaded session is refused", () => 
   saveImportSession(SESSION, { storage });
   const resumed = loadImportSession({ storage, now: SESSION.startedAt })!;
   const wrongFile = { name: "binhs-members-v2.csv", size: 6144, lastModified: 1_756_000_000_000 };
-  assert.equal(sameFile(resumed.files.members, wrongFile), false);
+  assert.equal(sameFile(resumed.files.customers!, wrongFile), false);
 });
 
 // --- the resume guard ---------------------------------------------------------
@@ -320,50 +327,50 @@ test("resuming a different file into a half-uploaded session is refused", () => 
 // other check passes, and the indices silently point at the wrong bytes.
 
 test("the same file and the same advertised chunk size resumes at the gap", () => {
-  const session = { ...SESSION, files: { members: { ...MEMBERS, uploadedChunks: [0, 1] } } };
-  assert.deepEqual(resumableChunks(session, "members", PICKED, session.chunkSize), [0, 1]);
+  const session = { ...SESSION, files: { customers: { ...MEMBERS, uploadedChunks: [0, 1] } } };
+  assert.deepEqual(resumableChunks(session, "customers", PICKED, session.chunkSize), [0, 1]);
 });
 
 test("a server that re-advertises a different chunk size invalidates the landed set", () => {
-  const session = { ...SESSION, files: { members: { ...MEMBERS, uploadedChunks: [0, 1] } } };
-  assert.deepEqual(resumableChunks(session, "members", PICKED, 256 * 1024), []);
-  assert.deepEqual(resumableChunks(session, "members", PICKED, MAX_IMPORT_CHUNK_SIZE), []);
+  const session = { ...SESSION, files: { customers: { ...MEMBERS, uploadedChunks: [0, 1] } } };
+  assert.deepEqual(resumableChunks(session, "customers", PICKED, 256 * 1024), []);
+  assert.deepEqual(resumableChunks(session, "customers", PICKED, MAX_IMPORT_CHUNK_SIZE), []);
 });
 
 test("a different file invalidates it too, through the same door", () => {
-  const session = { ...SESSION, files: { members: { ...MEMBERS, uploadedChunks: [0, 1] } } };
+  const session = { ...SESSION, files: { customers: { ...MEMBERS, uploadedChunks: [0, 1] } } };
   const renamed = { ...PICKED, name: "binhs-members (1).csv" };
-  assert.deepEqual(resumableChunks(session, "members", renamed, session.chunkSize), []);
-  assert.deepEqual(resumableChunks(session, "members", null, session.chunkSize), []);
+  assert.deepEqual(resumableChunks(session, "customers", renamed, session.chunkSize), []);
+  assert.deepEqual(resumableChunks(session, "customers", null, session.chunkSize), []);
 });
 
 test("an unknown slot yields nothing rather than throwing on mount", () => {
-  assert.deepEqual(resumableChunks(SESSION, "collaterals", PICKED, SESSION.chunkSize), []);
+  assert.deepEqual(resumableChunks(SESSION, "collaterals" as ImportFileKind, PICKED, SESSION.chunkSize), []);
 });
 
 // The comparison is between the sizes that would actually be USED, not the raw
 // values, so JSON that happens to be a string still lines up with the plan.
 test("the advertised size is normalised before comparing, on both sides", () => {
-  const session = { ...SESSION, files: { members: { ...MEMBERS, uploadedChunks: [0] } } };
+  const session = { ...SESSION, files: { customers: { ...MEMBERS, uploadedChunks: [0] } } };
   // Junk resolves to the default, which is what this session was planned with.
-  assert.deepEqual(resumableChunks(session, "members", PICKED, "524288"), [0]);
-  assert.deepEqual(resumableChunks(session, "members", PICKED, null), [0]);
+  assert.deepEqual(resumableChunks(session, "customers", PICKED, "524288"), [0]);
+  assert.deepEqual(resumableChunks(session, "customers", PICKED, null), [0]);
   // And two different oversized values both resolve to the ceiling, so they
   // agree with a session that was already planned at the ceiling.
   const clamped = {
     ...session,
     chunkSize: MAX_IMPORT_CHUNK_SIZE,
-    files: { members: { ...MEMBERS, uploadedChunks: [0] } },
+    files: { customers: { ...MEMBERS, uploadedChunks: [0] } },
   };
-  assert.deepEqual(resumableChunks(clamped, "members", PICKED, 50 * 1024 * 1024), [0]);
-  assert.deepEqual(resumableChunks(clamped, "members", PICKED, 20 * 1024 * 1024), [0]);
+  assert.deepEqual(resumableChunks(clamped, "customers", PICKED, 50 * 1024 * 1024), [0]);
+  assert.deepEqual(resumableChunks(clamped, "customers", PICKED, 20 * 1024 * 1024), [0]);
 });
 
 test("the caller gets a copy, so a resume cannot mutate the stored record", () => {
-  const session = { ...SESSION, files: { members: { ...MEMBERS, uploadedChunks: [0] } } };
-  const landed = resumableChunks(session, "members", PICKED, session.chunkSize);
+  const session = { ...SESSION, files: { customers: { ...MEMBERS, uploadedChunks: [0] } } };
+  const landed = resumableChunks(session, "customers", PICKED, session.chunkSize);
   landed.push(99);
-  assert.deepEqual(session.files.members.uploadedChunks, [0]);
+  assert.deepEqual(session.files.customers.uploadedChunks, [0]);
 });
 
 test("on drift the upload restarts from zero rather than corrupting the file", () => {
@@ -394,5 +401,95 @@ test("on drift the upload restarts from zero rather than corrupting the file", (
   // Reading the field directly is the bug this function exists to make hard: it
   // claims 3 of 4 chunks are done and sends only the last one, leaving a file
   // stitched from two different chunkings.
-  assert.deepEqual(missingChunks(plan, session.files.loans.uploadedChunks), [3]);
+  assert.deepEqual(missingChunks(plan, session.files.loans!.uploadedChunks), [3]);
+});
+
+// --- the shape of the answers -------------------------------------------------
+//
+// One header boolean for a two-file import is lossy in a way nothing downstream
+// can catch: both outcomes — a member row eaten as a heading, a heading imported
+// as a member — parse cleanly and import as real people.
+
+test("a header answer is kept per file, and two different answers stay different", () => {
+  const storage = fakeStore();
+  saveImportSession(SESSION, { storage });
+  const resumed = loadImportSession({ storage, now: SESSION.startedAt })!;
+
+  assert.equal(resumed.hasHeaderRow.customers, true);
+  assert.equal(resumed.hasHeaderRow.loans, false);
+  // The collapse this shape replaces would have carried one of these to both.
+  assert.notEqual(resumed.hasHeaderRow.customers, resumed.hasHeaderRow.loans);
+});
+
+test("a date order is kept per file and per column", () => {
+  const storage = fakeStore();
+  saveImportSession(SESSION, { storage });
+  const resumed = loadImportSession({ storage, now: SESSION.startedAt })!;
+
+  // 03/04 is ambiguous on its own, and one export really can write a birth date
+  // one way round and a release date the other.
+  assert.equal(resumed.dateFormat.customers?.birth_date, "dd/MM/yyyy");
+  assert.equal(resumed.dateFormat.loans?.release_date, "MM/dd/yyyy");
+});
+
+test("an unanswered file is absent rather than false", () => {
+  // The distinction is the whole point: `undefined` must be re-asked, and a
+  // caller writing `if (session.hasHeaderRow[kind])` turns it into "no header".
+  const partial: NewImportSession = { ...SESSION, hasHeaderRow: { customers: true } };
+  const storage = fakeStore();
+  saveImportSession(partial, { storage });
+  const resumed = loadImportSession({ storage, now: SESSION.startedAt })!;
+
+  assert.equal(resumed.hasHeaderRow.loans, undefined);
+  assert.equal("loans" in resumed.hasHeaderRow, false);
+});
+
+test("a record written by the previous shape is discarded, not half-read", () => {
+  // v1 stored one boolean and one string for the whole import. Those values are
+  // still perfectly valid JSON — they simply MEAN something else now, which is
+  // exactly what a shape check cannot see and a version can.
+  const storage = fakeStore();
+  const v1 = {
+    sessionId: "imp_9f3c2b",
+    branchId: 2,
+    productMap: { "SALARY LOAN": 4 },
+    hasHeaderRow: true,
+    dateFormat: "dd/MM/yyyy",
+    chunkSize: IMPORT_CHUNK_SIZE,
+    files: { customers: MEMBERS },
+    startedAt: 1_756_400_000_000,
+  };
+  storage.setItem("lendyph.import_session", JSON.stringify(v1));
+
+  assert.equal(isImportSession(v1), false);
+  assert.equal(loadImportSession({ storage, now: v1.startedAt }), null);
+  // And it is deleted on the way out rather than re-parsed on every mount.
+  assert.equal(storage.map.size, 0);
+});
+
+test("a record carrying the right shape but the wrong version is still refused", () => {
+  const wrongVersion = { ...SESSION, version: IMPORT_SESSION_VERSION + 1 };
+  assert.equal(isImportSession(wrongVersion), false);
+});
+
+test("the version is stamped by the module, so no caller can write a lying record", () => {
+  const storage = fakeStore();
+  // A caller cannot even name the field — `NewImportSession` omits it — and the
+  // value that lands on disk is this module's, not the caller's.
+  saveImportSession(SESSION, { storage });
+  const raw = JSON.parse(storage.getItem("lendyph.import_session")!);
+  assert.equal(raw.version, IMPORT_SESSION_VERSION);
+});
+
+test("a header map with a non-boolean in it is refused rather than coerced", () => {
+  assert.equal(
+    isImportSession({ ...SESSION, hasHeaderRow: { customers: "yes" } }),
+    false,
+  );
+  assert.equal(isImportSession({ ...SESSION, hasHeaderRow: true }), false);
+  assert.equal(isImportSession({ ...SESSION, dateFormat: "dd/MM/yyyy" }), false);
+  assert.equal(
+    isImportSession({ ...SESSION, dateFormat: { customers: "dd/MM/yyyy" } }),
+    false,
+  );
 });

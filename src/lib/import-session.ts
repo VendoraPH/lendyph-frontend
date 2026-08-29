@@ -23,6 +23,7 @@
  */
 
 import { resolveChunkSize } from "./import-chunks";
+import type { ImportFileKind } from "@/types/data-import";
 
 // localStorage, NOT sessionStorage — a deliberate departure from the
 // registration-key module next door, and the reason is the opposite of its
@@ -38,6 +39,23 @@ import { resolveChunkSize } from "./import-chunks";
 // mount and discarded if the session is gone, and anything older than
 // IMPORT_SESSION_TTL_MS is discarded here without asking.
 const STORAGE_KEY = "lendyph.import_session";
+
+/**
+ * The shape number of the record at STORAGE_KEY.
+ *
+ * Stamped on save and required on load, so an entry written by an older build
+ * is DISCARDED rather than half-read. The distinction matters more here than in
+ * most stores: the answers in this record are applied to a file the browser
+ * re-opens from disk, and a record that parses but means something different is
+ * how the wrong header setting gets re-applied to the wrong file — a member row
+ * eaten as a heading, or a heading imported as a member. `isImportSession`
+ * checks value shapes, not meaning, so the version is the only thing that can
+ * catch a change of meaning.
+ *
+ * 1 -> 2: `hasHeaderRow` and `dateFormat` became per-file. A v1 entry fails on
+ * both the version and the value shape, and is deleted on the way out.
+ */
+export const IMPORT_SESSION_VERSION = 2;
 
 /**
  * How long a stored session is worth offering.
@@ -76,29 +94,66 @@ export interface ImportSessionFile extends FileIdentity {
 }
 
 export interface ImportSession {
+  /** The shape of this record. See IMPORT_SESSION_VERSION. */
+  version: number;
   /** Issued by upload-init. Everything else is meaningless without it. */
   sessionId: string;
   /** Branch the imported members and loans are created under. */
   branchId: number;
-  /** CSV product label -> Lendyph `LoanProduct.id`. */
+  /** CSV product label -> Lendyph `LoanProduct.id`. Genuinely per RUN, not per
+   *  file: only the loans file names products. */
   productMap: Record<string, number>;
-  /** True when row 1 is column headings and must not be imported as data. */
-  hasHeaderRow: boolean;
-  /** The date format the admin confirmed for ambiguous columns, e.g. "dd/MM/yyyy". */
-  dateFormat: string;
+  /**
+   * Whether row 1 of each file is column headings, PER FILE.
+   *
+   * Not one boolean, because it genuinely is not one answer: a coop's export
+   * routinely has a header on the members file and none on the loans file, and
+   * the server models it per file too (`ImportFileStatus.staging.header_skipped`).
+   * One boolean re-applied to both on resume silently eats a member row as a
+   * heading, or imports a heading as a member — and nothing downstream can tell,
+   * because both outcomes parse.
+   *
+   * A MISSING key means "not answered for this file". It must never be read as
+   * `false`: `if (session.hasHeaderRow[kind])` turns an unanswered question into
+   * "no header", which is the same bug by another route. Check for `undefined`
+   * and ask again.
+   */
+  hasHeaderRow: Partial<Record<ImportFileKind, boolean>>;
+  /**
+   * The date order the admin confirmed, per file and per COLUMN within it —
+   * e.g. `{ customers: { birth_date: "dd/MM/yyyy" } }`.
+   *
+   * Per column because that is how it is settled: 03/04 is ambiguous on its own,
+   * and a file can carry a birth date written one way and a release date written
+   * the other. A single string for the whole import cannot express that, and
+   * collapsing to one silently re-dates a column on resume.
+   *
+   * A missing file key or column key means "not answered", never a default.
+   */
+  dateFormat: Partial<Record<ImportFileKind, Record<string, string>>>;
   /** The size the plan was built with — the server advertises its own. */
   chunkSize: number;
-  /** Keyed by upload slot ("members", "loans"), because on resume the admin
-   *  re-picks per slot; matching by filename would break the moment a file is
-   *  renamed, and would silently swap two files that were picked in the other
-   *  order. */
-  files: Record<string, ImportSessionFile>;
+  /** Keyed by upload slot, and the slot keys are the API's own
+   *  `ImportFileKind` — "customers" and "loans", never "members". The record is
+   *  `Record<string, …>`, so a second spelling costs nothing at compile time
+   *  and everything at runtime: `resumableChunks(session, "customers", …)`
+   *  would find no entry, return `[]`, and quietly re-upload a file that was
+   *  already on the server — a resume that silently finds nothing, which is the
+   *  exact failure this module exists to prevent. The server keys on the same
+   *  word in the chunk route (`/files/{kind}/chunks/{index}`) and in the status
+   *  payload's `files` map, so there is one vocabulary and this is it.
+   *
+   *  Keyed by slot rather than by filename because on resume the admin re-picks
+   *  per slot; matching by name would break the moment a file is renamed, and
+   *  would silently swap two files picked in the other order. */
+  files: Partial<Record<ImportFileKind, ImportSessionFile>>;
   /** Epoch ms the session was opened. Drives expiry; stamped on first save. */
   startedAt: number;
 }
 
-/** A session on its way in: the timestamp is this module's to stamp. */
-export type NewImportSession = Omit<ImportSession, "startedAt"> & {
+/** A session on its way in: the timestamp and the version are this module's to
+ *  stamp, so no caller can write a record that lies about its own shape. */
+export type NewImportSession = Omit<ImportSession, "startedAt" | "version"> & {
   startedAt?: number;
 };
 
@@ -154,13 +209,30 @@ function isFileRecord(value: unknown): value is ImportSessionFile {
  * a missing `productMap` imports every loan under the wrong product. Anything
  * that does not typecheck at runtime is dropped and the admin starts clean.
  */
+function isRecordOf(
+  value: unknown,
+  valueIsValid: (entry: unknown) => boolean,
+): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).every(valueIsValid);
+}
+
 export function isImportSession(value: unknown): value is ImportSession {
   if (!value || typeof value !== "object") return false;
   const session = value as Record<string, unknown>;
+  // The version first: a record from an older shape may satisfy every check
+  // below and still MEAN something different.
+  if (session.version !== IMPORT_SESSION_VERSION) return false;
   if (typeof session.sessionId !== "string" || session.sessionId === "") return false;
   if (typeof session.branchId !== "number") return false;
-  if (typeof session.hasHeaderRow !== "boolean") return false;
-  if (typeof session.dateFormat !== "string") return false;
+  if (!isRecordOf(session.hasHeaderRow, (entry) => typeof entry === "boolean")) return false;
+  if (
+    !isRecordOf(session.dateFormat, (perFile) =>
+      isRecordOf(perFile, (format) => typeof format === "string"),
+    )
+  ) {
+    return false;
+  }
   if (typeof session.chunkSize !== "number") return false;
   if (typeof session.startedAt !== "number") return false;
   if (!session.productMap || typeof session.productMap !== "object") return false;
@@ -232,7 +304,7 @@ export function sameFile(
  */
 export function resumableChunks(
   session: ImportSession,
-  slot: string,
+  slot: ImportFileKind,
   picked: FileIdentity | null | undefined,
   advertisedChunkSize: unknown,
 ): number[] {
@@ -257,6 +329,7 @@ export function saveImportSession(
   if (!storage) return;
   const stamped: ImportSession = {
     ...session,
+    version: IMPORT_SESSION_VERSION,
     startedAt: session.startedAt ?? env.now ?? Date.now(),
   };
   try {
@@ -338,7 +411,7 @@ export function clearImportSession(env: SessionEnvironment = {}): void {
  */
 export function recordUploadedChunk(
   session: ImportSession,
-  slot: string,
+  slot: ImportFileKind,
   index: number,
   env: SessionEnvironment = {},
 ): ImportSession {
