@@ -905,11 +905,9 @@ export default function LoanDetailPage({
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const scheduleOpenInitialized = useRef(false);
   const [approvalStepsOpen, setApprovalStepsOpen] = useState(false);
   const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(false);
   const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(false);
-  const sectionsOpenInitialized = useRef(false);
 
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
@@ -1028,25 +1026,6 @@ export default function LoanDetailPage({
     fetchLoan();
     return () => { cancelled = true; };
   }, [loanId]);
-
-  // Initialize scheduleOpen once when loan first loads — collapsed only for "released" status
-  useEffect(() => {
-    if (loan && !scheduleOpenInitialized.current) {
-      scheduleOpenInitialized.current = true;
-      setScheduleOpen(loan.status !== "released");
-    }
-  }, [loan?.status]);
-
-  // Initialize sidebar/section collapsibles once when loan first loads — collapsed only for "released" status
-  useEffect(() => {
-    if (loan && !sectionsOpenInitialized.current) {
-      sectionsOpenInitialized.current = true;
-      const open = loan.status !== "released";
-      setApprovalStepsOpen(open);
-      setMemberCoMakerOpen(open);
-      setWorkflowHistoryOpen(open);
-    }
-  }, [loan?.status]);
 
   // Fetch users for AO tagging
   useEffect(() => {
