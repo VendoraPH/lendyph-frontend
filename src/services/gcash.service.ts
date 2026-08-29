@@ -8,6 +8,9 @@ import type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashNonMember,
+  GCashNonMemberInput,
+  GCashNonMemberFilters,
   PaginatedResponse,
 } from "@/types";
 
@@ -26,6 +29,23 @@ export const gcashService = {
 
   markPaid: (id: number) =>
     api.patch<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_MARK_PAID(id)),
+
+  // Same raw-paginator shape as the transactions list above, for the same
+  // reason: api.get's unwrap would drop meta and break pagination.
+  listNonMembers: (params?: GCashNonMemberFilters) =>
+    api.getRaw<PaginatedResponse<GCashNonMember>>(
+      API_ENDPOINTS.GCASH.NON_MEMBERS_LIST,
+      { params },
+    ),
+
+  createNonMember: (data: GCashNonMemberInput) =>
+    api.post<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_CREATE, data),
+
+  updateNonMember: (id: number, data: GCashNonMemberInput) =>
+    api.put<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_UPDATE(id), data),
+
+  deleteNonMember: (id: number) =>
+    api.delete<void>(API_ENDPOINTS.GCASH.NON_MEMBERS_DELETE(id)),
 
   listTiers: () => api.get<GCashTier[]>(API_ENDPOINTS.GCASH.TIERS_LIST),
 
