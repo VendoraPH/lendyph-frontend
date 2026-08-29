@@ -139,7 +139,19 @@ axiosClient.interceptors.response.use(
           }
         );
 
-        const newToken = data.token;
+        // The API is inconsistent about the envelope: /auth/login answers with
+        // a bare { token, user } (hence api.rawPost in auth.service) while most
+        // routes wrap their payload in { success, data }. This call uses plain
+        // axios, so nothing unwraps it for us — accept either shape.
+        const newToken: unknown = data?.data?.token ?? data?.token;
+        if (typeof newToken !== "string" || newToken.length === 0) {
+          // Reading the token from the wrong depth used to yield undefined,
+          // which localStorage stored as the string "undefined". Every later
+          // request then sent `Bearer undefined`, 401'd, tried to refresh with
+          // that same garbage, and logged the user out mid-session. Treat a
+          // token we cannot find as a failed refresh instead.
+          throw new Error("Refresh response contained no access token");
+        }
         tokenManager.setAccessToken(newToken);
 
         processQueue(null, newToken);
@@ -147,14 +159,28 @@ axiosClient.interceptors.response.use(
         return axiosClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        tokenManager.clearTokens();
-        // Instead of a hard redirect (window.location.href = "/login"),
-        // dispatch a custom event so the SessionProvider can handle the
-        // logout gracefully — showing a toast and cleaning up auth state
-        // without jarring the user mid-action.
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("auth:session-expired"));
+
+        // Only an outright rejection means the session is really gone. A
+        // dropped connection, a timeout, or a 500 says nothing about whether
+        // the user is still signed in — treating those as a dead session
+        // logged people out mid-task over a blip on the wire, and threw away
+        // a set of tokens that were still perfectly good.
+        const status = axios.isAxiosError(refreshError)
+          ? refreshError.response?.status
+          : undefined;
+        const sessionIsGone = status === 401 || status === 403 || status === 419;
+
+        if (sessionIsGone) {
+          tokenManager.clearTokens();
+          // Instead of a hard redirect (window.location.href = "/login"),
+          // dispatch a custom event so the SessionProvider can handle the
+          // logout gracefully — showing a toast and cleaning up auth state
+          // without jarring the user mid-action.
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("auth:session-expired"));
+          }
         }
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
