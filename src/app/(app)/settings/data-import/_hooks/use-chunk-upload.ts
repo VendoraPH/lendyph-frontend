@@ -52,26 +52,22 @@ import type {
 } from "@/types/data-import";
 
 /* ------------------------------------------------------------------ */
-/* Contract widening                                                    */
+/* The per-file block                                                   */
 /* ------------------------------------------------------------------ */
 
 /**
- * The per-file block as the API actually sends it.
+ * `ImportFileStatus` itself — no longer widened here.
  *
- * `CsvImportUploadService::runPayload()` publishes `id`, `kind`,
- * `original_filename`, `size_bytes` and `sha256` alongside the chunk
- * bookkeeping; `ImportFileStatus` in @/types/data-import declares only the
- * bookkeeping half. The three named here are load-bearing for a resume — after
- * a reload they are the only description of the file we are asking the admin to
- * re-pick — so they are widened in rather than gone without.
+ * This module used to declare a local `extends ImportFileStatus` that added
+ * `original_filename`, `size_bytes` and `sha256` as OPTIONAL, because the
+ * contract type omitted them while `CsvImportUploadService::runPayload()`
+ * publishes them. They are on the contract now, and REQUIRED — after a reload
+ * they are the only description of the file the admin is being asked to
+ * re-pick, which is why `sameFile()` compares against them. So the local widening
+ * is deleted rather than kept as a near-twin that quietly makes three required
+ * fields optional again.
  */
-export interface ServerFileBlock extends ImportFileStatus {
-  original_filename?: string;
-  size_bytes?: number;
-  sha256?: string;
-}
-
-type ServerFiles = Partial<Record<ImportFileKind, ServerFileBlock>>;
+type ServerFiles = Partial<Record<ImportFileKind, ImportFileStatus>>;
 
 /* ------------------------------------------------------------------ */
 /* Tuning                                                              */
@@ -248,7 +244,7 @@ export function wholeFilePercent(
  *     server already holds cost a 200 apiece.
  */
 export function landedChunksFrom(
-  block: ServerFileBlock | undefined,
+  block: ImportFileStatus | undefined,
   totalChunks: number,
 ): number[] {
   if (!block) return [];
@@ -314,7 +310,7 @@ export interface PickedFileLike extends FileIdentity {
  */
 export function resumeVerdict(args: {
   picked: FileIdentity | null | undefined;
-  block: ServerFileBlock | undefined;
+  block: ImportFileStatus | undefined;
   session: ImportSession | null | undefined;
   slot: ImportFileKind;
   advertisedChunkSize: unknown;
@@ -656,7 +652,7 @@ export function useChunkUpload(options: UseChunkUploadOptions): UseChunkUploadRe
       try {
         const status = await dataImportService.status(runId);
         if (status && typeof status === "object") {
-          serverFilesRef.current = (status.files ?? {}) as ServerFiles;
+          serverFilesRef.current = status.files ?? {};
           setServerStatus(status);
         }
         return status ?? null;

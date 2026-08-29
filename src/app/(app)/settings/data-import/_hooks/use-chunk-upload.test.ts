@@ -14,9 +14,9 @@ import {
   RETRY_MAX_MS,
   toHex,
   wholeFilePercent,
-  type ServerFileBlock,
 } from "./use-chunk-upload";
 import type { ImportSession } from "@/lib/import-session";
+import type { ImportFileStatus } from "@/types/data-import";
 import { IMPORT_CHUNK_SIZE } from "@/lib/import-chunks";
 
 /** An axios-shaped rejection: status and body under `response`. */
@@ -28,8 +28,20 @@ function httpError(status: number, data: Record<string, unknown> = {}) {
 const timeout = { code: "ECONNABORTED", message: "timeout of 60000ms exceeded" };
 const offline = { message: "Network Error" };
 
-function block(overrides: Partial<ServerFileBlock> = {}): ServerFileBlock {
+/**
+ * A file block mid-upload: five chunks declared, none received, nothing staged.
+ *
+ * `size_bytes` is expressed against `IMPORT_CHUNK_SIZE` so it stays consistent
+ * with `total_chunks: 5` — a five-chunk file is a real ~2.2 MB export, and a
+ * fixture claiming a size that cannot produce its own chunk count teaches the
+ * next reader something false. The counts are all zero because they honestly
+ * are: nothing is staged until the file is assembled.
+ */
+function block(overrides: Partial<ImportFileStatus> = {}): ImportFileStatus {
   return {
+    original_filename: "customer-profile.csv",
+    size_bytes: 4 * IMPORT_CHUNK_SIZE + 190_432,
+    sha256: "9f2c4a1e7b3d05c86ae4f0b12d97e35a6c8f4b20d1e93a7c05fb6182d4e0a739",
     chunk_size: IMPORT_CHUNK_SIZE,
     total_chunks: 5,
     received_chunks: 0,
@@ -39,6 +51,9 @@ function block(overrides: Partial<ServerFileBlock> = {}): ServerFileBlock {
     assembled: false,
     counts: {
       total: 0,
+      valid: 0,
+      invalid: 0,
+      pending: 0,
       imported: 0,
       matched_existing: 0,
       already_imported: 0,

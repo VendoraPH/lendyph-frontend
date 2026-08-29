@@ -9,9 +9,23 @@ import {
 } from "./step-processing";
 import type { ImportCounts } from "@/types/data-import";
 
+/**
+ * A counts block for a CLOSED run.
+ *
+ * The outcome buckets start at zero because each test names the ones it is
+ * about. The staging verdicts do not: they track `total`, because a closed run
+ * has staged every row and settled every verdict, and `pending` above zero is
+ * precisely the state in which the buckets are NOT expected to reconcile
+ * against `total`. A test about a run still in flight says so by overriding
+ * them.
+ */
 function counts(overrides: Partial<ImportCounts> = {}): ImportCounts {
+  const total = overrides.total ?? 0;
   return {
-    total: 0,
+    total,
+    valid: total,
+    invalid: 0,
+    pending: 0,
     imported: 0,
     matched_existing: 0,
     already_imported: 0,

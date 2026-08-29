@@ -245,8 +245,16 @@ export function useImportReattach(): UseImportReattachResult {
         try {
           if (source === "server") {
             // Only reached when neither the link nor this device named a run.
-            const active = await dataImportService.activeRun();
+            //
+            // The endpoint answers FLAT — `{run: … | null}` — and `getRaw`
+            // keeps that envelope, so the run is one level in. Reading the
+            // envelope as if it were the run itself typechecked happily and
+            // resolved to `undefined` at runtime: every probe fell through to
+            // "no import running", which is the one answer this hook exists to
+            // avoid giving wrongly.
+            const answer = await dataImportService.activeRun();
             if (cancelled) return;
+            const active = answer?.run ?? null;
             if (active) {
               finish({
                 runId: active.id,

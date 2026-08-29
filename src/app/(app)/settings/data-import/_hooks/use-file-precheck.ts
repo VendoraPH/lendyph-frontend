@@ -103,13 +103,19 @@ const SLOT_SAMPLE_ROWS = 5;
 // Types
 // ---------------------------------------------------------------------------
 
-/** `ImportFileKind` is plural, `ImportShape` is not. Kept in one place. */
-const SHAPE_BY_KIND: Record<ImportFileKind, ImportShape> = {
+/** `ImportFileKind` is plural, `ImportShape` is not. Kept in one place, and
+ *  exported so a screen that has a kind but no inspection to read it off — a
+ *  resumed run, where the files were never re-read — reaches the same map
+ *  rather than writing a third one that agrees until someone edits it. */
+export const SHAPE_BY_KIND: Record<ImportFileKind, ImportShape> = {
   customers: "customer",
   loans: "loans",
 };
 
-const FILE_LABELS: Record<ImportFileKind, string> = {
+/** What each slot is CALLED, in the admin's own workbook vocabulary. Exported
+ *  for the same reason: `FileInspection.label` is this map, and a resumed run
+ *  has no inspection to take it from. */
+export const FILE_LABELS: Record<ImportFileKind, string> = {
   customers: "Customer Profile",
   loans: "Loans",
 };
@@ -816,10 +822,10 @@ export function computeFindings(
 }
 
 // ---------------------------------------------------------------------------
-// Collapsing the answers into what the session record can hold
+// The answers, in the shape the session record stores them
 // ---------------------------------------------------------------------------
 
-/** `ImportSession.dateFormat` is one string. These are the three it can be. */
+/** A settled date order, written the way `ImportSession.dateFormat` records it. */
 export const DATE_FORMAT_PATTERNS: Record<DateOrder, string> = {
   dmy: "dd/MM/yyyy",
   mdy: "MM/dd/yyyy",
@@ -828,80 +834,59 @@ export const DATE_FORMAT_PATTERNS: Record<DateOrder, string> = {
 /** What a column of ISO dates and/or Excel serials is written as. */
 export const ISO_DATE_FORMAT = "yyyy-MM-dd";
 
-/** The per-file answers, in the only shape this collapse needs to see. */
-export interface CollapsibleFileAnswer {
-  /** For the message when two files disagree. */
-  label: string;
+/** One file's answers, in the only shape this conversion needs to see. */
+export interface FileSessionAnswer {
+  kind: ImportFileKind;
   skipHeaderRow: boolean;
   /** Per date column. `null` = the column needs no order. */
   dateOrders: Readonly<Record<string, DateOrder | null>>;
 }
 
-export interface CollapsedAnswers {
-  hasHeaderRow: boolean;
-  dateFormat: string;
-  /**
-   * What the collapse could not carry. Empty in the ordinary case.
-   *
-   * NOT an error and NOT a blocker: the current pass uploads from the per-file
-   * answers, which are exact. This is what a RESUME after a reload would have
-   * to re-ask, and the admin is told rather than left to find out.
-   */
-  losses: string[];
+/** The slice of `ImportSession` step 2 settles, `productMap` aside. */
+export interface SessionAnswers {
+  hasHeaderRow: Partial<Record<ImportFileKind, boolean>>;
+  dateFormat: Partial<Record<ImportFileKind, Record<string, string>>>;
 }
 
 /**
- * Squeeze the per-file, per-column answers into `ImportSession`'s single
- * `hasHeaderRow` and single `dateFormat`.
+ * Write the per-file, per-column answers the way `ImportSession` stores them.
  *
- * This function exists because that record is narrower than the truth, and the
- * narrowing is worth naming rather than hiding:
+ * A change of notation, not of meaning: nothing is merged, averaged, or
+ * dropped. Both fields are keyed per file because both answers genuinely are
+ * per file — the server models header-skipping per file
+ * (`ImportFileStatus.staging.header_skipped`), and one sheet routinely has a
+ * header row while the other does not, because the client's spec tells coops to
+ * delete it and they delete it from one. Inside a file, `dateFormat` stays per
+ * COLUMN, because that is the grain a date order is settled at: `03/04` is
+ * ambiguous on its own, and one sheet can prove day-first in a birth date and
+ * month-first in a release date.
  *
- *  - the SERVER models header-skipping per file — see
- *    `ImportFileStatus.staging.header_skipped` on the contract — and one file
- *    routinely has a header row while the other does not, because the client's
- *    spec tells coops to delete it and they delete it from one sheet;
- *  - date order is settled per COLUMN, and a file can genuinely prove day-first
- *    in one column and month-first in another.
- *
- * So it reports what it had to drop instead of silently picking. Nothing here
- * guesses in silence, which is the same rule the date inference follows.
+ * A file that was not inspected gets NO key, which is exactly what the record
+ * defines as "not answered". It is never written as `false` or as a default
+ * pattern: an unasked header question stored as "no header" eats a member row
+ * as a heading on resume, and nothing downstream can tell, because both
+ * outcomes parse.
  */
-export function collapseForSession(
-  answers: readonly CollapsibleFileAnswer[],
-): CollapsedAnswers {
-  const losses: string[] = [];
+export function sessionAnswers(
+  answers: readonly FileSessionAnswer[],
+): SessionAnswers {
+  const hasHeaderRow: Partial<Record<ImportFileKind, boolean>> = {};
+  const dateFormat: Partial<Record<ImportFileKind, Record<string, string>>> = {};
 
-  const skipping = answers.filter((answer) => answer.skipHeaderRow);
-  const hasHeaderRow = skipping.length > 0;
-  if (skipping.length > 0 && skipping.length < answers.length) {
-    const without = answers.filter((answer) => !answer.skipHeaderRow).map((a) => a.label);
-    losses.push(
-      `${skipping
-        .map((a) => a.label)
-        .join(" and ")} ${skipping.length === 1 ? "has" : "have"} a header row and ${without.join(
-        " and ",
-      )} ${without.length === 1 ? "does" : "do"} not. This import handles each file correctly, but the saved session remembers only one setting — if you close the tab and resume, check the header setting again before uploading.`,
-    );
-  }
-
-  const orders = new Set<DateOrder>();
   for (const answer of answers) {
-    for (const order of Object.values(answer.dateOrders)) {
-      if (order) orders.add(order);
+    hasHeaderRow[answer.kind] = answer.skipHeaderRow;
+
+    const columns: Record<string, string> = {};
+    for (const [column, order] of Object.entries(answer.dateOrders)) {
+      // A column that needs no order is still an ANSWER — "this one is written
+      // ISO" — so it is recorded rather than left absent, and a resume does not
+      // re-ask a question the file itself already settled.
+      columns[column] = order ? DATE_FORMAT_PATTERNS[order] : ISO_DATE_FORMAT;
     }
-  }
-  const [first, ...rest] = [...orders];
-  const dateFormat = first ? DATE_FORMAT_PATTERNS[first] : ISO_DATE_FORMAT;
-  if (rest.length > 0) {
-    losses.push(
-      `Your files use more than one date order (${[...orders]
-        .map((order) => DATE_FORMAT_PATTERNS[order])
-        .join(" and ")}). Each column is read correctly now, but the saved session remembers only ${dateFormat} — if you resume after closing the tab, confirm the dates again.`,
-    );
+    dateFormat[answer.kind] = columns;
   }
 
-  return { hasHeaderRow, dateFormat, losses };
+  return { hasHeaderRow, dateFormat };
 }
 
 // ---------------------------------------------------------------------------

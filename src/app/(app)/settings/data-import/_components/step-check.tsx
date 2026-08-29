@@ -31,14 +31,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import type { DateOrder } from "@/lib/import-date";
+import { columnsFor } from "@/lib/import-schema";
 import { loadImportSession, type ImportSession } from "@/lib/import-session";
 import { formatCount } from "@/lib/report-format";
 import type { ImportFileKind } from "@/types/data-import";
 import {
-  collapseForSession,
+  FILE_LABELS,
+  SHAPE_BY_KIND,
+  sessionAnswers,
   useFilePrecheck,
   type FileFindings,
   type FileInspection,
+  type FileSessionAnswer,
 } from "../_hooks/use-file-precheck";
 import { DateFormatCard } from "./date-format-card";
 import { HeaderDetectionCard } from "./header-detection-card";
@@ -50,64 +54,33 @@ import { ProductMappingGate } from "./product-mapping-table";
 // The contract with the shell
 // ---------------------------------------------------------------------------
 
-/**
- * The picked files, keyed by upload slot.
- *
- * The keys are `ImportFileKind` — `"customers"`, not `"members"`. That is what
- * the server keys on in both the chunk route (`/files/{kind}/chunks/{index}`)
- * and the status payload's `files` map, and a second client-side vocabulary for
- * the same slot costs nothing at compile time (`ImportSession.files` is
- * `Record<string, …>`) and silently costs the resume at runtime.
- *
- * Declared structurally rather than imported from the shell so the seam does
- * not point both ways; the shell's own alias satisfies it.
- */
-export type ImportFiles = Partial<Record<ImportFileKind, File | null | undefined>>;
+// `ImportFiles` and `PrecheckOutcome` are owned by ./data-import-view, which
+// holds the wizard's shared vocabulary. This file used to declare its own
+// `ImportFiles` — a same-named near-twin that also admitted `undefined` and
+// made both keys optional — and two types with one name that differ in
+// nullability is how a null reaches somewhere that never expected one. The
+// variance was never load-bearing here: the only thing this file does with the
+// prop is hand it to `useFilePrecheck`, whose PARAMETER is the wide shape, and
+// the shell's narrower type satisfies it unchanged.
+import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
 
 /**
- * What this step hands back.
+ * What the pre-check found out about ONE file, beyond the answers themselves.
  *
- * Deliberately `Pick<ImportSession, …>` rather than a parallel declaration: it
- * is exactly the slice of the persisted record this step is responsible for
- * filling, so if that record grows a field this breaks loudly instead of
- * dropping one silently on resume.
- */
-export type PrecheckOutcome = Pick<
-  ImportSession,
-  "hasHeaderRow" | "dateFormat" | "productMap"
->;
-
-/**
- * What the pre-check settled about ONE file.
+ * The answers — which file has a header row, how each date column reads — are
+ * NOT here. They travel in `PrecheckOutcome`, which is keyed per file and, for
+ * dates, per column, and is the thing that gets persisted. Carrying them in
+ * both arguments would be the same fact in two shapes, which is how the two
+ * come to disagree.
  *
- * This is finer-grained than `PrecheckOutcome` on purpose, and the difference
- * is not cosmetic. `ImportSession` holds ONE `hasHeaderRow` and ONE
- * `dateFormat`; the server holds `header_skipped` PER FILE
- * (`ImportFileStatus.staging.header_skipped`), and a date order is settled per
- * COLUMN. One file having a header row while the other does not is the ordinary
- * case, not an edge one — the client's spec tells coops to delete it and they
- * delete it from one sheet.
- *
- * So this rides along as `onConfirm`'s second argument. Nothing is required to
- * read it, and nothing is lost by the shell not reading it yet.
+ * What is left is evidence: what the file turned out to be, how much of it was
+ * checked, and whether the header answer is the admin's or the detector's. A
+ * consumer wanting the answer for a file reads `outcome.hasHeaderRow[kind]`;
+ * this says whether to believe the detector about it.
  */
 export interface FilePrecheckDecision {
-  /**
-   * Whether row 1 is the header row and must be skipped when this file is
-   * uploaded. Starts at what `detectHeaderRow` found; the admin can overrule.
-   */
-  skipHeaderRow: boolean;
-  /** True when this is the admin's answer rather than the detected one. */
+  /** True when the header answer is the admin's rather than the detected one. */
   headerOverridden: boolean;
-  /**
-   * How each date column is to be read, keyed by the column key from
-   * `import-schema` (`birthdate`, `date_released`, `maturity_date`).
-   * `null` means the column needs no order — it holds only ISO dates and/or
-   * Excel serials, which carry their own meaning. A key is never absent for a
-   * date column, and never carries an unsettled value: the step cannot be
-   * confirmed while one is outstanding.
-   */
-  dateOrders: Record<string, DateOrder | null>;
   /** The delimiter the file was actually read with. */
   delimiter: string;
   /** Data rows, from the COMPLETE parse. Never a checked subset. */
@@ -134,13 +107,8 @@ export interface PrecheckDecisions {
    */
   runId: number | null;
   /** Empty on a resumed run: the files were never re-read, so there is no
-   *  per-file detail to report and inventing some would be worse than none. */
+   *  per-file evidence to report and inventing some would be worse than none. */
   files: Partial<Record<ImportFileKind, FilePrecheckDecision>>;
-  /**
-   * What `PrecheckOutcome` could not carry, in words, already shown to the
-   * admin. Empty in the ordinary case. See `collapseForSession`.
-   */
-  losses: string[];
 }
 
 export interface StepCheckProps {
@@ -170,7 +138,9 @@ export interface StepCheckProps {
    * Called when the admin accepts the pre-check. Never fires while a blocker or
    * an unanswered date question is outstanding.
    *
-   * The second argument is the lossless, per-file form of the same answers. A
+   * The first argument carries the answers, per file — and per column for
+   * dates — in exactly the shape `ImportSession` persists. The second carries
+   * the per-file EVIDENCE behind them; nothing is required to read it, and a
    * handler declared as `(outcome) => void` satisfies this signature unchanged.
    */
   onConfirm: (outcome: PrecheckOutcome, decisions: PrecheckDecisions) => void;
@@ -216,6 +186,53 @@ function resumableSession(
   return String(session.sessionId) === String(runId) ? session : null;
 }
 
+/** One file's saved answers, read back for the resumed panel. */
+export interface StoredFileAnswer {
+  kind: ImportFileKind;
+  label: string;
+  /** `null` when the record holds no answer for this file. Never `false`. */
+  skipHeaderRow: boolean | null;
+  dateColumns: Array<{ column: string; label: string; pattern: string }>;
+}
+
+/**
+ * The saved answers, per file, in the order the files are uploaded.
+ *
+ * Both `hasHeaderRow` and `dateFormat` are keyed per file precisely so that a
+ * MISSING key can mean "not answered", and this is the one screen where that
+ * distinction is read by a human before they confirm — so it survives to the
+ * page as `null` rather than being flattened into `false`. Rendering an unasked
+ * question as "Row 1 is imported" is how a heading ends up in the member list
+ * with the admin's own agreement.
+ *
+ * Date columns are shown under the labels from the client's own workbook, since
+ * `date_released` is our word for that column and "Date Released" is theirs.
+ */
+export function storedAnswers(session: ImportSession): StoredFileAnswer[] {
+  return FILE_ORDER.filter(
+    (kind) =>
+      kind in session.hasHeaderRow ||
+      kind in session.dateFormat ||
+      kind in session.files,
+  ).map((kind) => {
+    const labels = new Map(
+      columnsFor(SHAPE_BY_KIND[kind]).map((column) => [column.key, column.label]),
+    );
+    return {
+      kind,
+      label: FILE_LABELS[kind],
+      skipHeaderRow: session.hasHeaderRow[kind] ?? null,
+      dateColumns: Object.entries(session.dateFormat[kind] ?? {}).map(
+        ([column, pattern]) => ({
+          column,
+          label: labels.get(column) ?? column,
+          pattern,
+        }),
+      ),
+    };
+  });
+}
+
 export function StepCheck({
   files,
   runId,
@@ -254,8 +271,19 @@ export function StepCheck({
     return list;
   }, [inspections, findings]);
 
+  /**
+   * The answers and the evidence, both keyed per file.
+   *
+   * One pass builds both from the same source, so they cannot drift: the
+   * answers go out as `PrecheckOutcome` in the shape the session stores, the
+   * evidence as `PrecheckDecisions`. Nothing is collapsed on the way — a
+   * header row is asked per file because it IS per file, and a date order per
+   * column because that is where it is settled.
+   */
   const decided = useMemo(() => {
     const perFile: Partial<Record<ImportFileKind, FilePrecheckDecision>> = {};
+    const perFileAnswers: FileSessionAnswer[] = [];
+
     for (const { inspection, findings: found } of pairs) {
       const dateOrders: Record<string, DateOrder | null> = {};
       for (const date of found.dates) {
@@ -263,10 +291,15 @@ export function StepCheck({
         // column is unsettled, and a blocked column is a blocker.
         dateOrders[date.key] = date.order ?? null;
       }
-      perFile[inspection.kind] = {
+
+      perFileAnswers.push({
+        kind: inspection.kind,
         skipHeaderRow: skipHeader(inspection.kind),
-        headerOverridden: headerOverridden(inspection.kind),
         dateOrders,
+      });
+
+      perFile[inspection.kind] = {
+        headerOverridden: headerOverridden(inspection.kind),
         delimiter: inspection.delimiter,
         rowCount: found.totalRows,
         columnCount: inspection.widths[0]?.columns ?? 0,
@@ -275,24 +308,18 @@ export function StepCheck({
         rowsNotChecked: found.rowsNotChecked,
       };
     }
-    const collapsed = collapseForSession(
-      pairs.map(({ inspection }) => ({
-        label: inspection.label,
-        skipHeaderRow: skipHeader(inspection.kind),
-        dateOrders: perFile[inspection.kind]?.dateOrders ?? {},
-      })),
-    );
-    return { perFile, collapsed };
+
+    return { perFile, answers: sessionAnswers(perFileAnswers) };
   }, [pairs, skipHeader, headerOverridden]);
 
   const handleConfirm = useCallback(() => {
     onConfirm(
       {
-        hasHeaderRow: decided.collapsed.hasHeaderRow,
-        dateFormat: decided.collapsed.dateFormat,
+        hasHeaderRow: decided.answers.hasHeaderRow,
+        dateFormat: decided.answers.dateFormat,
         productMap,
       },
-      { runId, files: decided.perFile, losses: decided.collapsed.losses },
+      { runId, files: decided.perFile },
     );
   }, [decided, productMap, runId, onConfirm]);
 
@@ -321,22 +348,46 @@ export function StepCheck({
               stand. Nothing is re-read and nothing is re-guessed.
             </p>
 
-            <dl className="grid gap-3 rounded-lg border bg-muted/30 p-4 text-sm sm:grid-cols-3">
-              <div>
-                <dt className="text-xs text-muted-foreground">Header row</dt>
-                <dd className="font-medium">
-                  {stored.hasHeaderRow ? "Row 1 is skipped" : "Row 1 is imported"}
-                </dd>
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
+              {storedAnswers(stored).map((answer) => (
+                <div key={answer.kind} className="grid gap-1 sm:grid-cols-[11rem_1fr] sm:gap-4">
+                  <p className="font-medium">{answer.label}</p>
+                  <div className="space-y-1 text-muted-foreground">
+                    <p>
+                      {answer.skipHeaderRow === null ? (
+                        // Never rendered as "Row 1 is imported". A file nobody
+                        // was asked about is not a file answered "no header",
+                        // and showing the two the same way is what makes an
+                        // admin confirm a heading into the member list.
+                        <span className="text-amber-700 dark:text-amber-500">
+                          Header row — not answered for this file
+                        </span>
+                      ) : answer.skipHeaderRow ? (
+                        "Row 1 is skipped as a heading"
+                      ) : (
+                        "Row 1 is imported as data"
+                      )}
+                    </p>
+                    {answer.dateColumns.length > 0 ? (
+                      <ul className="space-y-0.5">
+                        {answer.dateColumns.map(({ column, label, pattern }) => (
+                          <li key={column}>
+                            {label} read as <span className="font-mono">{pattern}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No date column needed an answer</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              <div className="grid gap-1 border-t pt-3 sm:grid-cols-[11rem_1fr] sm:gap-4">
+                <p className="font-medium">Loan products mapped</p>
+                <p className="text-muted-foreground tabular-nums">{formatCount(mapped)}</p>
               </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Date format</dt>
-                <dd className="font-mono text-sm font-medium">{stored.dateFormat}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Loan products mapped</dt>
-                <dd className="font-medium tabular-nums">{formatCount(mapped)}</dd>
-              </div>
-            </dl>
+            </div>
 
             <p className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
               <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -359,9 +410,11 @@ export function StepCheck({
                       dateFormat: stored.dateFormat,
                       productMap: stored.productMap,
                     },
-                    // No per-file detail: the files were never re-read, and
-                    // inventing some would be worse than reporting none.
-                    { runId, files: {}, losses: [] },
+                    // No per-file evidence: the files were never re-read, and
+                    // inventing some would be worse than reporting none. The
+                    // ANSWERS above are per file already — they come straight
+                    // off the record, which is keyed that way.
+                    { runId, files: {} },
                   )
                 }
               >
@@ -517,25 +570,6 @@ export function StepCheck({
             )}
           </CardContent>
         </Card>
-      )}
-
-      {/* What the saved session cannot hold. A disclosure, not a blocker: this
-          pass uploads from the per-file answers above, which are exact. */}
-      {decided.collapsed.losses.length > 0 && (
-        <div
-          role="status"
-          className="flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm"
-        >
-          <Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="space-y-1">
-            <p className="font-medium">Worth knowing if you come back to this later</p>
-            <ul className="list-inside list-disc space-y-1 text-muted-foreground">
-              {decided.collapsed.losses.map((loss) => (
-                <li key={loss}>{loss}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
       )}
 
       {!held && (

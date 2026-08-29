@@ -5,11 +5,11 @@ import {
   ISO_DATE_FORMAT,
   ISSUE_LIST_CAP,
   checkRows,
-  collapseForSession,
   computeFindings,
   describeIsoDate,
   fileBlockers,
   inspectFile,
+  sessionAnswers,
   type DateColumnFinding,
   type FileInspection,
 } from "./use-file-precheck";
@@ -459,70 +459,90 @@ test("anything that is not a plain YYYY-MM-DD comes back untouched", () => {
 });
 
 // ---------------------------------------------------------------------------
-// collapseForSession — the session record is narrower than the answers
+// sessionAnswers — the answers, written the way the session record stores them
 // ---------------------------------------------------------------------------
 
 const answer = (
-  label: string,
+  kind: "customers" | "loans",
   skipHeaderRow: boolean,
   dateOrders: Record<string, "dmy" | "mdy" | null>,
-) => ({ label, skipHeaderRow, dateOrders });
+) => ({ kind, skipHeaderRow, dateOrders });
 
-test("two files that agree collapse with nothing lost", () => {
-  const collapsed = collapseForSession([
-    answer("Customer Profile", true, { birthdate: "dmy" }),
-    answer("Loans", true, { date_released: "dmy", maturity_date: "dmy" }),
+test("two files that agree each keep their own entry", () => {
+  const written = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy" }),
+    answer("loans", true, { date_released: "dmy", maturity_date: "dmy" }),
   ]);
 
-  assert.equal(collapsed.hasHeaderRow, true);
-  assert.equal(collapsed.dateFormat, "dd/MM/yyyy");
-  assert.deepEqual(collapsed.losses, []);
+  assert.deepEqual(written.hasHeaderRow, { customers: true, loans: true });
+  assert.deepEqual(written.dateFormat, {
+    customers: { birthdate: "dd/MM/yyyy" },
+    loans: { date_released: "dd/MM/yyyy", maturity_date: "dd/MM/yyyy" },
+  });
 });
 
-test("a column of ISO dates and serials needs no order, and says so", () => {
-  const collapsed = collapseForSession([answer("Customer Profile", false, { birthdate: null })]);
-
-  assert.equal(collapsed.dateFormat, ISO_DATE_FORMAT);
-  assert.deepEqual(collapsed.losses, []);
-});
-
-test("one file with a header and one without is reported, not silently picked", () => {
-  // The real case: the coop deleted the header from one sheet and not the
-  // other. The server keys `header_skipped` per file; the session record holds
-  // one boolean, so the shortfall has to reach the admin.
-  const collapsed = collapseForSession([
-    answer("Customer Profile", true, { birthdate: "dmy" }),
-    answer("Loans", false, { date_released: "dmy", maturity_date: "dmy" }),
+test("one file with a header and one without is recorded as exactly that", () => {
+  // The real case, and the one a single boolean could not hold: the coop
+  // deleted the header from one sheet and not the other. The server keys
+  // `header_skipped` per file, and so does the record.
+  const written = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy" }),
+    answer("loans", false, { date_released: "dmy", maturity_date: "dmy" }),
   ]);
 
-  assert.equal(collapsed.losses.length, 1);
-  assert.match(collapsed.losses[0], /Customer Profile has a header row and Loans does not/);
-  assert.match(collapsed.losses[0], /resume/);
+  assert.equal(written.hasHeaderRow.customers, true);
+  assert.equal(written.hasHeaderRow.loans, false);
 });
 
-test("two date orders in one import are reported rather than averaged away", () => {
-  const collapsed = collapseForSession([
-    answer("Customer Profile", true, { birthdate: "dmy" }),
-    answer("Loans", true, { date_released: "mdy", maturity_date: "mdy" }),
+test("two date orders in one import both survive, per file", () => {
+  const written = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy" }),
+    answer("loans", true, { date_released: "mdy", maturity_date: "mdy" }),
   ]);
 
-  assert.equal(collapsed.losses.length, 1);
-  assert.match(collapsed.losses[0], /more than one date order/);
-  // It still emits a usable value — a loss is a disclosure, not a failure.
-  assert.ok(["dd/MM/yyyy", "MM/dd/yyyy"].includes(collapsed.dateFormat));
+  assert.equal(written.dateFormat.customers?.birthdate, "dd/MM/yyyy");
+  assert.equal(written.dateFormat.loans?.date_released, "MM/dd/yyyy");
 });
 
-test("a single file collapses without inventing a second one's opinion", () => {
-  const collapsed = collapseForSession([answer("Loans", false, { date_released: "mdy" })]);
+test("two date orders in one FILE survive too — the grain is the column", () => {
+  // Widening to per file must not flatten what is settled per column: a sheet
+  // can genuinely prove day-first in one column and month-first in another.
+  const written = sessionAnswers([
+    answer("loans", true, { date_released: "dmy", maturity_date: "mdy" }),
+  ]);
 
-  assert.equal(collapsed.hasHeaderRow, false);
-  assert.equal(collapsed.dateFormat, "MM/dd/yyyy");
-  assert.deepEqual(collapsed.losses, []);
+  assert.deepEqual(written.dateFormat.loans, {
+    date_released: "dd/MM/yyyy",
+    maturity_date: "MM/dd/yyyy",
+  });
+});
+
+test("a column of ISO dates and serials needs no order, and is recorded as ISO", () => {
+  const written = sessionAnswers([answer("customers", false, { birthdate: null })]);
+
+  assert.equal(written.dateFormat.customers?.birthdate, ISO_DATE_FORMAT);
+});
+
+test("a single file does not invent a second one's opinion", () => {
+  const written = sessionAnswers([answer("loans", false, { date_released: "mdy" })]);
+
+  // Absent, NOT false. A missing key means "not answered"; `false` would mean
+  // "answered: no header", and re-applying that to a file nobody asked about is
+  // how a member row gets eaten as a heading on resume.
+  assert.equal(written.hasHeaderRow.customers, undefined);
+  assert.equal("customers" in written.hasHeaderRow, false);
+  assert.equal(written.dateFormat.customers, undefined);
+  assert.equal(written.hasHeaderRow.loans, false);
 });
 
 test("no files at all is a defined answer, not a crash", () => {
-  const collapsed = collapseForSession([]);
-  assert.equal(collapsed.hasHeaderRow, false);
-  assert.equal(collapsed.dateFormat, ISO_DATE_FORMAT);
-  assert.deepEqual(collapsed.losses, []);
+  const written = sessionAnswers([]);
+  assert.deepEqual(written.hasHeaderRow, {});
+  assert.deepEqual(written.dateFormat, {});
+});
+
+test("a file with no date columns still records its header answer", () => {
+  const written = sessionAnswers([answer("customers", true, {})]);
+  assert.equal(written.hasHeaderRow.customers, true);
+  assert.deepEqual(written.dateFormat.customers, {});
 });
