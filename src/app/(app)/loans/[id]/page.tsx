@@ -505,7 +505,7 @@ const VISIBLE_LOAN_COUNT = 3;
 
 function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
-  const [activeLoansOpen, setActiveLoansOpen] = useState(false);
+  const [activeLoansOpen, setActiveLoansOpen] = useState(true);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
 
@@ -904,10 +904,10 @@ export default function LoanDetailPage({
   const [soaOpen, setSoaOpen] = useState(false);
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [approvalStepsOpen, setApprovalStepsOpen] = useState(false);
-  const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(false);
-  const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(true);
+  const [approvalStepsOpen, setApprovalStepsOpen] = useState(true);
+  const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(true);
+  const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(true);
 
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);

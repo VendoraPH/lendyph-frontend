@@ -20,7 +20,7 @@ interface CollapsibleCardProps {
    * never ends up nested inside the trigger button).
    */
   headerExtra?: ReactNode;
-  /** Sections start closed; pass true only where the content must be seen. */
+  /** Sections start open; pass false where the content is rarely wanted. */
   defaultOpen?: boolean;
   className?: string;
   contentClassName?: string;
@@ -28,15 +28,16 @@ interface CollapsibleCardProps {
 }
 
 /**
- * A Card whose body collapses behind its header. Deliberately uncontrolled —
- * screens with a dozen of these would otherwise carry a dozen open/close
- * useStates that nothing else reads.
+ * A Card whose body can collapse behind its header. Opens expanded, so a page
+ * of these reads top to bottom on arrival and the header is there to hide a
+ * section you are done with. Deliberately uncontrolled — screens with a dozen
+ * of these would otherwise carry a dozen open/close useStates nothing reads.
  */
 export function CollapsibleCard({
   title,
   icon,
   headerExtra,
-  defaultOpen = false,
+  defaultOpen = true,
   className,
   contentClassName,
   children,

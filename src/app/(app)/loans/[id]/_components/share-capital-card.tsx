@@ -31,7 +31,7 @@ function formatCurrency(amount: number): string {
   }).format(isNaN(amount) ? 0 : amount);
 }
 
-export function ShareCapitalCard({ borrowerId, defaultOpen = false }: ShareCapitalCardProps) {
+export function ShareCapitalCard({ borrowerId, defaultOpen = true }: ShareCapitalCardProps) {
   // This card's entire job is one figure, so it asks for exactly that rather
   // than re-summing a ledger it fetched itself. The credits/debits loop that
   // used to live here was the fourth copy of the same arithmetic, over a
