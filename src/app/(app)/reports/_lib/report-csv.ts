@@ -1,18 +1,8 @@
 import { saveAs } from "file-saver";
 import { todayISO } from "@/lib/format";
+import { csvBlob, toCsvRow as row } from "@/lib/csv";
 import { formatCell } from "@/lib/report-format";
 import type { ReportDocument } from "./types";
-
-function escape(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-function row(values: (string | null | undefined)[]): string {
-  return values.map((v) => escape(v ?? "")).join(",");
-}
 
 /**
  * CSV export — simple, plain text. Each section is rendered as its own
@@ -102,21 +92,12 @@ export function renderReportCsv(doc: ReportDocument): string {
   return lines.join("\r\n");
 }
 
-/**
- * Excel ignores the charset in a blob's MIME type when opening a local file
- * and falls back to the system code page, which turns every ₱ into mojibake.
- * A BOM is the only signal it honours.
- */
-const UTF8_BOM = "\uFEFF";
-
+/** The BOM `csvBlob` prepends is what stops Excel mangling the peso sign. */
 export function exportReportToCsv(doc: ReportDocument): void {
   const slug = doc.meta.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
   const date = todayISO();
-  const blob = new Blob([UTF8_BOM + renderReportCsv(doc)], {
-    type: "text/csv;charset=utf-8",
-  });
-  saveAs(blob, `${slug}-${date}.csv`);
+  saveAs(csvBlob(renderReportCsv(doc)), `${slug}-${date}.csv`);
 }
