@@ -6,7 +6,8 @@ import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileStack, Printer, Search } from "lucide-react";
+import { FileStack, Printer, Search, Table2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
@@ -30,6 +31,20 @@ const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
   repayment: "Receipts issued for a payment",
 };
 
+/**
+ * The bulk-import workbook. It is in this catalog but not in
+ * `PRINTABLE_CATALOG`: nothing about it is printed, and a ninth entry there
+ * would have to invent a subject and a `build` it will never use.
+ */
+const IMPORT_TEMPLATE = {
+  href: "/printables/data-template",
+  title: "Data Import Template",
+  description:
+    "The member and loan workbook for migrating an existing book onto Lendyph.",
+  /** Extra words the search should match, since none of them are on the card. */
+  keywords: "csv excel xlsm bulk import migration upload template onboarding",
+};
+
 export default function PrintablesPage() {
   const [query, setQuery] = useState("");
 
@@ -51,7 +66,16 @@ export default function PrintablesPage() {
     return bySubject;
   }, [query]);
 
-  const hasResults = Array.from(grouped.values()).some((v) => v.length > 0);
+  const templateMatches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return `${IMPORT_TEMPLATE.title} ${IMPORT_TEMPLATE.description} ${IMPORT_TEMPLATE.keywords}`
+      .toLowerCase()
+      .includes(needle);
+  }, [query]);
+
+  const hasResults =
+    templateMatches || Array.from(grouped.values()).some((v) => v.length > 0);
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
@@ -134,6 +158,35 @@ export default function PrintablesPage() {
                 </section>
               );
             })}
+
+            {templateMatches && (
+              <section>
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Bulk import
+                  </h2>
+                  <p className="text-xs text-muted-foreground/80">
+                    Bringing records in from another system
+                  </p>
+                </div>
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  <CatalogCard
+                    href={IMPORT_TEMPLATE.href}
+                    icon={Table2}
+                    // Not one of `SUBJECT_ACCENT`'s three on purpose: emerald
+                    // means "repayment" everywhere else in this catalog.
+                    accent={{
+                      text: "text-teal-600",
+                      bg: "bg-teal-50",
+                      ring: "ring-teal-200",
+                    }}
+                    title={IMPORT_TEMPLATE.title}
+                    description={IMPORT_TEMPLATE.description}
+                    footer="Preview · Edit · Download"
+                  />
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -142,14 +195,41 @@ export default function PrintablesPage() {
 }
 
 function PrintableCard({ printable }: { printable: PrintableDefinition }) {
-  const Icon = printable.icon;
-  const accent = SUBJECT_ACCENT[printable.subject];
   return (
-    <Link
+    <CatalogCard
       href={`/printables/${printable.id}`}
-      aria-label={`Open ${printable.title}`}
-      className="group text-left"
-    >
+      icon={printable.icon}
+      accent={SUBJECT_ACCENT[printable.subject]}
+      title={printable.title}
+      description={printable.description}
+      footer={`Select ${SUBJECT_META[printable.subject].label.toLowerCase()} · Print`}
+    />
+  );
+}
+
+/**
+ * The card treatment, shared by the eight printables and the import template.
+ * Kept generic over `href`/`icon`/`accent` rather than over a
+ * `PrintableDefinition`, because the template is not one — it takes no subject
+ * and produces no letterhead.
+ */
+function CatalogCard({
+  href,
+  icon: Icon,
+  accent,
+  title,
+  description,
+  footer,
+}: {
+  href: string;
+  icon: LucideIcon;
+  accent: { text: string; bg: string; ring: string };
+  title: string;
+  description: string;
+  footer: string;
+}) {
+  return (
+    <Link href={href} aria-label={`Open ${title}`} className="group text-left">
       <Card
         className={cn(
           "h-full border transition-all",
@@ -169,18 +249,14 @@ function PrintableCard({ printable }: { printable: PrintableDefinition }) {
               <Icon className={cn("h-5 w-5", accent.text)} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold leading-tight">
-                {printable.title}
-              </h3>
+              <h3 className="text-sm font-semibold leading-tight">{title}</h3>
               <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                {printable.description}
+                {description}
               </p>
             </div>
           </div>
           <div className="mt-auto flex items-center justify-between pt-1">
-            <span className="text-[11px] text-muted-foreground/70">
-              Select {SUBJECT_META[printable.subject].label.toLowerCase()} · Print
-            </span>
+            <span className="text-[11px] text-muted-foreground/70">{footer}</span>
             <span className="text-xs font-medium text-brand-orange group-hover:underline">
               Open →
             </span>
