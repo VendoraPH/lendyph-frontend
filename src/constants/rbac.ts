@@ -1,5 +1,15 @@
 import type { Role, RoleConfig } from "@/types";
 
+/**
+ * What each role is DOCUMENTED to have — the roles screen reads this to seed a
+ * role's permission grid and to label it.
+ *
+ * It is not the gate. Every guard in the app (`RouteGuard`, `PermissionGate`,
+ * `usePermission().can`) asks the auth store, which holds `user.permissions`
+ * as the server sent them. So editing this map cannot grant anyone anything,
+ * and a role whose server-side grants have drifted from this list will still
+ * behave exactly as the server says.
+ */
 export const ROLES: Record<Role, RoleConfig> = {
   admin: {
     label: "Admin",
@@ -43,6 +53,10 @@ export const ROLES: Record<Role, RoleConfig> = {
       "gcash:view",
       "gcash:transact",
       "gcash:settings",
+      // CSV migration. Deliberately on `admin` only — no other role in this map
+      // gets it, and `super_admin` (which the backend also grants) has no entry
+      // here at all; see the note on the `Role` union in @/types/rbac.
+      "imports:process",
     ],
   },
   loan_officer: {
