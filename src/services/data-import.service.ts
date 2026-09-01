@@ -5,6 +5,7 @@ import type {
   ImportFileKind,
   ImportRowIssue,
   ImportRunStatus,
+  ProductMappingConfirmation,
   ProductMappingResponse,
 } from "@/types/data-import";
 import type { AxiosRequestConfig } from "axios";
@@ -101,10 +102,23 @@ export const dataImportService = {
   productMapping: (runId: number | string) =>
     api.get<ProductMappingResponse>(API_ENDPOINTS.DATA_IMPORT.PRODUCT_MAPPING(runId)),
 
-  /** Every distinct CSV product string must be covered, blank cells included —
-   *  the blank cohort is a real one and the server keys on `""`. */
+  /** Every distinct BLOCKING csv product string must be covered, blank cells
+   *  included — the blank cohort is a real one and the server keys on `""`.
+   *
+   *  rawPut, NOT put. The response is `{message, data}` with `message` BESIDE
+   *  `data`, and `api.put` returns `response.data.data` — so it hands back the
+   *  refreshed payload and throws away the one thing this call was made to
+   *  learn. That is the same trap `createRun` documents, and this method was in
+   *  it: it declared `{warnings: string[]}`, a key the server has never sent,
+   *  so `result.warnings ?? []` quietly resolved to an empty list and the
+   *  compatibility disclosure never reached the admin. TypeScript could not see
+   *  it, because both helpers are declared `Promise<T>`.
+   *
+   *  `data` is a full re-read of the mapping payload, so a save needs no
+   *  follow-up GET. A 422 carries `errors.unmapped` — the server's own list of
+   *  what is still outstanding. */
   saveProductMapping: (runId: number | string, mapping: Record<string, number>) =>
-    api.put<{ warnings: string[] }>(
+    api.rawPut<ProductMappingConfirmation>(
       API_ENDPOINTS.DATA_IMPORT.PRODUCT_MAPPING(runId),
       { mapping }
     ),
