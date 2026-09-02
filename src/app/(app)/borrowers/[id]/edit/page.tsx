@@ -373,7 +373,10 @@ export default function EditBorrowerPage() {
     const missing: string[] = [];
     if (!form.first_name.trim()) missing.push("First name");
     if (!form.last_name.trim()) missing.push("Last name");
-    if (!form.middle_name.trim()) missing.push("Middle name");
+    // middle_name is deliberately NOT required. The public registration form
+    // lets an applicant register without one, so requiring it here made exactly
+    // those members impossible to save again — an admin could open the profile
+    // but never submit it. The backend has the column nullable.
     if (!form.birthdate) missing.push("Date of birth");
     if (!form.gender) missing.push("Gender");
     if (!form.civil_status) missing.push("Civil status");
@@ -693,9 +696,7 @@ export default function EditBorrowerPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="middle_name">
-                    Middle Name <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="middle_name">Middle Name</Label>
                   <Input
                     id="middle_name"
                     placeholder="Dela Cruz"
