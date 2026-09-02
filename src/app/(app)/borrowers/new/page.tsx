@@ -39,6 +39,29 @@ import { useAuth } from "@/hooks/use-auth";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
+// Last-resort copy for the duplicate dialog when NONE of name/code/birthdate
+// could be parsed out of the backend's 422. Without this the admin gets a
+// bordered empty box under "Review the match before creating a new account" —
+// told there is a match and shown nothing to review.
+//
+// This is reachable, not theoretical: `NoDuplicateBorrower` has a second,
+// detail-free message for callers who may not see who matched — "A similar
+// borrower already exists. Please contact your branch to continue." — which
+// satisfies `isDuplicateNameMessage` (it contains "already exists") but offers
+// the parser no name, no code and no `born` date.
+//
+// The trailing "Pass force=true to create anyway." is an internal hint that is
+// deliberately never shown to operators (`looksHuman` in @/lib/api-error
+// rejects any message carrying it), so it is stripped here rather than passed
+// through. Kept local instead of in src/lib because it exists solely for this
+// dialog's fallback.
+function duplicateFallbackText(rawMessage: string): string | null {
+  const cleaned = rawMessage
+    .replace(/\s*Pass force=true to create anyway\.?/i, "")
+    .trim();
+  return cleaned || null;
+}
+
 interface ValidIdEntry {
   type: string;
   // Populated only when type === "others" — free-text label for custom IDs
@@ -319,7 +342,10 @@ export default function NewBorrowerPage() {
     const missing: string[] = [];
     if (!form.first_name.trim()) missing.push("First name");
     if (!form.last_name.trim()) missing.push("Last name");
-    if (!form.middle_name.trim()) missing.push("Middle name");
+    // middle_name is deliberately NOT required. The backend has it nullable, the
+    // client's Guidelines sheet says to leave it blank when the member has none,
+    // and the public registration form already allows that. Requiring it here
+    // only diverged from every other source of truth.
     if (!form.birthdate) missing.push("Date of birth");
     if (!form.gender) missing.push("Gender");
     if (!form.civil_status) missing.push("Civil status");
@@ -410,8 +436,27 @@ export default function NewBorrowerPage() {
       // What it costs: a true duplicate sitting past the hundredth match for
       // this name is not warned about client-side. That is a missed warning,
       // not a missed check.
+      //
+      // SEARCH ON THE SURNAME ALONE, never "First Last". `Borrower::scopeSearch`
+      // LIKEs the WHOLE term against each column separately
+      // (`first_name LIKE %term% OR middle_name LIKE %term% OR last_name ...`),
+      // so a two-word term can only match if ONE column contains both words —
+      // which no name column ever does. This previously sent
+      // `"${first} ${last}"` and therefore came back empty for every applicant,
+      // making Tier A and Tier B below unreachable dead code. Verified against a
+      // live API: "Fixture" -> 1 row, "Lockout9001" -> 1 row,
+      // "Fixture Lockout9001" -> 0 rows, and the exact full name -> 0 rows.
+      //
+      // The surname is the most selective single token available, and the
+      // tiering below already re-checks first/middle/last individually in JS,
+      // so a broader candidate set costs nothing in precision.
+      //
+      // What this still cannot catch: a MISSPELLED surname. Tier B exists for
+      // one-name typos, and a typo in the very field being searched will not
+      // return the candidate. First/middle typos — the case Tier B was written
+      // for — are covered.
       const res = await borrowerService.list({
-        search: `${form.first_name.trim()} ${form.last_name.trim()}`,
+        search: form.last_name.trim(),
         per_page: MAX_PER_PAGE,
       });
       list = Array.isArray(res)
@@ -792,9 +837,7 @@ export default function NewBorrowerPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="middle_name">
-                  Middle Name <span className="text-destructive">*</span>
-                </Label>
+                <Label htmlFor="middle_name">Middle Name</Label>
                 <Input
                   id="middle_name"
                   placeholder="Dela Cruz"
@@ -1347,28 +1390,44 @@ export default function NewBorrowerPage() {
               {duplicateMatch.matchReason}
             </p>
           )}
-          <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
-            {duplicateMatch?.fullName && (
-              <div>
-                <span className="text-muted-foreground">Name:</span>{" "}
-                <span className="font-medium">{duplicateMatch.fullName}</span>
-              </div>
-            )}
-            {duplicateMatch?.code && (
-              <div>
-                <span className="text-muted-foreground">Member Code:</span>{" "}
-                <span className="font-mono text-brand-orange">
-                  {duplicateMatch.code}
-                </span>
-              </div>
-            )}
-            {duplicateMatch?.birthdate && (
-              <div>
-                <span className="text-muted-foreground">Birthdate:</span>{" "}
-                <span>{duplicateMatch.birthdate}</span>
-              </div>
-            )}
-          </div>
+          {/* The details box is rendered ONLY when it has something in it.
+              Previously the container was unconditional while all three rows
+              inside were conditional, so a match whose details did not parse
+              produced an empty bordered rectangle. A partial match is still
+              fine and expected — the backend emits "born unknown DOB" for a
+              match with no birthdate, which the date regex correctly refuses,
+              leaving name + code. */}
+          {duplicateMatch &&
+          (duplicateMatch.fullName || duplicateMatch.code || duplicateMatch.birthdate) ? (
+            <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
+              {duplicateMatch.fullName && (
+                <div>
+                  <span className="text-muted-foreground">Name:</span>{" "}
+                  <span className="font-medium">{duplicateMatch.fullName}</span>
+                </div>
+              )}
+              {duplicateMatch.code && (
+                <div>
+                  <span className="text-muted-foreground">Member Code:</span>{" "}
+                  <span className="font-mono text-brand-orange">
+                    {duplicateMatch.code}
+                  </span>
+                </div>
+              )}
+              {duplicateMatch.birthdate && (
+                <div>
+                  <span className="text-muted-foreground">Birthdate:</span>{" "}
+                  <span>{duplicateMatch.birthdate}</span>
+                </div>
+              )}
+            </div>
+          ) : duplicateMatch && duplicateFallbackText(duplicateMatch.rawMessage) ? (
+            /* Nothing parsed — show what the server actually said, so the
+               operator has some basis for choosing Create Anyway. */
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              {duplicateFallbackText(duplicateMatch.rawMessage)}
+            </div>
+          ) : null}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
             <Button
               variant="outline"
