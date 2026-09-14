@@ -78,6 +78,12 @@ interface ModuleMeta {
 }
 
 const MODULE_META: Record<UIModule, ModuleMeta> = {
+  fees: {
+    label: "Fees",
+    description: "Reusable fees, loan product applicability, and conditions.",
+    icon: CreditCard,
+    features: ["View fee rules", "Create and edit fees for selected products", "Delete fee rules"],
+  },
   dashboard: {
     label: "Dashboard",
     description: "Main KPI dashboard with portfolio metrics and trends.",
@@ -285,6 +291,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
 
 // Applicable actions per module — only the actions that make sense for each area
 const MODULE_ACTIONS: Record<UIModule, Action[]> = {
+  fees: ["view", "create", "update", "delete"],
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
   loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],

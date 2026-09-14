@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { RouteGuard } from "@/components/common";
+import { RouteGuard, PermissionButton } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
-import type { Fee, FeeType, FeeConditions, CreateFeeData, LoanProduct } from "@/types";
+import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { buildFeePayload } from "@/lib/fee-form";
+import { notifyError } from "@/lib/notify";
+import { getErrorMessage } from "@/lib/api-error";
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -82,16 +85,13 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const numericValue = Number(value);
-    if (!name.trim() || !Number.isFinite(numericValue)) return;
-
-    const payload: CreateFeeData = {
-      name: name.trim(),
-      type,
-      value: numericValue,
-      applicable_product_ids: selectedProducts,
-      ...(Object.keys(conditions).length > 0 ? { conditions } : {}),
-    };
+    if (saving) return;
+    const result = buildFeePayload({ name, type, value, productIds: selectedProducts, conditions });
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+    const { payload } = result;
 
     setSaving(true);
     try {
@@ -104,8 +104,8 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       }
       onOpenChange(false);
       onSave();
-    } catch {
-      toast.error(isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
+    } catch (err) {
+      notifyError(err, isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -160,6 +160,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
             <Input
               id="fee-value"
               type="number"
+              min="0"
               step={type === "fixed" ? "1" : "0.01"}
               placeholder={type === "fixed" ? "500" : "2"}
               value={value}
@@ -301,8 +302,8 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
       toast.success("Fee deleted");
       onOpenChange(false);
       onConfirm();
-    } catch {
-      toast.error("We couldn't delete the fee. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't delete the fee. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -346,22 +347,24 @@ function formatFeeValue(fee: Fee): string {
   return formatCurrency(fee.value);
 }
 
-function formatConditions(c: FeeConditions | undefined): string {
+function formatConditions(c: FeeConditions | null | undefined): string {
   if (!c) return "—";
   const parts: string[] = [];
   if (c.term_days_gt != null) parts.push(`term > ${c.term_days_gt}d`);
   if (c.term_days_lt != null) parts.push(`term < ${c.term_days_lt}d`);
   if (c.term_days_eq != null) parts.push(`term = ${c.term_days_eq}d`);
-  if (c.loan_amount_gt != null) parts.push(`amount > ₱${c.loan_amount_gt.toLocaleString()}`);
-  if (c.loan_amount_lt != null) parts.push(`amount < ₱${c.loan_amount_lt.toLocaleString()}`);
-  if (c.loan_amount_eq != null) parts.push(`amount = ₱${c.loan_amount_eq.toLocaleString()}`);
+  if (c.loan_amount_gt != null) parts.push(`amount > ${formatCurrency(c.loan_amount_gt)}`);
+  if (c.loan_amount_lt != null) parts.push(`amount < ${formatCurrency(c.loan_amount_lt)}`);
+  if (c.loan_amount_eq != null) parts.push(`amount = ${formatCurrency(c.loan_amount_eq)}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
-export default function FeesPage() {
+function FeesContent() {
   const [fees, setFees] = useState<Fee[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editFee, setEditFee] = useState<Fee | null>(null);
@@ -370,18 +373,24 @@ export default function FeesPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    try {
-      const [feesRes, productsRes] = await Promise.all([
-        feeService.list(),
-        loanProductService.list(),
-      ]);
-      setFees(Array.isArray(feesRes) ? feesRes : (feesRes as { data?: Fee[] })?.data ?? []);
-      setProducts(Array.isArray(productsRes) ? productsRes : (productsRes as { data?: LoanProduct[] })?.data ?? []);
-    } catch {
-      toast.error("We couldn't load the fees. Please try again.");
-    } finally {
-      setLoading(false);
+    setLoadError(null);
+    setProductsError(null);
+    // Both APIs return complete resource collections. A product permission
+    // failure must not hide successfully loaded fees.
+    const [feesResult, productsResult] = await Promise.allSettled([
+      feeService.list({}), loanProductService.list({}),
+    ]);
+    if (feesResult.status === "fulfilled") {
+      setFees(feesResult.value);
+    } else {
+      setLoadError(getErrorMessage(feesResult.reason));
     }
+    if (productsResult.status === "fulfilled") {
+      setProducts(productsResult.value);
+    } else {
+      setProductsError(getErrorMessage(productsResult.reason));
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -422,7 +431,7 @@ export default function FeesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Fees Settings">
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -431,15 +440,25 @@ export default function FeesPage() {
               Manage reusable fees that apply across loan products
             </p>
           </div>
-          <Button
+          <PermissionButton
+            permission="fees:create"
+            disabled={!!productsError || !!loadError}
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             onClick={handleAdd}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Fee
-          </Button>
+          </PermissionButton>
         </div>
 
+        {(loadError || productsError) && (
+          <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
+            {loadError && <p>Fees could not be loaded. {loadError}</p>}
+            {productsError && <p>Loan products could not be loaded. {productsError} Fee editing is unavailable until they load.</p>}
+            <Button variant="outline" size="sm" onClick={fetchData}>Retry</Button>
+          </div>
+        )}
+        {!loadError && <>
         <div className="grid gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -539,7 +558,9 @@ export default function FeesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
+                            <PermissionButton
+                              permission="fees:update"
+                              disabled={!!productsError}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs"
@@ -547,15 +568,17 @@ export default function FeesPage() {
                             >
                               <Pencil className="h-3 w-3" />
                               Edit
-                            </Button>
-                            <Button
+                            </PermissionButton>
+                            <PermissionButton
+                              permission="fees:delete"
+                              aria-label={`Delete ${fee.name}`}
                               variant="outline"
                               size="sm"
                               className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
                               onClick={() => handleDelete(fee)}
                             >
                               <Trash2 className="h-3 w-3" />
-                            </Button>
+                            </PermissionButton>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -574,6 +597,7 @@ export default function FeesPage() {
           </CardContent>
         </Card>
 
+        </>}
         <FeeFormDialog
           open={formOpen}
           onOpenChange={setFormOpen}
@@ -589,6 +613,10 @@ export default function FeesPage() {
           onConfirm={fetchData}
         />
       </div>
-    </RouteGuard>
+    </>
   );
+}
+
+export default function FeesPage() {
+  return <RouteGuard permission="fees:view" pageName="Fees Settings"><FeesContent /></RouteGuard>;
 }

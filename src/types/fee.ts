@@ -15,7 +15,7 @@ export interface Fee {
   type: FeeType;
   value: number;
   applicable_product_ids: number[];
-  conditions: FeeConditions;
+  conditions: FeeConditions | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,7 +25,7 @@ export interface CreateFeeData {
   type: FeeType;
   value: number;
   applicable_product_ids: number[];
-  conditions?: FeeConditions;
+  conditions?: FeeConditions | null;
 }
 
 export type UpdateFeeData = Partial<CreateFeeData>;

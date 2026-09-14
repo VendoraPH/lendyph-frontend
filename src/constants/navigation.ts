@@ -202,7 +202,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Branding", href: "/settings/branding" },
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
-      { title: "Fees", href: "/settings/fees" },
+      { title: "Fees", href: "/settings/fees", permission: "fees:view" },
       { title: "Collateral Types", href: "/settings/collateral-types" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
