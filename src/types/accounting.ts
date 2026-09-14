@@ -65,6 +65,12 @@ export interface Account {
    * ledger loses the other half of entries that already exist.
    */
   has_transactions?: boolean;
+  /**
+   * Centavos, signed in the account's normal direction. Optional because it is
+   * a reporting figure the list endpoints attach, not part of the account
+   * itself — a chart row fetched for a picker has no balance and needs none.
+   */
+  balance?: number;
 }
 
 /** One side of one entry. Exactly one of debit/credit is non-zero. */
@@ -338,4 +344,123 @@ export interface Expense {
   due_date?: string | null;
   status: ExpenseStatus;
   journal_id?: number | null;
+}
+
+/**
+ * ─── Reports the backend has to produce itself ───
+ *
+ * The balance sheet and income statement are NOT here: both are pure
+ * regroupings of the trial balance, so `@/lib/accounting/statements` builds
+ * them client-side from the rows the trial-balance endpoint already returns.
+ * Adding endpoints for them would create a second source of truth for figures
+ * that must agree exactly.
+ *
+ * The three below cannot be derived that way. A cash flow statement needs to
+ * know which movements were operating, investing or financing — a
+ * classification that lives on the account, not in its balance. The statement
+ * of changes in equity needs opening balances and the movements between them.
+ * The BIR books need each journal's lines in registration order. All three
+ * need the server.
+ */
+
+/** One line on a statement section. */
+export interface ReportLine {
+  account_id?: number;
+  account_code?: string;
+  label: string;
+  /** Centavos, signed in the direction the section reads. */
+  amount: number;
+}
+
+export interface ReportSection {
+  label: string;
+  lines: ReportLine[];
+  total: number;
+}
+
+export interface CashFlowStatement {
+  from: string;
+  to: string;
+  operating: ReportSection;
+  investing: ReportSection;
+  financing: ReportSection;
+  /** Centavos. Sum of the three sections. */
+  net_change: number;
+  opening_cash: number;
+  closing_cash: number;
+}
+
+export interface EquityChangeRow {
+  label: string;
+  /** Centavos. */
+  beginning: number;
+  additions: number;
+  deductions: number;
+  ending: number;
+}
+
+export interface EquityChanges {
+  from: string;
+  to: string;
+  rows: EquityChangeRow[];
+  total_beginning: number;
+  total_ending: number;
+}
+
+/** The four books of account BIR requires a registered business to keep. */
+export type BookKind =
+  | "general_journal"
+  | "general_ledger"
+  | "cash_receipts"
+  | "cash_disbursements";
+
+export interface BookRow {
+  date: string;
+  journal_no: string;
+  reference?: string | null;
+  particulars: string;
+  account_code?: string;
+  account_name?: string;
+  /** Centavos. */
+  debit: number;
+  credit: number;
+}
+
+export interface AccountingBook {
+  kind: BookKind;
+  from: string;
+  to: string;
+  rows: BookRow[];
+  total_debit: number;
+  total_credit: number;
+}
+
+/**
+ * The accounting dashboard's figures.
+ *
+ * Every one of these is a summary the server must compute — deriving them in
+ * the browser would mean pulling the whole ledger down to add it up, and the
+ * numbers would drift the moment the page was open while someone posted.
+ */
+export interface AccountingDashboard {
+  as_of: string;
+  /** Centavos. */
+  cash_on_hand: number;
+  cash_in_bank: number;
+  e_wallets: number;
+  /** Gross receivable less the allowance. */
+  loans_receivable_net: number;
+  total_assets: number;
+  total_liabilities: number;
+  total_equity: number;
+  /** Month to date. */
+  income_mtd: number;
+  expenses_mtd: number;
+  net_income_mtd: number;
+  /** Entries still in draft, waiting for someone to post them. */
+  unposted_journals: number;
+  /** False means the books do not balance and nothing else here is safe. */
+  is_balanced: boolean;
+  /** The period currently accepting entries, e.g. "2026-09". */
+  open_period?: string | null;
 }

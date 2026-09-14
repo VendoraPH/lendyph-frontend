@@ -55,4 +55,13 @@ export type {
   Reconciliation,
   ExpenseStatus,
   Expense,
+  ReportLine,
+  ReportSection,
+  CashFlowStatement,
+  EquityChangeRow,
+  EquityChanges,
+  BookKind,
+  BookRow,
+  AccountingBook,
+  AccountingDashboard,
 } from "./accounting";

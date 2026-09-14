@@ -12,7 +12,12 @@
  * way — `accountTypeFromCode` reads the leading digit.
  */
 
-import type { AccountType, CashAccountKind, NormalBalance } from "@/types/accounting";
+import type {
+  Account,
+  AccountType,
+  CashAccountKind,
+  NormalBalance,
+} from "@/types/accounting";
 
 /** A seed row. Ids are assigned by the server when the chart is created. */
 export interface SeedAccount {
@@ -156,4 +161,30 @@ export function seedNormalBalance(seed: SeedAccount): NormalBalance {
     seed.type === "asset" || seed.type === "expense" ? "debit" : "credit";
   if (!seed.is_contra) return base;
   return base === "debit" ? "credit" : "debit";
+}
+
+/**
+ * The seed rows as `Account` records, for screens that need a populated
+ * account picker before the chart has ever been saved.
+ *
+ * Ids are the row index, NOT server ids — they exist so a `<Select>` has a key
+ * and nothing more. Anything built from these is a preview: `useChartOfAccounts`
+ * flags it as a template, and the forms refuse to submit against it. Once the
+ * accounts endpoint answers, real ids replace these wholesale.
+ */
+export function templateAccounts(): Account[] {
+  const idByCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a, i) => [a.code, i + 1]));
+  return DEFAULT_CHART_OF_ACCOUNTS.map((seed, i) => ({
+    id: i + 1,
+    code: seed.code,
+    name: seed.name,
+    type: seed.type,
+    normal_balance: seedNormalBalance(seed),
+    parent_id: seed.parent ? (idByCode.get(seed.parent) ?? null) : null,
+    is_group: seed.is_group ?? false,
+    is_contra: seed.is_contra ?? false,
+    cash_kind: seed.cash_kind ?? null,
+    is_active: true,
+    has_transactions: false,
+  }));
 }

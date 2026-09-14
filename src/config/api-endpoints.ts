@@ -261,6 +261,9 @@ export const API_ENDPOINTS = {
    * disagreeing with the portfolio, with nothing to point at the difference.
    */
   ACCOUNTING: {
+    // Dashboard
+    DASHBOARD: "/accounting/dashboard",
+
     // Chart of accounts
     ACCOUNTS_LIST: "/accounting/accounts",
     ACCOUNTS_DETAIL: (id: number) => `/accounting/accounts/${id}`,
@@ -288,11 +291,14 @@ export const API_ENDPOINTS = {
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
 
-    // BIR books
-    BOOK_GENERAL_JOURNAL: "/accounting/books/general-journal",
-    BOOK_GENERAL_LEDGER: "/accounting/books/general-ledger",
-    BOOK_CASH_RECEIPTS: "/accounting/books/cash-receipts",
-    BOOK_CASH_DISBURSEMENTS: "/accounting/books/cash-disbursements",
+    // BIR books. One path per book, keyed by `BookKind`, so the books screen
+    // can pick by tab without a switch statement per call site.
+    BOOKS: {
+      general_journal: "/accounting/books/general-journal",
+      general_ledger: "/accounting/books/general-ledger",
+      cash_receipts: "/accounting/books/cash-receipts",
+      cash_disbursements: "/accounting/books/cash-disbursements",
+    },
 
     // Cash and bank
     CASH_ACCOUNTS_LIST: "/accounting/cash-accounts",

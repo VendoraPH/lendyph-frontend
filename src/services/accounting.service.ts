@@ -16,8 +16,13 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type {
   Account,
   AccountMapping,
+  AccountingBook,
+  AccountingDashboard,
   AccountingPeriod,
   Aging,
+  BookKind,
+  CashFlowStatement,
+  EquityChanges,
   Expense,
   JournalEntry,
   JournalEntryDraft,
@@ -50,7 +55,20 @@ export interface JournalQuery {
   branch_id?: number;
 }
 
+/** From/to plus an optional branch — the shape every report filter produces. */
+export interface PeriodQuery {
+  from: string;
+  to: string;
+  branch_id?: number;
+}
+
 export const accountingService = {
+  // ── Dashboard ──
+  dashboard: (asOf: string, branchId?: number): Promise<AccountingDashboard> =>
+    api.get<AccountingDashboard>(API_ENDPOINTS.ACCOUNTING.DASHBOARD, {
+      params: { as_of: asOf, branch_id: branchId },
+    }),
+
   // ── Chart of accounts ──
   listAccounts: async (): Promise<Account[]> =>
     unwrapList<Account>(await api.get(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_LIST)),
@@ -101,6 +119,20 @@ export const accountingService = {
     api.get<TrialBalance>(API_ENDPOINTS.ACCOUNTING.TRIAL_BALANCE, {
       params: { as_of: asOf, branch_id: branchId },
     }),
+
+  /**
+   * Balance sheet and income statement are NOT here. They are regroupings of
+   * the trial balance and are built from it by `@/lib/accounting/statements`,
+   * so there is exactly one place a figure can come from.
+   */
+  cashFlow: (query: PeriodQuery): Promise<CashFlowStatement> =>
+    api.get<CashFlowStatement>(API_ENDPOINTS.ACCOUNTING.CASH_FLOW, { params: query }),
+
+  equityChanges: (query: PeriodQuery): Promise<EquityChanges> =>
+    api.get<EquityChanges>(API_ENDPOINTS.ACCOUNTING.EQUITY_CHANGES, { params: query }),
+
+  book: (kind: BookKind, query: PeriodQuery): Promise<AccountingBook> =>
+    api.get<AccountingBook>(API_ENDPOINTS.ACCOUNTING.BOOKS[kind], { params: query }),
 
   receivableAging: (asOf: string, branchId?: number): Promise<Aging> =>
     api.get<Aging>(API_ENDPOINTS.ACCOUNTING.RECEIVABLE_AGING, {

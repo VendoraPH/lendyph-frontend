@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildIncomeStatement, buildBalanceSheet } from "./statements";
+import {
+  buildIncomeStatement,
+  buildBalanceSheet,
+  subtractTrialBalances,
+} from "./statements";
 import type { TrialBalanceRow } from "@/types/accounting";
 
 function row(
@@ -167,4 +171,35 @@ test("an empty book balances at zero", () => {
   const bs = buildBalanceSheet([], "2026-09-30");
   assert.equal(bs.total_assets, 0);
   assert.equal(bs.is_balanced, true);
+});
+
+test("subtractTrialBalances yields the movement between two dates", () => {
+  const opening = [row("4010", "Interest Income", "income", 0, 10_000_00)];
+  const closing = [row("4010", "Interest Income", "income", 0, 26_000_00)];
+
+  const [movement] = subtractTrialBalances(closing, opening);
+
+  // Cumulative income went from ₱10,000 to ₱26,000, so the period earned
+  // ₱16,000 — not the ₱26,000 the closing trial balance states on its own.
+  assert.equal(movement.credit, 16_000_00);
+  assert.equal(movement.debit, 0);
+  assert.equal(
+    buildIncomeStatement(subtractTrialBalances(closing, opening), {
+      from: "2026-09-01",
+      to: "2026-09-30",
+    }).total_income,
+    16_000_00
+  );
+});
+
+test("subtractTrialBalances keeps accounts that closed out to zero", () => {
+  const opening = [row("1010", "Cash on Hand", "asset", 5_000_00, 0)];
+
+  const [movement] = subtractTrialBalances([], opening);
+
+  // The account is gone from the closing set, which means it moved by its
+  // whole opening balance. Dropping the row would lose ₱5,000 of movement.
+  assert.equal(movement.account_code, "1010");
+  assert.equal(movement.credit, 5_000_00);
+  assert.equal(movement.debit, 0);
 });

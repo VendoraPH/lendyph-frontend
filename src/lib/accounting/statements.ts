@@ -79,6 +79,51 @@ function linesOf(rows: TrialBalanceRow[], type: AccountType): StatementLine[] {
 const sum = (lines: StatementLine[]): number =>
   lines.reduce((total, line) => total + line.amount, 0);
 
+/**
+ * Period movement: closing balances minus opening balances, account by account.
+ *
+ * A trial balance is cumulative — it states where each account stands on a
+ * date, not what happened during a range. An income statement for September
+ * therefore is not "the trial balance at 30 September"; that figure carries
+ * every peso earned since the books opened. The month's result is the
+ * difference between two trial balances, which is what this computes.
+ *
+ * Accounts that appear only in the opening set are kept, negated: an account
+ * that had a balance and now has none moved by exactly that amount, and
+ * dropping it would silently lose the movement.
+ */
+export function subtractTrialBalances(
+  closing: TrialBalanceRow[],
+  opening: TrialBalanceRow[]
+): TrialBalanceRow[] {
+  const openingByAccount = new Map(opening.map((row) => [row.account_id, row]));
+  const rows: TrialBalanceRow[] = [];
+
+  const push = (row: TrialBalanceRow, net: number) => {
+    // Re-split the signed movement onto the side it belongs on, so the result
+    // is a trial balance in its own right and every consumer of one still works.
+    rows.push({
+      ...row,
+      debit: net > 0 ? net : 0,
+      credit: net < 0 ? -net : 0,
+    });
+  };
+
+  for (const row of closing) {
+    const before = openingByAccount.get(row.account_id);
+    const net =
+      row.debit - row.credit - (before ? before.debit - before.credit : 0);
+    push(row, net);
+    openingByAccount.delete(row.account_id);
+  }
+
+  for (const row of openingByAccount.values()) {
+    push(row, -(row.debit - row.credit));
+  }
+
+  return rows;
+}
+
 /** Profit and loss for the period. */
 export function buildIncomeStatement(
   rows: TrialBalanceRow[],
