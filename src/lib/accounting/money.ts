@@ -84,13 +84,38 @@ export function formatCentavos(centavos: number): string {
   })}`;
 }
 
-/** Total of a list, skipping absent values. Exact, because integers. */
+/**
+ * Total of a list, skipping absent values. Exact, because integers.
+ *
+ * `string` is in the signature because it is in the responses. Laravel's
+ * `decimal:2` cast serialises to a JSON STRING — `"150050"`, not `150050` —
+ * and every centavo field here is typed `number` on the strength of a contract
+ * no compiler checks at the wire. The old body tested `typeof value === "number"`
+ * and so skipped those silently: each card on Cash & Bank formatted correctly
+ * (`formatCentavos` coerces via arithmetic) while the "Total across all money
+ * accounts" beside them read ₱0.00. A total that disagrees with the rows above
+ * it is worse than no total, and nothing in the types could ever have caught it.
+ *
+ * Coercion follows the house pattern already proven in `toShareCapitalBalance`:
+ * `Number()`, then skip anything non-finite rather than let one bad row poison
+ * the sum into `NaN` and render "₱NaN".
+ *
+ * Fractional values are rounded to a whole centavo through the same
+ * `roundHalfUp` `toCentavos` uses. This is a no-op for every legitimate caller —
+ * integers round to themselves — and exists only so sub-centavo dust cannot
+ * accumulate into a total that fails `isBalanced` against an exact one. It
+ * cannot rescue a field that arrives in PESOS where centavos were promised;
+ * that is a backend contract breach, and no client-side policy fixes it.
+ */
 export function sumCentavos(
-  values: Array<number | null | undefined>
+  values: Array<number | string | null | undefined>
 ): number {
   let total = 0;
   for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) total += value;
+    if (value === null || value === undefined || value === "") continue;
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) continue;
+    total += Number.isInteger(amount) ? amount : roundHalfUp(amount);
   }
   return total;
 }

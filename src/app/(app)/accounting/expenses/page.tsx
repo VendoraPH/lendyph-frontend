@@ -27,7 +27,9 @@ import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos, sumCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
+import type { DrainResult } from "@/lib/paginate";
 import type { Expense, ExpenseStatus } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
@@ -46,8 +48,11 @@ export default function ExpensesPage() {
   const [status, setStatus] = useState(ANY_STATUS);
   const [creating, setCreating] = useState(false);
 
-  const fetcher = useCallback(() => accountingService.listExpenses(), []);
-  const resource = useAccountingResource<Expense[]>(fetcher);
+  // Drained. `listExpenses()` read one page of 15 and the card below totalled
+  // it into "Outstanding", so a co-op with 40 open payables was shown the sum
+  // of the first fifteen in headline type with nothing marking it partial.
+  const fetcher = useCallback(() => accountingService.expensesListAll(), []);
+  const resource = useAccountingResource<DrainResult<Expense>>(fetcher);
 
   const create = async (data: Partial<Expense>) => {
     try {
@@ -102,10 +107,17 @@ export default function ExpensesPage() {
             "POST /accounting/expenses",
             "POST /accounting/expenses/{id}/pay",
           ]}
-          isEmpty={(rows) => rows.length === 0}
+          isEmpty={(drain) => drain.rows.length === 0}
           emptyMessage="No expense recorded yet."
         >
-          {(rows) => <ExpenseTable rows={rows} status={status} />}
+          {(drain) => (
+            <ExpenseTable
+              rows={drain.rows}
+              status={status}
+              truncated={drain.truncated}
+              total={drain.total}
+            />
+          )}
         </DataState>
 
         <ExpenseDialog
@@ -122,7 +134,17 @@ export default function ExpensesPage() {
  * Split out so the filtering memo is not re-created on every parent render,
  * and so the page component stays about page concerns.
  */
-function ExpenseTable({ rows, status }: { rows: Expense[]; status: string }) {
+function ExpenseTable({
+  rows,
+  status,
+  truncated,
+  total,
+}: {
+  rows: Expense[];
+  status: string;
+  truncated: boolean;
+  total: number | null;
+}) {
   const filtered = useMemo(
     () => (status === ANY_STATUS ? rows : rows.filter((r) => r.status === status)),
     [rows, status],
@@ -133,18 +155,33 @@ function ExpenseTable({ rows, status }: { rows: Expense[]; status: string }) {
     [filtered],
   );
 
+  // The status filter narrows what is already in hand, so a short list makes
+  // every one of these figures short too — including the filtered ones.
+  const notice = truncated ? (
+    <IncompleteListNotice
+      shown={rows.length}
+      total={total}
+      noun="expenses"
+      consequence="Outstanding is the total of the expenses listed here, not of every expense on file."
+    />
+  ) : null;
+
   if (filtered.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center text-sm text-muted-foreground">
-          No expense matches this status.
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {notice}
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            No expense matches this status.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {notice}
       <Card>
         <CardContent className="flex items-center justify-between py-4">
           <span className="text-sm text-muted-foreground">Outstanding</span>

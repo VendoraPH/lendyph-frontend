@@ -115,6 +115,35 @@ function requireAmount(amount: number, what: string): number {
   return amount;
 }
 
+/**
+ * One PART of an amount that is split across several lines.
+ *
+ * Distinct from `requireAmount` because zero is legitimate here and nowhere
+ * else: a collection with no penalty component is ordinary, and `used()` drops
+ * the empty line further down. Everything else `requireAmount` rejects is
+ * rejected identically.
+ *
+ * This exists because validating only the SUM is not validation. The old
+ * `loan_collection` branch checked `sumCentavos([...])` and nothing else, so
+ * `{ principal: 100.5, interest: 99.5 }` summed to a clean 200 and emitted two
+ * lines carrying half a centavo each — amounts that cannot exist in the ledger
+ * and that no later check would catch, because the entry balanced. Worse, a
+ * NEGATIVE component passed unnoticed whenever the sum stayed positive:
+ * `{ principal: 300, interest: -100 }` posted a 200 debit against a 300 credit
+ * and a -100 credit, which balances arithmetically and is nonsense as
+ * bookkeeping. This file is the spec the backend will mirror, so a gap here
+ * does not stay in the frontend.
+ */
+function requireComponent(amount: number, what: string): number {
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${what} cannot be negative.`);
+  }
+  if (!Number.isInteger(amount)) {
+    throw new Error(`${what} must be whole centavos, got ${amount}.`);
+  }
+  return amount;
+}
+
 const debit = (account_id: number, amount: number): PostingLine => ({
   account_id,
   debit: amount,
@@ -175,6 +204,12 @@ export function buildPosting(
      */
     case "loan_collection": {
       const { principal, interest, penalty, fees = 0 } = input.allocation;
+      // Each part on its own terms, THEN the total. Checking only the total
+      // let fractional and negative components through — see `requireComponent`.
+      requireComponent(principal, "The principal component");
+      requireComponent(interest, "The interest component");
+      requireComponent(penalty, "The penalty component");
+      requireComponent(fees, "The fees component");
       const total = sumCentavos([principal, interest, penalty, fees]);
       requireAmount(total, "A collection");
 

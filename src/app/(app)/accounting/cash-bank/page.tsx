@@ -9,7 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos, sumCentavos } from "@/lib/accounting/money";
+import type { DrainResult } from "@/lib/paginate";
 import type { Account, CashAccountKind } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { TransferDialog } from "../_components/transfer-dialog";
@@ -25,8 +27,11 @@ const KIND_ICON: Record<CashAccountKind, typeof Wallet> = {
 export default function CashAndBankPage() {
   const [transferring, setTransferring] = useState(false);
 
-  const fetcher = useCallback(() => accountingService.listCashAccounts(), []);
-  const resource = useAccountingResource<Account[]>(fetcher);
+  // Drained. The card at the bottom sums these into "Total across all money
+  // accounts", so a short list understates the co-op's cash position — and the
+  // transfer dialog picks its from/to accounts out of the same array.
+  const fetcher = useCallback(() => accountingService.cashAccountsListAll(), []);
+  const resource = useAccountingResource<DrainResult<Account>>(fetcher);
 
   const transfer = async (data: {
     date: string;
@@ -80,11 +85,19 @@ export default function CashAndBankPage() {
             "GET /accounting/cash-accounts",
             "POST /accounting/cash-accounts/transfer",
           ]}
-          isEmpty={(accounts) => accounts.length === 0}
+          isEmpty={(drain) => drain.rows.length === 0}
           emptyMessage="No cash or bank account has been set up."
         >
-          {(accounts) => (
+          {({ rows: accounts, truncated, total }) => (
             <div className="space-y-4">
+              {truncated && (
+                <IncompleteListNotice
+                  shown={accounts.length}
+                  total={total}
+                  noun="money accounts"
+                  consequence="The total below covers only the accounts shown, and an account missing here cannot be picked as a transfer destination."
+                />
+              )}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {accounts.map((account) => {
                   const Icon = account.cash_kind

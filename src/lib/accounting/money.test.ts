@@ -88,3 +88,76 @@ test("balance check is exact", () => {
   assert.equal(isBalanced(150050, 150049), false);
   assert.equal(isBalanced(0, 0), true);
 });
+
+// ── Amounts as they actually arrive off the wire ──
+//
+// Laravel's `decimal:2` cast serialises to a JSON STRING. Every centavo field
+// in this module is typed `number` on the strength of a contract no compiler
+// checks at the boundary, so the types said this could not happen while the
+// responses said otherwise.
+
+test("REGRESSION: a numeric string used to be skipped, silently", () => {
+  // `formatCentavos` coerces through arithmetic, so each card on Cash & Bank
+  // rendered correctly while the total beside them read ₱0.00. The rows and
+  // their own total disagreed on screen, and nothing said which was wrong.
+  const wire = ["150050", "250000"] as unknown as number[];
+  assert.equal(formatCentavos(Number(wire[0])), "₱1,500.50");
+  assert.equal(sumCentavos(wire), 400050);
+});
+
+test("string and number amounts mix without loss", () => {
+  const mixed = [150050, "250000", 99] as unknown as number[];
+  assert.equal(sumCentavos(mixed), 400149);
+});
+
+test("a decimal string from a `decimal:2` column still lands on the centavo", () => {
+  // The realistic serialisation of an integer centavo column with scale 2.
+  assert.equal(sumCentavos(["150050.00", "1.00"] as unknown as number[]), 150051);
+});
+
+test("blank and absent values are skipped, not counted as zero-length text", () => {
+  const values = [100, "", null, undefined, 200] as unknown as number[];
+  assert.equal(sumCentavos(values), 300);
+});
+
+test("unparseable amounts are skipped rather than poisoning the total with NaN", () => {
+  // Matches `toShareCapitalBalance`'s house rule: one bad row must not turn a
+  // money figure into "₱NaN".
+  const values = [100, "not a number", 200] as unknown as number[];
+  assert.equal(sumCentavos(values), 300);
+  assert.ok(Number.isFinite(sumCentavos(values)));
+});
+
+test("non-finite values are skipped", () => {
+  const values = [100, Infinity, -Infinity, NaN, 200] as unknown as number[];
+  assert.equal(sumCentavos(values), 300);
+});
+
+test("negative amounts still subtract — this is a sum, not a validator", () => {
+  // `expenses/page.tsx` sums `amount - amount_paid`, which is legitimately
+  // negative on an overpaid expense.
+  assert.equal(sumCentavos([100000, -25000]), 75000);
+  assert.equal(sumCentavos(["-25000"] as unknown as number[]), -25000);
+});
+
+test("sub-centavo dust is resolved per value instead of accumulating", () => {
+  // A centavo is the smallest unit that exists here, so a fraction of one is
+  // already corrupt. Rounding each value keeps the total comparable by exact
+  // equality against `isBalanced`, which has no tolerance band.
+  assert.equal(sumCentavos([0.5, 0.5] as unknown as number[]), 2);
+  assert.ok(Number.isInteger(sumCentavos([100.4, 99.6] as unknown as number[])));
+});
+
+test("integers are untouched, so every existing caller is unaffected", () => {
+  assert.equal(sumCentavos([1, 2, 3]), 6);
+  assert.equal(sumCentavos([150050]), 150050);
+  assert.equal(sumCentavos([]), 0);
+});
+
+test("a drained list of string balances totals what the cards show", () => {
+  // The Cash & Bank screen, end to end: six money accounts off the wire.
+  const balances = ["52000000", "125000000", "3500000"] as unknown as number[];
+  const total = sumCentavos(balances);
+  assert.equal(total, 180500000);
+  assert.equal(formatCentavos(total), "₱1,805,000.00");
+});

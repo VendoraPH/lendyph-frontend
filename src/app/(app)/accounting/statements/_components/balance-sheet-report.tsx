@@ -5,7 +5,11 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
-import { buildBalanceSheet } from "@/lib/accounting/statements";
+import {
+  buildBalanceSheet,
+  dayBefore,
+  startOfFinancialYear,
+} from "@/lib/accounting/statements";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TrialBalance } from "@/types";
@@ -17,44 +21,76 @@ interface BalanceSheetReportProps {
   branchId?: number;
 }
 
+/** Closing position, and the books as they stood when the year opened. */
+interface SheetBalances {
+  closing: TrialBalance;
+  opening: TrialBalance;
+  /** The window the Current Year Earnings line covers. */
+  period: { from: string; to: string };
+}
+
 /**
  * Built in the browser from the trial balance rather than fetched.
  *
  * A balance sheet is a regrouping of the trial balance and nothing more, so
  * giving it its own endpoint would create a second place the same figure is
- * computed — and two places eventually disagree. One fetch, one source of
- * truth, and `buildBalanceSheet` is unit-tested against the worked example.
+ * computed — and two places eventually disagree. One source of truth, and
+ * `buildBalanceSheet` is unit-tested against the worked example.
+ *
+ * TWO trial balances, not one, and that is the fix rather than an optimisation
+ * missed. A trial balance is cumulative, so the single closing one this used to
+ * pass carried every peso earned since the books opened — which
+ * `buildBalanceSheet` then printed under the heading "Current Year Earnings".
+ * On a co-op trading since 2024 whose books have never been closed, that line
+ * read ₱3,000,000 while the Income Statement tab, one click away and computing
+ * the same year properly from two balances, read ₱750,000. Fetching the
+ * opening balance here lets the sheet do the identical subtraction, so the two
+ * tabs cannot disagree.
+ *
+ * The opening date comes from `asOf`, not from the shared `from` filter: the
+ * filter is hidden on this tab because a balance sheet is a position on a date,
+ * and "current year" on a balance sheet means the financial year regardless of
+ * what range someone last set for the P&L.
  */
 export function BalanceSheetReport({ asOf, branchId }: BalanceSheetReportProps) {
-  const fetcher = useCallback(
-    () => accountingService.trialBalance(asOf, branchId),
-    [asOf, branchId],
-  );
-  const resource = useAccountingResource<TrialBalance>(fetcher);
+  const fetcher = useCallback(async (): Promise<SheetBalances> => {
+    const from = startOfFinancialYear(asOf);
+    const [closing, opening] = await Promise.all([
+      accountingService.trialBalance(asOf, branchId),
+      accountingService.trialBalance(dayBefore(from), branchId),
+    ]);
+    return { closing, opening, period: { from, to: asOf } };
+  }, [asOf, branchId]);
+
+  const resource = useAccountingResource<SheetBalances>(fetcher);
 
   return (
     <DataState
       resource={resource}
       summary="What the business owns, owes and is worth on a date."
       endpoints={["GET /accounting/trial-balance"]}
-      isEmpty={(tb) => tb.rows.length === 0}
+      isEmpty={({ closing }) => closing.rows.length === 0}
       emptyMessage="No posted entry on or before this date."
     >
-      {(tb) => <Sheet trialBalance={tb} asOf={asOf} />}
+      {(balances) => <Sheet balances={balances} asOf={asOf} />}
     </DataState>
   );
 }
 
 function Sheet({
-  trialBalance,
+  balances,
   asOf,
 }: {
-  trialBalance: TrialBalance;
+  balances: SheetBalances;
   asOf: string;
 }) {
   const sheet = useMemo(
-    () => buildBalanceSheet(trialBalance.rows, asOf),
-    [trialBalance.rows, asOf],
+    () =>
+      buildBalanceSheet(balances.closing.rows, asOf, {
+        rows: balances.opening.rows,
+        period: balances.period,
+      }),
+    [balances, asOf],
   );
 
   const toLines = (lines: typeof sheet.assets) =>
@@ -122,11 +158,30 @@ function Sheet({
         Named explicitly because it is the line people query: income and
         expense accounts never appear on a balance sheet, yet their net result
         has to, or the sheet misses by exactly the period's profit.
+
+        The dates are stated rather than implied. Two equity lines that both
+        sound like "profit" are exactly how the ₱3,000,000 / ₱750,000
+        disagreement went unnoticed, and the only defence is saying on screen
+        which window each one covers.
       */}
       <p className="text-xs text-muted-foreground">
-        Equity includes Current Year Earnings, the period&apos;s net result
-        carried in so the sheet closes. Your accountant folds it into Retained
-        Earnings at year end.
+        {sheet.earnings_basis === "period" && sheet.earnings_period ? (
+          <>
+            Current Year Earnings is the net result from{" "}
+            {formatDate(sheet.earnings_period.from)} to{" "}
+            {formatDate(sheet.earnings_period.to)} — the same figure the Income
+            Statement tab reports for that period. Prior Period Earnings is
+            everything earned before it and not yet closed into Retained
+            Earnings. Both are carried into equity so the sheet closes.
+          </>
+        ) : (
+          <>
+            Accumulated Earnings is every peso earned since the books opened,
+            not this year&apos;s result, because the opening balance for the
+            year could not be read. Your accountant closes it into Retained
+            Earnings at year end.
+          </>
+        )}
       </p>
     </div>
   );

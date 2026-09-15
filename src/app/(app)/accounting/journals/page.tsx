@@ -28,7 +28,9 @@ import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
+import type { DrainResult } from "@/lib/paginate";
 import type { JournalEntry, JournalStatus } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import {
@@ -62,7 +64,9 @@ export default function JournalEntriesPage() {
 
   const fetcher = useCallback(
     () =>
-      accountingService.listJournals({
+      // Drained: the register showed the endpoint's default 15 entries as
+      // though they were every journal in the range.
+      accountingService.journalsListAll({
         from,
         to,
         branch_id: branchParam(branch),
@@ -70,7 +74,7 @@ export default function JournalEntriesPage() {
       }),
     [from, to, branch, status],
   );
-  const resource = useAccountingResource<JournalEntry[]>(fetcher);
+  const resource = useAccountingResource<DrainResult<JournalEntry>>(fetcher);
 
   const post = async (entry: JournalEntry) => {
     try {
@@ -139,12 +143,20 @@ export default function JournalEntriesPage() {
             "POST /accounting/journals/{id}/post",
             "POST /accounting/journals/{id}/reverse",
           ]}
-          isEmpty={(rows) => rows.length === 0}
+          isEmpty={(drain) => drain.rows.length === 0}
           emptyMessage="No journal entry in the chosen range."
         >
-          {(rows) => (
+          {({ rows, truncated, total }) => (
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="space-y-4 pt-6">
+                {truncated && (
+                  <IncompleteListNotice
+                    shown={rows.length}
+                    total={total}
+                    noun="journal entries"
+                    consequence="Entries missing from this register cannot be opened, posted or reversed from here."
+                  />
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>

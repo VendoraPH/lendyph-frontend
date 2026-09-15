@@ -7,6 +7,7 @@
  * right. Everything here is a regrouping of one set of numbers.
  */
 
+import { formatDateISO } from "@/lib/format";
 import type {
   AccountType,
   TrialBalanceRow,
@@ -36,6 +37,18 @@ export interface IncomeStatement {
   net_income: number;
 }
 
+/**
+ * Which window `current_year_earnings` actually covers.
+ *
+ * `"period"` means an opening trial balance was supplied and the figure is the
+ * movement since it — the same arithmetic the income statement does, so the two
+ * agree. `"cumulative"` means none was, and the figure is every peso earned
+ * since the books opened. The two are wildly different numbers on any co-op
+ * whose books have never been closed, so the UI must not label them the same
+ * way, and this is what lets it tell them apart without guessing.
+ */
+export type EarningsBasis = "period" | "cumulative";
+
 export interface BalanceSheet {
   as_of: string;
   assets: StatementLine[];
@@ -44,11 +57,62 @@ export interface BalanceSheet {
   total_assets: number;
   total_liabilities: number;
   total_equity: number;
-  /** The period's profit, carried into equity so the sheet closes. */
+  /**
+   * The earnings carried into equity so the sheet closes. Read
+   * `earnings_basis` before labelling it: on `"period"` this is the current
+   * year's result and matches the income statement; on `"cumulative"` it is
+   * everything ever earned.
+   */
   current_year_earnings: number;
+  /**
+   * Earnings banked BEFORE the period opened and never closed into Retained
+   * Earnings. Always 0 on a `"cumulative"` sheet, where it is folded into
+   * `current_year_earnings` instead.
+   */
+  prior_period_earnings: number;
+  earnings_basis: EarningsBasis;
+  /** The window `current_year_earnings` covers. Null on a `"cumulative"` sheet. */
+  earnings_period: StatementPeriod | null;
   /** `total_assets - (total_liabilities + total_equity)`. Zero when sound. */
   difference: number;
   is_balanced: boolean;
+}
+
+/**
+ * The day before an ISO date — the date an opening trial balance carries.
+ *
+ * A period that starts on 1 September opens with the books as they stood at
+ * the close of 31 August, so every "opening" fetch in this module is dated the
+ * day before its `from`. Lives here rather than in either report because BOTH
+ * statements need it now: the income statement to difference its two balances,
+ * and the balance sheet to find the start of the financial year.
+ *
+ * `formatDateISO` rather than `toISOString().slice(0, 10)`: the latter is UTC,
+ * so in Manila (UTC+8) it hands back the wrong day for the whole evening and
+ * the opening balance would silently be taken a day early. The repo's eslint
+ * config makes that an error for exactly this reason.
+ */
+export function dayBefore(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  date.setDate(date.getDate() - 1);
+  return formatDateISO(date);
+}
+
+/**
+ * The first day of the financial year containing `iso`.
+ *
+ * What "Current Year Earnings" means on a balance sheet is fixed by accounting
+ * convention — year to date from the start of the financial year — and not by
+ * whatever range the user last typed into the statements filter bar. Deriving
+ * it from `asOf` rather than from the shared `from` filter is what lets the
+ * balance sheet stay a position on a date while still agreeing with the income
+ * statement, whose own default period is this same year.
+ *
+ * Sliced off the ISO string rather than round-tripped through `Date`, which
+ * would reintroduce the timezone hazard `dayBefore` exists to avoid.
+ */
+export function startOfFinancialYear(iso: string): string {
+  return `${iso.slice(0, 4)}-01-01`;
 }
 
 /**
@@ -150,38 +214,99 @@ export function buildIncomeStatement(
 const CURRENT_YEAR_EARNINGS_CODE = "3040";
 
 /**
+ * Code for the synthetic line carrying earnings banked before the period.
+ *
+ * Deliberately NOT "3030 Retained Earnings", which is a real, postable account
+ * in the seeded chart: if a co-op has actually posted to 3030, reusing the code
+ * would put two lines with the same key and the same name in one section, and
+ * anyone reconciling the statement would have no way to tell the posted balance
+ * from the derived one.
+ */
+const PRIOR_PERIOD_EARNINGS_CODE = "3045";
+
+/** Net income implied by a set of trial-balance rows. */
+function netIncomeOf(rows: TrialBalanceRow[]): number {
+  return sum(linesOf(rows, "income")) - sum(linesOf(rows, "expense"));
+}
+
+/**
  * What the business owns, owes, and is worth, as of a date.
  *
  * The part worth understanding: income and expense accounts do not appear on a
  * balance sheet, yet their net result must, or `Assets = Liabilities + Equity`
- * fails by exactly the period's profit. So net income is computed from the
- * same rows and carried into equity as "Current Year Earnings" — a real line
- * on the statement, not just an adjustment folded into the total, because
- * anyone checking the arithmetic needs to see where it came from.
+ * fails by exactly the period's profit. So net income is derived from the trial
+ * balance and carried into equity as a real line on the statement, not an
+ * adjustment folded into the total, because anyone checking the arithmetic
+ * needs to see where it came from.
  *
- * At year end the accountant closes this into Retained Earnings; until then it
- * is derived on every read, so it cannot go stale.
+ * `opening` is what makes that line honest, and omitting it was a reporting
+ * bug rather than a missing nicety. A trial balance is CUMULATIVE. Handed only
+ * the closing one, this derived net income from every posting since the books
+ * opened and labelled the result "Current Year Earnings" — so a co-op trading
+ * since 2024 with books never closed (the default state, since nothing has
+ * closed them yet) saw ₱3,000,000 against an Income Statement, one tab away,
+ * reading ₱750,000 for the same year. Both screens showed green. The balanced
+ * badge could never have caught it: `difference` is identically zero whenever
+ * the input trial balance balances, whatever this splits out of it.
+ *
+ * Given `opening` — the cumulative trial balance as at the day BEFORE the
+ * period starts — the period's result is `closing - opening`, which is exactly
+ * what `IncomeStatementReport` computes, so the two agree by construction
+ * rather than by coincidence. The earlier earnings do not vanish: they are
+ * shown as their own line, because they are real equity that simply has not
+ * been closed into Retained Earnings yet. The two lines still sum to the
+ * cumulative figure, so the sheet balances exactly as before.
+ *
+ * Without `opening` the old arithmetic is unavoidable, so the result says so
+ * via `earnings_basis: "cumulative"` and names the line for what it is rather
+ * than claiming a year it does not cover.
  */
 export function buildBalanceSheet(
   rows: TrialBalanceRow[],
-  asOf: string
+  asOf: string,
+  opening?: { rows: TrialBalanceRow[]; period: StatementPeriod } | null
 ): BalanceSheet {
   const assets = linesOf(rows, "asset");
   const liabilities = linesOf(rows, "liability");
   const postedEquity = linesOf(rows, "equity");
 
-  const { net_income } = buildIncomeStatement(rows, { from: asOf, to: asOf });
+  const cumulative = netIncomeOf(rows);
+  const prior_period_earnings = opening ? netIncomeOf(opening.rows) : 0;
+  // Subtraction rather than `netIncomeOf(subtractTrialBalances(...))`: the two
+  // are equal, and this way the split is visibly exhaustive — prior + current
+  // is the cumulative figure, so total equity is unchanged and the sheet still
+  // closes.
+  const current_year_earnings = cumulative - prior_period_earnings;
 
   const equity: StatementLine[] = [...postedEquity];
-  // Omit the line entirely on a book with no activity rather than showing a
-  // ₱0.00 earnings row on an otherwise empty statement.
-  if (net_income !== 0) {
+  const pushEarnings = (code: string, name: string, amount: number) => {
+    // Omit a line entirely rather than show ₱0.00 on an otherwise empty sheet.
+    if (amount === 0) return;
     equity.push({
-      account_id: Number(CURRENT_YEAR_EARNINGS_CODE),
-      account_code: CURRENT_YEAR_EARNINGS_CODE,
-      account_name: "Current Year Earnings",
-      amount: net_income,
+      account_id: Number(code),
+      account_code: code,
+      account_name: name,
+      amount,
     });
+  };
+
+  if (opening) {
+    pushEarnings(
+      PRIOR_PERIOD_EARNINGS_CODE,
+      "Prior Period Earnings (not yet closed)",
+      prior_period_earnings
+    );
+    pushEarnings(
+      CURRENT_YEAR_EARNINGS_CODE,
+      "Current Year Earnings",
+      current_year_earnings
+    );
+  } else {
+    pushEarnings(
+      CURRENT_YEAR_EARNINGS_CODE,
+      "Accumulated Earnings (not yet closed)",
+      current_year_earnings
+    );
   }
 
   const total_assets = sum(assets);
@@ -197,7 +322,10 @@ export function buildBalanceSheet(
     total_assets,
     total_liabilities,
     total_equity,
-    current_year_earnings: net_income,
+    current_year_earnings,
+    prior_period_earnings,
+    earnings_basis: opening ? "period" : "cumulative",
+    earnings_period: opening ? opening.period : null,
     difference,
     is_balanced: difference === 0,
   };

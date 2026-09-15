@@ -16,7 +16,9 @@ import { useAccountingResource, useChartOfAccounts } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
+import type { DrainResult } from "@/lib/paginate";
 import type { LedgerEntry } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
@@ -41,9 +43,13 @@ export default function GeneralLedgerPage() {
   const [to, setTo] = useState(todayISO());
   const [branch, setBranch] = useState(ALL_BRANCHES);
 
+  // Drained. A ledger is the worst place in the module to stop at the default
+  // page of 15, because every row carries a `running_balance`: the last visible
+  // row then presents the balance after entry fifteen as the account's current
+  // position, correctly formatted and wrong by every movement after it.
   const fetcher = useCallback(
     () =>
-      accountingService.generalLedger({
+      accountingService.generalLedgerListAll({
         account_id: accountId ?? undefined,
         from,
         to,
@@ -54,7 +60,10 @@ export default function GeneralLedgerPage() {
 
   // A ledger with no account chosen is every movement in the book, which is
   // not a ledger. Hold the request until one is picked.
-  const resource = useAccountingResource<LedgerEntry[]>(fetcher, accountId !== null);
+  const resource = useAccountingResource<DrainResult<LedgerEntry>>(
+    fetcher,
+    accountId !== null,
+  );
   const account = postable.find((a) => a.id === accountId);
 
   return (
@@ -88,12 +97,20 @@ export default function GeneralLedgerPage() {
             resource={resource}
             summary="One account at a time, over a date range, with a running balance and a link back to the journal entry behind each line."
             endpoints={["GET /accounting/general-ledger"]}
-            isEmpty={(rows) => rows.length === 0}
+            isEmpty={(drain) => drain.rows.length === 0}
             emptyMessage="No movement through this account in the chosen range."
           >
-            {(rows) => (
+            {({ rows, truncated, total }) => (
               <Card>
                 <CardContent className="space-y-4 pt-6">
+                  {truncated && (
+                    <IncompleteListNotice
+                      shown={rows.length}
+                      total={total}
+                      noun="ledger entries"
+                      consequence="The running balance on the last row is the balance after the entries shown, not this account's current position."
+                    />
+                  )}
                   {account && (
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm text-muted-foreground">

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   summariseDraft,
   validateJournalDraft,
+  buildJournalPayload,
   buildReversal,
   emptyLine,
 } from "./journal";
@@ -376,4 +377,205 @@ test("a fresh line is blank on both sides", () => {
     debit: "",
     credit: "",
   });
+});
+
+// ── buildJournalPayload ──
+//
+// The draft-to-wire conversion. `JournalLineDraft.debit` is RAW INPUT TEXT and
+// the type says so; the service used to hand the draft to `api.post` untouched,
+// so whatever someone typed is what the ledger received. The on-screen balance
+// panel read `toCentavos` and was right the entire time, which is exactly why
+// nothing caught it — the form said "Balanced" about a request that was not.
+
+function draftOf(lines: JournalLineDraft[]): JournalEntryDraft {
+  return {
+    date: "2026-09-15",
+    reference: "",
+    branch_id: null,
+    description: "Manual adjustment",
+    lines,
+  };
+}
+
+const TYPED = draftOf([
+  { account_id: 2, description: "", debit: "1,500.50", credit: "" },
+  { account_id: 33, description: "", debit: "", credit: "1500.50" },
+  { account_id: null, description: "", debit: "", credit: "" },
+]);
+
+test("raw peso text becomes integer centavos", () => {
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.lines[0].debit, 150050);
+  assert.equal(payload.lines[1].credit, 150050);
+});
+
+test("grouped and ungrouped spellings are indistinguishable on the wire", () => {
+  // The heart of it: PHP casts "1,500.50" to 1.0 and "1500.50" to 1500.5, so
+  // these two lines were NOT equal by the time they were stored.
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.lines[0].debit, payload.lines[1].credit);
+});
+
+test("no amount leaves as a string", () => {
+  for (const line of buildJournalPayload(TYPED).lines) {
+    assert.equal(typeof line.debit, "number");
+    assert.equal(typeof line.credit, "number");
+    assert.ok(Number.isInteger(line.debit) && Number.isInteger(line.credit));
+  }
+});
+
+test("the form's spare blank row is dropped", () => {
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.lines.length, 2);
+  assert.ok(payload.lines.every((l) => l.account_id !== null));
+});
+
+test("the unused side of a line is 0, not empty text", () => {
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.lines[0].credit, 0);
+  assert.equal(payload.lines[1].debit, 0);
+});
+
+test("totals travel with the lines, as they do on a reversal", () => {
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.total_debit, 150050);
+  assert.equal(payload.total_credit, 150050);
+  assert.equal(payload.source, "manual");
+});
+
+test("the payload agrees with the panel the user was shown", () => {
+  // Same draft, two code paths. If these ever diverge, one of the two screens
+  // is lying and there is no way to tell which from the UI.
+  const summary = summariseDraft(TYPED);
+  const payload = buildJournalPayload(TYPED);
+  assert.equal(payload.total_debit, summary.total_debit);
+  assert.equal(payload.total_credit, summary.total_credit);
+});
+
+test("an empty reference is normalised to null", () => {
+  assert.equal(buildJournalPayload(TYPED).reference, null);
+  const withRef = buildJournalPayload({ ...TYPED, reference: " JV-2026-0001 " });
+  assert.equal(withRef.reference, "JV-2026-0001");
+});
+
+test("a line description is trimmed, and absent means null", () => {
+  const payload = buildJournalPayload(
+    draftOf([
+      { account_id: 2, description: "  Rent for September  ", debit: "100", credit: "" },
+      { account_id: 33, description: "   ", debit: "", credit: "100" },
+    ]),
+  );
+  assert.equal(payload.lines[0].description, "Rent for September");
+  assert.equal(payload.lines[1].description, null);
+});
+
+test("a peso sign and thousands separators are resolved before sending", () => {
+  const payload = buildJournalPayload(
+    draftOf([
+      { account_id: 2, description: "", debit: " ₱ 1 234 567.89 ", credit: "" },
+      { account_id: 33, description: "", debit: "", credit: "1234567.89" },
+    ]),
+  );
+  assert.equal(payload.lines[0].debit, 123456789);
+  assert.equal(payload.lines[0].debit, payload.lines[1].credit);
+});
+
+test("an unbalanced draft throws rather than posting", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: 2, description: "", debit: "1500.50", credit: "" },
+          { account_id: 33, description: "", debit: "", credit: "1400.50" },
+        ]),
+      ),
+    /differ by/,
+  );
+});
+
+test("a line with text where an amount belongs throws, quoting the text", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: 2, description: "", debit: "one thousand", credit: "" },
+          { account_id: 33, description: "", debit: "", credit: "1000" },
+        ]),
+      ),
+    /one thousand/,
+  );
+});
+
+test("a negative amount throws instead of being flipped into the other column", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: 2, description: "", debit: "-100", credit: "" },
+          { account_id: 33, description: "", debit: "", credit: "100" },
+        ]),
+      ),
+    /positive amount/,
+  );
+});
+
+test("a line with no account throws", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: null, description: "Something", debit: "100", credit: "" },
+          { account_id: 33, description: "", debit: "", credit: "100" },
+        ]),
+      ),
+    /no account/,
+  );
+});
+
+test("a line carrying both a debit and a credit throws", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: 2, description: "", debit: "100", credit: "100" },
+          { account_id: 33, description: "", debit: "", credit: "100" },
+        ]),
+      ),
+    /only be one side/,
+  );
+});
+
+test("a draft with fewer than two real lines throws", () => {
+  assert.throws(
+    () =>
+      buildJournalPayload(
+        draftOf([
+          { account_id: 2, description: "", debit: "100", credit: "" },
+          emptyLine(),
+        ]),
+      ),
+    /at least two lines/,
+  );
+});
+
+test("whatever validateJournalDraft accepts, buildJournalPayload can send", () => {
+  // The two encode the same rules and must not drift. A draft that passes
+  // validation and then throws on the way out is a dead end for the user.
+  const chart = [
+    account({ id: 2, code: "5030", name: "Electricity", type: "expense" }),
+    account({ id: 33, code: "1010", name: "Cash on Hand" }),
+  ];
+  const validation = validateJournalDraft(TYPED, chart);
+  assert.ok(validation.ok, "fixture must be a valid draft");
+  assert.doesNotThrow(() => buildJournalPayload(TYPED));
+});
+
+test("a rounding-boundary amount lands on the same centavo as the panel", () => {
+  const draft = draftOf([
+    { account_id: 2, description: "", debit: "1.555", credit: "" },
+    { account_id: 33, description: "", debit: "", credit: "1.555" },
+  ]);
+  const payload = buildJournalPayload(draft);
+  assert.equal(payload.lines[0].debit, 156);
+  assert.equal(payload.total_debit, summariseDraft(draft).total_debit);
 });

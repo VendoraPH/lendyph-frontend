@@ -6,9 +6,10 @@ import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import {
   buildIncomeStatement,
+  dayBefore,
   subtractTrialBalances,
 } from "@/lib/accounting/statements";
-import { formatDate, formatDateISO } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { TrialBalance } from "@/types";
 import { DataState } from "../../_components/data-state";
 import { Amount, ReportSection } from "../../_components/report-section";
@@ -19,18 +20,12 @@ interface IncomeStatementReportProps {
   branchId?: number;
 }
 
-/**
- * The day before an ISO date, for the opening trial balance.
- *
- * `formatDateISO` rather than `toISOString().slice(0, 10)`: the latter is UTC,
- * so in Manila it hands back the wrong day for most of the evening and the
- * income statement would silently start a day early.
+/*
+ * `dayBefore` used to be defined here. It moved to `@/lib/accounting/statements`
+ * when the balance sheet started needing the same opening balance — two copies
+ * of "which date does an opening trial balance carry" is precisely how the two
+ * tabs would drift apart again.
  */
-function dayBefore(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  date.setDate(date.getDate() - 1);
-  return formatDateISO(date);
-}
 
 /** Closing and opening trial balances, fetched together. */
 interface PeriodBalances {

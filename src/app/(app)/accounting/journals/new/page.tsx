@@ -22,12 +22,13 @@ import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { JournalEntryDraft, JournalLineDraft } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../../_components/page-header";
 import { JournalLineRows } from "../../_components/journal-line-rows";
 
 export default function NewJournalEntryPage() {
   const router = useRouter();
-  const { postable, isTemplate } = useChartOfAccounts();
+  const { postable, isTemplate, truncated, total } = useChartOfAccounts();
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -114,6 +115,20 @@ export default function NewJournalEntryPage() {
             </Button>
           }
         />
+
+        {/*
+          A picker missing rows reads as "that account does not exist", not as
+          a bug, and this is the form where that matters most: an account the
+          chart drain never reached cannot be posted to at all.
+        */}
+        {truncated && (
+          <IncompleteListNotice
+            shown={postable.length}
+            total={total}
+            noun="accounts"
+            consequence="An account missing from the chart cannot be selected on a line below."
+          />
+        )}
 
         {isTemplate && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">

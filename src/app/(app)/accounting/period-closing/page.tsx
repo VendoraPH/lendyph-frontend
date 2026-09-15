@@ -25,15 +25,20 @@ import {
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate, formatDateTime } from "@/lib/format";
+import type { DrainResult } from "@/lib/paginate";
 import type { AccountingPeriod } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 
 export default function PeriodClosingPage() {
   const [confirming, setConfirming] = useState<AccountingPeriod | null>(null);
 
-  const fetcher = useCallback(() => accountingService.listPeriods(), []);
-  const resource = useAccountingResource<AccountingPeriod[]>(fetcher);
+  // Drained. A co-op live since 2024 already has more than 15 monthly periods,
+  // and the ones past the first page are the OLD ones — exactly the periods
+  // someone opens this screen to close.
+  const fetcher = useCallback(() => accountingService.periodsListAll(), []);
+  const resource = useAccountingResource<DrainResult<AccountingPeriod>>(fetcher);
 
   const close = async (period: AccountingPeriod) => {
     try {
@@ -84,12 +89,20 @@ export default function PeriodClosingPage() {
             "POST /accounting/periods/{id}/close",
             "POST /accounting/periods/{id}/reopen",
           ]}
-          isEmpty={(periods) => periods.length === 0}
+          isEmpty={(drain) => drain.rows.length === 0}
           emptyMessage="No accounting period has been set up."
         >
-          {(periods) => (
+          {({ rows: periods, truncated, total }) => (
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="space-y-4 pt-6">
+                {truncated && (
+                  <IncompleteListNotice
+                    shown={periods.length}
+                    total={total}
+                    noun="accounting periods"
+                    consequence="A period missing from this table cannot be closed or reopened from here."
+                  />
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>

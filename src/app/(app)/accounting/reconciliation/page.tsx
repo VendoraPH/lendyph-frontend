@@ -18,7 +18,9 @@ import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { DrainResult } from "@/lib/paginate";
 import type { Reconciliation, ReconciliationMatch } from "@/types";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
@@ -54,11 +56,14 @@ export default function ReconciliationPage() {
     [postable],
   );
 
+  // Drained. The account filter below narrows what is already in hand, so a
+  // short page makes "No reconciliation for this account" a lie rather than an
+  // empty state.
   const fetcher = useCallback(
-    () => accountingService.listReconciliations(),
+    () => accountingService.reconciliationsListAll(),
     [],
   );
-  const resource = useAccountingResource<Reconciliation[]>(fetcher);
+  const resource = useAccountingResource<DrainResult<Reconciliation>>(fetcher);
 
   return (
     <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
@@ -98,27 +103,40 @@ export default function ReconciliationPage() {
             "POST /accounting/reconciliations",
             "POST /accounting/reconciliations/{id}/match",
           ]}
-          isEmpty={(items) => items.length === 0}
+          isEmpty={(drain) => drain.rows.length === 0}
           emptyMessage="No reconciliation has been started."
         >
-          {(items) => {
+          {({ rows: items, truncated, total }) => {
             const shown =
               accountId === null
                 ? items
                 : items.filter((item) => item.account_id === accountId);
 
+            const notice = truncated ? (
+              <IncompleteListNotice
+                shown={items.length}
+                total={total}
+                noun="reconciliations"
+                consequence="A reconciliation missing here will not appear under its account either."
+              />
+            ) : null;
+
             if (shown.length === 0) {
               return (
-                <Card>
-                  <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                    No reconciliation for this account.
-                  </CardContent>
-                </Card>
+                <div className="space-y-4">
+                  {notice}
+                  <Card>
+                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                      No reconciliation for this account.
+                    </CardContent>
+                  </Card>
+                </div>
               );
             }
 
             return (
               <div className="space-y-4">
+                {notice}
                 {shown.map((item) => (
                   <ReconciliationCard
                     key={`${item.account_id}-${item.period}`}

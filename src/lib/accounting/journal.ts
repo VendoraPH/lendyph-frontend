@@ -208,6 +208,125 @@ export function validateJournalDraft(
   return { ok: errors.length === 0, errors };
 }
 
+/**
+ * The shape handed to the API to create a manual entry.
+ *
+ * Deliberately the same shape as `ReversalDraft` below: integer centavos, no
+ * blank rows, and the totals alongside the lines. Both are "a journal, ready
+ * for the wire", and the API should not be able to tell which code path built
+ * one.
+ */
+export interface JournalEntryPayload {
+  date: string;
+  source: JournalSource;
+  reference: string | null;
+  branch_id: number | null;
+  description: string;
+  lines: Pick<JournalLine, "account_id" | "description" | "debit" | "credit">[];
+  /** Centavos. Equal by construction — `buildJournalPayload` refuses otherwise. */
+  total_debit: number;
+  total_credit: number;
+}
+
+/**
+ * A validated draft, converted for the wire.
+ *
+ * `JournalLineDraft.debit` and `.credit` are raw text out of an `<input>` —
+ * "1,500.50", "" or garbage — and the form's own type says so. Posting a draft
+ * unconverted sent that text to the API verbatim, and the damage was specific:
+ * PHP casts `"1,500.50"` to `1.0` (it stops at the comma) while `"1500.50"`
+ * casts to `1500.5`. So an entry the on-screen panel called "Balanced, 150050
+ * both sides" reached the ledger as a ₱1.00 debit against a ₱1,500.50 credit.
+ * The balance panel was right the whole time; it was reading `toCentavos` while
+ * the request was not.
+ *
+ * Three things happen here, and all three have to happen on the way OUT rather
+ * than in the component, because the component is not the only possible caller
+ * and the ledger is downstream of all of them:
+ *
+ *  1. Blank rows are dropped. The entry form always keeps a spare row on screen,
+ *     and it was being shipped as `{ account_id: null, debit: "", credit: "" }`.
+ *  2. Every amount goes through `toCentavos`, so grouping, a peso sign and
+ *     stray whitespace are resolved here instead of by PHP's cast.
+ *  3. The totals are computed and compared. Debits must equal credits.
+ *
+ * Throws rather than returning errors, for the reason `buildReversal` does:
+ * `validateJournalDraft` has already told the user about every one of these in
+ * the form, so reaching this in a bad state is a call the UI should never have
+ * made. If the API ever accepts an unbalanced DRAFT, this check and the
+ * `balance` rule in `validateJournalDraft` are the two places that change —
+ * they encode the same rule and must not drift apart.
+ */
+export function buildJournalPayload(
+  draft: JournalEntryDraft
+): JournalEntryPayload {
+  const used = draft.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => !isBlankLine(line));
+
+  if (used.length < 2) {
+    throw new Error(
+      "A journal entry needs at least two lines — one debit and one credit."
+    );
+  }
+
+  const lines = used.map(({ line, index }) => {
+    const label = `Line ${index + 1}`;
+
+    if (line.account_id === null) {
+      throw new Error(`${label} has no account.`);
+    }
+
+    const hasDebitText = !!line.debit.trim();
+    const hasCreditText = !!line.credit.trim();
+    if (hasDebitText && hasCreditText) {
+      throw new Error(
+        `${label} has both a debit and a credit — a line can only be one side.`
+      );
+    }
+    if (!hasDebitText && !hasCreditText) {
+      throw new Error(`${label} has no amount.`);
+    }
+
+    // `toCentavos` returns null for text, negatives and malformed decimals
+    // alike. Any of them here means the draft was never validated.
+    const raw = hasDebitText ? line.debit : line.credit;
+    const amount = toCentavos(raw);
+    if (amount === null || amount <= 0) {
+      throw new Error(`${label} needs a positive amount, got "${raw}".`);
+    }
+
+    return {
+      account_id: line.account_id,
+      description: line.description.trim() || null,
+      debit: hasDebitText ? amount : 0,
+      credit: hasCreditText ? amount : 0,
+    };
+  });
+
+  const total_debit = sumCentavos(lines.map((l) => l.debit));
+  const total_credit = sumCentavos(lines.map((l) => l.credit));
+  if (total_debit !== total_credit) {
+    throw new Error(
+      `Debits and credits differ by ${formatCentavos(
+        Math.abs(total_debit - total_credit)
+      )}. An entry must balance.`
+    );
+  }
+
+  return {
+    date: draft.date,
+    source: "manual",
+    // "" is the form's empty reference; the API's empty is null.
+    reference: draft.reference.trim() || null,
+    branch_id: draft.branch_id,
+    description: draft.description.trim(),
+    lines,
+    total_debit,
+    total_credit,
+  };
+}
+
 /** The shape handed to the API to create a reversing entry. */
 export interface ReversalDraft {
   date: string;

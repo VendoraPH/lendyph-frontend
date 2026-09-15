@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   buildIncomeStatement,
   buildBalanceSheet,
+  dayBefore,
+  startOfFinancialYear,
   subtractTrialBalances,
 } from "./statements";
 import type { TrialBalanceRow } from "@/types/accounting";
@@ -202,4 +205,225 @@ test("subtractTrialBalances keeps accounts that closed out to zero", () => {
   assert.equal(movement.account_code, "1010");
   assert.equal(movement.credit, 5_000_00);
   assert.equal(movement.debit, 0);
+});
+
+// ── The two tabs agreeing about the same year ──
+//
+// The defect these pin: a trial balance is CUMULATIVE, so the closing one alone
+// carries every peso earned since the books opened. `buildBalanceSheet` derived
+// net income from it and printed the result as "Current Year Earnings", while
+// the Income Statement one tab away differenced two balances and got the year.
+// Both screens showed green. The balanced badge could never have caught it —
+// `difference` is identically zero whenever the input trial balance balances,
+// however the earnings are split out of it.
+
+/**
+ * A co-op trading since 2024 whose books have never been closed. This is the
+ * DEFAULT state for every organisation on this module, not an edge case:
+ * nothing has closed them, because the module is new.
+ *
+ * Lifetime surplus ₱3,000,000, of which ₱750,000 was earned this year.
+ */
+const OPENING_2026: TrialBalanceRow[] = [
+  row("1010", "Cash on Hand", "asset", 500000000, 0),
+  row("3010", "Capital", "equity", 0, 275000000),
+  row("4010", "Interest Income", "income", 0, 300000000),
+  row("5010", "Salaries and Wages", "expense", 75000000, 0),
+];
+
+const CLOSING_2026: TrialBalanceRow[] = [
+  row("1010", "Cash on Hand", "asset", 575000000, 0),
+  row("3010", "Capital", "equity", 0, 275000000),
+  row("4010", "Interest Income", "income", 0, 390000000),
+  row("5010", "Salaries and Wages", "expense", 90000000, 0),
+];
+
+const YEAR_2026 = { from: "2026-01-01", to: "2026-09-15" };
+
+test("the unclosed-books fixture balances on both dates", () => {
+  for (const [label, rows] of [
+    ["opening", OPENING_2026],
+    ["closing", CLOSING_2026],
+  ] as const) {
+    const debits = rows.reduce((sum, r) => sum + r.debit, 0);
+    const credits = rows.reduce((sum, r) => sum + r.credit, 0);
+    assert.equal(debits, credits, `${label} trial balance must close`);
+  }
+});
+
+test("REGRESSION: the sheet used to claim ₱3,000,000 where the P&L said ₱750,000", () => {
+  const incomeStatement = buildIncomeStatement(
+    subtractTrialBalances(CLOSING_2026, OPENING_2026),
+    YEAR_2026,
+  );
+  // The old call: closing rows only, no opening balance.
+  const oldSheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to);
+
+  assert.equal(incomeStatement.net_income, 75000000, "₱750,000 — the year");
+  assert.equal(oldSheet.current_year_earnings, 300000000, "₱3,000,000 — since 2024");
+  assert.ok(
+    oldSheet.is_balanced && oldSheet.difference === 0,
+    "and the badge said green, because difference cannot detect this",
+  );
+});
+
+test("given the opening balance, both statements report the same year", () => {
+  const incomeStatement = buildIncomeStatement(
+    subtractTrialBalances(CLOSING_2026, OPENING_2026),
+    YEAR_2026,
+  );
+  const sheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to, {
+    rows: OPENING_2026,
+    period: YEAR_2026,
+  });
+
+  assert.equal(
+    sheet.current_year_earnings,
+    incomeStatement.net_income,
+    "the two tabs must not be able to disagree",
+  );
+  assert.equal(sheet.current_year_earnings, 75000000);
+});
+
+test("earlier earnings are shown, not discarded, so the sheet still closes", () => {
+  const sheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to, {
+    rows: OPENING_2026,
+    period: YEAR_2026,
+  });
+
+  assert.equal(sheet.prior_period_earnings, 225000000, "₱2,250,000 from 2024–25");
+  // The split must be exhaustive: prior + current is the cumulative figure, or
+  // equity is short by the difference and the sheet stops balancing.
+  assert.equal(
+    sheet.prior_period_earnings + sheet.current_year_earnings,
+    300000000,
+  );
+  assert.equal(sheet.difference, 0);
+  assert.ok(sheet.is_balanced);
+});
+
+test("the two earnings lines are separately visible and separately named", () => {
+  const sheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to, {
+    rows: OPENING_2026,
+    period: YEAR_2026,
+  });
+
+  const current = sheet.equity.find((l) => l.account_code === "3040");
+  const prior = sheet.equity.find((l) => l.account_code === "3045");
+
+  assert.equal(current?.account_name, "Current Year Earnings");
+  assert.equal(current?.amount, 75000000);
+  assert.equal(prior?.account_name, "Prior Period Earnings (not yet closed)");
+  assert.equal(prior?.amount, 225000000);
+});
+
+test("the derived lines cannot collide with a posted Retained Earnings account", () => {
+  // 3030 is a real, postable account in the seeded chart. Reusing its code for
+  // the derived line would put two identically named rows in one section with
+  // the same React key, and nothing on screen to tell them apart.
+  const withPosted = [
+    ...CLOSING_2026,
+    row("3030", "Retained Earnings", "equity", 0, 0),
+  ];
+  const sheet = buildBalanceSheet(withPosted, YEAR_2026.to, {
+    rows: OPENING_2026,
+    period: YEAR_2026,
+  });
+
+  const codes = sheet.equity.map((l) => l.account_code);
+  assert.equal(new Set(codes).size, codes.length, "no duplicate keys in equity");
+  assert.ok(!codes.includes("3030") || codes.filter((c) => c === "3030").length === 1);
+});
+
+test("without an opening balance the line stops claiming a year it does not cover", () => {
+  const sheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to);
+
+  assert.equal(sheet.earnings_basis, "cumulative");
+  assert.equal(sheet.earnings_period, null);
+  const line = sheet.equity.find((l) => l.account_code === "3040");
+  assert.equal(line?.account_name, "Accumulated Earnings (not yet closed)");
+  assert.equal(sheet.prior_period_earnings, 0, "folded into the one line instead");
+});
+
+test("the basis flag says which window the figure covers", () => {
+  const withOpening = buildBalanceSheet(CLOSING_2026, YEAR_2026.to, {
+    rows: OPENING_2026,
+    period: YEAR_2026,
+  });
+  assert.equal(withOpening.earnings_basis, "period");
+  assert.deepEqual(withOpening.earnings_period, YEAR_2026);
+});
+
+test("a first year of trading has no prior earnings and one line", () => {
+  // Opening rows exist but carry no income or expense — the books really did
+  // start here, so a "Prior Period Earnings ₱0.00" row would be noise.
+  const firstYearOpening = [row("3010", "Capital", "equity", 0, 275000000)];
+  const sheet = buildBalanceSheet(CLOSING_2026, YEAR_2026.to, {
+    rows: firstYearOpening,
+    period: YEAR_2026,
+  });
+
+  assert.equal(sheet.prior_period_earnings, 0);
+  assert.ok(!sheet.equity.some((l) => l.account_code === "3045"));
+  assert.equal(sheet.current_year_earnings, 300000000);
+});
+
+// ── Shared date helpers ──
+
+test("dayBefore steps back one calendar day, including across a year end", () => {
+  assert.equal(dayBefore("2026-01-01"), "2025-12-31");
+  assert.equal(dayBefore("2026-09-15"), "2026-09-14");
+  assert.equal(dayBefore("2026-03-01"), "2026-02-28");
+});
+
+test("dayBefore gives the same answer in Manila as anywhere else", () => {
+  // The hazard this guards: `toISOString()` is UTC, so slicing a date out of it
+  // reports YESTERDAY before 08:00 in Manila (UTC+8) — an opening trial balance
+  // taken a day early moves income between periods silently. `formatDateISO`
+  // reads local calendar fields instead, which is why this holds everywhere.
+  //
+  // Run in child processes because TZ is fixed when a process starts; asserting
+  // it in-process would only ever test whichever machine ran the suite, and
+  // this one happens to sit at UTC+08:00, where the bug is live.
+  const probe = [
+    'import { dayBefore } from "./src/lib/accounting/statements";',
+    'process.stdout.write(dayBefore("2026-01-01") + "," + dayBefore("2026-09-15"));',
+  ].join("\n");
+
+  const results = ["Asia/Manila", "America/New_York", "UTC"].map((tz) =>
+    execFileSync(process.execPath, ["--import", "tsx", "--eval", probe], {
+      cwd: process.cwd(),
+      env: { ...process.env, TZ: tz },
+      encoding: "utf8",
+    }),
+  );
+
+  for (const [i, out] of results.entries()) {
+    assert.equal(out, "2025-12-31,2026-09-14", `wrong calendar day in zone #${i}`);
+  }
+  assert.equal(new Set(results).size, 1, "the answer must not depend on the host");
+});
+
+test("the financial year starts on 1 January of the as-of date's year", () => {
+  assert.equal(startOfFinancialYear("2026-09-15"), "2026-01-01");
+  assert.equal(startOfFinancialYear("2026-01-01"), "2026-01-01");
+  assert.equal(startOfFinancialYear("2024-12-31"), "2024-01-01");
+});
+
+test("the balance sheet asks for the year's opening balance, not the filter's", () => {
+  // Mirrors `BalanceSheetReport`'s fetcher exactly. The balance sheet tab hides
+  // the shared "From" filter because a balance sheet is a position on a date,
+  // so its earnings period has to come from `asOf` — "current year" on a
+  // balance sheet means the financial year, whatever range someone last set
+  // for the P&L. Pinned here because that convention is the only reason the
+  // two tabs agree by default and stay defensible when they do not.
+  const asOf = "2026-09-15";
+  const from = startOfFinancialYear(asOf);
+
+  assert.equal(from, "2026-01-01");
+  assert.equal(dayBefore(from), "2025-12-31", "the opening trial balance's date");
+
+  // And the Income Statement tab's own default period is that same year, which
+  // is what makes the default view of the two tabs agree exactly.
+  assert.equal(from, `${new Date(`${asOf}T00:00:00`).getFullYear()}-01-01`);
 });

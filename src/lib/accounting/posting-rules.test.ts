@@ -343,3 +343,105 @@ test("every posting carries its source, date, branch and reference", () => {
   assert.equal(posting.source, "loan_release");
   assert.ok(posting.description.length > 0);
 });
+
+// ── Collection allocation: each component, not just the sum ──
+//
+// The branch validated `sumCentavos([principal, interest, penalty, fees])` and
+// nothing else, so any split that added up passed however impossible its parts
+// were. This file is the spec the backend will mirror, so a gap here does not
+// stay in the frontend.
+
+const collection = (allocation: {
+  principal: number;
+  interest: number;
+  penalty: number;
+  fees?: number;
+}) =>
+  buildPosting(
+    {
+      event: "loan_collection",
+      date: "2026-09-15",
+      method: "cash",
+      allocation,
+      reference: "COL-10254",
+      branch_id: null,
+    },
+    MAPPING,
+  );
+
+test("REGRESSION: fractional components summed to a clean total and passed", () => {
+  // {principal: 100.5, interest: 99.5} adds up to exactly 200 — a valid-looking
+  // collection built from two amounts that cannot exist in a ledger. The entry
+  // balanced, so no later check would ever have caught it.
+  //
+  // Stated as plain addition, which is what the old `sumCentavos` did. It now
+  // rounds each value to a whole centavo, so this same pair totals 201 through
+  // it — a second, independent line of defence, and the reason the historical
+  // claim has to be written out rather than re-derived from today's helper.
+  assert.equal(100.5 + 99.5, 200);
+  assert.equal(sumCentavos([100.5, 99.5, 0, 0]), 201, "no longer a clean total");
+
+  assert.throws(
+    () => collection({ principal: 100.5, interest: 99.5, penalty: 0 }),
+    /whole centavos/,
+  );
+});
+
+test("REGRESSION: a negative component passed while the sum stayed positive", () => {
+  // Posts a 200 debit against a 300 credit and a -100 credit. That balances
+  // arithmetically and is nonsense as bookkeeping — a credit of minus money.
+  assert.equal(sumCentavos([300, -100, 0, 0]), 200);
+  assert.throws(
+    () => collection({ principal: 300, interest: -100, penalty: 0 }),
+    /cannot be negative/,
+  );
+});
+
+test("each component is named in its own error", () => {
+  assert.throws(
+    () => collection({ principal: 100, interest: 0, penalty: 0.5 }),
+    /penalty component/,
+  );
+  assert.throws(
+    () => collection({ principal: 100, interest: 0, penalty: 0, fees: -1 }),
+    /fees component/,
+  );
+  assert.throws(
+    () => collection({ principal: -1, interest: 100, penalty: 0 }),
+    /principal component/,
+  );
+});
+
+test("zero components stay legal — a collection with no penalty is ordinary", () => {
+  const posting = collection({ principal: 150000, interest: 25000, penalty: 0 });
+  assertBalanced(posting.lines);
+  // `used()` drops the empty lines rather than posting ₱0.00 rows.
+  assert.ok(posting.lines.every((l) => l.debit !== 0 || l.credit !== 0));
+  assert.equal(posting.lines.length, 3);
+});
+
+test("an all-zero allocation is still refused by the total check", () => {
+  assert.throws(
+    () => collection({ principal: 0, interest: 0, penalty: 0 }),
+    /greater than zero/,
+  );
+});
+
+test("a valid allocation is unchanged by the added checks", () => {
+  const posting = collection({
+    principal: 150000,
+    interest: 25000,
+    penalty: 5000,
+    fees: 2000,
+  });
+  assertBalanced(posting.lines);
+  const debit = posting.lines.find((l) => l.debit !== 0);
+  assert.equal(debit?.debit, 182000, "the debit is the sum of the parts");
+});
+
+test("a non-finite component is refused rather than emitting NaN lines", () => {
+  assert.throws(
+    () => collection({ principal: Number.NaN, interest: 100, penalty: 0 }),
+    /cannot be negative|whole centavos/,
+  );
+});
