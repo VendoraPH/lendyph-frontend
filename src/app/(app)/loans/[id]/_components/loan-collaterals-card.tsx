@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { ShieldCheck } from "lucide-react";
@@ -80,10 +80,10 @@ export function LoanCollateralsCard({
   );
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+    <CollapsibleCard
+      icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
+      title={
+        <>
           Collaterals
           {!loading && rows.length > 0 && (
             <Badge
@@ -100,9 +100,9 @@ export function LoanCollateralsCard({
               {securityStatusLabel(status)}
             </Badge>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </>
+      }
+    >
         {loading ? (
           <div className="flex items-center justify-center py-6">
             <Spinner className="size-5 text-muted-foreground" />
@@ -158,7 +158,6 @@ export function LoanCollateralsCard({
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }

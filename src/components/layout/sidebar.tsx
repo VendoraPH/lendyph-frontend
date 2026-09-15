@@ -192,7 +192,17 @@ function NavLink({
         <span className="flex-1 text-left truncate">{item.title}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
-      <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", expanded ? "max-h-96 opacity-100 mt-1" : "max-h-0 opacity-0")}>
+      {/*
+        `max-h-[40rem]` is a transition trick, not a layout intent: height
+        cannot animate to `auto`, so this stands in for "tall enough for the
+        longest menu". It has to actually BE tall enough — anything over the
+        cap is silently clipped with no scrollbar to hint at it.
+
+        Sized for Accounting's 13 children at ~34px each (~440px). The previous
+        `max-h-96` (384px) fit Settings' 10 with barely any room and would have
+        cut Accounting off mid-list. Re-check this when adding to either menu.
+      */}
+      <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", expanded ? "max-h-[40rem] opacity-100 mt-1" : "max-h-0 opacity-0")}>
         <div className="ml-6 flex flex-col gap-0.5 border-l-2 border-brand-orange/15 pl-4">
           {visibleChildren.map((child) => {
             const childActive = pathname === child.href;

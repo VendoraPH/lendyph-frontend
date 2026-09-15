@@ -25,6 +25,7 @@ import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency, formatDate, formatDateISO } from "@/lib/format";
 import type { GCashIncomeReport, GCashPendingItem } from "@/types";
 import { PaidButton } from "./paid-button";
+import { PartyCell } from "./party-cell";
 
 // First and last day of the current month. Both bounds are built at LOCAL
 // midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
@@ -162,7 +163,7 @@ export function ReportsTab() {
           <CardTitle>Pending Payments</CardTitle>
           <CardDescription>
             Cash In transactions awaiting cash collection. Click Paid once the
-            member settles.
+            customer settles.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -172,7 +173,7 @@ export function ReportsTab() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Reference</TableHead>
-                  <TableHead>Member</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Charge</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -203,7 +204,12 @@ export function ReportsTab() {
                       <TableCell className="font-mono text-xs">
                         {p.reference_no}
                       </TableCell>
-                      <TableCell>{p.borrower.full_name}</TableCell>
+                      <TableCell>
+                        <PartyCell
+                          borrower={p.borrower}
+                          nonMember={p.non_member}
+                        />
+                      </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(p.amount)}
                       </TableCell>
