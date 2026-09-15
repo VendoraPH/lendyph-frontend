@@ -28,6 +28,7 @@ import {
   IMAGE_MIME_TYPES,
   ID_MIME_TYPES,
 } from "@/lib/file-validation";
+import type { ValidIdError, ValidIdField } from "@/lib/valid-id";
 
 export interface ValidIdEntry {
   type: string;
@@ -45,6 +46,8 @@ export interface ValidIdEntry {
 interface Props {
   photoPreview: string | null;
   validIds: ValidIdEntry[];
+  /** Per-row completeness errors raised when the applicant tried to continue. */
+  validIdErrors?: ValidIdError[];
   onPhotoChange: (file: File | null, preview: string | null) => void;
   onValidIdsChange: Dispatch<SetStateAction<ValidIdEntry[]>>;
   onNext: () => void;
@@ -54,11 +57,16 @@ interface Props {
 export function StepPhotoIds({
   photoPreview,
   validIds,
+  validIdErrors = [],
   onPhotoChange,
   onValidIdsChange,
   onNext,
   onBack,
 }: Props) {
+  // Look up the message for one field of one row, so each input can show its
+  // own reason rather than a single toast the applicant has to decode.
+  const errorFor = (index: number, field: ValidIdField) =>
+    validIdErrors.find((e) => e.index === index && e.field === field)?.message;
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoCropOpen, setPhotoCropOpen] = useState(false);
   const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
@@ -374,12 +382,17 @@ export function StepPhotoIds({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                   <div className="space-y-1.5">
-                    <Label>ID Type</Label>
+                    <Label>
+                      ID Type <span className="text-destructive">*</span>
+                    </Label>
                     <Select
                       value={entry.type || null}
                       onValueChange={(v) => updateValidId(index, "type", v ?? "")}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger
+                        className="w-full"
+                        aria-invalid={!!errorFor(index, "type")}
+                      >
                         <SelectValue placeholder="Select ID type">
                           {(value: string | null) =>
                             value
@@ -397,14 +410,27 @@ export function StepPhotoIds({
                         ))}
                       </SelectContent>
                     </Select>
+                    {errorFor(index, "type") && (
+                      <p className="text-xs text-destructive">
+                        {errorFor(index, "type")}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>ID Number</Label>
+                    <Label>
+                      ID Number <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       placeholder="ID number"
                       value={entry.id_number}
+                      aria-invalid={!!errorFor(index, "id_number")}
                       onChange={(e) => updateValidId(index, "id_number", e.target.value)}
                     />
+                    {errorFor(index, "id_number") && (
+                      <p className="text-xs text-destructive">
+                        {errorFor(index, "id_number")}
+                      </p>
+                    )}
                   </div>
                   {entry.type === "others" && (
                     <div className="space-y-1.5 sm:col-span-2">
@@ -414,10 +440,16 @@ export function StepPhotoIds({
                       <Input
                         placeholder="e.g. Senior Citizen ID, Company ID"
                         value={entry.custom_type_name}
+                        aria-invalid={!!errorFor(index, "custom_type_name")}
                         onChange={(e) =>
                           updateValidId(index, "custom_type_name", e.target.value)
                         }
                       />
+                      {errorFor(index, "custom_type_name") && (
+                        <p className="text-xs text-destructive">
+                          {errorFor(index, "custom_type_name")}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -427,7 +459,12 @@ export function StepPhotoIds({
                     const preview = side === "front" ? entry.front_preview : entry.back_preview;
                     return (
                       <div key={side} className="space-y-1.5">
-                        <Label className="capitalize">{side} of ID</Label>
+                        <Label className="capitalize">
+                          {side} of ID{" "}
+                          {side === "front" && (
+                            <span className="text-destructive">*</span>
+                          )}
+                        </Label>
                         {preview ? (
                           <div className="space-y-1.5">
                             <div className="relative h-36 rounded-lg overflow-hidden border bg-muted/30">
@@ -482,6 +519,11 @@ export function StepPhotoIds({
                               className="hidden"
                             />
                           </label>
+                        )}
+                        {side === "front" && errorFor(index, "front_file") && (
+                          <p className="text-xs text-destructive">
+                            {errorFor(index, "front_file")}
+                          </p>
                         )}
                       </div>
                     );

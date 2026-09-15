@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
 
 import { Button } from "@/components/ui/button";
@@ -359,6 +360,16 @@ export default function NewBorrowerPage() {
       return;
     }
 
+    // IDs are optional here — staff can add a member now and collect IDs later
+    // — but an ID that was started must be complete. Incomplete rows used to be
+    // filtered out at upload time, so the member was created and the ID quietly
+    // went nowhere.
+    const idCheck = validateValidIds(validIds, { requireAtLeastOne: false });
+    if (!idCheck.ok) {
+      notifyValidation(idCheck.errors.map((e) => e.message));
+      return;
+    }
+
     // Tiered duplicate detection (client-side first, backend as safety net).
     //
     // The backend Levenshtein+birthdate matcher misses cases where the
@@ -614,15 +625,10 @@ export default function NewBorrowerPage() {
         }
       }
 
-      // Upload valid IDs if provided (front and back separately).
-      // "Others" entries must have a custom_type_name to be uploadable —
-      // otherwise the backend has no meaningful label for the document.
-      const validIdsToUpload = validIds.filter(
-        (v) =>
-          v.type &&
-          (v.front_file || v.back_file) &&
-          (v.type !== "others" || v.custom_type_name.trim())
-      );
+      // Upload valid IDs if provided (front and back separately). Only blank
+      // rows are dropped — completeness was already enforced above, and
+      // filtering on it here is what used to discard an ID in silence.
+      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
       if (validIdsToUpload.length > 0 && borrowerId) {
         for (const entry of validIdsToUpload) {
           try {
