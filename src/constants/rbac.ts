@@ -57,6 +57,25 @@ export const ROLES: Record<Role, RoleConfig> = {
       // gets it, and `super_admin` (which the backend also grants) has no entry
       // here at all; see the note on the `Role` union in @/types/rbac.
       "imports:process",
+      // Accounting — the full set, including the three that move or lock the
+      // books: post, reverse and close.
+      "accounting:view",
+      "accounting:reconcile",
+      "accounting:close",
+      "accounting:settings",
+      "chart_of_accounts:view",
+      "chart_of_accounts:create",
+      "chart_of_accounts:update",
+      "chart_of_accounts:delete",
+      "journals:view",
+      "journals:create",
+      "journals:post",
+      "journals:reverse",
+      "expenses:view",
+      "expenses:create",
+      "expenses:update",
+      "cash_accounts:view",
+      "cash_accounts:transfer",
     ],
   },
   loan_officer: {
@@ -111,6 +130,19 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reports:view",
       "share_capital:view",
       "collaterals:view",
+      // Accounting, at bookkeeper level: drafts entries, records expenses and
+      // reconciles accounts. Pointedly WITHOUT `journals:post`,
+      // `journals:reverse` or `accounting:close` — drafting is reversible,
+      // posting moves the books, and keeping the two apart is what makes the
+      // preparer/approver split real rather than advisory.
+      "accounting:view",
+      "accounting:reconcile",
+      "chart_of_accounts:view",
+      "journals:view",
+      "journals:create",
+      "expenses:view",
+      "expenses:create",
+      "cash_accounts:view",
     ],
   },
   collector: {
@@ -162,6 +194,14 @@ export const ROLES: Record<Role, RoleConfig> = {
       "audit_logs:view",
       "users:view",
       "collaterals:view",
+      // Read-only accounting for their own branch. The branch restriction is
+      // enforced server-side from the user's branch assignment, not here — this
+      // grant only says "may look at accounting", never "at all of it".
+      "accounting:view",
+      "chart_of_accounts:view",
+      "journals:view",
+      "expenses:view",
+      "cash_accounts:view",
     ],
   },
   bod1: {

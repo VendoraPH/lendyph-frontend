@@ -51,7 +51,23 @@ export type Module =
   // and this is the only screen that can create members and loans in bulk
   // without an approval chain. The backend migration grants `imports:process`
   // to `super_admin` and `admin` only.
-  | "imports";
+  | "imports"
+  // ── Accounting ──
+  //
+  // Split across five modules rather than collapsed into one, because the
+  // people differ: a bookkeeper drafts journals but must not post them, an
+  // accountant posts and closes periods, and a branch manager reads statements
+  // without touching either. One `accounting:*` module would force all of that
+  // through a single grant.
+  //
+  // `accounting` itself covers the read-only reporting surface — dashboard,
+  // general ledger, trial balance, financial statements — plus the three
+  // privileged verbs that have no other home: `reconcile`, `close`, `settings`.
+  | "accounting"
+  | "chart_of_accounts"
+  | "journals"
+  | "expenses"
+  | "cash_accounts";
 
 export type Action =
   | "view"
@@ -70,7 +86,19 @@ export type Action =
   | "process"
   | "toggle"
   | "transact"
-  | "settings";
+  | "settings"
+  // ── Accounting verbs ──
+  //
+  // `post` is deliberately separate from `create`: drafting a journal changes
+  // nothing, while posting it moves the books and cannot be undone except by a
+  // reversal. That is the line between a bookkeeper and an accountant, and it
+  // is the reason a loan collector with `journals:create` still cannot alter
+  // the financial record.
+  | "post"
+  | "reverse"
+  | "reconcile"
+  | "close"
+  | "transfer";
 
 export type Permission = `${Module}:${Action}`;
 

@@ -15,6 +15,7 @@ import {
   Package,
   Landmark,
   ShieldCheck,
+  BookOpenCheck,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -116,6 +117,38 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/gcash",
     icon: GCashIcon,
     permission: "gcash:view",
+  },
+  {
+    title: "Accounting",
+    href: "/accounting",
+    icon: BookOpenCheck,
+    permission: "accounting:view",
+    /**
+     * Thirteen children, which is the most any menu here has. Two of them —
+     * Financial Statements and Accounting Books — have a third level in the
+     * spec (Balance Sheet, Income Statement, … / General Journal, Cash
+     * Receipts, …). `NavSubItem` has no `children`, and rather than grow the
+     * nav model for two entries, each of those pages carries its own tabs.
+     * Same destinations, one less level of chrome to collapse and expand.
+     *
+     * Children that need a stricter permission than the parent's
+     * `accounting:view` say so; the rest inherit it.
+     */
+    children: [
+      { title: "Dashboard", href: "/accounting" },
+      { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", permission: "chart_of_accounts:view" },
+      { title: "Journal Entries", href: "/accounting/journals", permission: "journals:view" },
+      { title: "Cash & Bank", href: "/accounting/cash-bank", permission: "cash_accounts:view" },
+      { title: "Expenses & Payables", href: "/accounting/expenses", permission: "expenses:view" },
+      { title: "Loan Accounting", href: "/accounting/loans" },
+      { title: "General Ledger", href: "/accounting/general-ledger" },
+      { title: "Trial Balance", href: "/accounting/trial-balance" },
+      { title: "Reconciliation", href: "/accounting/reconciliation", permission: "accounting:reconcile" },
+      { title: "Financial Statements", href: "/accounting/statements" },
+      { title: "Accounting Books", href: "/accounting/books" },
+      { title: "Period Closing", href: "/accounting/period-closing", permission: "accounting:close" },
+      { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
+    ],
   },
   {
     title: "User Management",

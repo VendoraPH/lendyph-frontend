@@ -51,6 +51,11 @@ import {
   Zap,
   Smartphone,
   FileSpreadsheet,
+  BookOpenCheck,
+  BookOpen,
+  ListTree,
+  Receipt,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -211,6 +216,60 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Creates members AND loans in bulk, with no approval chain",
     ],
   },
+  accounting: {
+    label: "Accounting",
+    description:
+      "The reporting side of the books, plus the three privileged verbs that lock or correct them.",
+    icon: BookOpenCheck,
+    features: [
+      "View the accounting dashboard, general ledger and trial balance",
+      "View the four financial statements and the BIR books",
+      "Reconcile a cash or bank account against an external statement",
+      "Close and reopen an accounting period",
+      "Configure accounting settings and the automatic posting map",
+    ],
+  },
+  chart_of_accounts: {
+    label: "Chart of Accounts",
+    description: "The account tree every journal posts into.",
+    icon: ListTree,
+    features: [
+      "View the chart of accounts",
+      "Add, rename and deactivate accounts",
+      "Deactivating is the only removal available once an account has entries",
+    ],
+  },
+  journals: {
+    label: "Journal Entries",
+    description:
+      "Manual double-entry records. Drafting and posting are separate grants on purpose.",
+    icon: BookOpen,
+    features: [
+      "View journal entries and their lines",
+      "Draft a manual entry — changes nothing until posted",
+      "Post an entry, which moves the books and cannot be edited afterwards",
+      "Reverse a posted entry, which writes a mirror entry and keeps both",
+    ],
+  },
+  expenses: {
+    label: "Expenses & Payables",
+    description: "Operating costs, whether paid immediately or owed.",
+    icon: Receipt,
+    features: [
+      "View expenses and outstanding payables",
+      "Record an expense against a cash account or as a payable",
+      "Settle a payable",
+    ],
+  },
+  cash_accounts: {
+    label: "Cash & Bank",
+    description: "Cash on hand, bank accounts and the e-money wallets.",
+    icon: Wallet,
+    features: [
+      "View cash, bank, GCash and Maya balances",
+      "Move money between own accounts — a transfer, never income",
+    ],
+  },
 };
 
 // Applicable actions per module — only the actions that make sense for each area
@@ -231,6 +290,17 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // without running one, so a view-only grant would be a link to an empty
   // wizard, and the template literal `Module:Action` type would happily mint it.
   imports: ["process"],
+  // `close` and `settings` sit on `accounting` rather than on a module of their
+  // own because neither has a screen to view — they are verbs applied to the
+  // whole book.
+  accounting: ["view", "reconcile", "close", "settings"],
+  chart_of_accounts: ["view", "create", "update", "delete"],
+  // No `update` or `delete`: a posted entry is immutable, and the only lawful
+  // correction is `reverse`, which writes a second entry rather than editing
+  // the first. Granting "edit a journal" would be granting "rewrite history".
+  journals: ["view", "create", "post", "reverse"],
+  expenses: ["view", "create", "update"],
+  cash_accounts: ["view", "transfer"],
 };
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
@@ -249,6 +319,11 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   toggle: { label: "Toggle", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
   transact: { label: "Transact", colorClass: "bg-fuchsia-500/10 text-fuchsia-700 border-fuchsia-500/30" },
   settings: { label: "Configure", colorClass: "bg-zinc-500/10 text-zinc-700 border-zinc-500/30" },
+  post: { label: "Post", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  reverse: { label: "Reverse", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  reconcile: { label: "Reconcile", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  close: { label: "Close Period", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
+  transfer: { label: "Transfer", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
 };
 
 // ---------------------------------------------------------------------------
