@@ -26,6 +26,10 @@ export type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashNonMember,
+  GCashNonMemberInput,
+  GCashNonMemberFilters,
+  GCashParty,
 } from "./gcash";
 export type {
   AccountType,

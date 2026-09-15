@@ -1,7 +1,7 @@
 // src/app/(public)/register/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Info } from "lucide-react";
@@ -12,6 +12,11 @@ import { StepPersonal, type StepOneData } from "./_components/step-personal";
 import { StepContact, type StepTwoData } from "./_components/step-contact";
 import type { StepSpouseData } from "./_components/step-spouse";
 import { StepPhotoIds, type ValidIdEntry } from "./_components/step-photo-ids";
+import {
+  isBlankValidId,
+  validateValidIds,
+  type ValidIdError,
+} from "@/lib/valid-id";
 import { StepEmployment, type StepEmploymentData } from "./_components/step-employment";
 import { StepReview } from "./_components/step-review";
 import { registrationService } from "@/services/registration.service";
@@ -166,6 +171,7 @@ export default function RegisterPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+  const [validIdErrors, setValidIdErrors] = useState<ValidIdError[]>([]);
 
   // Once the borrower record is created we keep its id/token so a resubmit
   // (after a partial upload failure) reuses it instead of creating a duplicate.
@@ -222,20 +228,24 @@ export default function RegisterPage() {
     goToStep(3);
   }
 
+  // Editing any ID clears the messages so corrections don't sit under stale
+  // errors; Continue re-validates and raises whatever is still missing.
+  const handleValidIdsChange: Dispatch<SetStateAction<ValidIdEntry[]>> = (
+    update
+  ) => {
+    setValidIds(update);
+    setValidIdErrors([]);
+  };
+
   function handleNextPhotoIds() {
-    // KYC: at least one valid ID (with a front photo) is required before review.
-    // Mirrors the backend gate that blocks approving a registration with no ID.
-    const hasUsableId = validIds.some(
-      (v) =>
-        v.uploaded ||
-        (v.type &&
-          v.front_file &&
-          (v.type !== "others" || v.custom_type_name.trim()))
-    );
-    if (!hasUsableId) {
-      toast.error(
-        "Please add at least one valid ID (with a front photo) before continuing."
-      );
+    // KYC: at least one valid ID is required before review (mirrors the backend
+    // gate that blocks approving a registration with no ID), and every ID the
+    // applicant started must be complete. An ID left half-filled used to be
+    // dropped silently at submit, so the application "succeeded" without it.
+    const { ok, errors } = validateValidIds(validIds);
+    setValidIdErrors(errors);
+    if (!ok) {
+      toast.error(errors[0].message);
       return;
     }
     goToStep(4);
@@ -251,6 +261,18 @@ export default function RegisterPage() {
   }
 
   async function handleSubmit() {
+    // Last line of defence: never create a registration whose IDs would be
+    // dropped on the way. Step 3 already checks this, so reaching here means a
+    // route that skipped it — send the applicant back rather than succeed with
+    // an ID missing.
+    const idCheck = validateValidIds(validIds);
+    if (!idCheck.ok) {
+      setValidIdErrors(idCheck.errors);
+      toast.error(idCheck.errors[0].message);
+      goToStep(3);
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Create the borrower once. On a resubmit after a partial upload failure
@@ -328,14 +350,14 @@ export default function RegisterPage() {
         }
       }
 
-      // Upload valid IDs — same filter rules as admin /borrowers/new. Skip any
-      // already uploaded on a prior attempt to avoid duplicate ID records.
+      // Upload valid IDs. Blank rows (added, never filled) are dropped because
+      // there is nothing to send; every other row is uploaded as-is. Rows are
+      // no longer filtered on completeness — step 3 rejects incomplete IDs
+      // outright, and filtering here is what used to make one vanish without
+      // the applicant ever being told. Already-uploaded rows are skipped so a
+      // resubmit doesn't create duplicate ID records.
       const idsToUpload = validIds.filter(
-        (v) =>
-          !v.uploaded &&
-          v.type &&
-          (v.front_file || v.back_file) &&
-          (v.type !== "others" || v.custom_type_name.trim())
+        (v) => !v.uploaded && !isBlankValidId(v)
       );
       for (const entry of idsToUpload) {
         try {
@@ -470,8 +492,9 @@ export default function RegisterPage() {
             <StepPhotoIds
               photoPreview={photoPreview}
               validIds={validIds}
+              validIdErrors={validIdErrors}
               onPhotoChange={handlePhotoChange}
-              onValidIdsChange={setValidIds}
+              onValidIdsChange={handleValidIdsChange}
               onNext={handleNextPhotoIds}
               onBack={() => goToStep(2)}
             />

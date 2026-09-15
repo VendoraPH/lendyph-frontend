@@ -70,22 +70,25 @@ function text(value: string | null | undefined): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Logo, organization name, address, contact, branch.
+ * Logo, organization name, address, contact.
  *
- * A plain `<img>`, not `next/image`: this markup is opened as a blob document
+ * Only what branding settings hold. The issuing branch deliberately does not
+ * appear here: a letterhead is the cooperative's identity, and the branch a
+ * copy was printed at is not part of it.
+ *
+ * A plain `<img>`, not `next/image`: this markup is opened in a blank tab
  * outside the Next runtime, where the image optimizer does not exist, and
  * `next.config.ts` whitelists a single remote host anyway. `print-chrome`
  * guarantees the URL is absolute — a relative `src` has nothing to resolve
- * against inside a `blob:` document.
+ * against in a document that carries no URL of its own.
  *
- * Degrades a piece at a time: no logo leaves the name centred, no organization
- * name at all (a fresh deployment that has not filled in branding) drops the
- * letterhead entirely rather than printing an empty rule.
+ * Degrades a piece at a time: no logo leaves the name centred, no name leaves
+ * the logo alone, and a fresh deployment that has filled in no branding at all
+ * drops the letterhead entirely rather than printing an empty rule.
  */
 function renderLetterhead(org: PrintableOrg): string {
   const name = text(org.name);
-  const branch = text(org.branchLabel);
-  const meta = [text(org.address), text(org.contact), branch ? `Branch: ${branch}` : null]
+  const meta = [text(org.address), text(org.contact)]
     .filter((line): line is string => line !== null)
     .map((line) => `<div class="letterhead-meta">${escapeHtml(line)}</div>`)
     .join("");

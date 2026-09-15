@@ -5,6 +5,8 @@ import { saveAs } from "file-saver";
 // deliberately NOT applied here: these exports are full of negative currency,
 // and a leading `-` is a figure, not an attack.
 import { csvRow as row } from "@/lib/csv-escape";
+// Only the blob helper: the record writer above is the shared one.
+import { csvBlob } from "@/lib/csv";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
 import type { ReportDocument } from "./types";
@@ -97,21 +99,12 @@ export function renderReportCsv(doc: ReportDocument): string {
   return lines.join("\r\n");
 }
 
-/**
- * Excel ignores the charset in a blob's MIME type when opening a local file
- * and falls back to the system code page, which turns every ₱ into mojibake.
- * A BOM is the only signal it honours.
- */
-const UTF8_BOM = "\uFEFF";
-
+/** The BOM `csvBlob` prepends is what stops Excel mangling the peso sign. */
 export function exportReportToCsv(doc: ReportDocument): void {
   const slug = doc.meta.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
   const date = todayISO();
-  const blob = new Blob([UTF8_BOM + renderReportCsv(doc)], {
-    type: "text/csv;charset=utf-8",
-  });
-  saveAs(blob, `${slug}-${date}.csv`);
+  saveAs(csvBlob(renderReportCsv(doc)), `${slug}-${date}.csv`);
 }

@@ -33,8 +33,8 @@ test("a standalone, printable HTML document comes out", () => {
   assert.match(html, /^<!DOCTYPE html>/);
   assert.match(html, /<html lang="en">/);
   assert.match(html, /<\/html>$/);
-  // The stylesheet travels inside the document — it is opened as a blob with
-  // no origin to load one from.
+  // The stylesheet travels inside the document — it is opened in a blank tab
+  // with no origin to load one from.
   assert.match(html, /\.charges-table/);
   assert.match(html, /Times New Roman/);
   // The toolbar is the only interactive part, and it never prints.
@@ -44,7 +44,7 @@ test("a standalone, printable HTML document comes out", () => {
   assert.match(html, /<title>Official Receipt — Binhs Multi-Purpose Cooperative<\/title>/);
 });
 
-test("the letterhead carries logo, organization, address, contact and branch", () => {
+test("the letterhead carries logo, organization, address and contact", () => {
   const html = renderPrintable(
     doc({
       org: {
@@ -52,7 +52,6 @@ test("the letterhead carries logo, organization, address, contact and branch", (
         logoUrl: "https://api.example.test/storage/logo.png",
         address: "Poblacion, Binhs, Leyte",
         contact: "(053) 555-0100",
-        branchLabel: "Main",
       },
     })
   );
@@ -62,13 +61,23 @@ test("the letterhead carries logo, organization, address, contact and branch", (
   assert.match(html, /Binhs Multi-Purpose Cooperative/);
   assert.match(html, /Poblacion, Binhs, Leyte/);
   assert.match(html, /\(053\) 555-0100/);
-  assert.match(html, /Branch: Main/);
 });
 
 test("a deployment with no branding configured prints no empty letterhead", () => {
   const html = renderPrintable(doc({ org: { name: "", logoUrl: null } }));
 
   assert.equal(count(html, 'class="letterhead"'), 0);
+  assert.match(html, /<title>Official Receipt<\/title>/);
+});
+
+test("a configured logo with no organization name prints the logo uncaptioned", () => {
+  const html = renderPrintable(
+    doc({ org: { name: null, logoUrl: "https://api.example.test/storage/logo.png" } })
+  );
+
+  assert.equal(count(html, 'class="letterhead"'), 1);
+  assert.match(html, /<img class="letterhead-logo"/);
+  assert.equal(count(html, 'class="letterhead-name"'), 0);
   assert.match(html, /<title>Official Receipt<\/title>/);
 });
 
