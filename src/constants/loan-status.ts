@@ -102,3 +102,37 @@ export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
   // The semantic tokens carry their own dark variants, so no `dark:` pairs.
   void: "bg-muted text-muted-foreground border-border line-through",
 };
+
+/**
+ * The statuses that mean the money is out and still owed.
+ *
+ * "Active" vs "inactive" is a distinction the API does not make — it only
+ * reports the twelve statuses above — but it is the one staff actually ask for
+ * ("show me their live loans"). Defined here rather than inline in the one
+ * screen that filters by it, next to the vocabulary it partitions, so the
+ * answer cannot drift between screens the way the badge colours did.
+ *
+ * `ongoing` is the legacy spelling of `current`; both are live. Everything
+ * else — not yet released (`draft`, `for_review`, `approved`), never released
+ * (`rejected`, `void`), or finished (`completed`, `defaulted`, `restructured`,
+ * `closed`) — is inactive.
+ */
+export const ACTIVE_LOAN_STATUSES: readonly LoanStatus[] = [
+  LOAN_STATUS.RELEASED,
+  LOAN_STATUS.CURRENT,
+  LOAN_STATUS.PAST_DUE,
+  LOAN_STATUS.ONGOING,
+];
+
+/**
+ * Whether a loan status counts as active.
+ *
+ * Takes a plain string as well as a `LoanStatus`: list rows arrive from the
+ * API, and a backend that adds a status the union has not caught up with
+ * should read as inactive, not crash the filter.
+ */
+export function isActiveLoanStatus(status: string | null | undefined): boolean {
+  return (
+    !!status && (ACTIVE_LOAN_STATUSES as readonly string[]).includes(status)
+  );
+}
