@@ -1,11 +1,14 @@
 /**
- * CSV primitives.
+ * CSV writing primitives: the BOM, the record joiner, and the blob.
  *
- * Extracted from `reports/_lib/report-csv.ts` when the data-import template
- * grew a second CSV writer: the quoting rules are RFC 4180, not a report
- * concern, and two copies of an escape function is exactly how one of them
- * ends up wrong.
+ * Quoting is deliberately NOT here. `@/lib/csv-escape` owns RFC 4180 quoting
+ * for every CSV this app writes, and this module re-uses it rather than
+ * carrying a second escaper — which is what it did originally, and what
+ * `csv-escape`'s own docblock exists to prevent. The copy that lived here
+ * quoted `,` `"` and `\n` but not a lone `\r`: the exact gap that terminates a
+ * record early and shifts every column after it into the wrong heading.
  */
+import { csvRow } from "./csv-escape";
 
 /**
  * Excel ignores the charset in a blob's MIME type when opening a local file
@@ -14,20 +17,9 @@
  */
 export const UTF8_BOM = "\uFEFF";
 
-export function escapeCsvCell(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-export function toCsvRow(values: (string | null | undefined)[]): string {
-  return values.map((v) => escapeCsvCell(v ?? "")).join(",");
-}
-
 /** CRLF line endings, because Excel is the consumer that matters here. */
 export function toCsv(rows: (string | null | undefined)[][]): string {
-  return rows.map(toCsvRow).join("\r\n");
+  return rows.map((values) => csvRow(values)).join("\r\n");
 }
 
 export function csvBlob(text: string): Blob {

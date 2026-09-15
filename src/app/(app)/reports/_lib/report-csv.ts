@@ -5,8 +5,9 @@ import { saveAs } from "file-saver";
 // deliberately NOT applied here: these exports are full of negative currency,
 // and a leading `-` is a figure, not an attack.
 import { csvRow as row } from "@/lib/csv-escape";
+// Only the blob helper: the record writer above is the shared one.
+import { csvBlob } from "@/lib/csv";
 import { todayISO } from "@/lib/format";
-import { csvBlob, toCsvRow as row } from "@/lib/csv";
 import { formatCell } from "@/lib/report-format";
 import type { ReportDocument } from "./types";
 

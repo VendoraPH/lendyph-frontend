@@ -1,3 +1,10 @@
+import {
+  CIVIL_STATUS_OPTIONS,
+  GENDER_OPTIONS,
+  INTEREST_TYPE_OPTIONS,
+  PAYMENT_FREQUENCY_OPTIONS,
+  SUFFIX_OPTIONS,
+} from "@/constants";
 import type {
   DictionaryKey,
   TemplateColumn,
@@ -139,31 +146,44 @@ export const TEMPLATE_SHEETS: TemplateSheet[] = [
   },
 ];
 
-/** The workbook's Data Dictionary sheet. */
+/**
+ * The workbook's Data Dictionary sheet.
+ *
+ * Derived from `@/constants`, NOT transcribed a second time. The CSV importer
+ * (`@/lib/import-schema`) validates uploads against these same option tables,
+ * so a hand-typed copy here is a list that silently stops matching the one the
+ * importer enforces — it already had: this was written before `II` was added
+ * to `SUFFIX_OPTIONS`, and because these columns render as a `<select>`, a
+ * member with that suffix could not be entered at all while the importer
+ * accepted it perfectly well.
+ *
+ * The workbook prints labels, not the API's snake_case values, and the labels
+ * in those tables are the workbook's own words.
+ */
+const dictionaryValues = (
+  options: readonly { readonly value: string; readonly label: string }[]
+): string[] =>
+  // `SUFFIX_OPTIONS` leads with a blank-valued "None"; the cell editor renders
+  // its own empty choice, so a second one would read as a duplicate.
+  options.filter((option) => option.value !== "").map((option) => option.label);
+
 export const DATA_DICTIONARY: Record<
   DictionaryKey,
   { label: string; values: string[] }
 > = {
-  gender: { label: "Gender", values: ["Male", "Female"] },
+  gender: { label: "Gender", values: dictionaryValues(GENDER_OPTIONS) },
   civil_status: {
     label: "Civil Status",
-    values: ["Single", "Married", "Widowed", "Separated", "Divorced"],
+    values: dictionaryValues(CIVIL_STATUS_OPTIONS),
   },
-  suffix: { label: "Suffix", values: ["Jr.", "Sr.", "III", "IV", "V"] },
+  suffix: { label: "Suffix", values: dictionaryValues(SUFFIX_OPTIONS) },
   interest_type: {
     label: "Interest Type",
-    values: ["Straight (Fixed)", "Diminishing"],
+    values: dictionaryValues(INTEREST_TYPE_OPTIONS),
   },
   payment_frequency: {
     label: "Payment Frequency",
-    values: [
-      "Daily",
-      "Weekly",
-      "Bi-Weekly",
-      "Semi-Monthly",
-      "Monthly",
-      "Upon Maturity",
-    ],
+    values: dictionaryValues(PAYMENT_FREQUENCY_OPTIONS),
   },
 };
 

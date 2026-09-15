@@ -1,16 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { UTF8_BOM, escapeCsvCell, toCsv, toCsvRow } from "./csv";
+import { UTF8_BOM, toCsv } from "./csv";
 
 test("only quotes cells that need it", () => {
-  assert.equal(escapeCsvCell("Dela Cruz"), "Dela Cruz");
-  assert.equal(escapeCsvCell("Dela Cruz, Juan"), '"Dela Cruz, Juan"');
-  assert.equal(escapeCsvCell('He said "hi"'), '"He said ""hi"""');
-  assert.equal(escapeCsvCell("line\nbreak"), '"line\nbreak"');
+  assert.equal(toCsv([["Dela Cruz"]]), "Dela Cruz");
+  assert.equal(toCsv([["Dela Cruz, Juan"]]), '"Dela Cruz, Juan"');
+  assert.equal(toCsv([['He said "hi"']]), '"He said ""hi"""');
+  assert.equal(toCsv([["line\nbreak"]]), '"line\nbreak"');
+});
+
+// The escaper this module used to carry missed this case, so it is asserted
+// here and not only in csv-escape.test.ts: the regression would reappear as a
+// local copy, not as a change to the shared one.
+test("a lone carriage return is quoted too, or the record splits in two", () => {
+  assert.equal(toCsv([["line\rbreak"]]), '"line\rbreak"');
 });
 
 test("a null or undefined cell writes as blank, not as the word", () => {
-  assert.equal(toCsvRow(["a", null, undefined, "b"]), "a,,,b");
+  assert.equal(toCsv([["a", null, undefined, "b"]]), "a,,,b");
 });
 
 test("rows join with CRLF, which is what Excel reads", () => {
