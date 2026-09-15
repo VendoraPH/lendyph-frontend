@@ -1,3 +1,23 @@
+/**
+ * Numbered step rail for a multi-step flow.
+ *
+ * Promoted here from `app/(public)/register/_components/` when the data-import
+ * wizard needed the same rail. Moved rather than copied, and the body below is
+ * byte-for-byte what the registration flow has been shipping.
+ *
+ * The reason it is a move: the progress-fill width is an empirically-derived
+ * expression, not a formula anyone can re-derive from the layout. It exists to
+ * make the fill stop under the centre of the last completed dot given that the
+ * first and last dots are inset by half a dot-width, and a second copy would
+ * drift the moment either flow nudged a size. Do not "simplify" it without a
+ * screenshot of every step count it has to serve (registration renders 5-7
+ * depending on marital status; data-import renders 5).
+ *
+ * Imported directly rather than via `@/components/common` — that barrel is not
+ * tree-shaken and pulls its whole named module into the shared chunk of the ~43
+ * routes that import `RouteGuard` from it. See the note at the foot of
+ * `components/common/index.ts`.
+ */
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 

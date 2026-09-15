@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { RouteGuard, TablePagination } from "@/components/common";
+// Imported directly rather than through the `common` barrel on purpose: that
+// barrel is not tree-shaken and is pulled in by nearly every page, so
+// re-exporting a calendar there would ship react-day-picker to all of them.
+import { DateRangeFilter } from "@/components/common/date-range-filter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -281,6 +285,12 @@ export default function AuditTrailPage() {
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
+  // `YYYY-MM-DD` or null, never `Date`. This is exactly what `date_from` and
+  // `date_to` want, and it is what `fetchLogs`' dependency array can compare —
+  // a Date rebuilt on each render is a new object every time, which would
+  // re-trigger the fetch forever.
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -303,6 +313,12 @@ export default function AuditTrailPage() {
       const params: Record<string, unknown> = { page, per_page: perPage };
       if (actionFilter !== "all") params.action = actionFilter;
       if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      // Whole-day bounds on `created_at`, applied by `buildQuery()`. Sent as
+      // the calendar strings themselves — shifting either end by a day here to
+      // reinterpret the window would put the screen and the CSV, which sends
+      // the same two values, one day apart.
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       // Sent to the server, not applied here. Filtering the fetched page
       // client-side would search one page of an unbounded log and report
       // "no results" for events that exist — the same truncation as the table,
@@ -339,7 +355,7 @@ export default function AuditTrailPage() {
     } finally {
       if (requestId === requestIdRef.current && !clamping) setLoading(false);
     }
-  }, [actionFilter, moduleFilter, search, page, perPage]);
+  }, [actionFilter, moduleFilter, dateFrom, dateTo, search, page, perPage]);
 
   useEffect(() => {
     fetchLogs();
@@ -369,19 +385,30 @@ export default function AuditTrailPage() {
     setActionFilter(value ?? "all");
     setPage(1);
   };
+  const changeDateRange = (from: string | null, to: string | null) => {
+    setDateFrom(from);
+    setDateTo(to);
+    setPage(1);
+  };
   const changePerPage = (next: number) => {
     setPerPage(next);
     setPage(1);
   };
 
   const hasFilters =
-    searchDraft || moduleFilter !== "all" || actionFilter !== "all";
+    searchDraft !== "" ||
+    moduleFilter !== "all" ||
+    actionFilter !== "all" ||
+    dateFrom !== null ||
+    dateTo !== null;
 
   const clearFilters = () => {
     setSearchDraft("");
     setSearch("");
     setModuleFilter("all");
     setActionFilter("all");
+    setDateFrom(null);
+    setDateTo(null);
     setPage(1);
   };
 
@@ -398,8 +425,8 @@ export default function AuditTrailPage() {
    * server-side, so `page`/`per_page` are correctly absent below: adding them
    * would narrow the file to what is on screen while the button still says
    * "Export". The filters are passed so the CSV matches what the user is
-   * looking at, `search` included — which is now the same server-side search
-   * the table runs, so the two cannot disagree.
+   * looking at, `search` and the date window included — both are the same
+   * server-side parameters the table runs on, so the two cannot disagree.
    */
   const handleExport = async () => {
     setExporting(true);
@@ -408,6 +435,8 @@ export default function AuditTrailPage() {
       if (search) params.search = search;
       if (actionFilter !== "all") params.action = actionFilter;
       if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const blob = await auditService.export(params);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -558,6 +587,12 @@ export default function AuditTrailPage() {
                 ))}
               </SelectContent>
             </Select>
+            <DateRangeFilter
+              label="Date Exclusive"
+              from={dateFrom}
+              to={dateTo}
+              onChange={changeDateRange}
+            />
             {hasFilters && (
               <Button
                 variant="ghost"
