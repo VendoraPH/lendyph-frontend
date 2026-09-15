@@ -13,6 +13,16 @@ export const API_ENDPOINTS = {
     UPDATE_ME: "/auth/me",
     CHANGE_PASSWORD: "/auth/change-password",
   },
+  DATA_IMPORT: {
+    RUNS: "/imports",
+    RUN: (id: number | string) => `/imports/${id}`,
+    CHUNK: (id: number | string, kind: string, index: number) =>
+      `/imports/${id}/files/${kind}/chunks/${index}`,
+    ASSEMBLE: (id: number | string) => `/imports/${id}/assemble`,
+    PRODUCT_MAPPING: (id: number | string) => `/imports/${id}/product-mapping`,
+    ERRORS: (id: number | string) => `/imports/${id}/errors`,
+    ERRORS_CSV: (id: number | string) => `/imports/${id}/errors.csv`,
+  },
   BORROWERS: {
     LIST: "/borrowers",
     DETAIL: (id: number) => `/borrowers/${id}`,
@@ -220,6 +230,10 @@ export const API_ENDPOINTS = {
     TRANSACTIONS_LIST: "/gcash/transactions",
     TRANSACTIONS_CREATE: "/gcash/transactions",
     TRANSACTIONS_MARK_PAID: (id: number) => `/gcash/transactions/${id}/paid`,
+    NON_MEMBERS_LIST: "/gcash/non-members",
+    NON_MEMBERS_CREATE: "/gcash/non-members",
+    NON_MEMBERS_UPDATE: (id: number) => `/gcash/non-members/${id}`,
+    NON_MEMBERS_DELETE: (id: number) => `/gcash/non-members/${id}`,
     TIERS_LIST: "/gcash/tiers",
     TIERS_UPSERT: "/gcash/tiers",
     REPORTS_INCOME: "/gcash/reports/income",
