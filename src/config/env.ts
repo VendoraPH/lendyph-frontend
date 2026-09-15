@@ -108,9 +108,25 @@ export const env = {
       "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
       "lendy_refresh_token",
     ),
-    // Minutes of genuine inactivity before the idle warning appears. Thirty
-    // was short enough that reading a long loan page counted as idling.
-    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 60),
+    // Minutes of genuine inactivity before the idle warning appears.
+    //
+    // This was briefly 60, on the reasonable complaint that thirty was short
+    // enough that reading a long loan page counted as idling. It is back to 30
+    // by decision: these are shared cooperative workstations, and this number
+    // is how long a member's name, birthdate, contact number and loan balances
+    // stay readable on an unattended screen. The server-side token expiry is a
+    // separate 30-minute sliding window in `CheckTokenExpiry` and is unaffected
+    // either way — this value only governs when the browser clears.
+    //
+    // If "reading a long page counts as idling" comes back, widen what counts
+    // as activity rather than widening this window.
+    //
+    // CHANGE IT HERE, NOT IN .env. `getNumberEnvVar` reads `process.env[key]`
+    // with a dynamic key, which Next cannot statically inline, so the browser
+    // bundle never sees NEXT_PUBLIC_SESSION_TIMEOUT and always falls back to
+    // this default. Setting it per-box does nothing client-side — the same trap
+    // .env.example already documents for NEXT_PUBLIC_API_TIMEOUT.
+    sessionTimeout: getNumberEnvVar("NEXT_PUBLIC_SESSION_TIMEOUT", 30),
   },
   storage: {
     url: getEnvVar("NEXT_PUBLIC_STORAGE_URL", "http://localhost:8000/storage"),
