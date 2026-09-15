@@ -4,7 +4,7 @@ name: Deploy Portfolio
 # environment).
 #   domain   : lendyph-staging.abedubas.dev
 #   dir      : /var/www/lendyph-frontend-staging   (VPS 76.13.22.110)
-#   branch   : main
+#   branch   : development
 #   pm2 app  : lendyph-frontend-staging            (pre-existing name — do not rename)
 #
 # Manual-only on purpose. deploy-staging.yml used to fire on every push to
@@ -13,18 +13,33 @@ name: Deploy Portfolio
 # ones are now deploy-production.yml (app.lendyph.com) and deploy-staging.yml
 # (staging-app.lendyph.com); refresh the demo from here when you want to.
 #
-# The steps are inlined here rather than calling the on-VPS deploy.sh. That
-# script once pulled `development` and skipped the raised Node heap, which is
-# why the workflow stopped trusting it; it has since been brought in line
-# (tracks `main`, `npm ci`, 2048 heap, artifact assertion, online check), so
-# either route is now safe. Inline is kept because it is the only version-
+# The steps are inlined here rather than calling the on-VPS deploy.sh, which
+# is now the only thing on this box still pinned to `main` (its line 39 reads
+# `git checkout -f -B main origin/main`). Nothing invokes that script: no cron
+# entry, no systemd unit and no other script on the VPS references
+# /var/www/lendyph-frontend-staging/deploy.sh (checked 2026-09-16 — binhs-coop's
+# workflow calls ITS OWN directory's deploy.sh, never this one). So it is dead
+# as an automated path and is left as found. It is not harmless, though: run it
+# by hand as a "fallback" and it drags this checkout back to `main`. Update or
+# delete it before trusting it. Inline is kept because it is the only version-
 # controlled copy: the on-VPS scripts live outside git, so they can change
 # without review and this file cannot detect it.
 on:
   push:
-    # Tracks main, like the other production deployments. Previously
-    # dispatch-only, which is why this box silently fell behind.
-    branches: [main]
+    # Tracks `development`, which is what the -staging name on this directory
+    # and its pm2 app has always implied. It tracked `main` until 2026-09-16
+    # (and was dispatch-only before that, which is why this box silently fell
+    # behind); the branch was moved so the name stops lying rather than
+    # renaming a directory that pm2 and nginx key off.
+    #
+    # This is a real cadence change, not just a rename: `development` moves far
+    # more often than `main`. deploy-staging.yml and deploy-binhs-coop.yml
+    # ALREADY build a frontend on every push to `development`, so this makes
+    # three. They do not run concurrently — the shared
+    # /var/lock/lendyph-frontend-build.lock below serializes them, which is the
+    # whole reason it exists — but see the flock note for the timeout this puts
+    # pressure on.
+    branches: [development]
     paths-ignore: ['.github/**']
   workflow_dispatch:
 
@@ -69,20 +84,47 @@ jobs:
         # and released when it exits. These steps are inlined rather than
         # calling this directory's deploy.sh, so the lock is taken here rather
         # than wrapping one.
+        #
+        # QUEUE DEPTH went up on 2026-09-16, when this deployment moved from
+        # `main` to `development`. A push to `development` now starts THREE
+        # frontend builds that all want this one lock — deploy-staging.yml
+        # (lendy.ph staging), deploy-binhs-coop.yml (binhs staging) and this
+        # one — where it used to start two. They queue rather than race, which
+        # is correct and is the whole point of the lock.
+        #
+        # The ceiling to watch is not this -w: it is the ssh-action's
+        # `command_timeout: 20m` on the step below. This waits up to 2400s
+        # (40 min) for the lock, so the ssh session is killed at 20 minutes
+        # while flock is still patiently waiting — the lock wait cannot
+        # actually be spent. Two slow builds ahead in the queue are enough to
+        # reach that on a box that swaps this hard. The failure is not silent
+        # (the step reds, the retry below sleeps 240s and tries again, and by
+        # then the queue has usually drained), but if this deployment starts
+        # timing out on busy days, raise command_timeout toward the 40 min this
+        # already permits rather than shortening the wait.
         exec 9>/var/lock/lendyph-frontend-build.lock
         flock -w 2400 9
 
         APP=lendyph-frontend-staging
-        # NAMING TRAP: despite the -staging suffix on both the directory and
-        # the pm2 app, /var/www/lendyph-frontend-staging is the portfolio
-        # PRODUCTION deployment and it tracks `main`. The names are
-        # historical and are not renamed because pm2 and nginx both key off
-        # them. Anyone reasoning from the directory name alone will verify
-        # the wrong environment. The authority on which branch this is, is the
-        # `git checkout -f -B main origin/main` below; DEPLOY_BRANCH must stay
-        # in step with it, and the post-deploy assertion checks exactly that.
+        # The -staging suffix on this directory and on the pm2 app is
+        # historical, and still is: this is the owner's PORTFOLIO deployment,
+        # not the product's staging environment (that is
+        # staging-app.lendyph.com, /var/www/lendyph-com-frontend-staging).
+        # Neither name is changed because pm2 and nginx both key off them.
+        #
+        # What the name no longer does is mislead about the branch. This used
+        # to be a genuine trap — directory said -staging, box tracked `main`.
+        # As of 2026-09-16 the branch was moved to match the name, so -staging
+        # here honestly means "follows `development`".
+        #
+        # Unchanged is where the authority lives: the
+        # `git checkout -f -B development origin/development` below is what
+        # actually decides the branch. DEPLOY_BRANCH is only this script's
+        # claim about it, it must stay in step with that line, and the
+        # post-deploy assertion at the bottom is what checks the pair against
+        # each other. If you change one, change both.
         DEPLOY_DIR=/var/www/lendyph-frontend-staging
-        DEPLOY_BRANCH=main
+        DEPLOY_BRANCH=development
 
         cd "$DEPLOY_DIR"
 
@@ -98,14 +140,24 @@ jobs:
         pm2 describe "$APP" > /dev/null
 
         echo "=== Fetching latest ==="
-        git fetch origin main
-        # This checkout has historically tracked `development`; the demo now
-        # follows `main`. `-f` throws away local edits (the box's own deploy.sh
-        # did `git checkout -- .` for the same reason) and `-B` creates-or-
-        # repoints a local `main` at origin/main, so this is idempotent
-        # whichever branch the directory was last left on.
-        echo "=== Resetting to match origin/main ==="
-        git checkout -f -B main origin/main
+        # Fetches one ref by name, but this box's remote.origin.fetch is the
+        # default +refs/heads/*:refs/remotes/origin/*, so it also opportunistic-
+        # ally updates refs/remotes/origin/development — which the dispatch path
+        # of the assertion below needs in order to resolve a branch tip. That
+        # ref is already present here (verified on the box 2026-09-16), and this
+        # fetch runs in the same ssh session, before the check.
+        git fetch origin development
+        # `-f` throws away local edits (the box's own deploy.sh does
+        # `git checkout -- .` for the same reason) and `-B` creates-or-repoints
+        # a local `development` at origin/development, so this is idempotent
+        # whichever branch the directory was last left on — including `main`,
+        # where it sat until this change. `-B` is also what moves .git/HEAD onto
+        # refs/heads/development: a bare `git reset --hard origin/development`
+        # would move the commit while leaving HEAD on a branch still NAMED
+        # `main`, which is how a box ends up reporting the wrong branch while
+        # serving the right code.
+        echo "=== Resetting to match origin/development ==="
+        git checkout -f -B development origin/development
         echo "=== Current commit ==="
         git log --oneline -1
         # `npm ci`, not `npm install`: install resolves a tree that can drift
@@ -154,7 +206,7 @@ jobs:
         # healthy from every angle except the deployed commit.
         #
         # Deliberately NOT an equality test against this run's commit. The deploy does
-        # `git fetch origin <branch>` + `git reset --hard origin/<branch>`, so it ships
+        # `git fetch origin <branch>` + `git checkout -f -B <branch> origin/<branch>`, so it ships
         # the branch tip AT THE MOMENT IT RUNS, not the commit that triggered this run;
         # and the concurrency group queues deploys rather than cancelling them, so a
         # queued older run can legitimately ship newer code. Ancestry is the honest
@@ -177,19 +229,29 @@ jobs:
         if [ "${EXPECTED_REF:-}" != "$DEPLOY_BRANCH" ]; then
           # This run's ref is NOT the branch this directory tracks, so this run's commit
           # is not expected to appear in this history at all and ancestry would be a
-          # guaranteed false failure. Not hypothetically: workflow_dispatch defaults to
-          # the repository's default branch, which is `main` in both repos, and `main`
-          # is PERMANENTLY ahead of `development` here — every promotion merges
-          # development -> main through a GitHub merge commit that is never merged back,
-          # so origin/main's tip is by construction never an ancestor of development.
-          # Measured 2026-09-16: 6 such commits in the backend, 10 in the frontend, with
-          # 0 flowing the other way. A hand-dispatched staging deploy — which is how
-          # binhs-coop is actually released — would therefore fail EVERY time on a
-          # deploy that did exactly the right thing. `git fetch origin <branch>` also
-          # fetches only that one ref, so the other branch's object may not exist on the
-          # box at all (/var/www/binhs-coop-backend and /var/www/lendyph-backend have no
-          # refs/remotes/origin/development), which would fail with a confusing
-          # "Not a valid commit name" instead.
+          # guaranteed false failure.
+          #
+          # Moving this deployment from `main` to `development` did NOT retire this
+          # branch — it swapped which side triggers it. workflow_dispatch defaults to
+          # the repository's default branch, which is `main`, while this directory now
+          # tracks `development`, so every hand-dispatched portfolio refresh lands
+          # here. (Before the move it was the reverse: a dispatch matched and it was a
+          # push from `development` that would not have.) Either way the mismatch is
+          # unfixable by ancestry: `main` is PERMANENTLY ahead of `development` because
+          # every promotion merges development -> main through a GitHub merge commit
+          # that is never merged back, so origin/main's tip is by construction never an
+          # ancestor of development. Measured 2026-09-16: 10 such commits in this repo,
+          # 0 flowing the other way. Asserting ancestry would red a deploy that did
+          # exactly the right thing.
+          #
+          # The fallback below needs refs/remotes/origin/$DEPLOY_BRANCH to exist.
+          # `git fetch origin <branch>` fetches only the one ref, so a directory that
+          # has only ever fetched `main` will not have the other one at all — that is
+          # precisely why /var/www/binhs-coop-backend and /var/www/lendyph-backend had
+          # no refs/remotes/origin/development. This directory is not one of those: it
+          # already carries refs/remotes/origin/development (and a local `development`
+          # branch), and after this change its own fetch maintains it. Verified on the
+          # box 2026-09-16.
           #
           # Assert what is still true and still worth asserting: the reset landed on the
           # tip the deploy just fetched, in this same ssh session.
@@ -362,7 +424,9 @@ jobs:
       - name: Verify lendyph-staging.abedubas.dev answers
         if: ${{ !cancelled() && (steps.deploy.outcome == 'success' || steps.deploy_retry.outcome == 'success') }}
         env:
-          # The portfolio PRODUCTION site, despite the -staging hostname.
+          # The owner's live portfolio demo, on the -staging hostname. It is the
+          # only frontend that is "live" while tracking `development`; see
+          # DEPLOY_BRANCH above.
           SITE_URL: https://lendyph-staging.abedubas.dev/
         run: |
           set -uo pipefail
