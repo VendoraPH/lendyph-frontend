@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { RouteGuard } from "@/components/common";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MembersTab } from "./_components/members-tab";
+import { NonMembersTab } from "./_components/non-members-tab";
 import { TransactionsTab } from "./_components/transactions-tab";
 import { ReportsTab } from "./_components/reports-tab";
 
-type TabKey = "members" | "transactions" | "reports";
-const TABS: TabKey[] = ["members", "transactions", "reports"];
+type TabKey = "members" | "non-members" | "transactions" | "reports";
+const TABS: TabKey[] = ["members", "non-members", "transactions", "reports"];
 
 function GCashPageContent() {
   const router = useRouter();
@@ -33,19 +34,23 @@ function GCashPageContent() {
       <div>
         <h1 className="text-2xl font-semibold">GCash</h1>
         <p className="text-sm text-muted-foreground">
-          Record Cash In / Cash Out transactions, manage pending payments, and
-          view income reports.
+          Record Cash In / Cash Out transactions for members and walk-in
+          non-members, manage pending payments, and view income reports.
         </p>
       </div>
 
       <Tabs value={active} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="non-members">Non-Members</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
         <TabsContent value="members" className="mt-4">
           <MembersTab />
+        </TabsContent>
+        <TabsContent value="non-members" className="mt-4">
+          <NonMembersTab />
         </TabsContent>
         <TabsContent value="transactions" className="mt-4">
           <TransactionsTab />

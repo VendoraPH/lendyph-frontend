@@ -18,18 +18,20 @@ import { gcashService } from "@/services/gcash.service";
 import { useGCashTiers } from "@/hooks/use-gcash-tiers";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency } from "@/lib/format";
+import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
+import type { GCashParty } from "@/types";
 
 interface Props {
   open: boolean;
   onOpenChange(open: boolean): void;
-  borrower: { id: number; full_name: string; borrower_code?: string };
+  party: GCashParty;
   onCreated?(): void;
 }
 
 export function CashOutDialog({
   open,
   onOpenChange,
-  borrower,
+  party,
   onCreated,
 }: Props) {
   const { resolveCharge, loading: tiersLoading } = useGCashTiers();
@@ -66,7 +68,7 @@ export function CashOutDialog({
     setSubmitting(true);
     try {
       const tx = await gcashService.createTransaction({
-        borrower_id: borrower.id,
+        ...gcashPartyPayload(party),
         type: "cash_out",
         amount: amountNum,
         remarks: remarks.trim() || undefined,
@@ -85,10 +87,10 @@ export function CashOutDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cash Out — {borrower.full_name}</DialogTitle>
+          <DialogTitle>Cash Out — {party.full_name}</DialogTitle>
           <DialogDescription>
-            Records a GCash Cash Out on behalf of this member. Member receives{" "}
-            <span className="font-medium">Amount − Charge</span>.
+            Records a GCash Cash Out on behalf of this {gcashPartyNoun(party)}.
+            They receive <span className="font-medium">Amount − Charge</span>.
           </DialogDescription>
         </DialogHeader>
 

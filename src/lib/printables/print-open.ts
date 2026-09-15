@@ -21,57 +21,108 @@ import type { PrintableDocument } from "./types";
 export type PrintOpenResult = "opened" | "popup_blocked" | "unavailable";
 
 /**
- * Backstop for a browser that never fires `load` on the blob document (or where
- * the listener cannot be attached). One minute is long enough for the tab to
- * paint and short enough that a session of printing does not accumulate
- * documents in memory.
+ * Backstop for the fallback path's object URL. One minute is long enough for
+ * the tab to paint and short enough that a session of printing does not
+ * accumulate documents in memory. The main path mints no URL at all.
  */
 const REVOKE_AFTER_MS = 60_000;
 
 /**
  * Render a document and open it in a new tab, ready to print.
  *
- * The object URL is revoked once the new tab has loaded. The code this replaces
- * (`loans/[id]/page.tsx`) never revoked, so every document a teller opened
- * pinned its own HTML in memory for the life of the page — and a collection day
- * is a lot of documents. Revoking after load is safe: the tab already holds the
- * parsed document. The only thing it costs is the ability to hard-reload that
- * tab, which the in-page Print button makes unnecessary.
+ * The tab is opened BLANK and the markup is written into it. The obvious
+ * alternative — mint a `blob:` URL and `window.open` that — is what this used
+ * to do, and it put the blob URL in the new tab's address bar, where it is not
+ * a document location so much as a live grenade:
  *
- * Never throws. A blocked pop-up releases the URL immediately rather than
- * leaking a blob nothing will ever display.
+ *   - Chrome renders a failed or intercepted `blob:` navigation by leaving the
+ *     raw URL sitting in the omnibox. A teller who nudges Enter searches Google
+ *     for `blob:http://localhost:3000/2079f4ad-…` and lands on a results page
+ *     instead of the loan's disclosure statement. That is the bug this fixes,
+ *     reported from an actual counter.
+ *   - The URL is revocable, so it also had to be revoked, and the listener that
+ *     did it was attached to the OPENER's handle on the new window — where the
+ *     `load` that fires first belongs to the initial empty document, not to the
+ *     blob. Revoking there pulls the URL out from under the navigation it was
+ *     created for.
+ *   - Extensions and enterprise policy block top-level `blob:` navigation
+ *     outright, and the block is silent.
+ *
+ * Writing into `about:blank` has none of those problems: nothing is minted, so
+ * nothing leaks and nothing can be revoked early; the address bar holds
+ * `about:blank`, which searches for nothing; and the document is same-origin
+ * with the app, so the toolbar's `window.print()` and `window.close()` still
+ * work. The tab cannot be hard-reloaded, which the in-page Print button already
+ * made unnecessary.
+ *
+ * Never throws.
  */
 export function openPrintable(doc: PrintableDocument): PrintOpenResult {
   if (typeof window === "undefined") return "unavailable";
 
   const html = renderPrintable(doc);
-  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
 
   let win: Window | null = null;
   try {
-    // Deliberately no "noopener": that feature string makes window.open return
-    // null, which is indistinguishable from a blocked pop-up and would leave
-    // the URL unrevocable. The content is this app's own markup, so there is
-    // nothing to protect the opener from.
-    win = window.open(url, "_blank");
+    win = window.open("", "_blank");
   } catch {
     win = null;
   }
 
-  if (!win) {
-    URL.revokeObjectURL(url);
-    return "popup_blocked";
+  if (!win) return "popup_blocked";
+
+  let written = false;
+  try {
+    const target = win.document;
+    target.open();
+    target.write(html);
+    // Without this the tab spins forever: the document stays open for further
+    // writes and never reaches `load`, so the print dialog opens against a
+    // document the browser still considers unfinished.
+    target.close();
+    written = true;
+  } catch {
+    written = false;
   }
 
-  const revoke = () => URL.revokeObjectURL(url);
+  // A nicety, and separately guarded: a browser that refuses `focus()` has not
+  // failed to open the document.
   try {
-    win.addEventListener("load", revoke, { once: true });
     win.focus();
   } catch {
-    // Some browsers restrict reaching into the new window. The timer below
-    // still frees the blob; revoking twice is a no-op.
+    // Nothing to do — the tab is open either way.
   }
-  window.setTimeout(revoke, REVOKE_AFTER_MS);
 
+  return written ? "opened" : openViaBlob(win, html);
+}
+
+/**
+ * Hand the tab a URL instead of writing into it.
+ *
+ * Only for a browser that will not let the opener reach `win.document` at all.
+ * It carries the address-bar problem described above, which is exactly why it
+ * is the fallback and not the path everyone takes.
+ */
+function openViaBlob(win: Window, html: string): PrintOpenResult {
+  let url: string;
+  try {
+    url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  } catch {
+    return "unavailable";
+  }
+
+  try {
+    win.location.href = url;
+  } catch {
+    // Nothing will ever display it, so it is released rather than leaked.
+    URL.revokeObjectURL(url);
+    return "unavailable";
+  }
+
+  // A timer and nothing else. The `load` listener this replaces was registered
+  // on the opener's view of the new window, whose initial empty document fires
+  // `load` before the blob navigation commits — so it revoked the URL the tab
+  // was in the middle of loading.
+  window.setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
   return "opened";
 }
