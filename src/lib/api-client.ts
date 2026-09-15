@@ -80,6 +80,25 @@ export const api = {
     return response.data;
   },
 
+  /** PUT without unwrapping nested `data` — for endpoints whose useful fields
+   *  sit BESIDE `data` rather than inside it. `put` returns `response.data.data`
+   *  and would drop them, silently, because both helpers are typed
+   *  `Promise<T>`. */
+  rawPut: async <T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
+    const response = await axiosClient.put<T>(url, data, config);
+    return response.data;
+  },
+
+  /** DELETE without unwrapping nested `data` — for endpoints that answer flat. */
+  rawDelete: async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+    const response = await axiosClient.delete<T>(url, config);
+    return response.data;
+  },
+
   /** GET without unwrapping nested `data` — for endpoints that return a raw Laravel paginator ({data, links, meta}) instead of the {success, data, message} envelope */
   getRaw: async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
     const response = await axiosClient.get<T>(url, config);

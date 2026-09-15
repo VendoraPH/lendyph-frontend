@@ -22,6 +22,19 @@ import { env } from "@/config/env";
 export interface NavSubItem {
   title: string;
   href: string;
+  /**
+   * Optional, and optional on purpose: a child with no permission of its own is
+   * covered by its parent's, which is true of every child that shipped before
+   * this field existed — "New Member" needs nothing beyond `borrowers:view`
+   * to be a fair offer.
+   *
+   * Set it when the child's route guards on something STRICTER than the parent.
+   * `/settings/data-import` is the first: Settings opens on `settings:view`,
+   * which a manager has, while the import itself needs `imports:process`,
+   * which only an admin has. Without this the sidebar would show the link to
+   * everyone who can see Settings and land them on AccessDenied.
+   */
+  permission?: Permission;
 }
 
 export interface NavItem {
@@ -145,6 +158,14 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
       { title: "GCash", href: "/settings/gcash" },
+      // Lives under Settings because it is admin-only, org-wide, one-time
+      // config — and because it belongs to neither Members nor Loans: a single
+      // run writes both.
+      {
+        title: "Data Import",
+        href: "/settings/data-import",
+        permission: "imports:process",
+      },
     ],
   },
 ];
