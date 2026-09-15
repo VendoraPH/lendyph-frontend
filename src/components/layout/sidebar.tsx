@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
@@ -62,14 +62,33 @@ function NavLink({
   onNavigate?: () => void;
   badge?: number;
 }) {
-  const hasChildren = item.children && item.children.length > 0;
+  const { can } = usePermission();
+  // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
+  // gates the top-level item on ITS permission, which for Settings is
+  // `settings:view` — so a child that guards on something stricter used to be
+  // offered to everyone who could open the parent, and clicking it landed on
+  // AccessDenied. A child with no `permission` of its own inherits the
+  // parent's, which is why every pre-existing child is untouched by this.
+  const visibleChildren = useMemo(
+    () => (item.children ?? []).filter((c) => !c.permission || can(c.permission)),
+    // `can` reads the auth store through a fresh closure on every render, so it
+    // is not referentially stable; depending on it would rebuild this array
+    // every render and defeat the memo. The permissions it reads only change
+    // when the user does, and that remounts the whole app shell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [item.children]
+  );
+  // Deliberately `visibleChildren`, not `item.children`: an item whose every
+  // child is hidden must render as a plain link, not as an expander that opens
+  // onto nothing.
+  const hasChildren = visibleChildren.length > 0;
   const isExactMatch = pathname === item.href;
   const isPrefixMatch = pathname.startsWith(item.href + "/");
   // For items without children, active on exact or prefix match
   // For items with children, only used to expand — dot shown on child only
   const isActive = hasChildren ? false : (isExactMatch || isPrefixMatch);
   const isChildActive = hasChildren
-    ? item.children!.some((c) => pathname === c.href)
+    ? visibleChildren.some((c) => pathname === c.href)
     : false;
   const isOpen = isExactMatch || isPrefixMatch || isChildActive;
   const [expanded, setExpanded] = useState(isOpen);
@@ -105,7 +124,7 @@ function NavLink({
           {hasChildren ? (
             <>
               <span className="font-semibold text-xs mb-1 text-foreground">{item.title}</span>
-              {item.children!.map((child) => (
+              {visibleChildren.map((child) => (
                 <Link
                   key={child.href}
                   href={child.href}
@@ -175,7 +194,7 @@ function NavLink({
       </button>
       <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", expanded ? "max-h-96 opacity-100 mt-1" : "max-h-0 opacity-0")}>
         <div className="ml-6 flex flex-col gap-0.5 border-l-2 border-brand-orange/15 pl-4">
-          {item.children!.map((child) => {
+          {visibleChildren.map((child) => {
             const childActive = pathname === child.href;
             return (
               <Link
