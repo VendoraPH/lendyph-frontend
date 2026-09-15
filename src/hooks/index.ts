@@ -5,3 +5,7 @@ export { useIsMobile } from "./use-mobile";
 export { usePermission } from "./use-permission";
 export { usePrintables } from "./use-printables";
 export type { UsePrintablesResult } from "./use-printables";
+export { useAccountingResource } from "./use-accounting-resource";
+export type { AccountingResource } from "./use-accounting-resource";
+export { useChartOfAccounts } from "./use-chart-of-accounts";
+export type { ChartOfAccounts } from "./use-chart-of-accounts";

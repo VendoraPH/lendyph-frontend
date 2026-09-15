@@ -72,6 +72,27 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+/**
+ * A refresh that answered 200 but carried no usable token.
+ *
+ * Named so the catch below can tell it apart from a network error. Both arrive
+ * as non-Axios throws with no `response.status`, but they mean opposite things:
+ * a dropped connection says nothing about the session and the tokens should be
+ * kept, whereas a 200 we cannot read a token out of means whatever answered is
+ * not our API and the access token in hand is unusable.
+ *
+ * The live backend cannot produce this — AuthController::refresh() returns a
+ * bare { token } — but a proxy, CDN or captive portal answering 200 with its
+ * own body would. Without this the user keeps a dead token, sees no dialog, and
+ * every later request 401s into a refresh that can never succeed.
+ */
+export class MalformedRefreshError extends Error {
+  constructor(message = "Refresh response contained no access token") {
+    super(message);
+    this.name = "MalformedRefreshError";
+  }
+}
+
 // Response interceptor — handle 401 + token refresh
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -139,7 +160,19 @@ axiosClient.interceptors.response.use(
           }
         );
 
-        const newToken = data.token;
+        // The API is inconsistent about the envelope: /auth/login answers with
+        // a bare { token, user } (hence api.rawPost in auth.service) while most
+        // routes wrap their payload in { success, data }. This call uses plain
+        // axios, so nothing unwraps it for us — accept either shape.
+        const newToken: unknown = data?.data?.token ?? data?.token;
+        if (typeof newToken !== "string" || newToken.length === 0) {
+          // Reading the token from the wrong depth used to yield undefined,
+          // which localStorage stored as the string "undefined". Every later
+          // request then sent `Bearer undefined`, 401'd, tried to refresh with
+          // that same garbage, and logged the user out mid-session. Treat a
+          // token we cannot find as a failed refresh instead.
+          throw new MalformedRefreshError();
+        }
         tokenManager.setAccessToken(newToken);
 
         processQueue(null, newToken);
@@ -147,14 +180,35 @@ axiosClient.interceptors.response.use(
         return axiosClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        tokenManager.clearTokens();
-        // Instead of a hard redirect (window.location.href = "/login"),
-        // dispatch a custom event so the SessionProvider can handle the
-        // logout gracefully — showing a toast and cleaning up auth state
-        // without jarring the user mid-action.
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("auth:session-expired"));
+
+        // Only an outright rejection means the session is really gone. A
+        // dropped connection, a timeout, or a 500 says nothing about whether
+        // the user is still signed in — treating those as a dead session
+        // logged people out mid-task over a blip on the wire, and threw away
+        // a set of tokens that were still perfectly good.
+        const status = axios.isAxiosError(refreshError)
+          ? refreshError.response?.status
+          : undefined;
+        // A malformed 200 is not a wire blip: it joins the outright
+        // rejections, because the token we hold cannot be renewed by whatever
+        // is answering.
+        const sessionIsGone =
+          status === 401 ||
+          status === 403 ||
+          status === 419 ||
+          refreshError instanceof MalformedRefreshError;
+
+        if (sessionIsGone) {
+          tokenManager.clearTokens();
+          // Instead of a hard redirect (window.location.href = "/login"),
+          // dispatch a custom event so the SessionProvider can handle the
+          // logout gracefully — showing a toast and cleaning up auth state
+          // without jarring the user mid-action.
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("auth:session-expired"));
+          }
         }
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

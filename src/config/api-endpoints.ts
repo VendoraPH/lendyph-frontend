@@ -249,6 +249,88 @@ export const API_ENDPOINTS = {
     // register/login pages and the app shell. Mirrors BRANCHES.PUBLIC_LIST.
     PUBLIC: "/branding/public",
   },
+  /**
+   * Accounting — NOT YET IN SWAGGER.
+   *
+   * Every path below is a proposal, written here so the service layer has one
+   * place to be wrong rather than thirteen. None of them answer today; the
+   * handoff covering payloads and responses went to the backend team. Re-check
+   * against the spec before trusting any of these.
+   *
+   * The three that matter most, because they cannot be done from the client at
+   * all: POST /accounting/journals/{id}/post, /reverse, and the automatic
+   * postings raised by loan release and collection. A journal has to be written
+   * in the same database transaction as the lending event that caused it — do
+   * it in a second request and a crash between the two leaves the books
+   * disagreeing with the portfolio, with nothing to point at the difference.
+   */
+  ACCOUNTING: {
+    // Dashboard
+    DASHBOARD: "/accounting/dashboard",
+
+    // Chart of accounts
+    ACCOUNTS_LIST: "/accounting/accounts",
+    ACCOUNTS_DETAIL: (id: number) => `/accounting/accounts/${id}`,
+    ACCOUNTS_CREATE: "/accounting/accounts",
+    ACCOUNTS_UPDATE: (id: number) => `/accounting/accounts/${id}`,
+    ACCOUNTS_DELETE: (id: number) => `/accounting/accounts/${id}`,
+    ACCOUNTS_SEED: "/accounting/accounts/seed",
+
+    // Journals. Posting and reversing are separate verbs, not a PUT on the
+    // entry — a posted journal is immutable, and `reverse` writes a second
+    // entry rather than editing the first.
+    JOURNALS_LIST: "/accounting/journals",
+    JOURNALS_DETAIL: (id: number) => `/accounting/journals/${id}`,
+    JOURNALS_CREATE: "/accounting/journals",
+    JOURNALS_UPDATE: (id: number) => `/accounting/journals/${id}`,
+    JOURNALS_POST: (id: number) => `/accounting/journals/${id}/post`,
+    JOURNALS_REVERSE: (id: number) => `/accounting/journals/${id}/reverse`,
+
+    // Reporting
+    GENERAL_LEDGER: "/accounting/general-ledger",
+    TRIAL_BALANCE: "/accounting/trial-balance",
+    BALANCE_SHEET: "/accounting/statements/balance-sheet",
+    INCOME_STATEMENT: "/accounting/statements/income-statement",
+    CASH_FLOW: "/accounting/statements/cash-flow",
+    EQUITY_CHANGES: "/accounting/statements/equity-changes",
+    RECEIVABLE_AGING: "/accounting/loans/aging",
+
+    // BIR books. One path per book, keyed by `BookKind`, so the books screen
+    // can pick by tab without a switch statement per call site.
+    BOOKS: {
+      general_journal: "/accounting/books/general-journal",
+      general_ledger: "/accounting/books/general-ledger",
+      cash_receipts: "/accounting/books/cash-receipts",
+      cash_disbursements: "/accounting/books/cash-disbursements",
+    },
+
+    // Cash and bank
+    CASH_ACCOUNTS_LIST: "/accounting/cash-accounts",
+    CASH_TRANSFER: "/accounting/cash-accounts/transfer",
+
+    // Expenses and payables
+    EXPENSES_LIST: "/accounting/expenses",
+    EXPENSES_DETAIL: (id: number) => `/accounting/expenses/${id}`,
+    EXPENSES_CREATE: "/accounting/expenses",
+    EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
+    EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
+
+    // Reconciliation
+    RECONCILIATIONS_LIST: "/accounting/reconciliations",
+    RECONCILIATIONS_CREATE: "/accounting/reconciliations",
+    RECONCILIATIONS_DETAIL: (id: number) => `/accounting/reconciliations/${id}`,
+    RECONCILIATIONS_MATCH: (id: number) => `/accounting/reconciliations/${id}/match`,
+
+    // Periods
+    PERIODS_LIST: "/accounting/periods",
+    PERIODS_CLOSE: (id: number) => `/accounting/periods/${id}/close`,
+    PERIODS_REOPEN: (id: number) => `/accounting/periods/${id}/reopen`,
+
+    // Settings and opening balances
+    SETTINGS: "/accounting/settings",
+    ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
+    OPENING_BALANCES: "/accounting/opening-balances",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },
