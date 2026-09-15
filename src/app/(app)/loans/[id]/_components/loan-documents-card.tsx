@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -114,18 +114,21 @@ export function LoanDocumentsCard({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Paperclip className="h-4 w-4 text-muted-foreground" />
-            Attached Documents
-            {!loading && documents.length > 0 && (
-              <Badge variant="outline" className="text-[10px] h-5">
-                {documents.length}
-              </Badge>
-            )}
-          </CardTitle>
+    <CollapsibleCard
+      icon={<Paperclip className="h-4 w-4 text-muted-foreground" />}
+      title={
+        <>
+          Attached Documents
+          {!loading && documents.length > 0 && (
+            <Badge variant="outline" className="text-[10px] h-5">
+              {documents.length}
+            </Badge>
+          )}
+        </>
+      }
+      contentClassName="p-0"
+      headerExtra={
+        <>
           {canUpload && (
             <div>
               <input
@@ -150,9 +153,9 @@ export function LoanDocumentsCard({
               </Button>
             </div>
           )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
+        </>
+      }
+    >
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -240,7 +243,6 @@ export function LoanDocumentsCard({
             </Table>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }
