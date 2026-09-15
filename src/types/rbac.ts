@@ -67,7 +67,16 @@ export type Module =
   | "chart_of_accounts"
   | "journals"
   | "expenses"
-  | "cash_accounts";
+  | "cash_accounts"
+  // ── Credit Scoring ──
+  //
+  // Internal 0-100 risk score plus a recommendation, never an automated
+  // approve/deny. `view` covers every read-only screen (dashboard, borrower
+  // list, borrower profile, score history, risk monitoring); `override` is
+  // the human decision verb (see Action below); `settings` gates the
+  // scorecard weights/thresholds and the module's privacy/versioning config,
+  // mirroring `accounting:settings`.
+  | "credit_scoring";
 
 export type Action =
   | "view"
@@ -98,7 +107,13 @@ export type Action =
   | "reverse"
   | "reconcile"
   | "close"
-  | "transfer";
+  | "transfer"
+  // A credit score is never hand-edited — only recalculated by the backend
+  // and then acted on. `override` is that act: a human records a Decision
+  // (Approve/Decline/Refer/Hold) with a required Reason against a specific
+  // score, writing to an immutable audit trail. Distinct from `update`
+  // because nothing about the score itself changes.
+  | "override";
 
 export type Permission = `${Module}:${Action}`;
 
