@@ -72,6 +72,27 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+/**
+ * A refresh that answered 200 but carried no usable token.
+ *
+ * Named so the catch below can tell it apart from a network error. Both arrive
+ * as non-Axios throws with no `response.status`, but they mean opposite things:
+ * a dropped connection says nothing about the session and the tokens should be
+ * kept, whereas a 200 we cannot read a token out of means whatever answered is
+ * not our API and the access token in hand is unusable.
+ *
+ * The live backend cannot produce this — AuthController::refresh() returns a
+ * bare { token } — but a proxy, CDN or captive portal answering 200 with its
+ * own body would. Without this the user keeps a dead token, sees no dialog, and
+ * every later request 401s into a refresh that can never succeed.
+ */
+export class MalformedRefreshError extends Error {
+  constructor(message = "Refresh response contained no access token") {
+    super(message);
+    this.name = "MalformedRefreshError";
+  }
+}
+
 // Response interceptor — handle 401 + token refresh
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -150,7 +171,7 @@ axiosClient.interceptors.response.use(
           // request then sent `Bearer undefined`, 401'd, tried to refresh with
           // that same garbage, and logged the user out mid-session. Treat a
           // token we cannot find as a failed refresh instead.
-          throw new Error("Refresh response contained no access token");
+          throw new MalformedRefreshError();
         }
         tokenManager.setAccessToken(newToken);
 
@@ -168,7 +189,14 @@ axiosClient.interceptors.response.use(
         const status = axios.isAxiosError(refreshError)
           ? refreshError.response?.status
           : undefined;
-        const sessionIsGone = status === 401 || status === 403 || status === 419;
+        // A malformed 200 is not a wire blip: it joins the outright
+        // rejections, because the token we hold cannot be renewed by whatever
+        // is answering.
+        const sessionIsGone =
+          status === 401 ||
+          status === 403 ||
+          status === 419 ||
+          refreshError instanceof MalformedRefreshError;
 
         if (sessionIsGone) {
           tokenManager.clearTokens();

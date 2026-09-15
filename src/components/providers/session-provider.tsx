@@ -218,9 +218,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showWarning} onOpenChange={(open) => {
-        if (!open) handleStaySignedIn();
-      }}>
+      {/* Same contract as the expiry dialog above: modal, no close button, and
+          no dismiss path other than the two buttons. Escape and backdrop
+          clicks used to run handleStaySignedIn, so brushing a key bought a
+          fresh full timeout the user never asked for. onOpenChange is
+          deliberately inert — staying signed in has to be a choice. */}
+      <Dialog open={showWarning} onOpenChange={() => {}}>
         <DialogContent size="sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
