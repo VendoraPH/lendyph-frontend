@@ -1,4 +1,10 @@
 import { saveAs } from "file-saver";
+// Shared with the CSV import's error report — see @/lib/csv-escape. The local
+// copy this replaced quoted `,` `"` and `\n` but not a lone `\r`, which splits a
+// record and shifts every column after it. Formula neutralisation is
+// deliberately NOT applied here: these exports are full of negative currency,
+// and a leading `-` is a figure, not an attack.
+import { csvRow as row } from "@/lib/csv-escape";
 import { todayISO } from "@/lib/format";
 import { csvBlob, toCsvRow as row } from "@/lib/csv";
 import { formatCell } from "@/lib/report-format";
