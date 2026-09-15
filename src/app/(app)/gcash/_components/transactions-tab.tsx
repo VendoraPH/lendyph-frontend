@@ -31,6 +31,7 @@ import type {
   GCashTransactionType,
 } from "@/types";
 import { PaidButton } from "./paid-button";
+import { PartyCell } from "./party-cell";
 
 const TYPE_OPTIONS: { value: GCashTransactionType | "all"; label: string }[] = [
   { value: "all", label: "All Types" },
@@ -182,7 +183,7 @@ export function TransactionsTab() {
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>Reference</TableHead>
-              <TableHead>Member</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead>Type</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead className="text-right">Charge</TableHead>
@@ -215,7 +216,9 @@ export function TransactionsTab() {
                   <TableCell className="font-mono text-xs">
                     {r.reference_no}
                   </TableCell>
-                  <TableCell>{r.borrower?.full_name ?? "—"}</TableCell>
+                  <TableCell>
+                    <PartyCell borrower={r.borrower} nonMember={r.non_member} />
+                  </TableCell>
                   <TableCell>
                     {r.type === "cash_in" ? "Cash In" : "Cash Out"}
                   </TableCell>

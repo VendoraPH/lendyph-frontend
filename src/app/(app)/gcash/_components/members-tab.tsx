@@ -138,7 +138,8 @@ export function MembersTab() {
         <CashInDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          borrower={{
+          party={{
+            kind: "member",
             id: dialog.borrower.id,
             full_name: dialog.borrower.full_name ?? "",
             borrower_code: dialog.borrower.borrower_code ?? undefined,
@@ -150,7 +151,8 @@ export function MembersTab() {
         <CashOutDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          borrower={{
+          party={{
+            kind: "member",
             id: dialog.borrower.id,
             full_name: dialog.borrower.full_name ?? "",
             borrower_code: dialog.borrower.borrower_code ?? undefined,
