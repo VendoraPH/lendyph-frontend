@@ -53,7 +53,7 @@ export default function CreditAssessmentPage() {
             <SelectContent>
               {borrowers.map((b) => (
                 <SelectItem key={b.id} value={String(b.id)}>
-                  {b.first_name} {b.last_name}
+                  {b.full_name}
                 </SelectItem>
               ))}
             </SelectContent>
