@@ -156,6 +156,5 @@ export const env = {
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
     showErrorDetails: getBoolEnvVar("NEXT_PUBLIC_SHOW_ERROR_DETAILS", false),
-    mockApi: getBoolEnvVar("NEXT_PUBLIC_MOCK_API", false),
   },
 };

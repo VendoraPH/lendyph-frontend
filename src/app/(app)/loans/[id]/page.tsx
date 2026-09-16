@@ -1781,7 +1781,7 @@ export default function LoanDetailPage({
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
   const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
   const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
-  const loanRejectedBy = loan?.created_by_user?.full_name ?? loan?.rejected_by; // TODO: actual rejected_by_user
+  const loanRejectedBy = loan?.rejected_by_user?.full_name ?? loan?.rejected_by_user?.name ?? loan?.rejected_by;
   // total_payable from API is computed by summing amortization_schedules. For
   // unreleased loans (draft/for_review/approved) those rows don't exist yet,
   // so the API returns 0. Fall back to a straight-line projection — same math
