@@ -1883,7 +1883,7 @@ export default function LoanDetailPage({
       if (loan.status === "draft") {
         await loanService.submit(loan.id);
       } else {
-        await loanApprovalService.approve(loan.id, currentStep.step_id, {
+        await loanApprovalService.approve(loan.id, currentStep.id, {
           remarks: stepRemarks.trim() || undefined,
         });
       }
@@ -1910,7 +1910,7 @@ export default function LoanDetailPage({
     const forwardedTo = nextStep?.name;
     try {
       setStepActionLoading(true);
-      await loanApprovalService.approve(loan.id, currentStep.step_id, {
+      await loanApprovalService.approve(loan.id, currentStep.id, {
         remarks: stepRemarks.trim() || undefined,
       });
       await refreshAfterStepAction();
@@ -1948,7 +1948,7 @@ export default function LoanDetailPage({
     }
     try {
       setStepActionLoading(true);
-      await loanApprovalService.sendBack(loan.id, currentStep.step_id, {
+      await loanApprovalService.sendBack(loan.id, currentStep.id, {
         target_step_order: targetStep.index,
         remarks,
       });

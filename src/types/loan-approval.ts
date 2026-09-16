@@ -27,13 +27,20 @@ export type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back
 
 export interface LoanApprovalStep {
   /**
+   * The approval-step ROW id, and the only thing that addresses this step:
+   * `/approval-steps/{id}/approve`. Not `step_id` — that is the chain-config
+   * slug, which repeats on every round and on every loan, so it cannot
+   * identify a row. Passing it to the act endpoints 404s.
+   */
+  id: number;
+  /**
    * The server's `step_order`. This is the value `send-back` wants as
    * `target_step_order` — it is NOT guaranteed to be the row's position in
    * `current_steps`, so use it for payloads and array position for neighbour
    * lookups and "Step N of M" labels.
    */
   index: number;
-  /** Route key for the act endpoints: `/approval-steps/{step_id}/approve`. */
+  /** The chain-config slug (e.g. `"loan-processor"`). Display/diagnostics only. */
   step_id: number | string;
   name: string;
   role: string;
