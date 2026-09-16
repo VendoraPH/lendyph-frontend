@@ -84,8 +84,19 @@ export default function BorrowerCreditProfilePage({
                 </CardContent>
               </Card>
 
-              {flagsResource.data && flagsResource.data.length > 0 && (
-                <PolicyFlagAlert flags={flagsResource.data} />
+              {flagsResource.unavailable || flagsResource.error ? (
+                <Card>
+                  <CardContent className="pt-6 text-sm text-muted-foreground">
+                    Policy flags unavailable — this borrower&apos;s hard-flag status
+                    could not be loaded. Treat this borrower as unscreened for hard
+                    flags until this is resolved.
+                  </CardContent>
+                </Card>
+              ) : (
+                flagsResource.data &&
+                flagsResource.data.length > 0 && (
+                  <PolicyFlagAlert flags={flagsResource.data} />
+                )
               )}
 
               <ScoreBreakdownCard breakdown={profile.category_breakdown} />

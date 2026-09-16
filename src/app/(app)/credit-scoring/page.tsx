@@ -8,16 +8,15 @@ import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "./_components/page-header";
-import { BranchFilter, FilterBar, ALL_BRANCHES } from "./_components/filters";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { CreditScoringDashboardSummary } from "@/types/credit-scoring";
+import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
 import type { LucideIcon } from "lucide-react";
 import { Users, TrendingUp, ShieldAlert, History } from "lucide-react";
 
-const CHART_HEX: Record<string, string> = {
+const CHART_HEX: Record<RiskLevel, string> = {
   very_low: "#10b981",
   low: "#22c55e",
   moderate: "#f59e0b",
@@ -107,8 +106,6 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
 }
 
 export default function CreditScoringDashboardPage() {
-  const [branch, setBranch] = useState(ALL_BRANCHES);
-
   const fetcher = useCallback(() => creditScoringService.getDashboardSummary(), []);
   const resource = useApiResource<CreditScoringDashboardSummary>(fetcher);
 
@@ -119,10 +116,6 @@ export default function CreditScoringDashboardPage() {
           title="Credit Scoring"
           description="Portfolio-wide view of borrower credit scores and risk distribution."
         />
-
-        <FilterBar>
-          <BranchFilter value={branch} onChange={setBranch} />
-        </FilterBar>
 
         <DataState
           resource={resource}

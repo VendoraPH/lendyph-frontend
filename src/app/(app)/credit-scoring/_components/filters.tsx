@@ -24,10 +24,19 @@ interface BranchFilterProps {
 export function BranchFilter({ value, onChange }: BranchFilterProps) {
   const { branches } = useBranches();
 
+  const items = [
+    { value: ALL_BRANCHES, label: "All branches" },
+    ...branches.map((branch) => ({ value: String(branch.id), label: branch.name })),
+  ];
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">Branch</Label>
-      <Select value={value} onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}>
+      <Select
+        value={value}
+        onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
+        items={items}
+      >
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
@@ -50,16 +59,26 @@ interface RiskLevelFilterProps {
 }
 
 export function RiskLevelFilter({ value, onChange }: RiskLevelFilterProps) {
+  const riskLevels = Object.keys(RISK_LEVEL_LABELS) as RiskLevel[];
+  const items = [
+    { value: ALL_RISK_LEVELS, label: "All risk levels" },
+    ...riskLevels.map((level) => ({ value: level, label: RISK_LEVEL_LABELS[level] })),
+  ];
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">Risk Level</Label>
-      <Select value={value} onValueChange={(v) => onChange(v ?? ALL_RISK_LEVELS)}>
+      <Select
+        value={value}
+        onValueChange={(v) => onChange(v ?? ALL_RISK_LEVELS)}
+        items={items}
+      >
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_RISK_LEVELS}>All risk levels</SelectItem>
-          {(Object.keys(RISK_LEVEL_LABELS) as RiskLevel[]).map((level) => (
+          {riskLevels.map((level) => (
             <SelectItem key={level} value={level}>
               {RISK_LEVEL_LABELS[level]}
             </SelectItem>

@@ -98,7 +98,11 @@ export function ManualOverrideDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Decision</Label>
-            <Select value={decision} onValueChange={(v) => setDecision(v as CreditDecision["decision"])}>
+            <Select
+              value={decision}
+              onValueChange={(v) => setDecision(v as CreditDecision["decision"])}
+              items={DECISION_OPTIONS}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a decision" />
               </SelectTrigger>

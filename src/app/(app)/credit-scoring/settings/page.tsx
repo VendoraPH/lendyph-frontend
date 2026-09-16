@@ -23,7 +23,7 @@ export default function CreditScoringSettingsPage() {
   async function handleSave(current: CreditScoringSettings) {
     setSaving(true);
     try {
-      await creditScoringService.updateSettings(draft ?? current);
+      await creditScoringService.updateSettings(current);
       toast.success("Settings saved.");
       setDraft(null);
       resource.refetch();

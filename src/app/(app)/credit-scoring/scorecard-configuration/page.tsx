@@ -11,7 +11,6 @@ import { isValidWeightTotal, sumWeights } from "@/lib/credit-scoring/scorecard-w
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import type { ScorecardConfig } from "@/types/credit-scoring";
