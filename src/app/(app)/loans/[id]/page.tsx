@@ -4,19 +4,18 @@ import { useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifyWarning } from "@/lib/notify";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
+  loanApprovalService,
   loanProductService,
   loanAdjustmentService,
   repaymentService,
   coMakerService,
   userService,
-  approvalWorkflowService,
   reportService,
-  type ApprovalChainStep,
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
@@ -44,6 +43,8 @@ import {
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
 import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import { isApprovalChainHidden, type LoanApprovalStep } from "@/types";
+import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
@@ -327,182 +328,47 @@ const adjustmentStatusColors: Record<string, string> = {
 };
 
 // ── Multi-Step Approval Chain ──
-// Implements the LOAN RELEASE FLOWCHART. The chain is loaded from
-// approvalWorkflowService so admins can reconfigure it via
-// /settings/approval-workflow. Each loan snapshots the chain at seed time,
-// so changes to the config only affect NEW loans (in-flight loans keep
-// whatever chain they started with).
+// Implements the LOAN RELEASE FLOWCHART. The chain is materialised and owned by
+// the SERVER (`GET /loans/{loan}/approval-steps`, read here through
+// `useLoanApproval`); this page renders it and offers the one action the server
+// says the signed-in user may take. It used to live in `localStorage`, which
+// meant approvals never crossed devices, "clear site data" erased who had
+// signed off, and none of it reached the audit log.
 //
-// On any "Approved? = No" the loan is sent back to Loan Processor for
-// revision (the chain does NOT support terminal rejection — "Void Loan"
-// is the escape hatch for drafts).
+// There is deliberately NO client-side derivation of the chain from
+// `loans.status` any more, and no migration of the old browser copy. The
+// derivation that used to live here (`deriveStepsFromLoanStatus`) WAS the
+// drift: it had no branch for `void`, `current` or `past_due`, so all three
+// fell through to a draft-like chain and a live, past-due loan rendered with
+// the Loan Processor still pending. The server re-derives the chain from the
+// authoritative `loans.status` when `loanService.submit()` seeds it. Where the
+// server has no answer the card says so — an invented chain is a claim about
+// who approved a loan that nobody can verify.
+//
+// On any "Approved? = No" the loan is sent back for revision (the chain does
+// NOT support terminal rejection — "Void Loan" is the escape hatch for drafts).
 
-type ChainStepKind = "submit" | "approve" | "release" | "confirmed";
-
-type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
-
-interface ApprovalStep {
-  index: number;
-  name: string;
-  role: string;
-  kind: ChainStepKind;
-  status: ApprovalStepStatus;
-  remarks?: string;
-  acted_at?: string; // ISO
-  acted_by?: string;
-}
-
-// A snapshot of a previous revision round, created whenever an approver sends
-// the loan back to the Loan Processor.
-interface RevisionRound {
-  round: number;
-  steps: ApprovalStep[];
-  sent_back_by: string;
-  sent_back_at: string;
-  sent_back_remarks: string;
-}
-
-interface ApprovalState {
-  current_steps: ApprovalStep[];
-  rounds: RevisionRound[];
-}
-
-function buildFreshSteps(
-  chain: ApprovalChainStep[],
-  pendingIndex: number = 0
-): ApprovalStep[] {
-  return chain.map((step, i) => ({
-    index: i,
-    name: step.name,
-    role: step.role,
-    kind: step.kind,
-    status: i === pendingIndex ? "pending" : "waiting",
-  }));
-}
-
-function canUserActOnStep(step: ApprovalStep, userRoles: string[] | undefined): boolean {
+/**
+ * ADVISORY ONLY. The gate is `step.can_act`, which the server computes for the
+ * requesting user, and behind that the endpoints themselves. This exists so a
+ * button can be disabled before the round trip when the signed-in user plainly
+ * lacks the role; it must never be the reason an action is considered allowed.
+ */
+function canUserActOnStep(
+  step: LoanApprovalStep,
+  userRoles: string[] | undefined
+): boolean {
   if (!userRoles || userRoles.length === 0) return false;
   // Admins (client) and super_admin (developer) can act on any step.
   if (userRoles.includes("admin") || userRoles.includes("super_admin")) return true;
   return userRoles.includes(step.role);
 }
 
-function approvalStorageKey(loanId: number | string): string {
-  return `loan-approval-${loanId}`;
-}
-
-// Back-compat migration: older stored approval states were saved before
-// the `kind` field existed on ApprovalStep. Without a kind, the action
-// panel's conditional buttons (`kind === "approve"`) silently render
-// nothing. Infer the kind from the step name so old loans still work.
-function migrateStep(step: ApprovalStep): ApprovalStep {
-  if (step.kind) return step;
-  const name = (step.name ?? "").toLowerCase();
-  const inferred: ChainStepKind = name.includes("loan processor") || name.includes("processor")
-    ? "submit"
-    : name.includes("cashier") || name.includes("release")
-      ? "release"
-      : "approve";
-  return { ...step, kind: inferred };
-}
-
-function migrateSteps(steps: ApprovalStep[]): ApprovalStep[] {
-  return steps.map(migrateStep);
-}
-
-function loadApprovalState(loanId: number | string): ApprovalState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(approvalStorageKey(loanId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ApprovalState | ApprovalStep[];
-    // Back-compat: earlier version stored a bare array
-    if (Array.isArray(parsed)) {
-      return { current_steps: migrateSteps(parsed), rounds: [] };
-    }
-    if (!parsed.current_steps || !Array.isArray(parsed.current_steps)) return null;
-    return {
-      current_steps: migrateSteps(parsed.current_steps),
-      rounds: (parsed.rounds ?? []).map((r) => ({
-        ...r,
-        steps: migrateSteps(r.steps),
-      })),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveApprovalState(loanId: number | string, state: ApprovalState) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(approvalStorageKey(loanId), JSON.stringify(state));
-  } catch {
-    /* ignore quota errors */
-  }
-}
-
-// Derive where the loan should be in the chain based on its server status.
-// Used to seed a fresh state when localStorage has nothing for this loan.
-// The chain is whatever the admin has configured via the settings page.
-function deriveStepsFromLoanStatus(
-  chain: ApprovalChainStep[],
-  status: string
-): ApprovalStep[] {
-  const steps = buildFreshSteps(chain);
-  if (steps.length === 0) return steps;
-
-  const firstApproveIdx = steps.findIndex((s) => s.kind === "approve");
-  const lastApproveIdx = (() => {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (steps[i].kind === "approve") return i;
-    }
-    return -1;
-  })();
-  const releaseIdx = steps.findIndex((s) => s.kind === "release");
-
-  if (status === "draft") {
-    // Loan Processor (submit step, index 0) is pending
-    return steps;
-  }
-  if (status === "for_review") {
-    // Submit done; first approve step is pending
-    steps[0] = { ...steps[0], status: "approved" };
-    if (firstApproveIdx >= 0) {
-      steps[firstApproveIdx] = { ...steps[firstApproveIdx], status: "pending" };
-    }
-    return steps;
-  }
-  if (status === "approved") {
-    // All approve steps done; release step is pending
-    for (let i = 0; i <= lastApproveIdx; i++) {
-      steps[i] = { ...steps[i], status: "approved" };
-    }
-    if (releaseIdx >= 0) {
-      steps[releaseIdx] = { ...steps[releaseIdx], status: "pending" };
-    }
-    return steps;
-  }
-  if (
-    status === "released" ||
-    status === "ongoing" ||
-    status === "completed" ||
-    status === "closed" ||
-    status === "defaulted" ||
-    status === "restructured"
-  ) {
-    // Full chain done
-    return steps.map((s) => ({ ...s, status: "approved" }));
-  }
-  // draft-like fallback
-  return steps;
-}
-
 // ── Borrower's Active Loans Component ──
 
 const VISIBLE_LOAN_COUNT = 3;
 
-function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: ApprovalStep[]; loanStatus: string; loan?: Loan }) {
+function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
   const [activeLoansOpen, setActiveLoansOpen] = useState(true);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
@@ -512,9 +378,12 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
     (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
   );
 
-  // Show remarks section if we have local approval steps OR server-side approval remarks
+  // Show the remarks section when the server's chain has signoffs to show, OR
+  // when the loan carries top-level approval/rejection remarks. `rejected` and
+  // `void` both end the chain, so neither shows per-step history.
   const hasServerRemarks = !!(loan?.approval_remarks || loan?.rejection_remarks);
-  const showRemarks = (approvalSteps.length > 0 && loanStatus !== "rejected") || hasServerRemarks;
+  const showRemarks =
+    (approvalSteps.length > 0 && !isApprovalChainHidden(loanStatus)) || hasServerRemarks;
 
   return (
     <Collapsible open={activeLoansOpen} onOpenChange={setActiveLoansOpen}>
@@ -1231,9 +1100,18 @@ export default function LoanDetailPage({
     relationship_to_borrower: "",
   });
 
-  // Multi-step approval workflow (local state, persisted to localStorage)
-  const [approvalSteps, setApprovalSteps] = useState<ApprovalStep[]>([]);
-  const [approvalRounds, setApprovalRounds] = useState<RevisionRound[]>([]);
+  // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
+  // step goes to the API and is followed by a refetch; nothing on this page is
+  // the source of truth for who signed off. `approvalUnavailable` means the
+  // chain could not be read (404 until the endpoint ships, or a loan whose
+  // chain was never seeded) and must be rendered as such, not as "no approvals".
+  const {
+    steps: approvalSteps,
+    rounds: approvalRounds,
+    loading: approvalLoading,
+    unavailable: approvalUnavailable,
+    refresh: refreshApproval,
+  } = useLoanApproval(loan?.id, loan?.status);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
   // Index of the step an approver is sending the loan back to. Defaults to
@@ -1249,31 +1127,6 @@ export default function LoanDetailPage({
   // list below is knowingly incomplete and must say so rather than read as "no
   // other debt" — the approver is making a credit decision on it.
   const [borrowerLoansTruncated, setBorrowerLoansTruncated] = useState(false);
-  // Chain configuration fetched from the approval-workflow service
-  const [chainConfig, setChainConfig] = useState<ApprovalChainStep[] | null>(null);
-
-  // Load the admin-configured chain based on policy_exception flag
-  useEffect(() => {
-    if (!loan) return;
-    let cancelled = false;
-    const isPolicyException = loan.policy_exception === true;
-    approvalWorkflowService
-      .listForLoan(isPolicyException)
-      .then((chain) => {
-        if (!cancelled) setChainConfig(chain);
-      })
-      .catch(() => {
-        if (!cancelled) setChainConfig(
-          isPolicyException
-            ? approvalWorkflowService.getDefault()
-            : approvalWorkflowService.getDefaultNormal()
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loan?.id, loan?.policy_exception]);
-
   // Current logged-in user (used to gate approval actions by role)
   const currentUser = useAuthStore((s) => s.user);
   const currentUserDisplayName =
@@ -1642,25 +1495,6 @@ export default function LoanDetailPage({
     });
   }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
 
-  // Seed/load multi-step approval state whenever the loan or chain config changes.
-  // The chain is visible for every status except "rejected" (voided drafts).
-  useEffect(() => {
-    if (!loan || !chainConfig) return;
-    if (loan.status === "rejected") {
-      setApprovalSteps([]);
-      setApprovalRounds([]);
-      return;
-    }
-    const stored = loadApprovalState(loan.id);
-    if (stored) {
-      setApprovalSteps(stored.current_steps);
-      setApprovalRounds(stored.rounds);
-    } else {
-      setApprovalSteps(deriveStepsFromLoanStatus(chainConfig, loan.status));
-      setApprovalRounds([]);
-    }
-  }, [loan?.id, loan?.status, chainConfig]);
-
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
   //
@@ -1939,21 +1773,10 @@ export default function LoanDetailPage({
       setAutoPayDialogOpen(true);
       // Fetch the server-generated schedule
       fetchSchedule(loan.id);
-      // Mark the Cashier step approved in the local approval chain
-      if (approvalSteps.length > 0) {
-        const actedAt = new Date().toISOString();
-        const updatedSteps = approvalSteps.map((s) =>
-          s.kind === "release" && s.status === "pending"
-            ? {
-                ...s,
-                status: "approved" as ApprovalStepStatus,
-                acted_at: actedAt,
-                acted_by: currentUserDisplayName,
-              }
-            : s
-        );
-        persistApprovalState(updatedSteps, approvalRounds);
-      }
+      // Re-read the chain rather than marking the release step approved here.
+      // Releasing is a server-side event; whether it closes the release step is
+      // the server's call to record and ours to display.
+      void refreshApproval();
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
       notifyError(err, "We couldn't release this loan. Please try again.");
@@ -1963,124 +1786,139 @@ export default function LoanDetailPage({
   };
 
   // ── Multi-step approval handlers ──
+  //
+  // Every one of these calls the API and then re-reads. None of them patch the
+  // chain on screen from what they sent or from a response body: the server
+  // decides what the chain looks like next, including whether the loan itself
+  // moved status, and the only honest way to find out is to ask it.
 
+  // Array POSITION, deliberately NOT `step.index`. `index` is the server's
+  // `step_order` — an ordering key, not a guaranteed 0-based offset — so using
+  // it to reach a neighbour (`steps[index + 1]`) or to label "Step N of M"
+  // breaks silently the moment the server's orders don't start at zero. It is
+  // used for exactly one thing: the `target_step_order` a send-back carries.
   const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
   const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  const nextStep =
+    currentStepIndex >= 0 ? approvalSteps[currentStepIndex + 1] ?? null : null;
   // Confirmation step = the last approve step (next step is release). Its button
   // reads "Confirm & Forward" instead of "Approve & Forward" to signal the
   // chairwoman's role as final confirmation before release.
   const isConfirmationStep =
-    currentStep?.kind === "approve" &&
-    approvalSteps[currentStepIndex + 1]?.kind === "release";
+    currentStep?.kind === "approve" && nextStep?.kind === "release";
   const allStepsApproved =
     approvalSteps.length > 0 && approvalSteps.every((s) => s.status === "approved");
+  // THE SERVER DECIDES. `can_act` is the same rule the endpoints enforce,
+  // evaluated for the requesting user; the client role check is only a fallback
+  // for a payload that omits the flag.
   const canActOnCurrentStep = currentStep
+    ? currentStep.can_act ?? canUserActOnStep(currentStep, currentUser?.roles)
+    : false;
+  // Advisory second opinion, used to disable the action buttons before the
+  // round trip. It can only ever narrow what `can_act` offers, never widen it.
+  const clientCanActOnCurrentStep = currentStep
     ? canUserActOnStep(currentStep, currentUser?.roles)
     : false;
 
-  const persistApprovalState = (steps: ApprovalStep[], rounds: RevisionRound[]) => {
-    if (!loan) return;
-    setApprovalSteps(steps);
-    setApprovalRounds(rounds);
-    saveApprovalState(loan.id, { current_steps: steps, rounds });
+  /**
+   * Re-read the loan AND its chain after acting on a step.
+   *
+   * Both, always. The last `approve` step moves `loans.status` to `approved`
+   * server-side, and a send-back opens a new round while leaving the status at
+   * `for_review` — neither is something the client can infer from what it sent.
+   */
+  const refreshAfterStepAction = async () => {
+    try {
+      const [updated] = await Promise.all([
+        loanService.detail(loan.id),
+        refreshApproval(),
+      ]);
+      setLoan(await resolveLoan(loan, updated));
+    } catch {
+      // Swallowed on purpose. Reaching here means the ACTION succeeded and only
+      // the re-read failed; letting this reject would have the caller report a
+      // recorded approval as "we couldn't record this approval", which is the
+      // one thing an approver must never be told twice.
+      notifyWarning(
+        "Recorded, but the page couldn't refresh",
+        "Reload to see the current step."
+      );
+    }
+  };
+
+  /** Shared guard for the three step actions. Returns false once it has toasted. */
+  const assertCanActOnStep = (verb: string): boolean => {
+    if (!currentStep) return false;
+    if (!canActOnCurrentStep || !clientCanActOnCurrentStep) {
+      toast.error(`Only a user with the ${currentStep.role} role can ${verb}`);
+      return false;
+    }
+    return true;
   };
 
   // Edit Loan Application — available to the Loan Processor while the loan
   // is still a draft OR has been sent back by an approver. The button links
   // to /loans/new?edit={id} so the full New Loan form is used for editing.
   const canEditLoanApplication =
-    !!loan &&
     !isLocked &&
-    loan.status !== "rejected" &&
+    !isApprovalChainHidden(loan.status) &&
     !!currentStep &&
     currentStep.kind === "submit" &&
     canActOnCurrentStep;
 
-  // Step 0 (Loan Processor): Submit the draft for review.
-  // First submission (draft → for_review) goes through loanService.submit().
-  // Resubmissions after a send-back are a local-only chain reset — the loan's
-  // server status is already for_review (send-back has no backend endpoint),
-  // so calling submit again would 422. Gate the API call on loan.status.
+  // Loan Processor's submit step.
+  //
+  // Two different calls behind one button, chosen on the loan's server status:
+  //   * `draft`  → `loanService.submit()`. This is the draft → for_review hop,
+  //     and it is what SEEDS the chain server-side. There is no chain to act on
+  //     before it runs.
+  //   * anything else → the loan is already `for_review` and has been sent back
+  //     to this step; the chain exists, so act on the step itself. Calling
+  //     `submit()` again would 422.
   const handleStepSubmit = async () => {
-    if (!loan || !currentStep || currentStep.kind !== "submit") return;
-    if (!canActOnCurrentStep) {
-      toast.error(`Only a user with the ${currentStep.role} role can submit the draft`);
-      return;
-    }
+    if (!currentStep || currentStep.kind !== "submit") return;
+    if (!assertCanActOnStep("submit the draft")) return;
     try {
       setStepActionLoading(true);
       if (loan.status === "draft") {
-        const updatedLoan = await loanService.submit(loan.id);
-        setLoan(await resolveLoan(loan, updatedLoan));
+        await loanService.submit(loan.id);
+      } else {
+        await loanApprovalService.approve(loan.id, currentStep.step_id, {
+          remarks: stepRemarks.trim() || undefined,
+        });
       }
-      const actedAt = new Date().toISOString();
-      const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
-        if (i === 0) {
-          return {
-            ...s,
-            status: "approved",
-            remarks: stepRemarks.trim() || undefined,
-            acted_at: actedAt,
-            acted_by: currentUserDisplayName,
-          };
-        }
-        if (i === 1) {
-          return { ...s, status: "pending" };
-        }
-        return s;
-      });
-      persistApprovalState(updatedSteps, approvalRounds);
+      await refreshAfterStepAction();
       setStepRemarks("");
-      toast.success("Submitted for review. Forwarded to Manager.");
-    } catch {
-      toast.error("We couldn't submit for review. Please try again.");
+      toast.success("Submitted for review");
+    } catch (err) {
+      notifyError(err, "We couldn't submit for review. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
   };
 
-  // Steps 1-8 (Manager + BOD1..BOD7): Approve & Forward.
-  // Marks the current step approved and the next step pending. On the last
-  // approver step, calls the real loanService.approve() to move the loan's
-  // server status from for_review → approved (so Cashier step becomes actionable).
+  // Approver steps (Manager, BOD1..BODn): Approve & Forward.
+  //
+  // One call. The server marks the step approved, moves the chain to the next
+  // step, and on the LAST approve step takes `loans.status` to `approved` by
+  // itself — so this must NOT also call `loanService.approve()`, which is what
+  // the localStorage version did and what would now double-post the approval.
   const handleStepApprove = async () => {
-    if (!loan || !currentStep || currentStep.kind !== "approve") return;
-    if (!canActOnCurrentStep) {
-      toast.error(`Only a user with the ${currentStep.role} role can approve this step`);
-      return;
-    }
+    if (!currentStep || currentStep.kind !== "approve") return;
+    if (!assertCanActOnStep("approve this step")) return;
+    const actedStepName = currentStep.name;
+    const forwardedTo = nextStep?.name;
     try {
       setStepActionLoading(true);
-      const actedAt = new Date().toISOString();
-      const updatedSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
-        if (i === currentStep.index) {
-          return {
-            ...s,
-            status: "approved",
-            remarks: stepRemarks.trim() || undefined,
-            acted_at: actedAt,
-            acted_by: currentUserDisplayName,
-          };
-        }
-        if (i === currentStep.index + 1) {
-          return { ...s, status: "pending" };
-        }
-        return s;
+      await loanApprovalService.approve(loan.id, currentStep.step_id, {
+        remarks: stepRemarks.trim() || undefined,
       });
+      await refreshAfterStepAction();
       setStepRemarks("");
-
-      // Was this the last approver (step 8, BOD7)? If so, flip server status.
-      const nextStep = updatedSteps[currentStep.index + 1];
-      const isLastApprover = nextStep?.kind === "release";
-      if (isLastApprover) {
-        const updatedLoan = await loanService.approve(loan.id, {
-          approval_remarks: stepRemarks.trim() || undefined,
-        });
-        setLoan(await resolveLoan(loan, updatedLoan));
-      }
-      persistApprovalState(updatedSteps, approvalRounds);
       toast.success(
-        `Approved by ${currentStep.name}. Forwarded to ${nextStep?.name ?? "next step"}.`
+        forwardedTo
+          ? `Approved by ${actedStepName}. Forwarded to ${forwardedTo}.`
+          : `Approved by ${actedStepName}`
       );
     } catch (err) {
       notifyError(err, "We couldn't record this approval. Please try again.");
@@ -2089,106 +1927,48 @@ export default function LoanDetailPage({
     }
   };
 
-  // Steps 1-8: Send Back for Revision.
-  // This is the flowchart's "Approved? = No" branch. Instead of killing the
-  // loan, it snapshots the current round, resets the chain, and puts the loan
-  // back on the Loan Processor's desk. Note: there is no backend call because
-  // no "send-back" endpoint exists yet — the loan server status stays at
-  // for_review while the local chain is reset. Loan Processor can then submit
-  // again to restart the chain.
-  const handleStepSendBack = async (targetIndex: number) => {
-    if (!loan || !currentStep || currentStep.kind !== "approve") return;
-    if (!canActOnCurrentStep) {
-      toast.error(
-        `Only a user with the ${currentStep.role} role can send back this loan`
-      );
-      return;
-    }
-    if (!stepRemarks.trim()) {
+  // Approver steps: Send Back for Revision — the flowchart's "Approved? = No".
+  //
+  // Opens a new round server-side and leaves `loans.status` at `for_review`;
+  // the loan goes back on an earlier desk rather than being killed. `remarks`
+  // is required by the endpoint, and `targetStepOrder` is a prior step's
+  // `index`, not its position in the array.
+  const handleStepSendBack = async (targetStepOrder: number) => {
+    if (!currentStep || currentStep.kind !== "approve") return;
+    if (!assertCanActOnStep("send back this loan")) return;
+    const remarks = stepRemarks.trim();
+    if (!remarks) {
       toast.error("Please enter a reason before sending back for revision");
       return;
     }
-    if (
-      targetIndex < 0 ||
-      targetIndex >= currentStep.index ||
-      approvalSteps[targetIndex] === undefined
-    ) {
+    const targetStep = approvalSteps.find((s) => s.index === targetStepOrder);
+    if (!targetStep || targetStep.index >= currentStep.index) {
       toast.error("Invalid send-back target");
       return;
     }
-    const targetStep = approvalSteps[targetIndex];
     try {
       setStepActionLoading(true);
-      const actedAt = new Date().toISOString();
-
-      // Snapshot the current progress as a completed revision round
-      const roundSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
-        if (i === currentStep.index) {
-          return {
-            ...s,
-            status: "sent_back",
-            remarks: stepRemarks.trim(),
-            acted_at: actedAt,
-            acted_by: currentUserDisplayName,
-          };
-        }
-        return s;
+      await loanApprovalService.sendBack(loan.id, currentStep.step_id, {
+        target_step_order: targetStep.index,
+        remarks,
       });
-      const nextRound: RevisionRound = {
-        round: approvalRounds.length + 1,
-        steps: roundSteps,
-        sent_back_by: currentUserDisplayName,
-        sent_back_at: actedAt,
-        sent_back_remarks: `To ${targetStep.name}: ${stepRemarks.trim()}`,
-      };
-
-      // Rebuild the chain so `targetStep` is pending again. Steps before the
-      // target keep their prior approval intact (so the approver doesn't have
-      // to re-act on them); steps from the target onward are reset to waiting,
-      // except the target itself which becomes pending.
-      const freshSteps: ApprovalStep[] = approvalSteps.map((s, i) => {
-        if (i < targetIndex) {
-          return { ...s, status: "approved" as ApprovalStepStatus };
-        }
-        if (i === targetIndex) {
-          return {
-            index: s.index,
-            name: s.name,
-            role: s.role,
-            kind: s.kind,
-            status: "pending" as ApprovalStepStatus,
-          };
-        }
-        return {
-          index: s.index,
-          name: s.name,
-          role: s.role,
-          kind: s.kind,
-          status: "waiting" as ApprovalStepStatus,
-        };
-      });
-      persistApprovalState(freshSteps, [...approvalRounds, nextRound]);
+      await refreshAfterStepAction();
       setStepRemarks("");
       toast.success(
         `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
-    } catch {
-      toast.error("We couldn't send this back for revision. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't send this back for revision. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
   };
 
-  // Step 9 (Cashier): Release the loan.
-  // Opens the existing Release Loan dialog (co-maker addition, release date,
-  // amortization preview, etc.). The existing handleRelease() handler takes
-  // care of the real API call and marks the step approved on success.
+  // Release step (Cashier / General Bookkeeper): open the existing Release Loan
+  // dialog. `handleRelease()` makes the real call and then refreshes the chain.
   const handleStepRelease = () => {
-    if (!loan || !currentStep || currentStep.kind !== "release") return;
-    if (!canActOnCurrentStep) {
-      toast.error(`Only a user with the ${currentStep.role} role can release this loan`);
-      return;
-    }
+    if (!currentStep || currentStep.kind !== "release") return;
+    if (!assertCanActOnStep("release this loan")) return;
     setReleaseOpen(true);
   };
 
@@ -2694,7 +2474,13 @@ export default function LoanDetailPage({
         loanPrincipal={Number(loan.principal_amount ?? 0)}
       />
 
-      {loan.status !== "rejected" && approvalSteps.length > 0 && (
+      {/* The chain is over for `rejected` and `void` loans — a voided draft used
+          to keep rendering its orphaned chain, complete with a "pending" step on
+          a loan struck from the record. While the chain is loading or
+          unreadable the card still renders, saying which: an empty card would
+          read as "nobody has approved anything". */}
+      {!isApprovalChainHidden(loan.status) &&
+        (approvalLoading || approvalUnavailable || approvalSteps.length > 0) && (
         <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
@@ -2703,11 +2489,15 @@ export default function LoanDetailPage({
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                   Loan Approval Process
                   <Badge variant="outline" className="text-xs font-normal">
-                    {allStepsApproved
-                      ? "Complete"
-                      : currentStep
-                        ? `Step ${currentStep.index + 1} of ${approvalSteps.length}`
-                        : `${approvalSteps.length} steps`}
+                    {approvalLoading
+                      ? "Loading..."
+                      : approvalUnavailable
+                        ? "Unavailable"
+                        : allStepsApproved
+                          ? "Complete"
+                          : currentStep
+                            ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
+                            : `${approvalSteps.length} steps`}
                   </Badge>
                   <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
                 </CardTitle>
@@ -2721,9 +2511,39 @@ export default function LoanDetailPage({
             </CardHeader>
             <CollapsibleContent>
               <CardContent className="space-y-5">
-            {/* Horizontal progress tracker — all 10 steps at a glance.
-                Circles are clickable: click any step to view/act on it below.
-                The currently-selected step is marked with an orange ring. */}
+            {approvalLoading && (
+              <div
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                <Spinner className="h-4 w-4" />
+                Loading the approval chain&hellip;
+              </div>
+            )}
+
+            {/* The read failed — 404 while the endpoint is still shipping, or a
+                loan whose chain was never seeded. Says so rather than drawing a
+                chain from `loans.status`: a chain assembled in the browser is a
+                claim about who signed off that nobody can check, which is the
+                whole reason this moved off localStorage. */}
+            {!approvalLoading && approvalUnavailable && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="text-xs">
+                  <p className="font-medium">Approval chain unavailable</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    We couldn&rsquo;t load the approval steps for this loan. Reload the
+                    page to try again — approvals are recorded on the server, so
+                    nothing has been lost.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Horizontal progress tracker — every step at a glance.
+                The step awaiting action is marked with an orange ring. */}
+            {approvalSteps.length > 0 && (
             <div className="rounded-lg border bg-muted/20 p-3">
               <div className="flex items-center gap-1 overflow-x-auto pb-1">
                 {approvalSteps.map((step, i) => {
@@ -2787,6 +2607,7 @@ export default function LoanDetailPage({
                 })}
               </div>
             </div>
+            )}
 
             {/* Previous revision rounds (collapsed summary) */}
             {approvalRounds.length > 0 && (
@@ -2892,9 +2713,9 @@ export default function LoanDetailPage({
                         {currentStep.kind === "submit" &&
                           " — submit the draft to forward it to the Manager for approval."}
                         {currentStep.kind === "approve" &&
-                          (currentStep.index < approvalSteps.length - 2
+                          (!isConfirmationStep && nextStep
                             ? ` — on approve, the loan will be forwarded to ${
-                                approvalSteps[currentStep.index + 1].name
+                                nextStep.name
                               }.${
                                 sendBackTargets.length > 1
                                   ? " You may send it back to any earlier step for revision."
@@ -2908,6 +2729,19 @@ export default function LoanDetailPage({
                         {currentStep.kind === "release" &&
                           " — open the release dialog to complete the loan release."}
                       </p>
+                      {!clientCanActOnCurrentStep && (
+                        <p
+                          className="text-xs text-amber-700 dark:text-amber-400 mt-1"
+                          role="status"
+                        >
+                          Your signed-in roles don&rsquo;t include{" "}
+                          <span className="font-mono bg-muted px-1 py-0.5 rounded">
+                            {currentStep.role}
+                          </span>
+                          , so the actions below are disabled. Sign in again if your
+                          access changed recently.
+                        </p>
+                      )}
                     </div>
 
                     {currentStep.kind !== "release" && (
@@ -2966,7 +2800,7 @@ export default function LoanDetailPage({
                             size="sm"
                             className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                             onClick={handleStepSubmit}
-                            disabled={stepActionLoading}
+                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
                           >
                             <Send className="mr-2 h-4 w-4" />
                             Submit for Review
@@ -3017,10 +2851,15 @@ export default function LoanDetailPage({
                               handleStepSendBack(
                                 sendBackTargets.length > 1
                                   ? sendBackTargetIndex
-                                  : 0
+                                  : sendBackTargets[0]?.index ?? 0
                               )
                             }
-                            disabled={stepActionLoading || !stepRemarks.trim()}
+                            disabled={
+                              stepActionLoading ||
+                              !stepRemarks.trim() ||
+                              !clientCanActOnCurrentStep ||
+                              sendBackTargets.length === 0
+                            }
                           >
                             <XCircle className="mr-2 h-4 w-4" />
                             Send Back for Revision
@@ -3029,7 +2868,7 @@ export default function LoanDetailPage({
                             size="sm"
                             className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
                             onClick={handleStepApprove}
-                            disabled={stepActionLoading}
+                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
                           >
                             <CheckCircle2 className="mr-2 h-4 w-4" />
                             {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
@@ -3041,7 +2880,7 @@ export default function LoanDetailPage({
                           size="sm"
                           className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                           onClick={handleStepRelease}
-                          disabled={stepActionLoading}
+                          disabled={stepActionLoading || !clientCanActOnCurrentStep}
                         >
                           <Unlock className="mr-2 h-4 w-4" />
                           Release Loan
@@ -3097,10 +2936,6 @@ export default function LoanDetailPage({
           </Card>
         </Collapsible>
       )}
-
-      {/* The "Release Loan" action has moved to the Approval Chain card
-          (Cashier step). Kept here as a no-op placeholder block to document
-          the migration — can be deleted once the chain is backend-wired. */}
 
       {loan.status === "rejected" && (
         <Card>

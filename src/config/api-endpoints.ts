@@ -95,6 +95,23 @@ export const API_ENDPOINTS = {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
     PROMISSORY_NOTE: (loanId: number) => `/loans/${loanId}/promissory-note`,
   },
+  /**
+   * The multi-step BOD approval chain. The chain used to live in the browser's
+   * `localStorage`; these are its server-side replacement, and the only place
+   * approval history is read from or written to.
+   *
+   * `{step}` is a step's `step_id` (the route key the GET hands back), NOT its
+   * `index`. `index` is the server's `step_order` and is what `send-back`
+   * carries as `target_step_order` — the two are different keys and are not
+   * interchangeable in either direction.
+   */
+  LOAN_APPROVAL: {
+    STEPS: (loanId: number) => `/loans/${loanId}/approval-steps`,
+    APPROVE_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/approve`,
+    SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+  },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
     CREATE: (loanId: number) => `/loans/${loanId}/adjustments`,
