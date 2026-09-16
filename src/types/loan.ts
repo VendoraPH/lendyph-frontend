@@ -64,6 +64,7 @@ export interface Loan {
   co_makers?: { id: number; full_name?: string; name?: string; first_name?: string; middle_name?: string; last_name?: string; suffix?: string; address?: string; relationship?: string }[];
   approved_by_user?: { id: number; full_name?: string; name?: string };
   released_by_user?: { id: number; full_name?: string; name?: string };
+  rejected_by_user?: { id: number; full_name?: string; name?: string };
   created_by_user?: { id: number; full_name?: string; name?: string };
   // Flat fields matching API
   interest_rate: number;
