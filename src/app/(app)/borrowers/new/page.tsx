@@ -1300,7 +1300,7 @@ export default function NewBorrowerPage() {
                   id="pledge_amount"
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
                   placeholder="0"
                   value={form.pledge_amount}
                   onChange={(e) => update("pledge_amount", e.target.value)}
