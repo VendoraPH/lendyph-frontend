@@ -18,10 +18,12 @@ import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import type { Borrower } from "@/types";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
+import { NewTransactionDialog } from "./new-transaction-dialog";
 
 type DialogState =
   | { type: "cash_in"; borrower: Borrower }
   | { type: "cash_out"; borrower: Borrower }
+  | { type: "new_transaction" }
   | null;
 
 export function MembersTab() {
@@ -64,7 +66,7 @@ export function MembersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -74,6 +76,9 @@ export function MembersTab() {
             className="pl-8"
           />
         </div>
+        <Button onClick={() => setDialog({ type: "new_transaction" })}>
+          New Transaction
+        </Button>
       </div>
 
       <div className="rounded-md border">
@@ -157,6 +162,14 @@ export function MembersTab() {
             full_name: dialog.borrower.full_name ?? "",
             borrower_code: dialog.borrower.borrower_code ?? undefined,
           }}
+          onCreated={() => setDialog(null)}
+        />
+      )}
+      {dialog?.type === "new_transaction" && (
+        <NewTransactionDialog
+          open
+          onOpenChange={(o) => !o && setDialog(null)}
+          members={members}
           onCreated={() => setDialog(null)}
         />
       )}
