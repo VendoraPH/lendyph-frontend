@@ -45,6 +45,7 @@ import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
 import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
+import { usePermission } from "@/hooks/use-permission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
@@ -1128,6 +1129,16 @@ export default function LoanDetailPage({
   // other debt" — the approver is making a credit decision on it.
   const [borrowerLoansTruncated, setBorrowerLoansTruncated] = useState(false);
   // Current logged-in user (used to gate approval actions by role)
+  // `loans:void` is held only by admin and super_admin. `loan_processor` is
+  // precisely who sits on a draft, so an ungated Void button offers that role
+  // an action it can never complete — QA measured it: 403, loan unchanged, and
+  // a toast saying "please try again" for a permission wall that retrying will
+  // never clear. Gated the same way Edit is.
+  //
+  // Called up here with the other hooks, not beside the flag it feeds: this
+  // component has early returns below, and a hook after one breaks the order.
+  const canVoidLoan = usePermission().can("loans:void");
+
   const currentUser = useAuthStore((s) => s.user);
   const currentUserDisplayName =
     currentUser?.full_name ||
@@ -1847,6 +1858,11 @@ export default function LoanDetailPage({
   };
 
   /** Shared guard for the three step actions. Returns false once it has toasted. */
+  // A draft whose chain has not been seeded yet: no steps, so no `currentStep`,
+  // so every guard keyed on one silently refuses. Submit, Edit and Void all
+  // have to remain reachable in this state or the draft is unrecoverable.
+  const isUnseededDraft = loan.status === "draft" && approvalSteps.length === 0;
+
   const assertCanActOnStep = (verb: string): boolean => {
     if (!currentStep) return false;
     if (!canActOnCurrentStep || !clientCanActOnCurrentStep) {
@@ -1862,9 +1878,8 @@ export default function LoanDetailPage({
   const canEditLoanApplication =
     !isLocked &&
     !isApprovalChainHidden(loan.status) &&
-    !!currentStep &&
-    currentStep.kind === "submit" &&
-    canActOnCurrentStep;
+    (isUnseededDraft ||
+      (!!currentStep && currentStep.kind === "submit" && canActOnCurrentStep));
 
   // Loan Processor's submit step.
   //
@@ -1876,14 +1891,25 @@ export default function LoanDetailPage({
   //     to this step; the chain exists, so act on the step itself. Calling
   //     `submit()` again would 422.
   const handleStepSubmit = async () => {
-    if (!currentStep || currentStep.kind !== "submit") return;
-    if (!assertCanActOnStep("submit the draft")) return;
+    // A never-submitted draft has NO chain — that is the whole point, the
+    // chain is seeded by this call — so there is no `currentStep` to check.
+    // Guarding on one made the draft Submit button a silent no-op: it
+    // rendered, it was enabled, and it returned on the first line.
+    //
+    // Authorisation is the server's here rather than the client's: with no
+    // step there is no role to compare against, and `submit` is gated on
+    // `loans:update`, which the page cannot evaluate. A 403 surfaces through
+    // notifyError like any other failure.
+    if (!isUnseededDraft) {
+      if (!currentStep || currentStep.kind !== "submit") return;
+      if (!assertCanActOnStep("submit the draft")) return;
+    }
     try {
       setStepActionLoading(true);
       if (loan.status === "draft") {
         await loanService.submit(loan.id);
       } else {
-        await loanApprovalService.approve(loan.id, currentStep.id, {
+        await loanApprovalService.approve(loan.id, currentStep!.id, {
           remarks: stepRemarks.trim() || undefined,
         });
       }
@@ -2509,7 +2535,11 @@ export default function LoanDetailPage({
                           ? "Complete"
                           : currentStep
                             ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
-                            : `${approvalSteps.length} steps`}
+                            : approvalSteps.length === 0
+                              ? loan.status === "draft"
+                                ? "Not submitted"
+                                : "No steps found"
+                              : `${approvalSteps.length} steps`}
                   </Badge>
                   <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
                 </CardTitle>
@@ -2571,14 +2601,45 @@ export default function LoanDetailPage({
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  disabled={stepActionLoading}
-                  onClick={handleStepSubmit}
-                >
-                  {stepActionLoading ? "Submitting…" : "Submit for Review"}
-                </Button>
+                {/* Void and Edit live in the submit-step panel below, which a
+                    never-submitted draft never reaches — so without these the
+                    draft could not be submitted, edited OR voided from its own
+                    page. */}
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                  {canVoidLoan && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={actionLoading}
+                      onClick={handleVoidLoan}
+                    >
+                      <Ban className="mr-2 h-4 w-4" />
+                      Void Loan
+                    </Button>
+                  )}
+                  {canEditLoanApplication && loan && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={stepActionLoading}
+                      nativeButton={false}
+                      render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit Loan Application
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                    disabled={stepActionLoading}
+                    onClick={handleStepSubmit}
+                  >
+                    {stepActionLoading ? "Submitting…" : "Submit for Review"}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -2593,10 +2654,10 @@ export default function LoanDetailPage({
                 <div className="text-xs">
                   <p className="font-medium">Approval chain unavailable</p>
                   <p className="text-muted-foreground mt-0.5">
-                    This loan is {loan.status === "approved" ? "approved" : "under review"},
-                    but its approval steps could not be found. Approvals are recorded
-                    on the server — ask an administrator to check this loan rather
-                    than re-approving it.
+                    This loan is {LOAN_STATUS_LABELS[loan.status] ?? loan.status}, but its approval
+                    steps could not be found. Approvals are recorded on the server —
+                    ask an administrator to check this loan rather than re-approving
+                    it.
                   </p>
                 </div>
               </div>

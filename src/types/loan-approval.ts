@@ -110,5 +110,15 @@ export function isApprovalChainHidden(status: string | undefined): boolean {
  * which the UI has to say out loud instead of rendering nothing.
  */
 export function loanShouldHaveAChain(status?: string | null): boolean {
-  return status === "for_review" || status === "approved";
+  if (!status || isApprovalChainHidden(status)) {
+    return false;
+  }
+
+  // Everything except `draft`. A released or ongoing loan went through the
+  // chain to get there, so missing rows are still missing — QA found that
+  // scoping this to for_review/approved left a released loan rendering no
+  // approval section at all, which is the same defect with a narrower blast
+  // radius: nobody is being asked to act by then, but the signoff history has
+  // silently vanished from the page.
+  return status !== "draft";
 }
