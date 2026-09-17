@@ -100,10 +100,12 @@ export const API_ENDPOINTS = {
    * `localStorage`; these are its server-side replacement, and the only place
    * approval history is read from or written to.
    *
-   * `{step}` is a step's `step_id` (the route key the GET hands back), NOT its
-   * `index`. `index` is the server's `step_order` and is what `send-back`
-   * carries as `target_step_order` — the two are different keys and are not
-   * interchangeable in either direction.
+   * `{step}` is the step ROW's `id`. Not `step_id`, which is the chain-config
+   * slug ("loan-processor") and repeats on every round and every loan, so it
+   * cannot address a row — passing it 404s, which is exactly what this comment
+   * used to tell you to do. And not `index`, which is the server's `step_order`
+   * and is what `send-back` carries as `target_step_order`. Three different
+   * keys, none of them interchangeable.
    */
   LOAN_APPROVAL: {
     STEPS: (loanId: number) => `/loans/${loanId}/approval-steps`,

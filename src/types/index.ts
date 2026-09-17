@@ -19,7 +19,7 @@ export type {
   ApproveStepPayload,
   SendBackStepPayload,
 } from "./loan-approval";
-export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden } from "./loan-approval";
+export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAChain } from "./loan-approval";
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";

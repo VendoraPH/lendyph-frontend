@@ -100,3 +100,15 @@ export const APPROVAL_CHAIN_HIDDEN_STATUSES: readonly LoanStatus[] = [
 export function isApprovalChainHidden(status: string | undefined): boolean {
   return APPROVAL_CHAIN_HIDDEN_STATUSES.includes(status as LoanStatus);
 }
+
+/**
+ * A loan whose chain the server should already have seeded.
+ *
+ * `draft` is deliberately absent: the chain is seeded ON submit, so a draft
+ * having no steps is correct, not broken. Everything here is past that point,
+ * so an empty chain means the rows are missing rather than not yet written —
+ * which the UI has to say out loud instead of rendering nothing.
+ */
+export function loanShouldHaveAChain(status?: string | null): boolean {
+  return status === "for_review" || status === "approved";
+}

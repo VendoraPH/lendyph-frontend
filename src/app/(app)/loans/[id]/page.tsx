@@ -43,7 +43,7 @@ import {
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
 import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
-import { isApprovalChainHidden, type LoanApprovalStep } from "@/types";
+import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
@@ -2480,7 +2480,19 @@ export default function LoanDetailPage({
           unreadable the card still renders, saying which: an empty card would
           read as "nobody has approved anything". */}
       {!isApprovalChainHidden(loan.status) &&
-        (approvalLoading || approvalUnavailable || approvalSteps.length > 0) && (
+        (approvalLoading ||
+          approvalUnavailable ||
+          approvalSteps.length > 0 ||
+          // A DRAFT has no chain yet — it is seeded on submit — but the only
+          // "Submit for Review" control lives inside this card, so suppressing
+          // it here left a draft with no way into the chain at all: the chain
+          // seeds on submit, and submit needed the chain. Any draft not
+          // auto-submitted by /loans/new was unrecoverable.
+          loan.status === "draft" ||
+          // Past draft the rows should exist. Empty here means they are
+          // missing, not unwritten — say so rather than rendering nothing,
+          // which reads as "this loan has no approval process".
+          loanShouldHaveAChain(loan.status)) && (
         <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
           <Card>
             <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
@@ -2536,6 +2548,55 @@ export default function LoanDetailPage({
                     We couldn&rsquo;t load the approval steps for this loan. Reload the
                     page to try again — approvals are recorded on the server, so
                     nothing has been lost.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* A draft has no chain yet — it is seeded on submit — so this is
+                the one place Submit for Review can live. It used to sit inside
+                the active-step panel, which needs a `currentStep` that a draft
+                by definition does not have, so the card was suppressed and the
+                loan had no way in. */}
+            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+              && loan.status === "draft" && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">Not yet submitted</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      The approval chain is created when this loan is submitted for
+                      review. Nobody can sign off on it until then.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  disabled={stepActionLoading}
+                  onClick={handleStepSubmit}
+                >
+                  {stepActionLoading ? "Submitting…" : "Submit for Review"}
+                </Button>
+              </div>
+            )}
+
+            {/* Past draft, the rows should already exist. Empty means missing,
+                not unwritten. The server answers 200 with empty arrays either
+                way, so the hook cannot tell them apart — the loan's own status
+                is what distinguishes them. */}
+            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+              && loanShouldHaveAChain(loan.status) && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="text-xs">
+                  <p className="font-medium">Approval chain unavailable</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    This loan is {loan.status === "approved" ? "approved" : "under review"},
+                    but its approval steps could not be found. Approvals are recorded
+                    on the server — ask an administrator to check this loan rather
+                    than re-approving it.
                   </p>
                 </div>
               </div>
