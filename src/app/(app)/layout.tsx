@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks";
+import { useAuth, usePasswordChangeGuard } from "@/hooks";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { SessionProvider } from "@/components/providers/session-provider";
@@ -14,6 +14,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { user, isAuthenticated, setUser, clearAuth } = useAuth();
   const router = useRouter();
+
+  // This layout wraps every authenticated route, which makes it the one place
+  // a "you cannot be here yet" rule can be enforced once and hold everywhere.
+  const { locked } = usePasswordChangeGuard();
 
   const initAuth = useCallback(async () => {
     const token = tokenManager.getAccessToken();
@@ -47,7 +51,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     initAuth();
   }, [initAuth]);
 
-  if (loading || !isAuthenticated) {
+  // `locked` is the forced password change, and it is checked HERE rather than
+  // inside each page for the same reason `isAuthenticated` is: a rule enforced
+  // by the layout cannot be reached around. While it holds, this returns before
+  // the sidebar, the header and `children` — so there is no nav to click, no
+  // route that renders, and nothing on screen to interact with, whether the
+  // user arrived by deep link, by reopening a tab, or by being locked out
+  // mid-session. The guard hook is redirecting them to /change-password; this
+  // is what makes the gap between that decision and the navigation landing
+  // empty rather than a briefly usable app.
+  if (loading || !isAuthenticated || locked) {
     return null;
   }
 

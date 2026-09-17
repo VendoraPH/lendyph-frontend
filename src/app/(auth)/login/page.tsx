@@ -14,6 +14,7 @@ import { tokenManager } from "@/lib/axios-client";
 import { toast } from "sonner";
 import { AxiosError } from "axios";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { CHANGE_PASSWORD_PATH } from "@/lib/password-change-required";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,6 +57,19 @@ export default function LoginPage() {
       }
 
       setUser(user);
+
+      // An administrator reset this password, so the API will answer 423 to
+      // everything except the change itself. Sending them to the dashboard
+      // would load a page that cannot fetch anything — the (app) layout would
+      // bounce them here anyway, just after a flash of empty shell. Skip it.
+      // The welcome toast is skipped too: the screen they land on opens by
+      // telling them their password was reset, and congratulating someone on
+      // being locked out reads badly.
+      if (user.must_change_password === true) {
+        router.replace(CHANGE_PASSWORD_PATH);
+        return;
+      }
+
       toast.success(`Welcome back, ${user.first_name || user.username}!`);
       router.push("/dashboard");
     } catch (error) {

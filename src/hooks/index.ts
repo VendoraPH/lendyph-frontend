@@ -2,6 +2,7 @@ export { useAuth } from "./use-auth";
 export { useBranches } from "./use-branches";
 export { useGCashNonMembers } from "./use-gcash-non-members";
 export { useIsMobile } from "./use-mobile";
+export { usePasswordChangeGuard } from "./use-password-change-guard";
 export { usePermission } from "./use-permission";
 export { usePrintables } from "./use-printables";
 export type { UsePrintablesResult } from "./use-printables";

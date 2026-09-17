@@ -61,6 +61,14 @@ function looksHuman(msg: string | undefined): msg is string {
   const text = msg.trim();
   if (!text) return false;
   if (FRAMEWORK_BOILERPLATE.test(text)) return false;
+  // A whole "sentence" with no spaces but an underscore in it is an
+  // identifier, not copy — `must_change_password`, `password_change_required`,
+  // `insufficient_funds`. The blocklist below only catches phrases someone
+  // thought of; this catches the shape. Real user copy always has whitespace,
+  // so nothing legitimate is rejected, and the promise in this function's own
+  // header — that an internal backend flag never reaches the UI — stops being
+  // aspirational. Found when 423 started preferring the server's message.
+  if (!/\s/.test(text) && text.includes("_")) return false;
   return !/status code|network error|axios|force=true|sqlstate|exception|undefined|null|econn|timeout of|\bstack\b|no query results|\\|::|\bclass\b|\bat line\b/i.test(
     text
   );
@@ -74,7 +82,16 @@ function looksHuman(msg: string | undefined): msg is string {
 //
 // 401 and 5xx are deliberately excluded — a session expiry is never better
 // explained by the server, and a 500 body is exactly where internals leak.
-const STATUSES_THAT_MAY_EXPLAIN = new Set([403, 404, 409, 413, 429]);
+//
+// 423 (password reset by an admin, see password-change-required.ts) is listed
+// deliberately rather than by accident. It used to reach the same outcome by
+// falling all the way through to the "unknown status" branch at the bottom,
+// which also surfaces a human-looking server message — so the behaviour was
+// right for a reason that had nothing to do with 423. Adding either a
+// STATUS_COPY entry or another `STATUSES_THAT_MAY_EXPLAIN` member above would
+// have quietly changed it. It is pinned here, with copy below for the case the
+// body is missing, so both paths are stated instead of inferred.
+const STATUSES_THAT_MAY_EXPLAIN = new Set([403, 404, 409, 413, 423, 429]);
 
 const STATUS_COPY: Record<number, string> = {
   401: "Your session has expired. Please sign in again.",
@@ -82,6 +99,8 @@ const STATUS_COPY: Record<number, string> = {
   404: "We couldn't find what you were looking for.",
   409: "That action conflicts with the current state. Refresh and try again.",
   413: "That file is too large. Please upload a smaller file.",
+  423:
+    "Your password was reset by an administrator. You must set a new password before continuing.",
   429: "Too many attempts. Please wait a moment and try again.",
   500: "Something went wrong on our end. Please try again in a moment.",
   502: "Something went wrong on our end. Please try again in a moment.",

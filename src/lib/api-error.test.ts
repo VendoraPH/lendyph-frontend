@@ -204,3 +204,57 @@ test("Laravel's other stock bodies never beat our own copy", () => {
     "We couldn't find what you were looking for."
   );
 });
+
+// ── 423: password reset by an administrator ──
+//
+// These pin behaviour that used to be incidental. Before 423 was named here it
+// reached the right answer through the "unknown status" branch, which meant any
+// later edit to STATUS_COPY or STATUSES_THAT_MAY_EXPLAIN could have silently
+// rerouted it. The point of the tests is that both paths are now asserted.
+
+test("423 surfaces the server's own explanation", () => {
+  const err = httpErr(423, {
+    message:
+      "Your password was reset by an administrator. You must set a new password before continuing.",
+    code: "password_change_required",
+    must_change_password: true,
+  });
+  assert.equal(
+    getErrorMessage(err),
+    "Your password was reset by an administrator. You must set a new password before continuing."
+  );
+});
+
+test("423 with no body still explains itself rather than falling back", () => {
+  assert.equal(
+    getErrorMessage(httpErr(423), "some caller fallback"),
+    "Your password was reset by an administrator. You must set a new password before continuing."
+  );
+});
+
+test("423 never leaks a technical server message", () => {
+  const err = httpErr(423, {
+    message: "Illuminate\\Auth\\Access\\AuthorizationException: locked",
+  });
+  assert.equal(
+    getErrorMessage(err),
+    "Your password was reset by an administrator. You must set a new password before continuing."
+  );
+});
+
+test("423 never leaks the internal must_change_password flag as copy", () => {
+  const msg = getErrorMessage(httpErr(423, { message: "must_change_password" }));
+  assert.ok(!msg.includes("must_change_password"), msg);
+});
+
+// The identifier guard must catch the shape without eating real prose that
+// happens to mention a field name.
+test("a human sentence containing an underscored field name still survives", () => {
+  const err = httpErr(403, {
+    message: "The field loan_amount must be filled in before you can submit.",
+  });
+  assert.equal(
+    getErrorMessage(err),
+    "The field loan_amount must be filled in before you can submit."
+  );
+});
