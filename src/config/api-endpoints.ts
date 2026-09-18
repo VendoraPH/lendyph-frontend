@@ -95,6 +95,25 @@ export const API_ENDPOINTS = {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
     PROMISSORY_NOTE: (loanId: number) => `/loans/${loanId}/promissory-note`,
   },
+  /**
+   * The multi-step BOD approval chain. The chain used to live in the browser's
+   * `localStorage`; these are its server-side replacement, and the only place
+   * approval history is read from or written to.
+   *
+   * `{step}` is the step ROW's `id`. Not `step_id`, which is the chain-config
+   * slug ("loan-processor") and repeats on every round and every loan, so it
+   * cannot address a row — passing it 404s, which is exactly what this comment
+   * used to tell you to do. And not `index`, which is the server's `step_order`
+   * and is what `send-back` carries as `target_step_order`. Three different
+   * keys, none of them interchangeable.
+   */
+  LOAN_APPROVAL: {
+    STEPS: (loanId: number) => `/loans/${loanId}/approval-steps`,
+    APPROVE_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/approve`,
+    SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+  },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
     CREATE: (loanId: number) => `/loans/${loanId}/adjustments`,

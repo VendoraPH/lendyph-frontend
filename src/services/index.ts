@@ -16,6 +16,7 @@ export { repaymentService } from "./repayment.service";
 export { systemService } from "./system.service";
 export { feeService } from "./fee.service";
 export { dashboardService } from "./dashboard.service";
+export { loanApprovalService } from "./loan-approval.service";
 export { approvalWorkflowService } from "./approval-workflow.service";
 export type { ApprovalChainStep, ChainStepKind } from "./approval-workflow.service";
 export { shareCapitalService } from "./share-capital.service";
