@@ -13,16 +13,17 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { TablePagination } from "@/components/common";
 import { borrowerService } from "@/services/borrower.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import type { Borrower } from "@/types";
+import { borrowerParty } from "@/lib/gcash-party";
+import type { Borrower, GCashParty } from "@/types";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
 import { NewTransactionDialog } from "./new-transaction-dialog";
 
 type DialogState =
-  | { type: "cash_in"; borrower: Borrower }
-  | { type: "cash_out"; borrower: Borrower }
+  | { type: "cash_in" | "cash_out"; party: GCashParty }
   | { type: "new_transaction" }
   | null;
 
@@ -30,6 +31,9 @@ export function MembersTab() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [members, setMembers] = useState<Borrower[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<DialogState>(null);
 
@@ -37,6 +41,9 @@ export function MembersTab() {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  // A narrower search can strand you past the last page of results.
+  useEffect(() => setPage(1), [debounced, perPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,11 +55,17 @@ export function MembersTab() {
           // (pending, rejected) must not reach the table at all.
           members_only: 1,
           search: debounced || undefined,
-          per_page: 25,
+          page,
+          per_page: perPage,
         });
         if (cancelled) return;
+        // This is one PAGE, deliberately — the table pages through the rest
+        // below. It must never be handed to a picker as if it were the whole
+        // membership: `NewTransactionDialog` drains its own list for exactly
+        // that reason.
         const list = Array.isArray(res) ? res : (res?.data ?? []);
         setMembers(list);
+        setTotal(Array.isArray(res) ? list.length : (res?.meta?.total ?? 0));
       } catch (err) {
         toast.error(extractGCashErrorMessage(err));
       } finally {
@@ -62,7 +75,7 @@ export function MembersTab() {
     return () => {
       cancelled = true;
     };
-  }, [debounced]);
+  }, [debounced, page, perPage]);
 
   return (
     <div className="space-y-4">
@@ -117,7 +130,7 @@ export function MembersTab() {
                     <Button
                       size="sm"
                       onClick={() =>
-                        setDialog({ type: "cash_in", borrower: b })
+                        setDialog({ type: "cash_in", party: borrowerParty(b) })
                       }
                     >
                       Cash In
@@ -126,7 +139,7 @@ export function MembersTab() {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        setDialog({ type: "cash_out", borrower: b })
+                        setDialog({ type: "cash_out", party: borrowerParty(b) })
                       }
                     >
                       Cash Out
@@ -139,16 +152,19 @@ export function MembersTab() {
         </Table>
       </div>
 
+      <TablePagination
+        page={page}
+        perPage={perPage}
+        total={total}
+        onPageChange={setPage}
+        onPerPageChange={setPerPage}
+      />
+
       {dialog?.type === "cash_in" && (
         <CashInDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          party={{
-            kind: "member",
-            id: dialog.borrower.id,
-            full_name: dialog.borrower.full_name ?? "",
-            borrower_code: dialog.borrower.borrower_code ?? undefined,
-          }}
+          party={dialog.party}
           onCreated={() => setDialog(null)}
         />
       )}
@@ -156,12 +172,7 @@ export function MembersTab() {
         <CashOutDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          party={{
-            kind: "member",
-            id: dialog.borrower.id,
-            full_name: dialog.borrower.full_name ?? "",
-            borrower_code: dialog.borrower.borrower_code ?? undefined,
-          }}
+          party={dialog.party}
           onCreated={() => setDialog(null)}
         />
       )}
@@ -169,7 +180,6 @@ export function MembersTab() {
         <NewTransactionDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          members={members}
           onCreated={() => setDialog(null)}
         />
       )}
