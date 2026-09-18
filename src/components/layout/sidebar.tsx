@@ -45,6 +45,7 @@ const iconColors: Record<string, string> = {
   "/printables": "bg-gradient-to-br from-rose-400 to-rose-500 text-white shadow-rose-200 dark:shadow-rose-900/30",
   "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
   "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
+  "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
 };
 
 // ── Nav Link ──
