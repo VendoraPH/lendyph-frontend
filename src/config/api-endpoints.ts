@@ -308,8 +308,11 @@ export const API_ENDPOINTS = {
     // Reporting
     GENERAL_LEDGER: "/accounting/general-ledger",
     TRIAL_BALANCE: "/accounting/trial-balance",
-    BALANCE_SHEET: "/accounting/statements/balance-sheet",
-    INCOME_STATEMENT: "/accounting/statements/income-statement",
+    // No BALANCE_SHEET / INCOME_STATEMENT entry, deliberately. Both statements
+    // are derived in the browser from TRIAL_BALANCE by
+    // `src/lib/accounting/statements.ts` (two reads: closing and opening), and
+    // the backend documents the absence of those routes as intentional. Listing
+    // them here only implies server work nobody wants.
     CASH_FLOW: "/accounting/statements/cash-flow",
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
