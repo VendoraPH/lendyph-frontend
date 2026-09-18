@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { toCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import type { Account } from "@/types";
@@ -29,7 +30,17 @@ interface TransferDialogProps {
   open: boolean;
   accounts: Account[];
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: TransferPayload) => void;
+  /**
+   * Must return the request's promise.
+   *
+   * `=> void` here discarded it, so the dialog could not tell that a request
+   * was in flight and a second click fired a second one. For a transfer that
+   * is two real journal entries in the books, and the server cannot dedupe it:
+   * `postImmediately()` keys on `(postable_type, postable_id, source)`, and a
+   * fund transfer is not raised BY a document — it IS the document, so there
+   * is nothing to key on.
+   */
+  onSubmit: (data: TransferPayload) => Promise<void>;
 }
 
 export function TransferDialog({
@@ -44,6 +55,7 @@ export function TransferDialog({
   const [amount, setAmount] = useState("");
   const [charge, setCharge] = useState("");
   const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const amountCentavos = toCentavos(amount);
   const chargeCentavos = toCentavos(charge);
@@ -59,20 +71,28 @@ export function TransferDialog({
     amountCentavos > 0 &&
     description.trim().length > 0;
 
-  const submit = () => {
-    if (!valid) return;
-    onSubmit({
-      date,
-      from_account_id: fromId,
-      to_account_id: toId,
-      amount: amountCentavos,
-      charge: chargeCentavos ?? undefined,
-      description: description.trim(),
-    });
+  const submit = async () => {
+    if (submitting || !valid) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        date,
+        from_account_id: fromId,
+        to_account_id: toId,
+        amount: amountCentavos,
+        charge: chargeCentavos ?? undefined,
+        description: description.trim(),
+      });
+    } finally {
+      // Whatever the request did, the button has to come back. A rejection
+      // that left this true would wedge the dialog with no way out but a
+      // reload.
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Transfer between accounts</DialogTitle>
@@ -149,11 +169,16 @@ export function TransferDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!valid}>
-            Record transfer
+          <Button onClick={submit} disabled={!valid || submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
+            {submitting ? "Recording…" : "Record transfer"}
           </Button>
         </div>
       </DialogContent>

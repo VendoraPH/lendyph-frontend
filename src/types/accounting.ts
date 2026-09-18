@@ -242,6 +242,20 @@ export interface PaymentAllocation {
   penalty: number;
   /** Processing/service fees collected alongside the payment. */
   fees?: number;
+  /**
+   * The part of the payment that settled nothing — `repayments.overpayment`.
+   *
+   * `repayments.amount_paid` is NOT bounded by what is owed (StoreRepaymentRequest
+   * validates only `numeric, min:0.01`), so a borrower can hand over more than
+   * the schedule asks for and the excess is persisted rather than refused. It
+   * is money the organisation is HOLDING, not money it has earned, so the
+   * posting rule credits it to `borrower_advances` — a liability — and never to
+   * an income account.
+   *
+   * Optional because the ordinary payment has none, and `used()` drops the
+   * empty leg.
+   */
+  overpayment?: number;
 }
 
 /** The lending events the posting engine reacts to. */
@@ -280,6 +294,16 @@ export interface AccountMapping {
   credit_loss_expense: number;
   allowance_credit_losses: number;
   accounts_payable: number;
+  /**
+   * Where an overpayment is parked until it is applied or refunded.
+   *
+   * Deliberately NOT `accounts_payable`: that role is a trade payable owned by
+   * the expenses side of this module, and an obligation to a supplier is not an
+   * obligation to a borrower — sharing one account would make a payables ageing
+   * report unreadable. Defaults to 2300 Other Liabilities, which the seeded
+   * chart already carries, so this adds a role without adding an account.
+   */
+  borrower_advances: number;
 }
 
 /** Accounting periods lock the books once an accountant signs them off. */

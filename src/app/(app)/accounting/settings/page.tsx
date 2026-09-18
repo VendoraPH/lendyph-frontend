@@ -102,6 +102,12 @@ const GROUPS: { title: string; description: string; fields: MappingField[] }[] =
         hint: "Expenses recorded but not yet paid.",
         types: ["liability"],
       },
+      {
+        key: "borrower_advances",
+        label: "Borrower advances",
+        hint: "Money received beyond what was due. Held on the borrower's behalf until it is applied or refunded — never income.",
+        types: ["liability"],
+      },
     ],
   },
 ];
