@@ -95,6 +95,25 @@ export const API_ENDPOINTS = {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
     PROMISSORY_NOTE: (loanId: number) => `/loans/${loanId}/promissory-note`,
   },
+  /**
+   * The multi-step BOD approval chain. The chain used to live in the browser's
+   * `localStorage`; these are its server-side replacement, and the only place
+   * approval history is read from or written to.
+   *
+   * `{step}` is the step ROW's `id`. Not `step_id`, which is the chain-config
+   * slug ("loan-processor") and repeats on every round and every loan, so it
+   * cannot address a row — passing it 404s, which is exactly what this comment
+   * used to tell you to do. And not `index`, which is the server's `step_order`
+   * and is what `send-back` carries as `target_step_order`. Three different
+   * keys, none of them interchangeable.
+   */
+  LOAN_APPROVAL: {
+    STEPS: (loanId: number) => `/loans/${loanId}/approval-steps`,
+    APPROVE_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/approve`,
+    SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
+      `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+  },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
     CREATE: (loanId: number) => `/loans/${loanId}/adjustments`,
@@ -330,6 +349,24 @@ export const API_ENDPOINTS = {
     SETTINGS: "/accounting/settings",
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
     OPENING_BALANCES: "/accounting/opening-balances",
+  },
+  /**
+   * None of these exist yet. Typed and wired now so the service layer has
+   * one place to be wrong rather than eleven, same rationale as ACCOUNTING
+   * above. Re-check against the backend handoff before trusting any path.
+   */
+  CREDIT_SCORING: {
+    DASHBOARD: "/credit-scoring/dashboard",
+    BORROWERS_LIST: "/credit-scoring/borrowers",
+    BORROWER_PROFILE: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}`,
+    BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
+    SCORE_HISTORY: "/credit-scoring/score-history",
+    RISK_MONITORING: "/credit-scoring/risk-monitoring",
+    ALERTS_LIST: "/credit-scoring/alerts",
+    SCORECARD_CONFIG: "/credit-scoring/scorecard-config",
+    POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
+    DECISIONS_CREATE: "/credit-scoring/decisions",
+    SETTINGS: "/credit-scoring/settings",
   },
   SYSTEM: {
     HEALTH: "/health",

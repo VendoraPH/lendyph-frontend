@@ -10,6 +10,16 @@ export type { Role, Module, Action, Permission, RoleConfig } from "./rbac";
 export type { AuditLog, AuditAction, AuditModule, AuditChange } from "./audit";
 export type { LoanDisclosure, LoanPromissoryNote } from "./loan-document";
 export type { LoanAdjustment, LoanAdjustmentType, LoanAdjustmentStatus, CreateLoanAdjustmentData } from "./loan-adjustment";
+export type {
+  ApprovalStepKind,
+  ApprovalStepStatus,
+  LoanApprovalStep,
+  LoanApprovalRound,
+  LoanApprovalState,
+  ApproveStepPayload,
+  SendBackStepPayload,
+} from "./loan-approval";
+export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAChain } from "./loan-approval";
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
@@ -69,3 +79,27 @@ export type {
   AccountingBook,
   AccountingDashboard,
 } from "./accounting";
+export type {
+  RiskLevel,
+  ScoreConfidence,
+  ScoreType,
+  ScoreCategoryBreakdown,
+  ScoreFactor,
+  CreditScore,
+  CreditScoreHistoryEntry,
+  PolicyFlag,
+  CreditDecision,
+  ScorecardCategoryConfig,
+  ScorecardFactorRule,
+  RiskMonitoringSummary,
+  CreditScoringDashboardSummary,
+  BorrowerScoreRow,
+  BorrowerScoreFilters,
+  ScoreHistoryFilters,
+  PolicyRule,
+  ScorecardConfig,
+  RiskAlert,
+  RiskMonitoringData,
+  CreateCreditDecisionData,
+  CreditScoringSettings,
+} from "./credit-scoring";
