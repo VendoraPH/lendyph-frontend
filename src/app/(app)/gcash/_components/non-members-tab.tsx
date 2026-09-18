@@ -33,6 +33,7 @@ import { TablePagination } from "@/components/common";
 import { useGCashNonMembers } from "@/hooks";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
+import { nonMemberParty } from "@/lib/gcash-party";
 import type { GCashNonMember } from "@/types";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
@@ -211,12 +212,7 @@ export function NonMembersTab() {
         <CashInDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          party={{
-            kind: "non_member",
-            id: dialog.nonMember.id,
-            full_name: dialog.nonMember.full_name,
-            mobile_number: dialog.nonMember.mobile_number,
-          }}
+          party={nonMemberParty(dialog.nonMember)}
           onCreated={() => setDialog(null)}
         />
       )}
@@ -225,12 +221,7 @@ export function NonMembersTab() {
         <CashOutDialog
           open
           onOpenChange={(o) => !o && setDialog(null)}
-          party={{
-            kind: "non_member",
-            id: dialog.nonMember.id,
-            full_name: dialog.nonMember.full_name,
-            mobile_number: dialog.nonMember.mobile_number,
-          }}
+          party={nonMemberParty(dialog.nonMember)}
           onCreated={() => setDialog(null)}
         />
       )}
