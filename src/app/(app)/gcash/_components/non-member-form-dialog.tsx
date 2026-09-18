@@ -43,7 +43,14 @@ interface Props {
   onOpenChange(open: boolean): void;
   /** Omit to add a new walk-in; pass a row to edit it. */
   nonMember?: GCashNonMember | null;
-  onSaved?(): void;
+  /**
+   * `saved` is the row the API echoed back, so a caller that opened this to
+   * register someone standing at the counter can select them immediately
+   * instead of making the teller find the name they just typed. Optional
+   * because the response envelope is not guaranteed to carry it; callers that
+   * only need to refresh a list ignore the argument.
+   */
+  onSaved?(saved?: GCashNonMember): void;
 }
 
 interface FormState {
@@ -114,14 +121,15 @@ export function NonMemberFormDialog({
         id_number: idNumber,
         remarks: form.remarks.trim() || null,
       };
+      let saved: GCashNonMember | undefined;
       if (nonMember) {
-        await gcashService.updateNonMember(nonMember.id, payload);
+        saved = await gcashService.updateNonMember(nonMember.id, payload);
         toast.success(`${name} updated.`);
       } else {
-        await gcashService.createNonMember(payload);
+        saved = await gcashService.createNonMember(payload);
         toast.success(`${name} added to GCash non-members.`);
       }
-      onSaved?.();
+      onSaved?.(saved);
       onOpenChange(false);
     } catch (err) {
       toast.error(extractGCashErrorMessage(err));
@@ -177,7 +185,13 @@ export function NonMemberFormDialog({
                 ID Presented <span className="text-destructive">*</span>
               </Label>
               <Select
-                value={form.id_type || undefined}
+                // `null`, not `undefined`: Base UI reads `undefined` as "this
+                // Select is uncontrolled", so an empty id_type made the very
+                // first render uncontrolled and picking an ID flipped it to
+                // controlled — a React warning on every walk-in registered.
+                // `null` is Base UI's controlled empty value and still shows
+                // the placeholder.
+                value={form.id_type || null}
                 onValueChange={(v) => set("id_type", v ?? "")}
               >
                 <SelectTrigger id="nm-id-type" className="w-full">

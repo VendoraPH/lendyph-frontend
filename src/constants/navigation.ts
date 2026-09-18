@@ -16,6 +16,7 @@ import {
   Landmark,
   ShieldCheck,
   BookOpenCheck,
+  Gauge,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -117,6 +118,21 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/gcash",
     icon: GCashIcon,
     permission: "gcash:view",
+  },
+  {
+    title: "Credit Scoring",
+    href: "/credit-scoring",
+    icon: Gauge,
+    permission: "credit_scoring:view",
+    children: [
+      { title: "Dashboard", href: "/credit-scoring", permission: "credit_scoring:view" },
+      { title: "Borrower Scores", href: "/credit-scoring/borrowers", permission: "credit_scoring:view" },
+      { title: "Credit Assessment", href: "/credit-scoring/assessment", permission: "credit_scoring:view" },
+      { title: "Scorecard Configuration", href: "/credit-scoring/scorecard-configuration", permission: "credit_scoring:settings" },
+      { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", permission: "credit_scoring:view" },
+      { title: "Score History", href: "/credit-scoring/score-history", permission: "credit_scoring:view" },
+      { title: "Settings", href: "/credit-scoring/settings", permission: "credit_scoring:settings" },
+    ],
   },
   {
     title: "Accounting",

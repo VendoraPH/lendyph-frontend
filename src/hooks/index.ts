@@ -8,5 +8,8 @@ export { usePrintables } from "./use-printables";
 export type { UsePrintablesResult } from "./use-printables";
 export { useAccountingResource } from "./use-accounting-resource";
 export type { AccountingResource } from "./use-accounting-resource";
+export { useApiResource } from "./use-api-resource";
+export type { ApiResource } from "./use-api-resource";
 export { useChartOfAccounts } from "./use-chart-of-accounts";
 export type { ChartOfAccounts } from "./use-chart-of-accounts";
+export { useLoanApproval } from "./use-loan-approval";
