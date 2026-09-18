@@ -14,6 +14,7 @@
 
 import type {
   Account,
+  AccountMapping,
   AccountType,
   CashAccountKind,
   NormalBalance,
@@ -150,6 +151,12 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
  * mapping, so an organisation can re-point "interest income" at its own
  * account without touching a rule. Keys mirror `AccountMapping`; values are
  * codes, resolved to ids once the chart exists.
+ *
+ * `satisfies` rather than a plain annotation so the literal codes survive for
+ * callers that index this by key, while a role added to `AccountMapping` and
+ * forgotten here fails to compile. A role with no default resolves to
+ * `undefined` at the moment a loan is released, which is the worst possible
+ * time to find out.
  */
 export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   cash: "1010",
@@ -165,7 +172,11 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   credit_loss_expense: "5140",
   allowance_credit_losses: "1200",
   accounts_payable: "2010",
-} as const;
+  // 2300 Other Liabilities, NOT 2010: an overpayment is owed to a borrower, a
+  // payable is owed to a supplier, and one account for both makes a payables
+  // ageing report unreadable.
+  borrower_advances: "2300",
+} as const satisfies Record<keyof AccountMapping, string>;
 
 /** The normal balance a seed row implies, for building the account record. */
 export function seedNormalBalance(seed: SeedAccount): NormalBalance {

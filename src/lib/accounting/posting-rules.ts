@@ -9,14 +9,24 @@
  * the collection, or a crash between the two leaves the books disagreeing with
  * the portfolio. This module is the rule set expressed once, in a form that
  * can be unit-tested and that the UI can use to PREVIEW the entry an action
- * will produce. The backend must mirror these rules exactly; the handoff doc
- * carries them as the contract.
+ * will produce.
+ *
+ * WHICH SIDE IS AUTHORITATIVE. `app/Services/Accounting/PostingRules.php` is.
+ * This file used to say the backend must mirror it, and for `loan_release` and
+ * `loan_collection` mirroring it exactly would have been wrong: the rules here
+ * did not match what the backend does with money. It withholds fees at release
+ * and it accepts a payment larger than the amount due. Both rules have been
+ * brought back into agreement with it — see each `case` for what was wrong and
+ * why it went unnoticed. Change the PHP first; change this to match.
  *
  * Two invariants hold for every rule here, and the tests assert both on every
- * shape: the result balances, and no zero-amount line is ever emitted.
+ * shape: the result balances, and no zero-amount line is ever emitted. The two
+ * rules that take figures sourced independently of each other assert a third —
+ * that those figures reconcile — rather than emitting an entry built from
+ * numbers that disagree.
  */
 
-import { sumCentavos } from "./money";
+import { formatCentavos, sumCentavos } from "./money";
 import type {
   AccountMapping,
   JournalSource,
@@ -50,12 +60,28 @@ interface BaseInput {
 export type PostingInput =
   | (BaseInput & {
       event: "loan_release";
+      /** `loans.principal_amount` — the GROSS the borrower owes from day one. */
       amount: number;
+      /** `loans.net_proceeds` — what actually left the drawer. */
+      net: number;
+      /** `loans.total_deductions` — what was withheld at release and kept. */
+      deductions: number;
       method: SettlementMethod;
     })
   | (BaseInput & {
       event: "loan_collection";
       method: SettlementMethod;
+      /**
+       * `repayments.amount_paid` — every peso that arrived.
+       *
+       * Carried separately from the allocation rather than derived from it,
+       * exactly as the backend carries it, because the two are sourced
+       * independently: the split comes from the loan engine and this comes from
+       * what the payer handed over. Deriving it would make the reconciliation
+       * check below vacuous, and a preview that cannot disagree with the
+       * backend is a preview that cannot warn about anything.
+       */
+      received: number;
       allocation: PaymentAllocation;
     })
   | (BaseInput & {
@@ -181,17 +207,56 @@ export function buildPosting(
     /**
      * Money leaves a wallet and becomes an amount the borrower owes. The
      * business is no poorer — one asset has turned into another.
+     *
+     * ## The gross/net split, which is the whole point of this rule
+     *
+     * The borrower owes the FULL principal from day one — the amortisation
+     * schedule is built on `principal_amount`, not on what they walked out
+     * with — so loans receivable is debited with the GROSS.
+     *
+     * What actually left the drawer is `net_proceeds`. The backend withholds in
+     * two places, `LoanService::computeDeductions()` (processing, service and
+     * notarial fees) and `LoanService::applyInsuranceOnRelease()` (the insurance
+     * premium), and the difference is income the organisation kept. This rule
+     * credited the settlement account with the gross and emitted no fee leg at
+     * all, which is only correct where nothing is withheld: cash came out
+     * overstated by every peso deducted AND the fee income never appeared.
+     * The entry still balanced, because both sides moved by the same amount,
+     * which is exactly why nothing downstream ever surfaced it — two statements
+     * wrong at once and both looking fine.
+     *
+     *     gross = net + deductions        (asserted, not assumed)
+     *
+     * The assertion is not ceremony. `net_proceeds` is maintained by repeated
+     * float subtraction in pesos across two methods, and a CSV-imported or
+     * hand-edited loan need not satisfy the identity at all. Naming the three
+     * figures that disagree beats previewing an entry that cannot post.
      */
     case "loan_release": {
-      const amount = requireAmount(input.amount, "A loan release");
+      const gross = requireAmount(input.amount, "A loan release");
+      const net = requireComponent(input.net, "The net proceeds");
+      const deductions = requireComponent(input.deductions, "The total deductions");
+
+      if (net + deductions !== gross) {
+        throw new Error(
+          `This loan does not reconcile: ${formatCentavos(net)} disbursed plus ` +
+            `${formatCentavos(deductions)} withheld is ${formatCentavos(net + deductions)}, ` +
+            `but the principal is ${formatCentavos(gross)}.`
+        );
+      }
+
       return {
         ...base,
         source: "loan_release",
         description: "Loan release",
-        lines: [
-          debit(mapping.loans_receivable, amount),
-          credit(settlementAccountId(input.method, mapping), amount),
-        ],
+        lines: used([
+          debit(mapping.loans_receivable, gross),
+          credit(settlementAccountId(input.method, mapping), net),
+          // Withheld at release and kept: income, recognised now. `used()`
+          // drops it when nothing was deducted, which is the ordinary case for
+          // a product with no fees.
+          credit(mapping.processing_fee_income, deductions),
+        ]),
       };
     }
 
@@ -199,30 +264,61 @@ export function buildPosting(
      * A repayment. The split comes FROM the loan engine and is never inferred
      * here — principal/interest allocation is an amortisation decision, and if
      * accounting re-derived it the ledger would disagree with the loan balance
-     * the moment either side changed its rounding. The debit is the sum of the
-     * parts, so the two can never drift.
+     * the moment either side changed its rounding.
+     *
+     * ## The debit is what was RECEIVED, not what was allocated
+     *
+     * `repayments.amount_paid` is not bounded by what is owed — the store
+     * request validates only `numeric, min:0.01` — and the excess is persisted
+     * as `repayments.overpayment`. Debiting only `principal + interest +
+     * penalty + fees`, as this rule used to, understates the drawer by exactly
+     * that excess, so the ledger's cash balance stops matching the cash there
+     * actually is.
+     *
+     * The excess is credited to `borrower_advances`, a LIABILITY: it is money
+     * the organisation is holding, not money it has earned, and crediting it to
+     * any income account would report revenue the borrower can still ask back.
+     *
+     *     allocated + overpayment = received       (asserted, not assumed)
      */
     case "loan_collection": {
-      const { principal, interest, penalty, fees = 0 } = input.allocation;
+      const {
+        principal,
+        interest,
+        penalty,
+        fees = 0,
+        overpayment = 0,
+      } = input.allocation;
       // Each part on its own terms, THEN the total. Checking only the total
       // let fractional and negative components through — see `requireComponent`.
       requireComponent(principal, "The principal component");
       requireComponent(interest, "The interest component");
       requireComponent(penalty, "The penalty component");
       requireComponent(fees, "The fees component");
-      const total = sumCentavos([principal, interest, penalty, fees]);
-      requireAmount(total, "A collection");
+      requireComponent(overpayment, "The overpayment");
+      const received = requireAmount(input.received, "A collection");
+      const allocated = sumCentavos([principal, interest, penalty, fees]);
+
+      if (allocated + overpayment !== received) {
+        throw new Error(
+          `This payment does not reconcile: ${formatCentavos(allocated)} allocated plus ` +
+            `${formatCentavos(overpayment)} unallocated is ${formatCentavos(allocated + overpayment)}, ` +
+            `but ${formatCentavos(received)} was received.`
+        );
+      }
 
       return {
         ...base,
         source: "loan_collection",
         description: "Loan collection",
         lines: used([
-          debit(settlementAccountId(input.method, mapping), total),
+          debit(settlementAccountId(input.method, mapping), received),
           credit(mapping.loans_receivable, principal),
           credit(mapping.interest_income, interest),
           credit(mapping.penalty_income, penalty),
           credit(mapping.processing_fee_income, fees),
+          // Held, not earned.
+          credit(mapping.borrower_advances, overpayment),
         ]),
       };
     }

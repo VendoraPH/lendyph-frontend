@@ -19,6 +19,7 @@ const MAPPING: AccountMapping = {
   credit_loss_expense: 5140,
   allowance_credit_losses: 1200,
   accounts_payable: 2010,
+  borrower_advances: 2300,
 };
 
 function assertBalanced(lines: { debit: number; credit: number }[]) {
@@ -43,6 +44,8 @@ test("a GCash loan release debits receivable and credits GCash", () => {
     {
       event: "loan_release",
       amount: 5000000, // ₱50,000
+      net: 5000000, // nothing withheld: the net IS the gross
+      deductions: 0,
       method: "gcash",
       reference: "LN-000154",
       branch_id: 1,
@@ -61,10 +64,128 @@ test("a GCash loan release debits receivable and credits GCash", () => {
 
 test("a cash loan release credits cash on hand instead", () => {
   const posting = buildPosting(
-    { event: "loan_release", amount: 5000000, method: "cash", date: "2026-09-12", branch_id: 1 },
+    {
+      event: "loan_release",
+      amount: 5000000,
+      net: 5000000,
+      deductions: 0,
+      method: "cash",
+      date: "2026-09-12",
+      branch_id: 1,
+    },
     MAPPING
   );
   assert.equal(posting.lines[1].account_id, 1010);
+});
+
+// ── Loan release: the gross/net split ──
+//
+// The rule debited receivable and credited the settlement account with the SAME
+// figure, which is only correct where nothing is withheld at release. This
+// backend withholds twice — `LoanService::computeDeductions()` takes the
+// processing, service and notarial fees and `applyInsuranceOnRelease()` takes
+// the premium — so only `net_proceeds` ever leaves the drawer.
+
+/** A release with everything named, so each test states only what it varies. */
+const release = (over: {
+  amount: number;
+  net: number;
+  deductions: number;
+  method?: "cash" | "gcash" | "maya" | "bank";
+}) =>
+  buildPosting(
+    {
+      event: "loan_release",
+      method: "gcash",
+      date: "2026-09-12",
+      branch_id: 1,
+      reference: "LN-000154",
+      ...over,
+    },
+    MAPPING,
+  );
+
+test("REGRESSION: a release with deductions credited the GROSS to cash", () => {
+  // ₱50,000 principal, ₱3,000 withheld, ₱47,000 handed over. The old rule
+  // credited GCash ₱50,000 and emitted no fee leg at all, so cash was
+  // overstated by the deductions AND the fee income never appeared — the
+  // balance sheet and the income statement wrong at once. Both legs moved by
+  // the same amount, so the entry balanced and nothing downstream could catch
+  // it.
+  const posting = release({ amount: 5000000, net: 4700000, deductions: 300000 });
+
+  assert.deepEqual(posting.lines, [
+    { account_id: 1110, debit: 5000000, credit: 0 },
+    { account_id: 1020, debit: 0, credit: 4700000 },
+    { account_id: 4030, debit: 0, credit: 300000 },
+  ]);
+  assertBalanced(posting.lines);
+});
+
+test("the drawer is credited what left it, never what the borrower owes", () => {
+  const posting = release({ amount: 5000000, net: 4700000, deductions: 300000, method: "cash" });
+  const drawer = posting.lines.find((l) => l.account_id === MAPPING.cash);
+  assert.equal(drawer?.credit, 4700000);
+  assert.notEqual(drawer?.credit, 5000000, "the gross overstates cash by the deductions");
+});
+
+test("receivable still carries the gross — the schedule is built on it", () => {
+  // The borrower owes the full principal from day one whatever they walked out
+  // with, so this leg is deliberately NOT the net.
+  const posting = release({ amount: 5000000, net: 4700000, deductions: 300000 });
+  const receivable = posting.lines.find((l) => l.account_id === MAPPING.loans_receivable);
+  assert.equal(receivable?.debit, 5000000);
+});
+
+test("the deductions are recognised as fee income at release", () => {
+  const posting = release({ amount: 5000000, net: 4700000, deductions: 300000 });
+  const fee = posting.lines.find((l) => l.account_id === MAPPING.processing_fee_income);
+  assert.equal(fee?.credit, 300000);
+});
+
+test("a release with nothing withheld emits no empty fee leg", () => {
+  // The ordinary case for a product with no fees, and the shape the rule used
+  // to produce for every release.
+  const posting = release({ amount: 5000000, net: 5000000, deductions: 0 });
+  assert.equal(posting.lines.length, 2);
+  assert.ok(!posting.lines.some((l) => l.account_id === MAPPING.processing_fee_income));
+  assert.ok(posting.lines.every((l) => l.debit !== 0 || l.credit !== 0));
+  assertBalanced(posting.lines);
+});
+
+test("a release whose parts do not add up to its principal is refused", () => {
+  // `net_proceeds` is maintained by repeated float subtraction in pesos across
+  // two backend methods, and a CSV-imported or hand-edited loan need not
+  // satisfy the identity at all — so this is a real check, not ceremony.
+  assert.throws(
+    () => release({ amount: 5000000, net: 4000000, deductions: 500000 }),
+    /does not reconcile/,
+  );
+});
+
+test("the reconciliation error names all three figures", () => {
+  // Saying which numbers disagree is the difference between a fixable data
+  // problem and an unbalanced entry nobody can explain.
+  assert.throws(
+    () => release({ amount: 5000000, net: 4000000, deductions: 500000 }),
+    (error: Error) =>
+      error.message.includes("₱40,000.00") &&
+      error.message.includes("₱5,000.00") &&
+      error.message.includes("₱45,000.00") &&
+      error.message.includes("₱50,000.00"),
+  );
+});
+
+test("a negative net or deduction is refused and named", () => {
+  assert.throws(() => release({ amount: 100, net: -1, deductions: 101 }), /net proceeds/i);
+  assert.throws(() => release({ amount: 100, net: 101, deductions: -1 }), /deductions/i);
+});
+
+test("fractional proceeds are refused — centavos only", () => {
+  assert.throws(
+    () => release({ amount: 100, net: 99.5, deductions: 0.5 }),
+    /whole centavos/,
+  );
 });
 
 // ── Loan collection (spec §5) ──
@@ -74,6 +195,7 @@ test("a GCash collection splits into principal, interest and penalty", () => {
     {
       event: "loan_collection",
       method: "gcash",
+      received: 500000,
       allocation: { principal: 400000, interest: 90000, penalty: 10000 },
       reference: "COL-10254",
       branch_id: 1,
@@ -98,6 +220,7 @@ test("the debit equals the sum of the allocation, never a separate figure", () =
     {
       event: "loan_collection",
       method: "cash",
+      received: 123456 + 7891 + 23,
       allocation: { principal: 123456, interest: 7891, penalty: 23 },
       date: "2026-09-12",
       branch_id: 1,
@@ -115,6 +238,7 @@ test("a collection with no penalty produces no penalty line", () => {
     {
       event: "loan_collection",
       method: "bank",
+      received: 490000,
       allocation: { principal: 400000, interest: 90000, penalty: 0 },
       date: "2026-09-12",
       branch_id: 1,
@@ -131,6 +255,7 @@ test("a pure-principal collection is two lines", () => {
     {
       event: "loan_collection",
       method: "cash",
+      received: 400000,
       allocation: { principal: 400000, interest: 0, penalty: 0 },
       date: "2026-09-12",
       branch_id: 1,
@@ -146,6 +271,7 @@ test("fees collected with a payment credit fee income", () => {
     {
       event: "loan_collection",
       method: "gcash",
+      received: 550000,
       allocation: { principal: 400000, interest: 90000, penalty: 10000, fees: 50000 },
       date: "2026-09-12",
       branch_id: 1,
@@ -164,6 +290,7 @@ test("a collection of nothing is refused", () => {
         {
           event: "loan_collection",
           method: "cash",
+          received: 0,
           allocation: { principal: 0, interest: 0, penalty: 0 },
           date: "2026-09-12",
           branch_id: 1,
@@ -309,18 +436,30 @@ test("a provision charges expense and builds the allowance", () => {
 
 test("a zero or negative amount is refused by every rule", () => {
   assert.throws(
-    () => buildPosting({ event: "loan_release", amount: 0, method: "cash", date: "d", branch_id: 1 }, MAPPING),
+    () =>
+      buildPosting(
+        { event: "loan_release", amount: 0, net: 0, deductions: 0, method: "cash", date: "d", branch_id: 1 },
+        MAPPING
+      ),
     /zero/i
   );
   assert.throws(
-    () => buildPosting({ event: "loan_release", amount: -100, method: "cash", date: "d", branch_id: 1 }, MAPPING),
+    () =>
+      buildPosting(
+        { event: "loan_release", amount: -100, net: -100, deductions: 0, method: "cash", date: "d", branch_id: 1 },
+        MAPPING
+      ),
     /zero/i
   );
 });
 
 test("a non-integer amount is refused — centavos only", () => {
   assert.throws(
-    () => buildPosting({ event: "loan_release", amount: 100.5, method: "cash", date: "d", branch_id: 1 }, MAPPING),
+    () =>
+      buildPosting(
+        { event: "loan_release", amount: 100.5, net: 100.5, deductions: 0, method: "cash", date: "d", branch_id: 1 },
+        MAPPING
+      ),
     /whole centavos/i
   );
 });
@@ -330,6 +469,8 @@ test("every posting carries its source, date, branch and reference", () => {
     {
       event: "loan_release",
       amount: 100,
+      net: 100,
+      deductions: 0,
       method: "cash",
       date: "2026-09-12",
       branch_id: 7,
@@ -351,17 +492,30 @@ test("every posting carries its source, date, branch and reference", () => {
 // were. This file is the spec the backend will mirror, so a gap here does not
 // stay in the frontend.
 
-const collection = (allocation: {
-  principal: number;
-  interest: number;
-  penalty: number;
-  fees?: number;
-}) =>
+/**
+ * `received` defaults to what the parts add up to, which is the reconciling
+ * case; pass it explicitly to express a payment whose figures disagree.
+ */
+const collection = (
+  allocation: {
+    principal: number;
+    interest: number;
+    penalty: number;
+    fees?: number;
+    overpayment?: number;
+  },
+  received = allocation.principal +
+    allocation.interest +
+    allocation.penalty +
+    (allocation.fees ?? 0) +
+    (allocation.overpayment ?? 0),
+) =>
   buildPosting(
     {
       event: "loan_collection",
       date: "2026-09-15",
       method: "cash",
+      received,
       allocation,
       reference: "COL-10254",
       branch_id: null,
@@ -444,4 +598,109 @@ test("a non-finite component is refused rather than emitting NaN lines", () => {
     () => collection({ principal: Number.NaN, interest: 100, penalty: 0 }),
     /cannot be negative|whole centavos/,
   );
+});
+
+// ── Collection: what arrived, not what it settled ──
+//
+// `repayments.amount_paid` is not bounded by what is owed — the store request
+// validates only `numeric, min:0.01` — and the excess is persisted as
+// `repayments.overpayment`. The rule debited `principal + interest + penalty +
+// fees` and ignored the excess, so the ledger's cash balance drifted below the
+// cash actually in the drawer by exactly that amount.
+
+test("REGRESSION: an overpayment never reached the drawer", () => {
+  // ₱6,000 handed over against ₱5,000 due. The old rule debited GCash ₱5,000
+  // and emitted four lines; the ₱1,000 the borrower actually paid went
+  // nowhere.
+  const posting = buildPosting(
+    {
+      event: "loan_collection",
+      method: "gcash",
+      received: 600000,
+      allocation: { principal: 400000, interest: 90000, penalty: 10000, overpayment: 100000 },
+      reference: "COL-10254",
+      date: "2026-09-15",
+      branch_id: 1,
+    },
+    MAPPING,
+  );
+
+  assert.deepEqual(posting.lines, [
+    { account_id: 1020, debit: 600000, credit: 0 },
+    { account_id: 1110, debit: 0, credit: 400000 },
+    { account_id: 4010, debit: 0, credit: 90000 },
+    { account_id: 4020, debit: 0, credit: 10000 },
+    { account_id: 2300, debit: 0, credit: 100000 },
+  ]);
+  assertBalanced(posting.lines);
+});
+
+test("an overpayment is a liability and never income", () => {
+  // Money the organisation is HOLDING, not money it has earned: credited to an
+  // income account it would report revenue the borrower can still ask back.
+  const posting = collection({
+    principal: 400000,
+    interest: 90000,
+    penalty: 0,
+    overpayment: 100000,
+  });
+  const held = posting.lines.find((l) => l.credit === 100000);
+  assert.equal(held?.account_id, MAPPING.borrower_advances);
+  assert.ok(
+    !posting.lines.some((l) => String(l.account_id).startsWith("4") && l.credit === 100000),
+    "nothing in the 4xxx range may carry an overpayment",
+  );
+});
+
+test("a payment that settles nothing at all still posts", () => {
+  // Paying ahead of the schedule, with no instalment due. The old rule refused
+  // this outright — the allocation was empty, so its derived total was zero.
+  const posting = collection(
+    { principal: 0, interest: 0, penalty: 0, overpayment: 100000 },
+  );
+  assert.deepEqual(posting.lines, [
+    { account_id: 1010, debit: 100000, credit: 0 },
+    { account_id: 2300, debit: 0, credit: 100000 },
+  ]);
+  assertBalanced(posting.lines);
+});
+
+test("a payment whose parts do not add up to what arrived is refused", () => {
+  // ₱6,000 received, ₱5,000 accounted for and nothing recorded as unallocated.
+  // The old rule quietly posted the ₱5,000 and lost the difference.
+  assert.throws(
+    () => collection({ principal: 500000, interest: 0, penalty: 0 }, 600000),
+    /does not reconcile/,
+  );
+});
+
+test("the payment reconciliation error names what arrived and what was allocated", () => {
+  assert.throws(
+    () => collection({ principal: 500000, interest: 0, penalty: 0 }, 600000),
+    (error: Error) =>
+      error.message.includes("₱5,000.00") && error.message.includes("₱6,000.00"),
+  );
+});
+
+test("a negative overpayment is refused and named", () => {
+  // Direction belongs to the column, not the sign — and a negative excess
+  // would silently reduce the debit to the drawer.
+  assert.throws(
+    () => collection({ principal: 100000, interest: 0, penalty: 0, overpayment: -1 }, 99999),
+    /overpayment cannot be negative/i,
+  );
+});
+
+test("a fractional overpayment is refused — centavos only", () => {
+  assert.throws(
+    () => collection({ principal: 100000, interest: 0, penalty: 0, overpayment: 0.5 }),
+    /whole centavos/,
+  );
+});
+
+test("a collection with no overpayment emits no advances line", () => {
+  const posting = collection({ principal: 400000, interest: 90000, penalty: 0 });
+  assert.ok(!posting.lines.some((l) => l.account_id === MAPPING.borrower_advances));
+  assert.equal(posting.lines[0].debit, 490000);
+  assertBalanced(posting.lines);
 });

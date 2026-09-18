@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useChartOfAccounts } from "@/hooks";
@@ -22,7 +23,14 @@ import { AccountSelect } from "./account-select";
 interface ExpenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: Partial<Expense>) => void;
+  /**
+   * Must return the request's promise.
+   *
+   * `=> void` here discarded it, so the dialog could not tell that a request
+   * was in flight and a second click recorded the expense twice. See the same
+   * note on `TransferDialog`, where the duplicate is a second journal entry.
+   */
+  onSubmit: (data: Partial<Expense>) => Promise<void>;
 }
 
 /**
@@ -45,6 +53,7 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
   const [dueDate, setDueDate] = useState("");
   const [reference, setReference] = useState("");
   const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const expenseAccounts = postable.filter((a) => a.type === "expense");
   const moneyAccounts = postable.filter((a) => Boolean(a.cash_kind));
@@ -57,22 +66,30 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
     amountCentavos > 0 &&
     (!paidNow || paymentAccountId !== null);
 
-  const submit = () => {
-    if (!valid || isTemplate) return;
-    onSubmit({
-      date,
-      payee: payee.trim(),
-      expense_account_id: expenseAccountId,
-      amount: amountCentavos,
-      payment_account_id: paidNow ? paymentAccountId : null,
-      due_date: paidNow ? null : dueDate || null,
-      reference: reference.trim() || null,
-      description: description.trim() || null,
-    });
+  const submit = async () => {
+    if (submitting || !valid || isTemplate) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        date,
+        payee: payee.trim(),
+        expense_account_id: expenseAccountId,
+        amount: amountCentavos,
+        payment_account_id: paidNow ? paymentAccountId : null,
+        due_date: paidNow ? null : dueDate || null,
+        reference: reference.trim() || null,
+        description: description.trim() || null,
+      });
+    } finally {
+      // Whatever the request did, the button has to come back. A rejection
+      // that left this true would wedge the dialog with no way out but a
+      // reload.
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Record an expense</DialogTitle>
@@ -183,11 +200,16 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!valid || isTemplate}>
-            Record expense
+          <Button onClick={submit} disabled={!valid || isTemplate || submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
+            {submitting ? "Recording…" : "Record expense"}
           </Button>
         </div>
       </DialogContent>

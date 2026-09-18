@@ -81,8 +81,35 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                     registration was opened. `null` is Base UI's controlled empty
                     value and still shows the placeholder.
                   */}
-                  <Select value={d.suffix || null} onValueChange={(v) => onDraftChange("suffix", v ?? "")}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger>
+                  {/*
+                    "none" is this Select's stand-in for the empty option —
+                    `SUFFIX_OPTIONS[0]` has `value: ""` and Base UI refuses an
+                    empty string as an item value. It is a presentation detail
+                    and must not escape: sent as-is it becomes the borrower's
+                    literal suffix, and "Juan Dela Cruz none" is what prints on
+                    the promissory note. Mapped back to "" here, the same way
+                    `borrowers/new`, `borrowers/[id]/edit` and the public
+                    register form strip it before building their payloads —
+                    this draft IS the payload, so the boundary is here.
+                  */}
+                  <Select
+                    value={d.suffix || null}
+                    onValueChange={(v) => onDraftChange("suffix", v && v !== "none" ? v : "")}
+                  >
+                    <SelectTrigger className="w-full">
+                      {/*
+                        Base UI resolves the trigger's label from `items`, not
+                        from the mounted <SelectItem> children, so without this
+                        render prop the closed trigger shows the raw value.
+                      */}
+                      <SelectValue placeholder="None">
+                        {(value: string | null) =>
+                          value
+                            ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                            : "None"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {SUFFIX_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value || "none"} value={opt.value || "none"}>{opt.label}</SelectItem>
