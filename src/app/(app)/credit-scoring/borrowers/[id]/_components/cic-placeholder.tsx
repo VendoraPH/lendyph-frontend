@@ -15,7 +15,7 @@ export function CicPlaceholder() {
         <Link2Off className="h-6 w-6 text-muted-foreground" />
         <p className="text-sm font-medium">External Credit Bureau (CIC)</p>
         <p className="max-w-xs text-sm text-muted-foreground">
-          Not connected. This score is based on Lendy's internal data only.
+          Not connected. This score is based on Lendy&apos;s internal data only.
         </p>
       </CardContent>
     </Card>
