@@ -73,8 +73,43 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Suffix</Label>
-                  <Select value={d.suffix || undefined} onValueChange={(v) => onDraftChange("suffix", v ?? "")}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger>
+                  {/*
+                    `null`, not `undefined`, on every Base UI `value` below: Base UI
+                    reads `undefined` as "this control is uncontrolled", so an empty
+                    draft field made the very first render uncontrolled and picking a
+                    value flipped it to controlled — a React warning every time a
+                    registration was opened. `null` is Base UI's controlled empty
+                    value and still shows the placeholder.
+                  */}
+                  {/*
+                    "none" is this Select's stand-in for the empty option —
+                    `SUFFIX_OPTIONS[0]` has `value: ""` and Base UI refuses an
+                    empty string as an item value. It is a presentation detail
+                    and must not escape: sent as-is it becomes the borrower's
+                    literal suffix, and "Juan Dela Cruz none" is what prints on
+                    the promissory note. Mapped back to "" here, the same way
+                    `borrowers/new`, `borrowers/[id]/edit` and the public
+                    register form strip it before building their payloads —
+                    this draft IS the payload, so the boundary is here.
+                  */}
+                  <Select
+                    value={d.suffix || null}
+                    onValueChange={(v) => onDraftChange("suffix", v && v !== "none" ? v : "")}
+                  >
+                    <SelectTrigger className="w-full">
+                      {/*
+                        Base UI resolves the trigger's label from `items`, not
+                        from the mounted <SelectItem> children, so without this
+                        render prop the closed trigger shows the raw value.
+                      */}
+                      <SelectValue placeholder="None">
+                        {(value: string | null) =>
+                          value
+                            ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                            : "None"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {SUFFIX_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value || "none"} value={opt.value || "none"}>{opt.label}</SelectItem>
@@ -88,7 +123,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Civil Status</Label>
-                  <Select value={d.civil_status || undefined} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
+                  <Select value={d.civil_status || null} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {CIVIL_STATUS_OPTIONS.map((opt) => (
@@ -99,7 +134,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Gender</Label>
-                  <RadioGroup className="flex gap-5 pt-1" value={d.gender || undefined} onValueChange={(v) => onDraftChange("gender", v ?? "")}>
+                  <RadioGroup className="flex gap-5 pt-1" value={d.gender || null} onValueChange={(v) => onDraftChange("gender", v ?? "")}>
                     <label className="flex items-center gap-2 cursor-pointer"><RadioGroupItem value="male" /><span className="text-sm">Male</span></label>
                     <label className="flex items-center gap-2 cursor-pointer"><RadioGroupItem value="female" /><span className="text-sm">Female</span></label>
                   </RadioGroup>

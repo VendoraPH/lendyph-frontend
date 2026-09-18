@@ -5,14 +5,32 @@
 //   * bypass api-client's auto-unwrap and talk to axios directly
 //   * accept multiple response shapes (array, {steps}, {data:{steps}}, etc.)
 // The normal and policy-exception chains are stored server-side; this module
-// is a thin wrapper plus a synchronous default fallback used by loan
-// snapshotting when the server is unreachable.
+// is a thin wrapper plus a synchronous default used when the server is
+// unreachable.
+//
+// SCOPE: this is the chain TEMPLATE that admins edit at /settings/approval-
+// workflow. It is not a loan's actual approval progress — that is materialised
+// per loan by the server and read through `loanApprovalService`. The loan
+// detail page used to fetch this template and derive a chain from it in the
+// browser; it no longer does, and nothing here should grow a loan-specific
+// branch again.
 // ---------------------------------------------------------------------------
 
 import axiosClient from "@/lib/axios-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import type { ApprovalStepKind } from "@/types";
 
-export type ChainStepKind = "submit" | "approve" | "release" | "confirmed";
+/**
+ * Re-exported under the name this module has always used. Defined once, in
+ * `@/types/loan-approval`, so the settings editor, the chain the loan page
+ * renders and the backend's own validation rule cannot drift apart.
+ *
+ * "confirmed" USED to be a fourth member here. It could never be persisted —
+ * the backend validates `in:submit,approve,release` and 422s — and the loan
+ * page's action panel rendered no buttons for it, so a chain that somehow
+ * contained one would have stalled with nothing to click.
+ */
+export type ChainStepKind = ApprovalStepKind;
 
 export interface ApprovalChainStep {
   id: string;
@@ -135,19 +153,30 @@ function isApprovalChainStep(v: unknown): v is ApprovalChainStep {
     (o.kind === "submit" ||
       o.kind === "approve" ||
       o.kind === "release" ||
+      // Accepted on the way IN only, and normalised to "approve" below. The
+      // editor no longer offers it and the backend rejects it, but a chain
+      // stored before either was true must not make the settings page throw
+      // and silently reset the co-op's configuration to the default.
       o.kind === "confirmed") &&
     statusValid
   );
 }
 
+/** Legacy `confirmed` steps behave as approvals — that is all they ever were. */
+function normalizeKind(step: ApprovalChainStep): ApprovalChainStep {
+  return (step.kind as string) === "confirmed"
+    ? { ...step, kind: "approve" }
+    : step;
+}
+
 function extractSteps(payload: unknown): ApprovalChainStep[] {
   if (Array.isArray(payload) && payload.every(isApprovalChainStep)) {
-    return payload;
+    return payload.map(normalizeKind);
   }
   if (payload && typeof payload === "object") {
     const obj = payload as Record<string, unknown>;
     if (Array.isArray(obj.steps) && obj.steps.every(isApprovalChainStep)) {
-      return obj.steps as ApprovalChainStep[];
+      return (obj.steps as ApprovalChainStep[]).map(normalizeKind);
     }
     if (obj.data !== undefined) {
       return extractSteps(obj.data);
@@ -246,10 +275,5 @@ export const approvalWorkflowService = {
 
   getDefaultNormal(): ApprovalChainStep[] {
     return DEFAULT_NORMAL_CHAIN;
-  },
-
-  /** Get the correct chain for a loan based on policy_exception flag. */
-  async listForLoan(policyException: boolean): Promise<ApprovalChainStep[]> {
-    return policyException ? this.list() : this.listNormal();
   },
 };

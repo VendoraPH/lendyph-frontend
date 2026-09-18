@@ -337,7 +337,11 @@ function CoMakerFormFields({
       <div className="space-y-2">
         <Label>Linked Loan *</Label>
         <Select
-          value={form.loan_id ? String(form.loan_id) : undefined}
+          // `null`, not `undefined`: `loan_id` starts as `""`, so `undefined` made
+          // the first render uncontrolled and picking a loan flipped it to
+          // controlled. `null` is Base UI's controlled empty value, matching the
+          // other two Selects in this dialog.
+          value={form.loan_id ? String(form.loan_id) : null}
           onValueChange={(v) => update("loan_id", Number(v))}
         >
           <SelectTrigger className="w-full">

@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean;
   setUser: (user: User) => void;
   clearAuth: () => void;
+  flagPasswordChangeRequired: () => void;
   refreshUser: () => Promise<void>;
   getPermissions: () => Permission[];
   hasPermission: (permission: Permission) => boolean;
@@ -22,6 +23,22 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       setUser: (user) => set({ user, isAuthenticated: true }),
       clearAuth: () => set({ user: null, isAuthenticated: false }),
+      /**
+       * Record that the API has told us (via 423) the password must change.
+       *
+       * Needed because the flag can become true while the user is already
+       * sitting in the app — an owner resets the password mid-session, or a
+       * tab is reopened and rehydrates a persisted user from before the reset.
+       * In both cases the store says `false` and only the 423 knows better.
+       * Clearing it is deliberately NOT a setter: the only thing allowed to
+       * say the lock is over is a fresh `GET /auth/me`.
+       */
+      flagPasswordChangeRequired: () =>
+        set((state) =>
+          state.user && state.user.must_change_password !== true
+            ? { user: { ...state.user, must_change_password: true } }
+            : state
+        ),
       refreshUser: async () => {
         try {
           const fresh = await authService.me();

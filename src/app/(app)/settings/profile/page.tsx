@@ -16,6 +16,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
+import { ChangePasswordForm } from "@/components/common/change-password-form";
 import { getInitials } from "@/lib/initials";
 import { useAuth } from "@/hooks/use-auth";
 import { authService } from "@/services";
@@ -278,51 +279,15 @@ function EditProfileCard() {
 
 // ── Change Password Form ──
 
-interface PasswordForm {
-  current: string;
-  next: string;
-  confirm: string;
-}
-
-const EMPTY_PASSWORD: PasswordForm = { current: "", next: "", confirm: "" };
+// The fields, the validation and the call all live in <ChangePasswordForm>,
+// which /change-password shares. They have to agree: the rules enforced here
+// are the backend's, and a second copy of them only drifts from it. This card
+// is the chrome around that form and nothing else.
+//
+// Imported from its own path rather than the components/common barrel on
+// purpose — see the note at the bottom of that file.
 
 function ChangePasswordCard() {
-  const [form, setForm] = useState<PasswordForm>(EMPTY_PASSWORD);
-  const [saving, setSaving] = useState(false);
-
-  const update = (field: keyof PasswordForm, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (saving) return;
-
-    if (form.next !== form.confirm) {
-      toast.error("New password and confirmation do not match");
-      return;
-    }
-
-    if (form.next.length < 8) {
-      toast.error("New password must be at least 8 characters");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await authService.changePassword({
-        current_password: form.current,
-        new_password: form.next,
-        new_password_confirmation: form.confirm,
-      });
-      toast.success("Password updated. Other active sessions have been signed out.");
-      setForm(EMPTY_PASSWORD);
-    } catch (err) {
-      notifyError(err, "We couldn't update your password. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Card>
       <CardHeader className="pb-4">
@@ -333,75 +298,7 @@ function ChangePasswordCard() {
       </CardHeader>
       <Separator />
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Current Password */}
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="pwd-current">Current Password *</Label>
-              <Input
-                id="pwd-current"
-                type="password"
-                placeholder="Enter current password"
-                value={form.current}
-                onChange={(e) => update("current", e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
-
-            {/* New Password */}
-            <div className="space-y-2">
-              <Label htmlFor="pwd-new">New Password *</Label>
-              <Input
-                id="pwd-new"
-                type="password"
-                placeholder="Min. 8 characters"
-                value={form.next}
-                onChange={(e) => update("next", e.target.value)}
-                required
-                autoComplete="new-password"
-              />
-            </div>
-
-            {/* Confirm New Password */}
-            <div className="space-y-2">
-              <Label htmlFor="pwd-confirm">Confirm New Password *</Label>
-              <Input
-                id="pwd-confirm"
-                type="password"
-                placeholder="Repeat new password"
-                value={form.confirm}
-                onChange={(e) => update("confirm", e.target.value)}
-                required
-                autoComplete="new-password"
-              />
-            </div>
-          </div>
-
-          {/* Mismatch hint */}
-          {form.confirm.length > 0 && form.next !== form.confirm && (
-            <p className="text-xs text-destructive">
-              Passwords do not match.
-            </p>
-          )}
-
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={
-                saving ||
-                !form.current ||
-                !form.next ||
-                form.next !== form.confirm
-              }
-              className="w-full sm:w-auto"
-            >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {saving ? "Updating…" : "Update Password"}
-            </Button>
-          </div>
-        </form>
+        <ChangePasswordForm />
       </CardContent>
     </Card>
   );

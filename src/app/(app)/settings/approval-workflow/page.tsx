@@ -38,7 +38,6 @@ import {
   ChevronDown,
   Send,
   CheckCircle2,
-  BadgeCheck,
   Unlock,
   Save,
   RotateCcw,
@@ -76,12 +75,11 @@ const KIND_META: Record<
     description: "Finalizes and releases the loan",
     colorClass: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   },
-  confirmed: {
-    label: "Confirmed",
-    icon: BadgeCheck,
-    description: "Confirms the decision before proceeding to the next step",
-    colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30",
-  },
+  // No "confirmed" kind. The backend validates `in:submit,approve,release`, so
+  // saving a chain containing one 422s, and the loan page's action panel had no
+  // buttons for it — a chain that somehow held one would stall with nothing to
+  // click. The final approver before release is an ordinary `approve` step; the
+  // loan page already labels its button "Confirm & Forward".
 };
 
 function titleCase(s: string): string {

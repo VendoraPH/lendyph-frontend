@@ -1,5 +1,9 @@
 import axios from "axios";
 import { env } from "@/config/env";
+import {
+  isPasswordChangeRequiredError,
+  PASSWORD_CHANGE_REQUIRED_EVENT,
+} from "./password-change-required";
 
 const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
 
@@ -115,6 +119,30 @@ axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // ── 423: the password must be changed before anything else works ──
+    //
+    // Announced, then rethrown untouched, so the calling component's own catch
+    // still runs and nothing swallows the failure. A listener (see
+    // use-password-change-guard.ts) moves the user to /change-password, which
+    // is why this dispatches an event instead of setting window.location — the
+    // same reasoning as "auth:session-expired" below.
+    //
+    // It sits ABOVE the 401 handler rather than beside it to make one thing
+    // unmissable to the next reader: a 423 must NEVER reach the refresh path.
+    // `POST /auth/refresh` is not on the backend's allowlist while the flag is
+    // set, so a refresh attempt would itself come back 423, and the catch down
+    // there only treats 401/403/419 as a dead session — so the retry would
+    // fail, the user would be left on a spinner, and nothing would ever say
+    // why. As written the refresh block is already unreachable for a 423 (it
+    // is gated on `status === 401`), so this changes no existing behaviour; it
+    // guards the invariant against a later edit that widens that condition.
+    if (isPasswordChangeRequiredError(error)) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(PASSWORD_CHANGE_REQUIRED_EVENT));
+      }
+      return Promise.reject(error);
+    }
 
     const isAuthRoute = originalRequest?.url?.includes("/auth/login") ||
       originalRequest?.url?.includes("/auth/refresh");
