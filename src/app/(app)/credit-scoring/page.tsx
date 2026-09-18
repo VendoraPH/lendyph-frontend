@@ -49,7 +49,7 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Figure label="Scored Borrowers" value={String(data.total_scored_borrowers)} />
-        <Figure label="Average Score" value={data.average_score.toFixed(1)} />
+        <Figure label="Average Score" value={Number(data.average_score ?? 0).toFixed(1)} />
       </div>
 
       <Card>

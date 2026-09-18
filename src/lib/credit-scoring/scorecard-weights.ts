@@ -1,7 +1,11 @@
 import type { ScorecardCategoryConfig } from "@/types/credit-scoring";
 
 export function sumWeights(categories: ScorecardCategoryConfig[]): number {
-  return categories.reduce((total, c) => total + c.weight_percent, 0);
+  // Number() is load-bearing, not defensive noise. Laravel serialises a
+  // `decimal:2` column as a JSON *string*, so `0 + "25"` concatenates: the
+  // six real categories yield "0252015151510", isValidWeightTotal() returns
+  // false, and the Save button is disabled forever with no error shown.
+  return categories.reduce((total, c) => total + Number(c.weight_percent), 0);
 }
 
 /**
