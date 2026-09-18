@@ -1560,6 +1560,16 @@ export default function LoanDetailPage({
       .map((s) => ({ index: s.index, name: s.name, kind: s.kind }));
   }, [approvalSteps]);
 
+  // Base UI resolves <SelectValue> labels from `items`, not from the mounted
+  // <SelectItem> children — without it the "Send back to" trigger showed the
+  // raw value, which here is the step's `index` (the server's `step_order`),
+  // so the closed dropdown read "2" instead of the step name the rest of the
+  // chain renders.
+  const sendBackTargetItems = useMemo(
+    () => sendBackTargets.map((t) => ({ value: String(t.index), label: t.name })),
+    [sendBackTargets],
+  );
+
   // When the set of valid targets changes, default to the most recent prior
   // approver (or the Loan Processor if there is none).
   useEffect(() => {
@@ -2940,6 +2950,7 @@ export default function LoanDetailPage({
                                 Send back to
                               </Label>
                               <Select
+                                items={sendBackTargetItems}
                                 value={String(sendBackTargetIndex)}
                                 onValueChange={(v) =>
                                   setSendBackTargetIndex(Number(v))

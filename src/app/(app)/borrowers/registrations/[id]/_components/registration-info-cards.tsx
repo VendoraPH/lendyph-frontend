@@ -73,7 +73,15 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Suffix</Label>
-                  <Select value={d.suffix || undefined} onValueChange={(v) => onDraftChange("suffix", v ?? "")}>
+                  {/*
+                    `null`, not `undefined`, on every Base UI `value` below: Base UI
+                    reads `undefined` as "this control is uncontrolled", so an empty
+                    draft field made the very first render uncontrolled and picking a
+                    value flipped it to controlled — a React warning every time a
+                    registration was opened. `null` is Base UI's controlled empty
+                    value and still shows the placeholder.
+                  */}
+                  <Select value={d.suffix || null} onValueChange={(v) => onDraftChange("suffix", v ?? "")}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger>
                     <SelectContent>
                       {SUFFIX_OPTIONS.map((opt) => (
@@ -88,7 +96,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Civil Status</Label>
-                  <Select value={d.civil_status || undefined} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
+                  <Select value={d.civil_status || null} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {CIVIL_STATUS_OPTIONS.map((opt) => (
@@ -99,7 +107,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Gender</Label>
-                  <RadioGroup className="flex gap-5 pt-1" value={d.gender || undefined} onValueChange={(v) => onDraftChange("gender", v ?? "")}>
+                  <RadioGroup className="flex gap-5 pt-1" value={d.gender || null} onValueChange={(v) => onDraftChange("gender", v ?? "")}>
                     <label className="flex items-center gap-2 cursor-pointer"><RadioGroupItem value="male" /><span className="text-sm">Male</span></label>
                     <label className="flex items-center gap-2 cursor-pointer"><RadioGroupItem value="female" /><span className="text-sm">Female</span></label>
                   </RadioGroup>
