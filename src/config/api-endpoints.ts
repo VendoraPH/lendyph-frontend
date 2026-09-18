@@ -350,6 +350,24 @@ export const API_ENDPOINTS = {
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
     OPENING_BALANCES: "/accounting/opening-balances",
   },
+  /**
+   * None of these exist yet. Typed and wired now so the service layer has
+   * one place to be wrong rather than eleven, same rationale as ACCOUNTING
+   * above. Re-check against the backend handoff before trusting any path.
+   */
+  CREDIT_SCORING: {
+    DASHBOARD: "/credit-scoring/dashboard",
+    BORROWERS_LIST: "/credit-scoring/borrowers",
+    BORROWER_PROFILE: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}`,
+    BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
+    SCORE_HISTORY: "/credit-scoring/score-history",
+    RISK_MONITORING: "/credit-scoring/risk-monitoring",
+    ALERTS_LIST: "/credit-scoring/alerts",
+    SCORECARD_CONFIG: "/credit-scoring/scorecard-config",
+    POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
+    DECISIONS_CREATE: "/credit-scoring/decisions",
+    SETTINGS: "/credit-scoring/settings",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

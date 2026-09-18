@@ -28,6 +28,17 @@ export interface ChartOfAccounts {
    * exist on the server.
    */
   isTemplate: boolean;
+  /**
+   * True only when the endpoint itself is missing (404/501), as opposed to a
+   * request that failed for some other reason. `isTemplate` collapses both
+   * into "showing the template", which is right for a picker but wrong for
+   * anything offering to WRITE the chart: a 500 on the list call says nothing
+   * about whether accounts already exist, and seeding on that assumption is
+   * how you get a 409 (or worse, a second chart).
+   */
+  notBuiltYet: boolean;
+  /** Re-read the chart, e.g. after seeding it. */
+  refetch: () => void;
 }
 
 /**
@@ -43,7 +54,7 @@ export function useChartOfAccounts(): ChartOfAccounts {
   // 60-odd accounts, so the expense and equity sections were absent from every
   // picker in the module and a journal against them could not be raised at all.
   const fetcher = useCallback(() => accountingService.accountsListAll(), []);
-  const { data, loading, unavailable, error } =
+  const { data, loading, unavailable, error, refetch } =
     useAccountingResource<DrainResult<Account>>(fetcher);
 
   const isTemplate =
@@ -59,5 +70,7 @@ export function useChartOfAccounts(): ChartOfAccounts {
     truncated: !isTemplate && (data?.truncated ?? false),
     total: isTemplate ? null : (data?.total ?? null),
     isTemplate,
+    notBuiltYet: unavailable || (!error && (data?.rows.length ?? 0) === 0),
+    refetch,
   };
 }

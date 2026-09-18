@@ -56,6 +56,7 @@ import {
   ListTree,
   Receipt,
   Wallet,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -270,6 +271,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Move money between own accounts — a transfer, never income",
     ],
   },
+  credit_scoring: {
+    label: "Credit Scoring",
+    description: "Automated credit scoring, risk assessment and manual override for loan decisions.",
+    icon: Gauge,
+    features: [
+      "View borrower credit scores, risk levels and score history",
+      "Override an automated score with a manual credit decision",
+      "Configure scorecard weights, policy rules and module settings",
+    ],
+  },
 };
 
 // Applicable actions per module — only the actions that make sense for each area
@@ -301,6 +312,7 @@ const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   journals: ["view", "create", "post", "reverse"],
   expenses: ["view", "create", "update"],
   cash_accounts: ["view", "transfer"],
+  credit_scoring: ["view", "override", "settings"],
 };
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
@@ -324,6 +336,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reconcile: { label: "Reconcile", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
   close: { label: "Close Period", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
   transfer: { label: "Transfer", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
+  override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
 };
 
 // ---------------------------------------------------------------------------

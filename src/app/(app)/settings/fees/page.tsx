@@ -496,10 +496,19 @@ export default function FeesPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((fee) => {
+                    // Fall back to a placeholder rather than dropping the id.
+                    // An id that did not resolve used to be filtered out, and an empty
+                    // list renders as "All products" below — so a fee scoped to
+                    // ONE product was displayed as applying to EVERY product, a
+                    // false statement about what borrowers are charged.
+                    //
+                    // Not a rare edge case: productNameById is built from a
+                    // single loanProductService.list() whose shape guard falls
+                    // back to [] silently, so one unexpected envelope relabels
+                    // every product-scoped fee at once, with no error shown.
                     const productNames =
                       (fee.applicable_product_ids ?? [])
-                        .map((id) => productNameById.get(id))
-                        .filter(Boolean) as string[];
+                        .map((id) => productNameById.get(id) ?? `Product #${id}`);
                     return (
                       <TableRow key={fee.id}>
                         <TableCell className="font-medium">{fee.name}</TableCell>

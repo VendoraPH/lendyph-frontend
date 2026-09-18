@@ -76,6 +76,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "expenses:update",
       "cash_accounts:view",
       "cash_accounts:transfer",
+      "credit_scoring:view",
+      "credit_scoring:override",
+      "credit_scoring:settings",
     ],
   },
   loan_officer: {
@@ -100,6 +103,8 @@ export const ROLES: Record<Role, RoleConfig> = {
       "collaterals:view",
       "collaterals:create",
       "collaterals:update",
+      "credit_scoring:view",
+      "credit_scoring:override",
     ],
   },
   cashier: {
@@ -202,6 +207,7 @@ export const ROLES: Record<Role, RoleConfig> = {
       "journals:view",
       "expenses:view",
       "cash_accounts:view",
+      "credit_scoring:view",
     ],
   },
   bod1: {

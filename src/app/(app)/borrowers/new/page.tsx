@@ -1287,7 +1287,7 @@ export default function NewBorrowerPage() {
                   id="monthly_income"
                   type="number"
                   min={0}
-                  step={100}
+                  step="0.01"
                   placeholder="0"
                   value={form.monthly_income}
                   onChange={(e) => update("monthly_income", e.target.value)}
@@ -1300,7 +1300,7 @@ export default function NewBorrowerPage() {
                   id="pledge_amount"
                   type="number"
                   min={0}
-                  step={100}
+                  step="0.01"
                   placeholder="0"
                   value={form.pledge_amount}
                   onChange={(e) => update("pledge_amount", e.target.value)}

@@ -97,10 +97,22 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "3010", name: "Capital", type: "equity", parent: "3000" },
   { code: "3020", name: "Additional Capital", type: "equity", parent: "3000" },
   { code: "3030", name: "Retained Earnings", type: "equity", parent: "3000" },
-  // Derived on every balance sheet from the period's net income rather than
-  // posted to directly — see `buildBalanceSheet`. It exists in the chart so
-  // year-end closing has somewhere to move the result from.
-  { code: "3040", name: "Current Year Earnings", type: "equity", parent: "3000" },
+  // A heading, never a postable account. `buildBalanceSheet` DERIVES the
+  // period's result from the trial balance and pushes it into the equity
+  // section as a synthetic line carrying this very code, so a real balance
+  // here would put two lines with code 3040 — different names, different
+  // amounts — side by side in one section with no way to tell the posted
+  // figure from the derived one. The sheet still balances (`difference` is
+  // identically zero whenever the trial balance balances, whatever is split
+  // out of it), which is precisely why nothing would catch it. `is_group`
+  // blocks posting and makes that unreachable. Year-end closing moves the
+  // result into 3030 Retained Earnings.
+  { code: "3040", name: "Current Year Earnings", type: "equity", is_group: true, parent: "3000" },
+  // The named plug for the opening-balance difference the accounting backfill
+  // computes. Folded into 3030 Retained Earnings it would be indistinguishable
+  // from real earnings forever. NOT 3045 — `statements.ts` already uses that
+  // code for its synthetic prior-period line.
+  { code: "3050", name: "Opening Balance Equity", type: "equity", parent: "3000" },
 
   // ── Income ──
   { code: "4000", name: "Income", type: "income", is_group: true },
