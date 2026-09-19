@@ -13,6 +13,14 @@
 # testing
 /coverage
 
+# playwright / e2e
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+# saved signed-in browser state produced by e2e/auth.setup.ts
+/.auth/
+
 # next.js
 /.next/
 /out/
@@ -35,6 +43,7 @@ yarn-error.log*
 .env*.local
 .env.development
 .env.staging
+.env.e2e
 .env.production
 
 # vercel
