@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -59,6 +60,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { userEditChanges, userEditPayload } from "@/lib/user-edit";
+import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
@@ -504,20 +507,41 @@ function EditUserDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Ask before sending. The API refuses a PUT that would write nothing —
+    // an untouched form used to validate, reach the super_admin check and
+    // answer 200 having issued no UPDATE, which made it a free probe for which
+    // ids are super_admin accounts. Without this, Save on an unedited form
+    // would surface as "please try again" on a request that fails identically
+    // every time.
+    const changed = userEditChanges(user, form);
+    if (changed.length === 0) {
+      toast.info("No changes to save.");
+      onOpenChange(false);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await userService.update(user.id, {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        mobile_number: form.mobile_number || undefined,
-        branch_id: form.branch_id as number,
-        role: form.role,
-      });
+      await userService.update(user.id, userEditPayload(form));
       toast.success("User updated");
       onOpenChange(false);
       onSave();
-    } catch {
+    } catch (error) {
+      // The server disagreed about whether anything changed — it compares the
+      // same fields, so this means the record moved under us (someone else
+      // saved first, and our copy already matches theirs).
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const errors = (error as { response?: { data?: { errors?: Record<string, string[]> } } })
+        ?.response?.data?.errors;
+
+      if (status === 422 && errors?.changes) {
+        toast.info("Nothing to save — this record already matches what you entered.");
+        onOpenChange(false);
+        onSave();
+        return;
+      }
+
       toast.error("We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
@@ -808,6 +832,29 @@ function UserActionsCell({
 }) {
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = user.status === "active";
+  const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+
+  // Only a super_admin may act on a super_admin. The API enforces this and now
+  // answers the same 404 a missing id gives, rather than a 422 naming the
+  // account — masking it is the point, since a 422 there identified the
+  // platform's own account to anyone with users:update.
+  //
+  // Which is why these are disabled here: the server is deliberately no longer
+  // able to explain itself, so an admin who clicks Edit on a super_admin row
+  // would get "No query results" on Save with no way to tell why. The list
+  // response already carries `roles`, so the answer is known before the click.
+  //
+  // Disabled rather than hidden, per the house convention PermissionButton
+  // sets: a denied action stays visible with a reason attached, because an
+  // action that vanishes reads as a bug in the page.
+  //
+  // Read off the raw roles array rather than usePermission().isRole, because
+  // the `Role` union deliberately excludes "super_admin" — it is the platform
+  // team's role, not a client one, so it is not a value client code is meant to
+  // name. This is the one place that has to.
+  const targetIsSuperAdmin = user.roles?.includes("super_admin") ?? false;
+  const cannotManageTarget =
+    targetIsSuperAdmin && !currentUserRoles.includes("super_admin");
 
   return (
     <>
@@ -816,16 +863,33 @@ function UserActionsCell({
           <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setOpenDialog("edit")}>
+          {cannotManageTarget && (
+            <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Only a super_admin can change this account.
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("edit")}
+          >
             <Pencil className="mr-2 h-4 w-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpenDialog("reset")}>
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("reset")}
+          >
             <KeyRound className="mr-2 h-4 w-4" />
             Reset Password
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setOpenDialog("status")}>
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("status")}
+          >
             {isActive ? (
               <UserX className="mr-2 h-4 w-4" />
             ) : (
