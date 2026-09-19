@@ -32,6 +32,7 @@ import type { PrintableId } from "@/lib/printables/types";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
+import { ReleaseDeductions } from "./_components/release-deductions";
 import {
   InsurancePremiumSection,
   computeInsurancePremium,
@@ -4329,6 +4330,8 @@ export default function LoanDetailPage({
                 </div>
               </div>
             </div>
+
+            <ReleaseDeductions deductions={loan.deductions} totalDeductions={loan.total_deductions} />
 
             {/* Co-Makers Section */}
             <div className="space-y-2">
