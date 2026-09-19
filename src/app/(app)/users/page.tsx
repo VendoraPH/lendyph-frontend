@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -60,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
+import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
@@ -830,6 +832,29 @@ function UserActionsCell({
 }) {
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = user.status === "active";
+  const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+
+  // Only a super_admin may act on a super_admin. The API enforces this and now
+  // answers the same 404 a missing id gives, rather than a 422 naming the
+  // account — masking it is the point, since a 422 there identified the
+  // platform's own account to anyone with users:update.
+  //
+  // Which is why these are disabled here: the server is deliberately no longer
+  // able to explain itself, so an admin who clicks Edit on a super_admin row
+  // would get "No query results" on Save with no way to tell why. The list
+  // response already carries `roles`, so the answer is known before the click.
+  //
+  // Disabled rather than hidden, per the house convention PermissionButton
+  // sets: a denied action stays visible with a reason attached, because an
+  // action that vanishes reads as a bug in the page.
+  //
+  // Read off the raw roles array rather than usePermission().isRole, because
+  // the `Role` union deliberately excludes "super_admin" — it is the platform
+  // team's role, not a client one, so it is not a value client code is meant to
+  // name. This is the one place that has to.
+  const targetIsSuperAdmin = user.roles?.includes("super_admin") ?? false;
+  const cannotManageTarget =
+    targetIsSuperAdmin && !currentUserRoles.includes("super_admin");
 
   return (
     <>
@@ -838,16 +863,33 @@ function UserActionsCell({
           <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setOpenDialog("edit")}>
+          {cannotManageTarget && (
+            <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Only a super_admin can change this account.
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("edit")}
+          >
             <Pencil className="mr-2 h-4 w-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpenDialog("reset")}>
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("reset")}
+          >
             <KeyRound className="mr-2 h-4 w-4" />
             Reset Password
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setOpenDialog("status")}>
+          <DropdownMenuItem
+            disabled={cannotManageTarget}
+            onClick={() => setOpenDialog("status")}
+          >
             {isActive ? (
               <UserX className="mr-2 h-4 w-4" />
             ) : (
