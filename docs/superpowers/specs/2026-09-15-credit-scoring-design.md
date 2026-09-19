@@ -46,20 +46,30 @@ Credit Scoring                         credit_scoring:view
   Dashboard                 /credit-scoring
   Borrower Scores           /credit-scoring/borrowers
   Credit Assessment         /credit-scoring/assessment
-  Scorecard Configuration   /credit-scoring/scorecard-configuration   credit_scoring:configure
+  Scorecard Configuration   /credit-scoring/scorecard-configuration   credit_scoring:settings
   Risk Monitoring           /credit-scoring/risk-monitoring
   Score History             /credit-scoring/score-history
-  Settings                  /credit-scoring/settings                 credit_scoring:configure
+  Settings                  /credit-scoring/settings                 credit_scoring:settings
 ```
 Add an `iconColors` entry for `/credit-scoring` in `sidebar.tsx` (new gradient, distinct from accounting's).
 
 ### Permissions (`src/types/rbac.ts`, `src/constants/rbac.ts`)
 
 - `credit_scoring:view` — all read screens (Dashboard, Borrower Scores, profile, Assessment, Risk Monitoring, Score History)
-- `credit_scoring:configure` — Scorecard Configuration + Settings pages
+- `credit_scoring:settings` — Scorecard Configuration + Settings pages
 - `credit_scoring:override` — the manual decision/override action specifically (gates the action, not a whole page)
 
-Grant `view` + `override` to Credit Manager / Loan Officer-equivalent roles, `configure` to Admin only — mirror however accounting's `accounting:close` vs `accounting:view` split is granted in `rbac.ts`.
+Grant `view` + `override` to Credit Manager / Loan Officer-equivalent roles, `settings` to Admin only — mirror however accounting's `accounting:close` vs `accounting:view` split is granted in `rbac.ts`. **Do not act on that sentence yet — see the correction immediately below.**
+
+> **CORRECTION — added 2026-09-19, after implementation. Two fixes to this section.**
+>
+> **1. The verb is `settings`, not `configure`.** This spec was written saying `credit_scoring:configure`; the code shipped `credit_scoring:settings`, mirroring `accounting:settings`. The code is authoritative (`src/types/rbac.ts`, the Credit Scoring block in `src/constants/navigation.ts`, and `src/constants/rbac.ts`). The three occurrences in this section and the two further down (Scorecard Configuration, Settings, under "Screens") have been corrected in place. A backend seeded from the original wording would create a permission nothing reads, and both admin screens would stay dark for everyone.
+>
+> **2. Do not grant any `credit_scoring:*` permission server-side until the eleven endpoints exist.** As of 2026-09-19 `credit_scoring` appears nowhere in `lendyph-backend` on `development` or `main` — no permission, no route, no migration — while the full frontend module is live in production. It is invisible for exactly one reason: the server sends no `credit_scoring:*`, so `can()` in `sidebar.tsx` drops the block. `RouteGuard` is not a second line of defence; it reads the same `user.permissions` from the auth store, so it admits precisely the users the sidebar shows the link to.
+>
+> Seeding these permissions alone therefore puts seven dead menu items in front of admin, loan_officer and manager with no frontend change and no deploy. Worse, a backend that has the permissions but not the routes answers 403 or 500, and `useApiResource` marks a resource `unavailable` only on **404 or 501** (`src/hooks/use-api-resource.ts:58`) — so these screens would degrade from the intended "Not connected yet" panel to red error states.
+>
+> **Permissions and routes must ship in the same release.** The endpoint-by-endpoint contract is now a committed file: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md` (reconstructed from the code, since the original handoff below was only ever a chat message).
 
 ### Routes
 
@@ -231,7 +241,7 @@ Each gets a co-located `*.test.ts`, matching accounting's `src/lib/accounting/*.
 - `ConfidenceBadge` — same pattern for High/Medium/Low confidence.
 - `ScoreBreakdownCard` — renders the 6-category bar/points breakdown (score 2 uses: compact on Dashboard mini-cards, full on Borrower Profile).
 - `ScoreFactorList` — renders positive (✓) / risk (⚠) factor lists.
-- `PolicyFlagAlert` — the "⚠ CREDIT POLICY ALERT" banner.
+- `PolicyFlagAlert` — the "CREDIT POLICY ALERT" banner.
 - `page-header.tsx` — reuse accounting's if generic enough, else a local copy following the same pattern.
 
 ## Screens
@@ -249,7 +259,7 @@ Header: name, Lendy Credit Score, `RiskLevelBadge`. `ScoreBreakdownCard` (full, 
 Standalone version of the panel described in section 40 of the source doc: pick a borrower (or in-flight loan application) via search, then render the same score + breakdown + factors + requested-loan-vs-suggested-payment comparison + system recommendation. This is the component that later gets embedded into `loans/new` — build it as a self-contained component from day one (`_components/credit-assessment-panel.tsx`) precisely so that follow-up is a drop-in, not a rewrite.
 
 ### 5. Scorecard Configuration (`/credit-scoring/scorecard-configuration`)
-Tabs (mirrors Statements' tab pattern): **Categories** (6 weight inputs + running total, blocked from submit unless `isValidWeightTotal` passes), **Factor Configuration** (per-category factor list → click a factor → editable band table, e.g. On-Time Payment Rate 95–100% Excellent / 90–94% Good / etc.), **Policy Rules** (separate from scoring — e.g. "60+ days past due → manual review required" regardless of score). Gated on `credit_scoring:configure`.
+Tabs (mirrors Statements' tab pattern): **Categories** (6 weight inputs + running total, blocked from submit unless `isValidWeightTotal` passes), **Factor Configuration** (per-category factor list → click a factor → editable band table, e.g. On-Time Payment Rate 95–100% Excellent / 90–94% Good / etc.), **Policy Rules** (separate from scoring — e.g. "60+ days past due → manual review required" regardless of score). Gated on `credit_scoring:settings` (corrected 2026-09-19 — see the Permissions section).
 
 ### 6. Risk Monitoring (`/credit-scoring/risk-monitoring`)
 Cards: Score Declined, New High Risk Borrowers, Past Due Borrowers, High Risk Exposure. Table of affected borrowers. Alerts list ("Credit Risk Alert: Juan's score decreased from 78 to 62 — reason, past-due balance").
@@ -258,7 +268,7 @@ Cards: Score Declined, New High Risk Borrowers, Past Due Borrowers, High Risk Ex
 Global, filterable ledger of `CreditScoreHistoryEntry` across all borrowers (date, borrower, score, risk level, version, reason, trigger event) + trend chart. Distinct from the per-borrower mini view on the profile page — this is portfolio-wide, for spotting systemic drift.
 
 ### 8. Settings (`/credit-scoring/settings`)
-Privacy/assessment notice text (editable static copy, section 32's sample text as default), current model version display (read-only, `score_model_version`), confidence-level definitions (read-only reference text), hard-risk-flag type definitions (read-only reference list of the `PolicyFlag` types). Gated on `credit_scoring:configure`.
+Privacy/assessment notice text (editable static copy, section 32's sample text as default), current model version display (read-only, `score_model_version`), confidence-level definitions (read-only reference text), hard-risk-flag type definitions (read-only reference list of the `PolicyFlag` types). Gated on `credit_scoring:settings` (corrected 2026-09-19 — see the Permissions section).
 
 ## Out of Scope (explicitly deferred)
 

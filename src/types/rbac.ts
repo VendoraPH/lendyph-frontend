@@ -77,6 +77,22 @@ export type Module =
   // the human decision verb (see Action below); `settings` gates the
   // scorecard weights/thresholds and the module's privacy/versioning config,
   // mirroring `accounting:settings`.
+  //
+  // The verb is `settings`, NOT `configure`. The design spec
+  // (`docs/superpowers/specs/2026-09-15-credit-scoring-design.md`) originally
+  // said `credit_scoring:configure` and has since been corrected, but older
+  // copies of it have not. The shipped code checks `credit_scoring:settings`
+  // here, in `@/constants/navigation` and in `@/constants/rbac`. A backend
+  // seeded from the old wording creates a permission nothing reads, and the
+  // two admin screens stay dark for everyone.
+  //
+  // None of these three are granted by the backend today, and none should
+  // be until the module's eleven endpoints exist — `credit_scoring` appears
+  // nowhere in lendyph-backend (checked on `development` and `main`,
+  // 2026-09-19). Every gate in this app reads `user.permissions` as the server
+  // sent them, so the server withholding these is the only thing keeping seven
+  // dead menu items out of production. Contract for building it:
+  // `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
   | "credit_scoring";
 
 export type Action =
