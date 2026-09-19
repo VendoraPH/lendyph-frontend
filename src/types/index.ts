@@ -49,6 +49,7 @@ export type {
   JournalLine,
   JournalSource,
   JournalStatus,
+  JournalPostableType,
   JournalEntry,
   JournalLineDraft,
   JournalEntryDraft,

@@ -25,6 +25,7 @@ import {
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import type { JournalEntry } from "@/types";
+import { JournalSourceDocumentNote } from "./journal-source-document";
 
 interface JournalEntryDialogProps {
   entry: JournalEntry | null;
@@ -70,6 +71,10 @@ export function JournalEntryDialog({
           </DialogTitle>
           <DialogDescription>
             {formatDate(entry.date)} · {entry.description}
+            {/* The source document, when there is one. This dialog is handed
+                the entry the register already fetched — it never re-reads it —
+                so it shows exactly what the list response carried. */}
+            <JournalSourceDocumentNote entry={entry} />
           </DialogDescription>
         </DialogHeader>
 

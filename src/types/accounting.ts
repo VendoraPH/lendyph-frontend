@@ -118,6 +118,22 @@ export type JournalSource =
  */
 export type JournalStatus = "draft" | "posted" | "reversed";
 
+/**
+ * What kind of document raised an entry.
+ *
+ * An API alias, never a class name: the server maps its four known classes to
+ * `loan` / `repayment` / `expense` / `expense_payment` and snake-cases the
+ * basename of anything it has not curated. So this is deliberately OPEN — a
+ * posting type nobody has mapped yet arrives as an unrecognised string rather
+ * than not arriving at all, and code that switches on it needs a default.
+ */
+export type JournalPostableType =
+  | "loan"
+  | "repayment"
+  | "expense"
+  | "expense_payment"
+  | (string & {});
+
 export interface JournalEntry {
   id: number;
   /** "JE-000154". Assigned by the server on post, not on draft. */
@@ -139,6 +155,24 @@ export interface JournalEntry {
   reverses_journal_id?: number | null;
   /** Set on an entry that has been reversed, pointing at its reversal. */
   reversed_by_journal_id?: number | null;
+  /**
+   * The source document that caused this entry, when one did.
+   *
+   * All three are absent or null together, and legitimately so: a fund
+   * transfer IS the document, a reversal is refused a postable on purpose
+   * (it points at what it undoes through `reverses_journal_id`), and a manual
+   * entry never had one.
+   */
+  postable_type?: JournalPostableType | null;
+  postable_id?: number | null;
+  /**
+   * The document's own identifier — loan account number, receipt number,
+   * payee. Server-side this is `whenLoaded`, so the KEY can be missing from
+   * the payload entirely rather than merely null. Absence means "the label was
+   * not resolved", never "there is no source document" — read `postable_type`
+   * for that.
+   */
+  postable_label?: string | null;
   created_by?: string | null;
   created_at?: string;
   posted_by?: string | null;
