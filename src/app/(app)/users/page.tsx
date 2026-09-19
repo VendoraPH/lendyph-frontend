@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { userEditChanges, userEditPayload } from "@/lib/user-edit";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
@@ -504,20 +505,41 @@ function EditUserDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Ask before sending. The API refuses a PUT that would write nothing —
+    // an untouched form used to validate, reach the super_admin check and
+    // answer 200 having issued no UPDATE, which made it a free probe for which
+    // ids are super_admin accounts. Without this, Save on an unedited form
+    // would surface as "please try again" on a request that fails identically
+    // every time.
+    const changed = userEditChanges(user, form);
+    if (changed.length === 0) {
+      toast.info("No changes to save.");
+      onOpenChange(false);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await userService.update(user.id, {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        mobile_number: form.mobile_number || undefined,
-        branch_id: form.branch_id as number,
-        role: form.role,
-      });
+      await userService.update(user.id, userEditPayload(form));
       toast.success("User updated");
       onOpenChange(false);
       onSave();
-    } catch {
+    } catch (error) {
+      // The server disagreed about whether anything changed — it compares the
+      // same fields, so this means the record moved under us (someone else
+      // saved first, and our copy already matches theirs).
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const errors = (error as { response?: { data?: { errors?: Record<string, string[]> } } })
+        ?.response?.data?.errors;
+
+      if (status === 422 && errors?.changes) {
+        toast.info("Nothing to save — this record already matches what you entered.");
+        onOpenChange(false);
+        onSave();
+        return;
+      }
+
       toast.error("We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
