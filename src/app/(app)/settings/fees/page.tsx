@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrencyExact } from "@/lib/format";
 import { buildFeePayload } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
@@ -31,6 +31,14 @@ import { getErrorMessage } from "@/lib/api-error";
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
 // ---------------------------------------------------------------------------
+
+// Base UI resolves <SelectValue> labels from `items`, not from the mounted
+// <SelectItem> children — without it the closed trigger reads "fixed", the raw
+// stored value, instead of "Fixed Amount". Static, so it lives at module scope.
+const FEE_TYPE_ITEMS: { value: FeeType; label: string }[] = [
+  { value: "fixed", label: "Fixed Amount" },
+  { value: "percentage", label: "Percentage" },
+];
 
 interface FeeFormDialogProps {
   open: boolean;
@@ -140,7 +148,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               <Label htmlFor="fee-type">
                 Type <span className="text-destructive">*</span>
               </Label>
-              <Select value={type} onValueChange={(v) => setType(v as FeeType)}>
+              <Select value={type} onValueChange={(v) => setType(v as FeeType)} items={FEE_TYPE_ITEMS}>
                 <SelectTrigger id="fee-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -344,7 +352,9 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 
 function formatFeeValue(fee: Fee): string {
   if (fee.type === "percentage") return `${fee.value}%`;
-  return formatCurrency(fee.value);
+  // Same reason as formatConditions below: this is the amount that will be
+  // deducted, and a ₱250.50 notarial fee must not be listed as ₱251.
+  return formatCurrencyExact(fee.value);
 }
 
 function formatConditions(c: FeeConditions | null | undefined): string {
@@ -353,9 +363,11 @@ function formatConditions(c: FeeConditions | null | undefined): string {
   if (c.term_days_gt != null) parts.push(`term > ${c.term_days_gt}d`);
   if (c.term_days_lt != null) parts.push(`term < ${c.term_days_lt}d`);
   if (c.term_days_eq != null) parts.push(`term = ${c.term_days_eq}d`);
-  if (c.loan_amount_gt != null) parts.push(`amount > ${formatCurrency(c.loan_amount_gt)}`);
-  if (c.loan_amount_lt != null) parts.push(`amount < ${formatCurrency(c.loan_amount_lt)}`);
-  if (c.loan_amount_eq != null) parts.push(`amount = ${formatCurrency(c.loan_amount_eq)}`);
+  // Exact, not rounded: these numbers are the rule, so `amount > 9999.50` must
+  // not read as "> ₱10,000" — a threshold the fee does not actually use.
+  if (c.loan_amount_gt != null) parts.push(`amount > ${formatCurrencyExact(c.loan_amount_gt)}`);
+  if (c.loan_amount_lt != null) parts.push(`amount < ${formatCurrencyExact(c.loan_amount_lt)}`);
+  if (c.loan_amount_eq != null) parts.push(`amount = ${formatCurrencyExact(c.loan_amount_eq)}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 

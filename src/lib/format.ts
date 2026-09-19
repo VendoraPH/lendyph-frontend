@@ -13,6 +13,31 @@ export function formatCurrency(
 }
 
 /**
+ * Peso amounts whose decimals carry meaning — thresholds, rules, anything the
+ * reader may retype rather than merely skim.
+ *
+ * `formatCurrency` rounds to whole pesos, which is right for the totals it was
+ * built for and wrong wherever the number defines a boundary: a fee rule of
+ * `amount > 9999.50` rendered as "₱10,000" states a threshold fifty centavos
+ * above the one that will actually fire.
+ *
+ * Centavos appear only when there are any, so whole amounts stay "₱10,000"
+ * rather than "₱10,000.00". Two decimals is the full precision of the value,
+ * not a truncation of it: the API compares money to half a centavo.
+ */
+export function formatCurrencyExact(
+  amount: number | string | undefined | null,
+): string {
+  const value = parseFloat(String(amount ?? 0)) || 0;
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/**
  * Format an interest/percentage rate for display, trimming trailing zeros.
  * The API returns rates like "3.0000"; this yields "3", "3.5", "12.75".
  * Returns the bare number — callers append the "%" sign.
