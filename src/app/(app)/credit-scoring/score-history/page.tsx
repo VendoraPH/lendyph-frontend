@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
@@ -19,9 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
+import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import type { CreditScoreHistoryEntry, ScoreHistoryFilters } from "@/types/credit-scoring";
 
 export default function ScoreHistoryPage() {
+  const router = useRouter();
   const [branch, setBranch] = useState(ALL_BRANCHES);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -80,8 +83,12 @@ export default function ScoreHistoryPage() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium">Borrower #{row.borrower_id}</TableCell>
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
+                    >
+                      <TableCell className="font-medium">{borrowerLabel(row)}</TableCell>
                       <TableCell>{row.score}</TableCell>
                       <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
                       <TableCell className="capitalize">{row.score_type}</TableCell>
