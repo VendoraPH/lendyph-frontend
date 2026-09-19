@@ -39,6 +39,40 @@ Lendyph is single-tenant-per-deployment and each instance builds separately on i
 NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION=true
 ```
 
+## Tests
+
+| Command | What it runs |
+| --- | --- |
+| `npm run test:unit` | Pure-logic `node:test` suites (`src/**/*.test.ts`). No DOM, no browser. |
+| `npm run test:e2e` | Playwright, driving a real browser against a **deployed** environment. |
+
+### End-to-end (Playwright)
+
+The e2e suite signs in through the real login form and asserts against live
+screens, so it needs a target and an account. Three variables, none of them
+committed:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `E2E_BASE_URL` | no | Deployment under test. Defaults to `https://binhs-coop-staging.lendyph.com`. **Staging or localhost only** — `playwright.config.ts` refuses to start against any other host. |
+| `E2E_USERNAME` | yes | An account holding `fees:view`. All `fees:*` permissions are admin-only (`src/constants/rbac.ts`), so this has to be an admin, and it must not be flagged `must_change_password`. |
+| `E2E_PASSWORD` | yes | That account's password. |
+
+```bash
+cp .env.e2e.example .env.e2e.local   # gitignored; fill in the two credentials
+npx playwright install chromium      # once per machine
+npm run test:e2e
+```
+
+With the credentials unset the suite **skips** with a stated reason rather than
+failing, so `npm run test:e2e` is safe to run on a machine that has no secrets.
+`e2e/auth.setup.ts` signs in once and saves the session to `.auth/user.json`
+(gitignored); the specs reuse it.
+
+Deliberately **not** wired into the required CI check — a credentialed browser
+job on a strict-mode required gate would block every merge whenever staging is
+down.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
