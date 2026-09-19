@@ -13,6 +13,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test 'src/**/*.test.ts'",
+    "test:e2e": "playwright test",
     "prepare": "husky"
   },
   "dependencies": {
