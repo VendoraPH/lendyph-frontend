@@ -331,6 +331,38 @@ test("a reversal of a balanced entry is itself balanced", () => {
   assert.equal(reversal.total_credit, 350000);
 });
 
+test("a reversal carries no source document of its own", () => {
+  // The original's postable belongs to the original. buildReversal builds its
+  // payload field by field rather than spreading the entry, so a new field on
+  // JournalEntry cannot leak into it — and the server refuses a reversal a
+  // postable anyway, because the loan was not released a second time.
+  const original: JournalEntry = {
+    id: 20,
+    journal_no: "JE-000160",
+    date: "2026-09-12",
+    source: "loan_release",
+    reference: "LN-000154",
+    description: "Release to Juan Dela Cruz",
+    branch_id: 1,
+    status: "posted",
+    total_debit: 100,
+    total_credit: 100,
+    postable_type: "loan",
+    postable_id: 48,
+    postable_label: "LN-000154",
+    lines: [
+      { account_id: 1, debit: 100, credit: 0 },
+      { account_id: 2, debit: 0, credit: 100 },
+    ],
+  };
+
+  const reversal = buildReversal(original, "2026-09-15");
+
+  assert.equal("postable_type" in reversal, false);
+  assert.equal("postable_id" in reversal, false);
+  assert.equal("postable_label" in reversal, false);
+});
+
 test("a draft that is already reversed cannot be reversed again", () => {
   const entry: JournalEntry = {
     id: 12,
