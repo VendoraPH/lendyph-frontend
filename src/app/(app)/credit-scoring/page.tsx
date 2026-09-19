@@ -10,6 +10,7 @@ import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "./_components/page-header";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
 import { formatDateTime } from "@/lib/format";
+import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
@@ -92,7 +93,12 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
             )}
             {data.recent_score_changes.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between text-sm">
-                <span>Borrower #{entry.borrower_id}</span>
+                <Link
+                  href={`/credit-scoring/borrowers/${entry.borrower_id}`}
+                  className="font-medium hover:underline"
+                >
+                  {borrowerLabel(entry)}
+                </Link>
                 <span className="text-muted-foreground">
                   {entry.score} · {RISK_LEVEL_LABELS[entry.risk_level]} · {formatDateTime(entry.calculated_at)}
                 </span>
