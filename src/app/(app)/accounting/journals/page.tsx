@@ -41,6 +41,7 @@ import {
   branchParam,
 } from "../_components/accounting-filters";
 import { JournalEntryDialog } from "../_components/journal-entry-dialog";
+import { JournalReferenceCell } from "../_components/journal-source-document";
 
 const ANY_STATUS = "any";
 
@@ -161,7 +162,7 @@ export default function JournalEntriesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-28">Date</TableHead>
-                      <TableHead className="w-32">Reference</TableHead>
+                      <TableHead className="w-36">Reference</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead className="w-32">Source</TableHead>
                       <TableHead className="w-24">Status</TableHead>
@@ -177,7 +178,7 @@ export default function JournalEntriesPage() {
                       >
                         <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
                         <TableCell className="font-mono text-xs">
-                          {entry.reference || "—"}
+                          <JournalReferenceCell entry={entry} />
                         </TableCell>
                         <TableCell className="text-sm">{entry.description}</TableCell>
                         <TableCell>
