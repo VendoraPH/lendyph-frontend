@@ -13,6 +13,8 @@ process.env.TZ = "Asia/Manila";
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatCurrency,
+  formatCurrencyExact,
   formatDate,
   formatDateFull,
   formatDateISO,
@@ -200,4 +202,39 @@ test("en-US and en-PH are interchangeable for these patterns", () => {
     d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
     formatTime(d)
   );
+});
+
+// ── formatCurrencyExact ──────────────────────────────────────────────
+//
+// Written for the fee-condition rows on Settings › Fees, where the number IS
+// the rule. Rounding one of those does not just look imprecise, it states a
+// different threshold than the one the API will apply.
+
+test("formatCurrencyExact keeps centavos that formatCurrency rounds away", () => {
+  // The reported case: a rule of `amount > 9999.50` advertised as ₱10,000.
+  assert.equal(formatCurrency(9999.5), "₱10,000");
+  assert.equal(formatCurrencyExact(9999.5), "₱9,999.50");
+});
+
+test("formatCurrencyExact leaves whole pesos undecorated", () => {
+  assert.equal(formatCurrencyExact(10000), "₱10,000");
+  assert.equal(formatCurrencyExact(0), "₱0");
+});
+
+test("formatCurrencyExact pads a single decimal to full centavos", () => {
+  // 9999.5 is five pesos short of nothing if read as "9,999.5".
+  assert.equal(formatCurrencyExact(1234.1), "₱1,234.10");
+  assert.equal(formatCurrencyExact(1234.99), "₱1,234.99");
+});
+
+test("formatCurrencyExact accepts the strings the API actually sends", () => {
+  // Laravel's `decimal:2` cast serialises to a JSON string, not a number.
+  assert.equal(formatCurrencyExact("9999.50"), "₱9,999.50");
+  assert.equal(formatCurrencyExact("10000"), "₱10,000");
+});
+
+test("formatCurrencyExact treats absent amounts as zero, never NaN", () => {
+  for (const empty of [null, undefined, "", "not a number"]) {
+    assert.equal(formatCurrencyExact(empty), "₱0");
+  }
 });

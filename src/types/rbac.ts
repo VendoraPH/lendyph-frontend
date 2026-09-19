@@ -39,6 +39,7 @@ export type Module =
   | "collections"
   | "reports"
   | "settings"
+  | "fees"
   | "users"
   | "audit_logs"
   | "share_capital"
