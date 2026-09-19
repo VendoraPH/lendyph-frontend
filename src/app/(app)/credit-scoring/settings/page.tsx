@@ -8,8 +8,6 @@ import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../_components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringSettings } from "@/types/credit-scoring";
@@ -23,7 +21,15 @@ export default function CreditScoringSettingsPage() {
   async function handleSave(current: CreditScoringSettings) {
     setSaving(true);
     try {
-      await creditScoringService.updateSettings(current);
+      // `score_model_version` is backend-owned: stamped on a score at calculation
+      // time and immutable per history row, so it is rendered read-only below and
+      // deliberately left out of the body. `updateSettings` takes a
+      // Partial<CreditScoringSettings>, and the backend 422s a PUT that carries
+      // this key (docs/CREDIT_SCORING_BACKEND_HANDOFF.md, endpoint 11) — a
+      // read-only input alone would not stop it going on the wire.
+      const payload: Partial<CreditScoringSettings> = { ...current };
+      delete payload.score_model_version;
+      await creditScoringService.updateSettings(payload);
       toast.success("Settings saved.");
       setDraft(null);
       resource.refetch();
@@ -49,7 +55,7 @@ export default function CreditScoringSettingsPage() {
 
         <DataState
           resource={resource}
-          summary="Module settings — the privacy notice, model version, and confidence/flag definitions — will be editable here once the backend is connected."
+          summary="Module settings — the privacy notice, the current model version, and confidence/flag definitions — will appear here once the backend is connected."
           endpoints={["GET /credit-scoring/settings", "PUT /credit-scoring/settings"]}
         >
           {(settings) => {
@@ -78,12 +84,14 @@ export default function CreditScoringSettingsPage() {
                     <CardTitle className="text-base">Score Model Version</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <Label className="text-xs text-muted-foreground">Current version</Label>
-                    <Input
-                      value={current.score_model_version}
-                      onChange={(e) => setDraft({ ...current, score_model_version: e.target.value })}
-                      className="max-w-xs"
-                    />
+                    <div className="text-sm">
+                      <span className="font-medium">{current.score_model_version}</span>
+                      <p className="text-muted-foreground">
+                        Read-only. The version is stamped on each score when it is
+                        calculated and is immutable per history row, so it is set by
+                        the scoring backend rather than edited here.
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
 

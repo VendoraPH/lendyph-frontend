@@ -159,6 +159,7 @@ Per-borrower score ledger. Defined in the service as `getBorrowerScoreHistory` b
 ```
 id             number       React key — unique per response
 borrower_id    number
+borrower_name  string?      optional, but send it — see the decision below
 score          number
 risk_level     RiskLevel
 score_type     "application" | "behavioral"
@@ -167,7 +168,13 @@ calculated_at  string       ISO 8601
 reason         string       free text, e.g. "Recent payment delinquency increased risk"
 ```
 
-**Known gap, not a request to change the shape:** this type carries no `borrower_name`, so the screen prints a literal `Borrower #{borrower_id}` in the Borrower column, on both this page and the dashboard's Recent Score Changes list. If adding `borrower_name` is cheap, propose it — it is a one-line frontend change and an obvious improvement. Do not add it silently.
+**Decided 2026-09-19 — send `borrower_name`.** This was posed here as a question awaiting a backend answer; there is no third party to answer it, so it is settled and the frontend side has shipped: `CreditScoreHistoryEntry` now carries an optional `borrower_name`. See `docs/BACKEND_ISSUES.md` #2.
+
+**What the backend must do:** add `borrower_name` to this endpoint's rows, and to `recent_score_changes` in endpoint 1 and the rows of endpoint 4 — they are the same type and the same two screens read it. Send the same name the borrower resource sends (`full_name`), resolved server-side in the same query; do not expect the client to join it.
+
+**It stays optional in the type, and that is deliberate.** Both screens now render through `borrowerLabel()` (`src/lib/credit-scoring/borrower-label.ts`), the house fallback chain narrowed to the two fields this row carries: `borrower_name` when present, else the previous `Borrower #{borrower_id}` literal. A blank or whitespace-only name is treated as absent. So a backend that ships without the field degrades to exactly today's output rather than a blank Borrower column — but it ships an id where staff expect a name, which is the whole point of the change.
+
+The frontend must **not** client-side join this via `borrowerService.listAll()`: that drains the entire borrower portfolio to label one table. (`/credit-scoring/assessment` does drain, to populate a borrower picker — a different justification, and not a precedent for a table label.)
 
 Dates: this app runs on Philippine time (UTC+8). Return ISO 8601 with an offset and let the client format; the frontend uses `formatDateTime`/`formatDate` and never slices a date out of a UTC string.
 
@@ -292,11 +299,18 @@ hard_flag_definitions   { type: "hard_flag"|"soft_flag"; label: string; descript
                         `type` is the React key — so at most two entries, one per type
 ```
 
-**PUT request body:** typed `Partial<CreditScoringSettings>`, but the page sends the **whole object**, definitions included. Accept and ignore the definition arrays if they are server-owned reference data.
+**PUT request body:** typed `Partial<CreditScoringSettings>`. The page sends the whole object **minus `score_model_version`** (see below), definitions included. Accept and ignore the definition arrays if they are server-owned reference data.
 
-Two things worth a decision before you build this:
+Two notes before you build this:
 
-- **`score_model_version` is an editable text input on the shipped Settings page.** The spec called it a read-only display, and endpoints 3 and 5 return it stamped per score. If it is meant to be immutable — and the spec's versioning rule that a history row's model version is fixed at calculation time implies it is — reject writes to it with a 422 and tell us, so the input can be made read-only. Do not silently accept and discard the write.
+- **`score_model_version` is read-only. Decided 2026-09-19** — this was posed here as a question awaiting a backend answer; there is no third party to answer it, so it is settled. The field is immutable: the spec calls it a "current model version display (read-only)" and its versioning rule has the value "stamped at calculation time, immutable per history row", which endpoints 3 and 5 return per score. The Settings page no longer renders it as an input — it is plain text beside the other read-only definition cards — and `handleSave` **omits the key from the PUT body entirely** (`updateSettings` takes a `Partial<CreditScoringSettings>`, so an absent key is already in contract). See `docs/BACKEND_ISSUES.md` #3.
+
+  **What the backend must do:**
+  1. Keep returning `score_model_version` on `GET`, and on the `PUT` response — the page refetches but reads the response first.
+  2. **Do not mark it `required` on the `PUT` validator.** This app never sends it; a `required` rule would 422 every save from the Settings page.
+  3. **If a request body does carry the key, reject it with a 422** — e.g. `{"errors": {"score_model_version": ["This field is read-only."]}}` — rather than silently accepting and discarding the write. The frontend's 404/501 check means a 422 surfaces as "Unable to save settings", which is the correct outcome for a client trying to write an immutable field.
+  4. The value changes only when the scoring model itself is deployed; it is not a settings knob for staff.
+
 - **`privacy_notice` is borrower-facing legal text** under the Philippine Data Privacy Act (NPC disclosure), per the note rendered beneath the field. Treat edits as auditable.
 
 ## Business rules the frontend already assumes

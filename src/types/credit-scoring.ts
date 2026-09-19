@@ -43,6 +43,12 @@ export interface CreditScore {
 export interface CreditScoreHistoryEntry {
   id: number;
   borrower_id: number;
+  /**
+   * Optional — the backend does not send it yet. Render through
+   * `borrowerLabel()` (`src/lib/credit-scoring/borrower-label.ts`), which falls
+   * back to `Borrower #{borrower_id}` so the column never goes blank.
+   */
+  borrower_name?: string;
   score: number;
   risk_level: RiskLevel;
   score_type: ScoreType;
