@@ -3,9 +3,6 @@ import type { User } from "@/types";
 
 /**
  * The Edit User dialog's fields, as the form holds them.
- *
- * `branch_id` is nullable because the form starts from `user.branch?.id`, which
- * is absent for an account with no branch.
  */
 export interface UserEditForm {
   first_name: string;
@@ -13,7 +10,7 @@ export interface UserEditForm {
   email: string;
   mobile_number: string;
   role: string;
-  branch_id: number | null;
+  branch_ids: number[];
 }
 
 /**
@@ -32,9 +29,19 @@ export function userEditPayload(form: UserEditForm): UpdateUserData {
     last_name: form.last_name,
     email: form.email,
     mobile_number: form.mobile_number || undefined,
-    branch_id: form.branch_id as number,
+    branch_ids: form.branch_ids,
     role: form.role,
   };
+}
+
+/**
+ * Set equality for branch id lists — the form's selection order has no
+ * meaning, so a reorder must not read as a change.
+ */
+function sameBranchIds(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sorted = [...b].sort((x, y) => x - y);
+  return [...a].sort((x, y) => x - y).every((id, i) => id === sorted[i]);
 }
 
 /**
@@ -70,7 +77,9 @@ export function userEditChanges(user: User, form: UserEditForm): string[] {
     changed.push("mobile_number");
   }
 
-  if (payload.branch_id !== (user.branch?.id ?? null)) changed.push("branch_id");
+  if (!sameBranchIds(payload.branch_ids ?? [], user.branches.map((b) => b.id))) {
+    changed.push("branch_ids");
+  }
   if (payload.role !== (user.roles?.[0] ?? "")) changed.push("role");
 
   return changed;

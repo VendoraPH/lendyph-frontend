@@ -21,7 +21,7 @@ export interface User {
   mobile_number?: string | null;
   status: UserStatus;
   last_login_at?: string | null;
-  branch?: UserBranch | null;
+  branches: UserBranch[];
   roles: string[];
   permissions: Permission[];
   avatar?: string | null;

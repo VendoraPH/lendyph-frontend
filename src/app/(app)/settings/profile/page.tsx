@@ -98,7 +98,9 @@ function ProfileCard() {
               >
                 {roleLabel}
               </Badge>
-              <span className="text-xs text-muted-foreground">{user.branch?.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {user.branches.map((b) => b.name).join(", ")}
+              </span>
             </div>
           </div>
 
@@ -246,14 +248,14 @@ function EditProfileCard() {
             {/* Branch */}
             <div className="space-y-2">
               <Label htmlFor="profile-branch">
-                Branch
+                Branches
                 <span className="ml-1.5 text-xs text-muted-foreground font-normal">
                   (read-only)
                 </span>
               </Label>
               <Input
                 id="profile-branch"
-                value={user?.branch?.name ?? ""}
+                value={user?.branches.map((b) => b.name).join(", ") ?? ""}
                 disabled
                 readOnly
                 className="bg-muted/50 cursor-not-allowed"

@@ -13,7 +13,7 @@ const user = {
   email: "juan@coop.ph",
   mobile_number: "09171234567",
   status: "active",
-  branch: { id: 3, name: "Main" },
+  branches: [{ id: 3, name: "Main" }],
   roles: ["loan_officer"],
   permissions: [],
 } as unknown as User;
@@ -24,7 +24,7 @@ const untouched: UserEditForm = {
   email: "juan@coop.ph",
   mobile_number: "09171234567",
   role: "loan_officer",
-  branch_id: 3,
+  branch_ids: [3],
 };
 
 test("a form nobody touched reports no changes", () => {
@@ -32,13 +32,13 @@ test("a form nobody touched reports no changes", () => {
 });
 
 test("each editable field is detected on its own", () => {
-  const cases: [keyof UserEditForm, string | number, string][] = [
+  const cases: [keyof UserEditForm, string | number | number[], string][] = [
     ["first_name", "Juanito", "first_name"],
     ["last_name", "Santos", "last_name"],
     ["email", "other@coop.ph", "email"],
     ["mobile_number", "09991112222", "mobile_number"],
     ["role", "cashier", "role"],
-    ["branch_id", 9, "branch_id"],
+    ["branch_ids", [9], "branch_ids"],
   ];
 
   for (const [field, value, expected] of cases) {
@@ -56,16 +56,27 @@ test("several edits at once are all reported", () => {
   assert.deepEqual(changed, ["first_name", "role"]);
 });
 
-test("an account with no branch is unchanged while the form leaves it empty", () => {
-  const branchless = { ...user, branch: null } as User;
-  const changed = userEditChanges(branchless, { ...untouched, branch_id: null });
+test("an account with no branches is unchanged while the form leaves it empty", () => {
+  const branchless = { ...user, branches: [] } as User;
+  const changed = userEditChanges(branchless, { ...untouched, branch_ids: [] });
   assert.deepEqual(changed, []);
 });
 
 test("giving a branchless account a branch is a change", () => {
-  const branchless = { ...user, branch: null } as User;
-  const changed = userEditChanges(branchless, { ...untouched, branch_id: 3 });
-  assert.deepEqual(changed, ["branch_id"]);
+  const branchless = { ...user, branches: [] } as User;
+  const changed = userEditChanges(branchless, { ...untouched, branch_ids: [3] });
+  assert.deepEqual(changed, ["branch_ids"]);
+});
+
+test("reordering the same set of branches is not a change", () => {
+  const multiBranch = { ...user, branches: [{ id: 3, name: "Main" }, { id: 9, name: "North" }] } as User;
+  const changed = userEditChanges(multiBranch, { ...untouched, branch_ids: [9, 3] });
+  assert.deepEqual(changed, []);
+});
+
+test("adding a second branch to a single-branch account is a change", () => {
+  const changed = userEditChanges(user, { ...untouched, branch_ids: [3, 9] });
+  assert.deepEqual(changed, ["branch_ids"]);
 });
 
 test("an account with no mobile number is unchanged while the field stays empty", () => {
@@ -96,7 +107,7 @@ test("the payload carries exactly the fields the change check compares", () => {
   // different object than the one it sends, and the server's 422 would come
   // back as a surprise.
   assert.deepEqual(Object.keys(userEditPayload(untouched)).sort(), [
-    "branch_id",
+    "branch_ids",
     "email",
     "first_name",
     "last_name",

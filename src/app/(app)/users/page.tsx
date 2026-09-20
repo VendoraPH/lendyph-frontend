@@ -56,6 +56,7 @@ import {
   AlertTriangle,
   Check,
   ChevronsUpDown,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -169,66 +170,98 @@ function RoleSelector({
   );
 }
 
-// ── Branch Selector Component ──
+// ── Branch Multi-Select Component ──
+//
+// A user can be assigned more than one branch: access to branch-scoped data
+// (loan applications included) extends to every branch they're assigned to,
+// not just one, so this has to allow selecting several.
 
-function BranchSelector({
+function BranchMultiSelect({
   value,
   onChange,
   branches,
 }: {
-  value: number | null;
-  onChange: (branchId: number) => void;
+  value: number[];
+  onChange: (branchIds: number[]) => void;
   branches: ApiBranch[];
 }) {
   const [open, setOpen] = useState(false);
-  const selected = branches.find((b) => b.id === value);
+  const selected = branches.filter((b) => value.includes(b.id));
+
+  const toggle = (branchId: number) => {
+    onChange(
+      value.includes(branchId)
+        ? value.filter((id) => id !== branchId)
+        : [...value, branchId]
+    );
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            role="combobox"
-            aria-expanded={open}
-            className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-          />
-        }
-      >
-        <span className={cn("truncate", !selected && "text-muted-foreground")}>
-          {selected ? selected.name : "Select a branch"}
-        </span>
-        <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-      </PopoverTrigger>
-      <PopoverContent className="w-(--anchor-width) p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search branch..." />
-          <CommandList>
-            <CommandEmpty>No branch found.</CommandEmpty>
-            <CommandGroup>
-              {branches.map((branch) => (
-                <CommandItem
-                  key={branch.id}
-                  value={branch.name}
-                  onSelect={() => {
-                    onChange(branch.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 size-4",
-                      value === branch.id ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {branch.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <div className="space-y-1.5">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              role="combobox"
+              aria-expanded={open}
+              className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            />
+          }
+        >
+          <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+            {selected.length === 0
+              ? "Select branches"
+              : selected.length <= 2
+                ? selected.map((b) => b.name).join(", ")
+                : `${selected.length} branches selected`}
+          </span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+        </PopoverTrigger>
+        <PopoverContent className="w-(--anchor-width) p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search branch..." />
+            <CommandList>
+              <CommandEmpty>No branch found.</CommandEmpty>
+              <CommandGroup>
+                {branches.map((branch) => (
+                  <CommandItem
+                    key={branch.id}
+                    value={branch.name}
+                    onSelect={() => toggle(branch.id)}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 size-4",
+                        value.includes(branch.id) ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {branch.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((branch) => (
+            <Badge key={branch.id} variant="outline" className="gap-1 pr-1">
+              {branch.name}
+              <button
+                type="button"
+                onClick={() => toggle(branch.id)}
+                className="rounded-full p-0.5 hover:bg-muted"
+                aria-label={`Remove ${branch.name}`}
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -254,10 +287,10 @@ function AddUserDialog({
     password: "",
     password_confirmation: "",
     role: "",
-    branch_id: null as number | null,
+    branch_ids: [] as number[],
   });
 
-  const update = (field: string, value: string | number) =>
+  const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const resetForm = () =>
@@ -270,7 +303,7 @@ function AddUserDialog({
       password: "",
       password_confirmation: "",
       role: "",
-      branch_id: null,
+      branch_ids: [],
     });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,8 +321,8 @@ function AddUserDialog({
       toast.error("Passwords do not match");
       return;
     }
-    if (!form.branch_id) {
-      toast.error("Please select a branch");
+    if (form.branch_ids.length === 0) {
+      toast.error("Please select at least one branch");
       return;
     }
     if (!form.role) {
@@ -307,7 +340,7 @@ function AddUserDialog({
         password: form.password,
         password_confirmation: form.password_confirmation,
         mobile_number: form.mobile_number || undefined,
-        branch_id: form.branch_id as number,
+        branch_ids: form.branch_ids,
         role: form.role,
       });
       toast.success("User created");
@@ -429,14 +462,14 @@ function AddUserDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Branch <span className="text-red-500">*</span></Label>
-                <BranchSelector
-                  value={form.branch_id}
-                  onChange={(v) => update("branch_id", v)}
+                <Label>Branches <span className="text-red-500">*</span></Label>
+                <BranchMultiSelect
+                  value={form.branch_ids}
+                  onChange={(v) => update("branch_ids", v)}
                   branches={branches}
                 />
-                {!form.branch_id && submitting && (
-                  <p className="text-xs text-red-500">Please select a branch</p>
+                {form.branch_ids.length === 0 && submitting && (
+                  <p className="text-xs text-red-500">Please select at least one branch</p>
                 )}
               </div>
             </div>
@@ -499,14 +532,19 @@ function EditUserDialog({
     email: user.email,
     mobile_number: user.mobile_number ?? "",
     role: user.roles?.[0] ?? "",
-    branch_id: user.branch?.id ?? null as number | null,
+    branch_ids: user.branches.map((b) => b.id),
   });
 
-  const update = (field: string, value: string | number) =>
+  const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (form.branch_ids.length === 0) {
+      toast.error("Please select at least one branch");
+      return;
+    }
 
     // Ask before sending. The API refuses a PUT that would write nothing —
     // an untouched form used to validate, reach the super_admin check and
@@ -604,10 +642,10 @@ function EditUserDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Branch</Label>
-                <BranchSelector
-                  value={form.branch_id}
-                  onChange={(v) => update("branch_id", v)}
+                <Label>Branches <span className="text-red-500">*</span></Label>
+                <BranchMultiSelect
+                  value={form.branch_ids}
+                  onChange={(v) => update("branch_ids", v)}
                   branches={branches}
                 />
               </div>
@@ -990,7 +1028,7 @@ export default function UsersPage() {
       user.full_name.toLowerCase().includes(q) ||
       user.username.toLowerCase().includes(q) ||
       user.email.toLowerCase().includes(q) ||
-      (user.branch?.name ?? "").toLowerCase().includes(q) ||
+      user.branches.some((b) => b.name.toLowerCase().includes(q)) ||
       role.toLowerCase().includes(q)
     );
   });
@@ -1068,7 +1106,7 @@ export default function UsersPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Branch</TableHead>
+                  <TableHead>Branches</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -1095,7 +1133,9 @@ export default function UsersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {user.branch?.name ?? "-"}
+                        {user.branches.length > 0
+                          ? user.branches.map((b) => b.name).join(", ")
+                          : "-"}
                       </TableCell>
                       <TableCell>
                         <Badge

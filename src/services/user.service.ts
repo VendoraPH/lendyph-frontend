@@ -10,7 +10,7 @@ export interface CreateUserData {
   password: string;
   password_confirmation: string;
   mobile_number?: string;
-  branch_id: number;
+  branch_ids: number[];
   role: string;
 }
 
@@ -19,7 +19,7 @@ export interface UpdateUserData {
   last_name?: string;
   email?: string;
   mobile_number?: string;
-  branch_id?: number;
+  branch_ids?: number[];
   role?: string;
 }
 
