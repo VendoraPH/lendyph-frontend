@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/avatar";
 import { ChangePasswordForm } from "@/components/common/change-password-form";
 import { getInitials } from "@/lib/initials";
+import { userBranches } from "@/lib/user-branches";
 import { useAuth } from "@/hooks/use-auth";
 import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
@@ -99,7 +100,7 @@ function ProfileCard() {
                 {roleLabel}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                {user.branches.map((b) => b.name).join(", ")}
+                {userBranches(user).map((b) => b.name).join(", ")}
               </span>
             </div>
           </div>
@@ -255,7 +256,7 @@ function EditProfileCard() {
               </Label>
               <Input
                 id="profile-branch"
-                value={user?.branches.map((b) => b.name).join(", ") ?? ""}
+                value={userBranches(user).map((b) => b.name).join(", ")}
                 disabled
                 readOnly
                 className="bg-muted/50 cursor-not-allowed"

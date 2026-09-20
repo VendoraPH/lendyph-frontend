@@ -62,6 +62,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
+import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
@@ -341,6 +342,7 @@ function AddUserDialog({
         password_confirmation: form.password_confirmation,
         mobile_number: form.mobile_number || undefined,
         branch_ids: form.branch_ids,
+        branch_id: primaryBranchId(form.branch_ids),
         role: form.role,
       });
       toast.success("User created");
@@ -532,7 +534,7 @@ function EditUserDialog({
     email: user.email,
     mobile_number: user.mobile_number ?? "",
     role: user.roles?.[0] ?? "",
-    branch_ids: user.branches.map((b) => b.id),
+    branch_ids: userBranchIds(user),
   });
 
   const update = (field: string, value: string | number | number[]) =>
@@ -1028,7 +1030,7 @@ export default function UsersPage() {
       user.full_name.toLowerCase().includes(q) ||
       user.username.toLowerCase().includes(q) ||
       user.email.toLowerCase().includes(q) ||
-      user.branches.some((b) => b.name.toLowerCase().includes(q)) ||
+      userBranches(user).some((b) => b.name.toLowerCase().includes(q)) ||
       role.toLowerCase().includes(q)
     );
   });
@@ -1133,8 +1135,8 @@ export default function UsersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {user.branches.length > 0
-                          ? user.branches.map((b) => b.name).join(", ")
+                        {userBranches(user).length > 0
+                          ? userBranches(user).map((b) => b.name).join(", ")
                           : "-"}
                       </TableCell>
                       <TableCell>

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
+import { userBranches } from "@/lib/user-branches";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -177,16 +178,22 @@ export default function NewBorrowerPage() {
   // multi-branch assignment existed. A user assigned to several has to pick
   // which of THEIR OWN branches the member belongs to — the selector below
   // is restricted to that list, not every branch in the system.
-  const userBranches = user?.branches ?? [];
+  //
+  // Read through `userBranches()`, which also understands the pre-multi-branch
+  // `user.branch`: reading `user.branches` alone would be an empty list for any
+  // session or API response still on the old shape, which fires neither the
+  // auto-fill nor the selector and leaves submit to fail on the "not assigned
+  // to a branch" guard below — for users who plainly are.
+  const assignedBranches = userBranches(user);
   useEffect(() => {
-    if (userBranches.length === 1) {
-      const branchId = userBranches[0].id;
+    if (assignedBranches.length === 1) {
+      const branchId = assignedBranches[0].id;
       setForm((prev) =>
         prev.branch_id === String(branchId) ? prev : { ...prev, branch_id: String(branchId) }
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userBranches.map((b) => b.id).join(",")]);
+  }, [assignedBranches.map((b) => b.id).join(",")]);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -821,7 +828,7 @@ export default function NewBorrowerPage() {
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-base font-semibold">Personal Information</h2>
 
-            {userBranches.length > 1 && (
+            {assignedBranches.length > 1 && (
               <div className="space-y-2">
                 <Label htmlFor="member-branch">
                   Branch <span className="text-red-500">*</span>
@@ -834,7 +841,7 @@ export default function NewBorrowerPage() {
                     <SelectValue placeholder="Select a branch" />
                   </SelectTrigger>
                   <SelectContent>
-                    {userBranches.map((branch) => (
+                    {assignedBranches.map((branch) => (
                       <SelectItem key={branch.id} value={String(branch.id)}>
                         {branch.name}
                       </SelectItem>

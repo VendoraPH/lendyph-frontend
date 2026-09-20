@@ -1,5 +1,6 @@
 import type { UpdateUserData } from "@/services/user.service";
 import type { User } from "@/types";
+import { primaryBranchId, userBranchIds } from "./user-branches";
 
 /**
  * The Edit User dialog's fields, as the form holds them.
@@ -22,6 +23,11 @@ export interface UserEditForm {
  * omitted rather than sent as null. That is pre-existing behaviour and it means
  * clearing a phone number does not clear it server-side; see the note on
  * `userEditChanges()`.
+ *
+ * `branch_id` rides along with `branch_ids` while the API accepts both shapes,
+ * so this request lands correctly whichever side merges first. It is not an
+ * independent field: it is derived from `branch_ids` as a set, so the
+ * change-check below still governs everything the payload carries.
  */
 export function userEditPayload(form: UserEditForm): UpdateUserData {
   return {
@@ -30,6 +36,7 @@ export function userEditPayload(form: UserEditForm): UpdateUserData {
     email: form.email,
     mobile_number: form.mobile_number || undefined,
     branch_ids: form.branch_ids,
+    branch_id: primaryBranchId(form.branch_ids),
     role: form.role,
   };
 }
@@ -77,7 +84,11 @@ export function userEditChanges(user: User, form: UserEditForm): string[] {
     changed.push("mobile_number");
   }
 
-  if (!sameBranchIds(payload.branch_ids ?? [], user.branches.map((b) => b.id))) {
+  // `userBranchIds` rather than `user.branches.map(...)`: the user here comes
+  // straight off the wire, and during the rollout it may still carry the
+  // single `branch` instead. Comparing against [] for such a user would report
+  // a branch change on every untouched form and send a pointless PUT.
+  if (!sameBranchIds(payload.branch_ids ?? [], userBranchIds(user))) {
     changed.push("branch_ids");
   }
   if (payload.role !== (user.roles?.[0] ?? "")) changed.push("role");
