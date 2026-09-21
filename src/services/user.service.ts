@@ -10,7 +10,14 @@ export interface CreateUserData {
   password: string;
   password_confirmation: string;
   mobile_number?: string;
-  branch_id: number;
+  branch_ids: number[];
+  /**
+   * The legacy single assignment, sent alongside `branch_ids` for as long as
+   * the API accepts both. It is what keeps either merge order safe: a backend
+   * without multi-branch ignores `branch_ids` and would 422 on a missing
+   * `branch_id`. Build it with `primaryBranchId()` — see @/lib/user-branches.
+   */
+  branch_id?: number;
   role: string;
 }
 
@@ -19,6 +26,8 @@ export interface UpdateUserData {
   last_name?: string;
   email?: string;
   mobile_number?: string;
+  branch_ids?: number[];
+  /** @see CreateUserData.branch_id — same dual-contract reason. */
   branch_id?: number;
   role?: string;
 }
