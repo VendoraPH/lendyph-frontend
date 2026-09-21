@@ -21,6 +21,27 @@ export interface User {
   mobile_number?: string | null;
   status: UserStatus;
   last_login_at?: string | null;
+  /**
+   * The branches this user is assigned to.
+   *
+   * **Optional, and it has to stay optional.** `api.get<User>()` is an
+   * unchecked cast of untyped JSON, so a required `branches` would not be a
+   * guarantee — it would only stop TypeScript from asking for a guard, while
+   * three real sources still answer `undefined`: an API that has not shipped
+   * its half of multi-branch yet, an endpoint that was missed, and
+   * localStorage (see `must_change_password` below — the auth store is
+   * persisted, so pre-change sessions rehydrate the old shape).
+   *
+   * Read it with `userBranches()` from @/lib/user-branches, which understands
+   * both shapes. Dereferencing it directly is a white screen, not a blank field.
+   */
+  branches?: UserBranch[];
+  /**
+   * @deprecated The pre-multi-branch single assignment. Still emitted by the
+   * API while both shapes are supported, and still sitting in every persisted
+   * session from before the change. Do not read it directly — `userBranches()`
+   * falls back to it for you.
+   */
   branch?: UserBranch | null;
   roles: string[];
   permissions: Permission[];

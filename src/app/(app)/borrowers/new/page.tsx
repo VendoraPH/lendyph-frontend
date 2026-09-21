@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
+import { userBranches } from "@/lib/user-branches";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -172,16 +173,27 @@ export default function NewBorrowerPage() {
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
   const [cropTarget, setCropTarget] = useState<{ index: number; side: "front" | "back"; src: string } | null>(null);
 
-  // Auto-assign branch from the currently signed-in user. Members inherit
-  // the branch of whoever creates them, so there's no manual selector.
+  // Members inherit the branch of whoever creates them. A user assigned to
+  // exactly one branch gets it auto-filled with no selector, same as before
+  // multi-branch assignment existed. A user assigned to several has to pick
+  // which of THEIR OWN branches the member belongs to — the selector below
+  // is restricted to that list, not every branch in the system.
+  //
+  // Read through `userBranches()`, which also understands the pre-multi-branch
+  // `user.branch`: reading `user.branches` alone would be an empty list for any
+  // session or API response still on the old shape, which fires neither the
+  // auto-fill nor the selector and leaves submit to fail on the "not assigned
+  // to a branch" guard below — for users who plainly are.
+  const assignedBranches = userBranches(user);
   useEffect(() => {
-    const branchId = user?.branch?.id;
-    if (branchId) {
+    if (assignedBranches.length === 1) {
+      const branchId = assignedBranches[0].id;
       setForm((prev) =>
         prev.branch_id === String(branchId) ? prev : { ...prev, branch_id: String(branchId) }
       );
     }
-  }, [user?.branch?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedBranches.map((b) => b.id).join(",")]);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -815,6 +827,29 @@ export default function NewBorrowerPage() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-base font-semibold">Personal Information</h2>
+
+            {assignedBranches.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="member-branch">
+                  Branch <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.branch_id}
+                  onValueChange={(v) => update("branch_id", v ?? "")}
+                >
+                  <SelectTrigger id="member-branch" className="w-full sm:w-1/2">
+                    <SelectValue placeholder="Select a branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignedBranches.map((branch) => (
+                      <SelectItem key={branch.id} value={String(branch.id)}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
