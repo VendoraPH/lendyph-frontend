@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,12 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
 import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
+import {
+  countUsersWithRole,
+  filterUsers,
+  toUserList,
+  type UserListShortfall,
+} from "@/lib/user-list";
 import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
@@ -582,7 +589,11 @@ function EditUserDialog({
         return;
       }
 
-      toast.error("We couldn't update the user. Please try again.");
+      // Everything else goes through the shared helper: a field-level 422 (a
+      // taken email), or the offline/timeout split. The `changes` case above
+      // must stay ahead of it — that message is prose, so the helper would show
+      // it as a red error and lose the info tone, the close and the refetch.
+      notifyError(error, "We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -715,8 +726,8 @@ function ResetPasswordDialog({
       setPassword("");
       setConfirm("");
       onOpenChange(false);
-    } catch {
-      toast.error("We couldn't reset the password. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't reset the password. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -810,8 +821,30 @@ function ToggleStatusDialog({
       }
       onOpenChange(false);
       onConfirm();
-    } catch {
-      toast.error(
+    } catch (err) {
+      // The account is already in the state we asked for — someone else
+      // toggled it first, so our row is stale. Both directions refuse on
+      // `changes` ("This account is already inactive." / "…already active.").
+      // Handle it the way the edit dialog handles its `changes` 422: say so,
+      // close, and refetch so the row catches up. A retry could never succeed.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const changes = (err as { response?: { data?: { errors?: Record<string, string[]> } } })
+        ?.response?.data?.errors?.changes;
+
+      if (status === 422 && changes) {
+        toast.info(
+          changes[0] ??
+            (isActive ? "This account is already inactive." : "This account is already active.")
+        );
+        onOpenChange(false);
+        onConfirm();
+        return;
+      }
+
+      // Anything else: the server's own wording where it has one, and a
+      // fallback that still says which way the toggle was going.
+      notifyError(
+        err,
         isActive
           ? "We couldn't deactivate the user. Please try again."
           : "We couldn't reactivate the user. Please try again."
@@ -997,6 +1030,9 @@ function RoleSummaryCard({
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  // Set only when the drain gave up with pages outstanding, i.e. this screen is
+  // knowingly missing users. Null means complete.
+  const [shortfall, setShortfall] = useState<UserListShortfall | null>(null);
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1004,16 +1040,26 @@ export default function UsersPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [u, r, b] = await Promise.all([
-        userService.list(),
+      const [userDrain, r, b] = await Promise.all([
+        // Drained across pages. This was `userService.list()` with no
+        // arguments — the endpoint's default page of 15, newest first — and
+        // everything on this screen is computed from that array in the
+        // browser: the table, the search box, the Total card and the per-role
+        // counts. From the 16th user on all four were short, and the oldest
+        // accounts could not be found, edited or deactivated from here at all.
+        userService.listAll(),
+        // Not drained, and not truncated: RoleController and BranchController
+        // answer every row (`->get()`), not a paginator.
         roleService.list(),
         branchService.list(),
       ]);
-      setUsers(Array.isArray(u) ? u : (u as unknown as { data: User[] }).data ?? []);
+      const list = toUserList(userDrain);
+      setUsers(list.users);
+      setShortfall(list.shortfall);
       setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
       setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
-    } catch {
-      toast.error("We couldn't load the data. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't load the data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -1023,17 +1069,7 @@ export default function UsersPage() {
     fetchData();
   }, [fetchData]);
 
-  const filteredUsers = users.filter((user) => {
-    const q = search.toLowerCase();
-    const role = user.roles?.[0] ?? "";
-    return (
-      user.full_name.toLowerCase().includes(q) ||
-      user.username.toLowerCase().includes(q) ||
-      user.email.toLowerCase().includes(q) ||
-      userBranches(user).some((b) => b.name.toLowerCase().includes(q)) ||
-      role.toLowerCase().includes(q)
-    );
-  });
+  const filteredUsers = filterUsers(users, search);
 
   if (loading) {
     return (
@@ -1062,6 +1098,15 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="users"
+          consequence="The Total, the role counts and the search box below cover only the users that loaded, and a user missing here cannot be edited, reset or deactivated from this screen."
+        />
+      )}
+
       {/* Role Summary Cards */}
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
         <Card>
@@ -1079,7 +1124,7 @@ export default function UsersPage() {
           <RoleSummaryCard
             key={role.id}
             role={role}
-            count={users.filter((u) => u.roles?.[0] === role.name).length}
+            count={countUsersWithRole(users, role.name)}
           />
         ))}
       </div>

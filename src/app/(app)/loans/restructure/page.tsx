@@ -88,6 +88,7 @@ import {
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
 import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
+import { toUserList, type UserListShortfall } from "@/lib/user-list";
 import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
@@ -314,6 +315,9 @@ function RestructureLoanInner() {
     shown: number;
     total: number | null;
   } | null>(null);
+  // Same, for the officer drain: set only when the Account Officer picker is
+  // knowingly missing staff. Null means complete.
+  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
   // ── Load seed data on mount ──
   useEffect(() => {
@@ -325,7 +329,11 @@ function RestructureLoanInner() {
         // picked and their loans could not be restructured from this screen.
         borrowerService.listAll({ members_only: 1 }),
         loanProductService.list(),
-        userService.list(),
+        // Drained, and filtered to active on the server. This was
+        // `userService.list()` with no arguments — the endpoint's default page
+        // of 15, newest first — so from the 16th user on, the longest-serving
+        // officers were the ones missing from the Account Officer picker.
+        userService.listAll({ status: "active" }),
       ]);
 
       if (borrowersRes.status === "fulfilled") {
@@ -342,9 +350,11 @@ function RestructureLoanInner() {
         setProducts(Array.isArray(raw) ? raw : (raw as { data: LoanProduct[] }).data ?? []);
       }
       if (usersRes.status === "fulfilled") {
-        const raw = usersRes.value;
-        const list = Array.isArray(raw) ? raw : (raw as { data: User[] }).data ?? [];
-        setUsers(list.filter((u) => u.status === "active"));
+        const officers = toUserList(usersRes.value);
+        // Still filtered here too, so the picker's rule does not hang on the
+        // server honouring `?status=`.
+        setUsers(officers.users.filter((u) => u.status === "active"));
+        setOfficerShortfall(officers.shortfall);
       }
 
       setLoadingData(false);
@@ -863,6 +873,15 @@ function RestructureLoanInner() {
             total={loanShortfall.total}
             noun="loans"
             consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
+          />
+        )}
+
+        {officerShortfall && (
+          <IncompleteListNotice
+            shown={officerShortfall.shown}
+            total={officerShortfall.total}
+            noun="active users"
+            consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
           />
         )}
 

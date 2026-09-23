@@ -19,10 +19,15 @@ export interface UserEditForm {
  * so the "did anything change?" question below is asked of the SAME object the
  * request carries — the two cannot drift.
  *
- * `mobile_number` collapses an empty string to `undefined`, i.e. the key is
- * omitted rather than sent as null. That is pre-existing behaviour and it means
- * clearing a phone number does not clear it server-side; see the note on
- * `userEditChanges()`.
+ * `mobile_number` sends an explicit `null` when the field is emptied, rather
+ * than omitting the key: an omitted key leaves the stored number untouched, so
+ * `null` is what actually clears it. Same `|| null` pattern as the borrower
+ * edit form.
+ *
+ * The API already accepts this as-is — the rule is
+ * `['nullable','string','max:20']`, the column is nullable, the field is
+ * fillable, and `ConvertEmptyStringsToNull` sits in the global middleware
+ * stack. Clearing the number was never waiting on a backend change.
  *
  * `branch_id` rides along with `branch_ids` while the API accepts both shapes,
  * so this request lands correctly whichever side merges first. It is not an
@@ -34,7 +39,7 @@ export function userEditPayload(form: UserEditForm): UpdateUserData {
     first_name: form.first_name,
     last_name: form.last_name,
     email: form.email,
-    mobile_number: form.mobile_number || undefined,
+    mobile_number: form.mobile_number.trim() || null,
     branch_ids: form.branch_ids,
     branch_id: primaryBranchId(form.branch_ids),
     role: form.role,
@@ -61,15 +66,12 @@ function sameBranchIds(a: number[], b: number[]): boolean {
  * answers 422 with a `changes` key now.
  *
  * So the dialog has to know before it asks. This mirrors the server's own test
- * — it compares exactly what `userEditPayload()` sends, and a key the payload
- * omits cannot be a change because the server never fills it.
+ * — it compares exactly what `userEditPayload()` sends, field for field.
  *
- * That last part has a visible consequence worth knowing: **clearing a phone
- * number reads as "no change"**, because the payload drops an empty
- * `mobile_number` instead of sending null. That is a real pre-existing bug —
- * the field could never be cleared — and this makes it visible rather than
- * answering "User updated" to a save that did nothing. Fixing it means sending
- * `null`, which is a backend contract question, not a change to make here.
+ * Clearing a phone number is a change like any other, because the payload
+ * sends `null` for it. When it dropped the key instead, the number could never
+ * be cleared: on its own the save read as "no changes", and alongside another
+ * edit it answered "User updated" while the old number stayed put.
  */
 export function userEditChanges(user: User, form: UserEditForm): string[] {
   const payload = userEditPayload(form);
@@ -79,8 +81,11 @@ export function userEditChanges(user: User, form: UserEditForm): string[] {
   if (payload.last_name !== user.last_name) changed.push("last_name");
   if (payload.email !== user.email) changed.push("email");
 
-  // Only a value the payload actually carries can change anything.
-  if (payload.mobile_number !== undefined && payload.mobile_number !== (user.mobile_number ?? "")) {
+  // Compare both sides normalized: a cleared field is `null` in the payload and
+  // may be `null` or `""` on the user, and those are all the same state. Left
+  // un-normalized, every untouched form for a user who has no phone number
+  // would report a change and send a PUT the server answers with a 422.
+  if ((payload.mobile_number ?? "") !== (user.mobile_number ?? "")) {
     changed.push("mobile_number");
   }
 
