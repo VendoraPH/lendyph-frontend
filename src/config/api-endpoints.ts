@@ -61,6 +61,11 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/co-makers/${id}`,
     UPDATE: (id: number) => `/co-makers/${id}`,
     DELETE: (id: number) => `/co-makers/${id}`,
+    // Same contract as the BORROWERS valid-ID routes; only the parent differs.
+    UPLOAD_VALID_ID: (id: number) => `/co-makers/${id}/valid-ids`,
+    LIST_VALID_IDS: (id: number) => `/co-makers/${id}/valid-ids`,
+    DELETE_VALID_ID: (id: number, validIdId: number) =>
+      `/co-makers/${id}/valid-ids/${validIdId}`,
   },
   DOCUMENTS: {
     BORROWER_LIST: (borrowerId: number) => `/borrowers/${borrowerId}/documents`,

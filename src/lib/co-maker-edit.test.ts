@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { coMakerToForm, coMakerUpdatePayload } from "./co-maker-edit";
+import {
+  coMakerDetailsProblems,
+  coMakerToForm,
+  coMakerUpdatePayload,
+  mergeFreshIntoForm,
+  type CoMakerFormData,
+} from "./co-maker-edit";
 import type { UpdateCoMakerData } from "@/services/co-maker.service";
 import type { CoMaker } from "@/types";
 
@@ -147,17 +153,11 @@ test("names and phone are trimmed, and names stay strings", () => {
 });
 
 test("the payload carries the API's columns and nothing the form only displays", () => {
-  // The ID fields, photo and linked loan have no column on `co_makers` and no
-  // rule on the request. Filled in or not, they must not be sent: a key the
-  // API does not validate is discarded while the response still says 200.
-  const payload = coMakerUpdatePayload({
-    ...untouched,
-    valid_id_type: "passport",
-    valid_id_number: "P1234567A",
-    valid_id_photo: "blob:http://localhost:3100/5f1c",
-    photo: "blob:http://localhost:3100/9a2e",
-    loan_id: 42,
-  });
+  // The linked loan has no column on `co_makers` and no rule on the request.
+  // Picked or not, it must not be sent: a key the API does not validate is
+  // discarded while the response still says 200. (The valid ID is not on this
+  // form at all any more — it has its own endpoint.)
+  const payload = coMakerUpdatePayload({ ...untouched, loan_id: 42 });
 
   assert.deepEqual(Object.keys(payload).sort(), [
     "address",
@@ -253,4 +253,52 @@ test("a record carrying no name parts still has its full_name split", () => {
     [form.first_name, form.middle_name, form.last_name],
     ["Maria", "Clara", "Santos"]
   );
+});
+
+test("a fresh copy fills the fields nobody touched and keeps what was typed", () => {
+  // The dialog opens on the list snapshot, then re-fetches. Someone else has
+  // since changed the occupation; meanwhile this person typed a new last name.
+  const snapshot = coMakerToForm(stored);
+  const typed: CoMakerFormData = { ...snapshot, last_name: "Dela Cruz-Reyes" };
+  const fresh = coMakerToForm({ ...stored, occupation: "Principal" } as unknown as CoMaker);
+
+  const merged = mergeFreshIntoForm(fresh, typed, new Set(["last_name"]));
+
+  assert.equal(merged.last_name, "Dela Cruz-Reyes", "what was typed survives");
+  assert.equal(merged.occupation, "Principal", "an untouched field takes the fresh value");
+});
+
+test("with nothing touched, the fresh copy is taken whole", () => {
+  const fresh = coMakerToForm({ ...stored, occupation: "Principal" } as unknown as CoMaker);
+  assert.deepEqual(mergeFreshIntoForm(fresh, untouched, new Set()), fresh);
+});
+
+test("a field cleared on purpose stays cleared when the fresh copy lands", () => {
+  // Emptying a field is typing too: the fresh copy must not quietly put the
+  // old value back, or the save would write it again.
+  const cleared: CoMakerFormData = { ...untouched, employer: "" };
+  const merged = mergeFreshIntoForm(coMakerToForm(stored), cleared, new Set(["employer"]));
+  assert.equal(merged.employer, "");
+});
+
+test("a complete form has nothing missing", () => {
+  assert.deepEqual(coMakerDetailsProblems(untouched), {});
+});
+
+test("each required field is named when it is missing", () => {
+  const problems = coMakerDetailsProblems({
+    ...untouched,
+    first_name: "",
+    last_name: "",
+    relationship: "",
+    phone: "",
+  });
+  assert.deepEqual(Object.keys(problems).sort(), ["first_name", "last_name", "phone", "relationship"]);
+});
+
+test("names and a phone of only spaces count as missing", () => {
+  // `required` on the inputs lets these through; the save used to stop on them
+  // without a word.
+  const problems = coMakerDetailsProblems({ ...untouched, first_name: "  ", phone: " " });
+  assert.deepEqual(Object.keys(problems).sort(), ["first_name", "phone"]);
 });
