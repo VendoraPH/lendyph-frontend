@@ -28,7 +28,9 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { PrintableMenu } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { PrintableId } from "@/lib/printables/types";
+import { toUserList, type UserListShortfall } from "@/lib/user-list";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
@@ -828,6 +830,9 @@ export default function LoanDetailPage({
 
   // Account Officer state
   const [users, setUsers] = useState<User[]>([]);
+  // Set only when the officer drain gave up with pages outstanding, i.e. the
+  // AO picker is knowingly missing staff. Null means complete.
+  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
   const [aoEditing, setAoEditing] = useState(false);
   const [aoOpen, setAoOpen] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
@@ -898,9 +903,15 @@ export default function LoanDetailPage({
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const res = await userService.list();
-        const list = Array.isArray(res) ? res : (res as unknown as { data: User[] }).data ?? [];
-        setUsers(list.filter((u) => u.status === "active"));
+        // Drained, and filtered to active on the server. This was
+        // `userService.list()` with no arguments — the endpoint's default page
+        // of 15, newest first — so from the 16th user on, the longest-serving
+        // officers could not be assigned from here.
+        const officers = toUserList(await userService.listAll({ status: "active" }));
+        // Still filtered here too, so the picker's rule does not hang on the
+        // server honouring `?status=`.
+        setUsers(officers.users.filter((u) => u.status === "active"));
+        setOfficerShortfall(officers.shortfall);
       } catch { /* non-critical */ }
     }
     fetchUsers();
@@ -3345,6 +3356,14 @@ export default function LoanDetailPage({
               </div>
               {aoEditing ? (
                 <div className="space-y-2">
+                  {officerShortfall && (
+                    <IncompleteListNotice
+                      shown={officerShortfall.shown}
+                      total={officerShortfall.total}
+                      noun="active users"
+                      consequence="Some staff are missing from this picker and cannot be assigned as account officer."
+                    />
+                  )}
                   <Popover open={aoOpen} onOpenChange={setAoOpen}>
                     <PopoverTrigger
                       render={
