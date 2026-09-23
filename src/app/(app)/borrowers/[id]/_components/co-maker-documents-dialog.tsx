@@ -71,7 +71,13 @@ export function CoMakerDocumentsDialog({
     setLoading(true);
     try {
       const data = await documentService.coMakerList(coMakerId);
-      setDocuments(Array.isArray(data) ? data : []);
+      // Valid IDs are managed in the Edit dialog, which pairs front and back.
+      // Listing them here too would show each side as a loose document, and
+      // deleting one would orphan the other — the borrower Documents tab hides
+      // them for the same reason.
+      setDocuments(
+        Array.isArray(data) ? data.filter((d) => d.type?.toLowerCase() !== "valid_id") : []
+      );
     } catch {
       // Treat any failure as empty so the dialog still renders cleanly.
       setDocuments([]);
@@ -137,8 +143,8 @@ export function CoMakerDocumentsDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            Attach valid IDs, signed forms, or any supporting files for this
-            co-maker.
+            Attach signed forms or other supporting files for this co-maker.
+            Valid IDs are added from Edit Co-Maker.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,7 +181,7 @@ export function CoMakerDocumentsDialog({
               <Paperclip className="h-7 w-7 opacity-40" />
               <p className="text-sm">No documents attached yet.</p>
               <p className="text-xs">
-                Upload IDs, signed forms, or other supporting files.
+                Upload signed forms or other supporting files.
               </p>
             </div>
           ) : (
