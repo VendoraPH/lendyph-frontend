@@ -113,15 +113,25 @@ test("adding a mobile number to an account that had none is a change", () => {
   assert.deepEqual(changed, ["mobile_number"]);
 });
 
-test("clearing a mobile number reads as no change, because the payload omits it", () => {
-  // Not a quirk of this helper — `userEditPayload` collapses "" to undefined, so
-  // the key never reaches the server and the column is never written. Saying
-  // "no changes" is the honest answer; answering "User updated" was the lie.
-  // Clearing the field needs the payload to send null, which is a backend
-  // contract change.
+test("clearing a mobile number sends null, and counts as a change", () => {
+  // This used to assert the bug: "" collapsed to undefined, the key never
+  // reached the server, and the number could never be cleared. An explicit
+  // null is all it takes — the API's rule is already `nullable`, the column is
+  // nullable and the field is fillable, so no backend change was involved.
   const form = { ...untouched, mobile_number: "" };
-  assert.equal(userEditPayload(form).mobile_number, undefined);
-  assert.deepEqual(userEditChanges(user, form), []);
+  const payload = userEditPayload(form);
+  assert.equal(payload.mobile_number, null);
+  // What actually goes over the wire: JSON drops an undefined key, keeps null.
+  assert.equal(JSON.parse(JSON.stringify(payload)).mobile_number, null);
+  assert.deepEqual(userEditChanges(user, form), ["mobile_number"]);
+});
+
+test("a whitespace-only mobile number is sent as null, not as spaces", () => {
+  // Trimmed before the empty check, so spaces are a cleared field — and on an
+  // account with no number, no change at all.
+  assert.equal(userEditPayload({ ...untouched, mobile_number: "   " }).mobile_number, null);
+  const noMobile = { ...user, mobile_number: null } as User;
+  assert.deepEqual(userEditChanges(noMobile, { ...untouched, mobile_number: "   " }), []);
 });
 
 test("the payload carries exactly the fields the change check compares", () => {

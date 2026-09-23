@@ -582,7 +582,11 @@ function EditUserDialog({
         return;
       }
 
-      toast.error("We couldn't update the user. Please try again.");
+      // Everything else goes through the shared helper: a field-level 422 (a
+      // taken email), or the offline/timeout split. The `changes` case above
+      // must stay ahead of it — that message is prose, so the helper would show
+      // it as a red error and lose the info tone, the close and the refetch.
+      notifyError(error, "We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -715,8 +719,8 @@ function ResetPasswordDialog({
       setPassword("");
       setConfirm("");
       onOpenChange(false);
-    } catch {
-      toast.error("We couldn't reset the password. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't reset the password. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -810,8 +814,13 @@ function ToggleStatusDialog({
       }
       onOpenChange(false);
       onConfirm();
-    } catch {
-      toast.error(
+    } catch (err) {
+      // The fallback still has to say which way the toggle was going. The
+      // server's own wording wins where it has one — deactivating an already
+      // inactive user answers 422, and "please try again" is the wrong advice
+      // for a condition that is benign and will never resolve on a retry.
+      notifyError(
+        err,
         isActive
           ? "We couldn't deactivate the user. Please try again."
           : "We couldn't reactivate the user. Please try again."
@@ -1012,8 +1021,8 @@ export default function UsersPage() {
       setUsers(Array.isArray(u) ? u : (u as unknown as { data: User[] }).data ?? []);
       setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
       setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
-    } catch {
-      toast.error("We couldn't load the data. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't load the data. Please try again.");
     } finally {
       setLoading(false);
     }

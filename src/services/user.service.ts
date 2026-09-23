@@ -25,7 +25,12 @@ export interface UpdateUserData {
   first_name?: string;
   last_name?: string;
   email?: string;
-  mobile_number?: string;
+  /**
+   * `null` clears the number. Omitting the key leaves it untouched, so the two
+   * are NOT interchangeable — sending `undefined` for an emptied field is what
+   * made clearing a phone number a no-op for as long as this screen existed.
+   */
+  mobile_number?: string | null;
   branch_ids?: number[];
   /** @see CreateUserData.branch_id — same dual-contract reason. */
   branch_id?: number;
