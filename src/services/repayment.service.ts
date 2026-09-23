@@ -30,8 +30,47 @@ export interface RepaymentPreview {
 }
 
 export const repaymentService = {
-  list: (loanId: number, params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<Repayment>>(API_ENDPOINTS.REPAYMENTS.LIST(loanId), { params }),
+  /**
+   * ONE page of one loan's repayments — `GET /loans/{loan}/repayments`.
+   *
+   * `getRaw`, not `get`: `RepaymentController::index()` answers
+   * `RepaymentResource::collection($paginator)`, a raw `{ data, links, meta }`
+   * body with no envelope. `api.get` unwrapped it to the bare rows and dropped
+   * `meta` while this was declared `PaginatedResponse` all along, so both
+   * callers normalised a shape that never arrived and took page 1 for the
+   * loan's whole history.
+   *
+   * That page is 15 rows by default, and they are the OLDEST 15:
+   * `Loan::repayments()` orders by `payment_date` ascending, and that clause
+   * comes before the controller's `latest()`, so the list reads oldest first.
+   * A loan past its fifteenth payment lost its newest ones — a daily-collection
+   * loan gets there in three weeks. For the whole history, `listAllForLoan`.
+   */
+  list: (loanId: number, params?: { page?: number; per_page?: number }) =>
+    api.getRaw<PaginatedResponse<Repayment>>(API_ENDPOINTS.REPAYMENTS.LIST(loanId), {
+      params,
+    }),
+
+  /**
+   * Every repayment on one loan, across as many pages as it takes — what the
+   * loan ledger is built from.
+   *
+   * Each row is the full `RepaymentResource`, identical to what `detail()`
+   * returns for it, so nothing needs fetching per row: N payments cost
+   * ceil(N / 100) requests.
+   *
+   * Not `listAll`: that name is the org-wide drain below (`GET /repayments`),
+   * which takes filters rather than a loan. For everything one MEMBER paid
+   * across all their loans, drain that with `{ borrower_id }` — one drain
+   * however many loans they hold — rather than calling this once per loan.
+   *
+   * Returns a `DrainResult`, NOT a row array, for the reason on
+   * `borrowerService.listAll`: `truncated` is part of the answer.
+   */
+  listAllForLoan: (loanId: number): Promise<DrainResult<Repayment>> =>
+    fetchAllPages<Repayment>(({ page, per_page }) =>
+      repaymentService.list(loanId, { page, per_page }),
+    ),
 
   /**
    * ONE PAGE of `GET /repayments` — every loan's repayments, not one loan's.
