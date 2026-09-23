@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
+import { notifyError } from "@/lib/notify";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -93,23 +94,26 @@ export default function BorrowerDetailPage() {
     fetchData();
   }, [fetchData]);
 
+  // Errors go through notifyError so a field-level 422 — a contact number over
+  // the API's 20 characters, say — names the field instead of reading as a
+  // generic "please try again".
   const handleAddCoMaker = async (data: CreateCoMakerData) => {
     try {
       await coMakerService.create(borrowerId, data);
       toast.success("Co-maker added");
       await fetchCoMakers();
-    } catch {
-      toast.error("We couldn't add the co-maker. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't add the co-maker. Please try again.");
     }
   };
 
-  const handleEditCoMaker = async (updated: CoMaker) => {
+  const handleEditCoMaker = async (id: number, data: UpdateCoMakerData) => {
     try {
-      await coMakerService.update(updated.id, updated as UpdateCoMakerData);
+      await coMakerService.update(id, data);
       toast.success("Co-maker updated");
       await fetchCoMakers();
-    } catch {
-      toast.error("We couldn't update the co-maker. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't update the co-maker. Please try again.");
     }
   };
 
@@ -118,8 +122,8 @@ export default function BorrowerDetailPage() {
       await coMakerService.delete(id);
       toast.success("Co-maker deleted");
       await fetchCoMakers();
-    } catch {
-      toast.error("We couldn't delete the co-maker. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't delete the co-maker. Please try again.");
     }
   };
 

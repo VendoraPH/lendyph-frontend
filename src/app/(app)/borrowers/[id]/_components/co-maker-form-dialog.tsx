@@ -23,27 +23,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { UserPlus, Upload, AlertTriangle, Loader2 } from "lucide-react";
 import { RELATIONSHIP_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
-import type { CoMaker, CoMakerRelationship, Loan, ValidIdType } from "@/types";
-import { coMakerService, type CreateCoMakerData } from "@/services/co-maker.service";
+import type { CoMaker, Loan } from "@/types";
+import {
+  coMakerService,
+  type CreateCoMakerData,
+  type UpdateCoMakerData,
+} from "@/services/co-maker.service";
 import { formatCurrency } from "@/lib/format";
-
-interface CoMakerFormData {
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  suffix: string;
-  relationship: CoMakerRelationship | "";
-  phone: string;
-  address: string;
-  occupation: string;
-  employer: string;
-  monthly_income: string;
-  valid_id_type: ValidIdType | "";
-  valid_id_number: string;
-  valid_id_photo: string | undefined;
-  photo: string | undefined;
-  loan_id: number | "";
-}
+import {
+  coMakerToForm,
+  coMakerUpdatePayload,
+  type CoMakerFormData,
+} from "@/lib/co-maker-edit";
 
 function emptyForm(): CoMakerFormData {
   return {
@@ -62,29 +53,6 @@ function emptyForm(): CoMakerFormData {
     valid_id_photo: undefined,
     photo: undefined,
     loan_id: "",
-  };
-}
-
-function coMakerToForm(cm: CoMaker): CoMakerFormData {
-  // Parse full_name back into parts if individual fields aren't available
-  const raw = cm as unknown as Record<string, unknown>;
-  const parts = (cm.full_name ?? "").split(" ");
-  return {
-    first_name: (raw.first_name as string) ?? parts[0] ?? "",
-    middle_name: (raw.middle_name as string) ?? (parts.length > 2 ? parts.slice(1, -1).join(" ") : ""),
-    last_name: (raw.last_name as string) ?? (parts.length > 1 ? parts[parts.length - 1]! : ""),
-    suffix: (raw.suffix as string) ?? "",
-    relationship: ((raw.relationship_to_borrower as string) ?? cm.relationship ?? "") as CoMakerRelationship | "",
-    phone: (raw.contact_number as string) ?? cm.phone ?? "",
-    address: cm.address ?? "",
-    occupation: cm.occupation ?? "",
-    employer: cm.employer ?? "",
-    monthly_income: cm.monthly_income?.toString() ?? "",
-    valid_id_type: cm.valid_id_type ?? "",
-    valid_id_number: cm.valid_id_number ?? "",
-    valid_id_photo: cm.valid_id_photo,
-    photo: cm.photo,
-    loan_id: cm.loan_id ?? "",
   };
 }
 
@@ -198,7 +166,7 @@ interface EditCoMakerDialogProps {
   loans: Loan[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (updated: CoMaker) => void;
+  onSave: (id: number, data: UpdateCoMakerData) => void;
 }
 
 export function EditCoMakerDialog({
@@ -248,21 +216,10 @@ export function EditCoMakerDialog({
     e.preventDefault();
     if (!form.first_name.trim() || !form.last_name.trim() || !form.relationship || !form.phone.trim()) return;
 
-    onSave({
-      ...fresh,
-      full_name: [form.first_name, form.middle_name, form.last_name, form.suffix].filter(Boolean).join(" "),
-      relationship: form.relationship as CoMakerRelationship,
-      phone: form.phone,
-      address: form.address || undefined,
-      occupation: form.occupation || undefined,
-      employer: form.employer || undefined,
-      monthly_income: form.monthly_income ? Number(form.monthly_income) : undefined,
-      valid_id_type: (form.valid_id_type || undefined) as ValidIdType | undefined,
-      valid_id_number: form.valid_id_number || undefined,
-      valid_id_photo: form.valid_id_photo,
-      photo: form.photo,
-      loan_id: form.loan_id as number,
-    });
+    // The API's keys only — never the co-maker object with edits spread over
+    // it. See coMakerUpdatePayload for how that shape lost every name, phone
+    // and relationship edit while still reporting success.
+    onSave(coMaker.id, coMakerUpdatePayload(form));
     onOpenChange(false);
   };
 

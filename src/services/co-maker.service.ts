@@ -15,7 +15,24 @@ export interface CreateCoMakerData {
   relationship_to_borrower?: string;
 }
 
-export interface UpdateCoMakerData extends Partial<CreateCoMakerData> {
+/**
+ * `PUT /co-makers/{id}`, rule for rule with `UpdateCoMakerRequest`. Every key
+ * is optional — one left out keeps its column as it is — and the columns the
+ * request marks `nullable` also take an explicit `null`, which is the only way
+ * to clear one. `first_name` / `last_name` are `sometimes|string`: they can be
+ * left out but never nulled.
+ */
+export interface UpdateCoMakerData {
+  first_name?: string;
+  middle_name?: string | null;
+  last_name?: string;
+  suffix?: string | null;
+  address?: string | null;
+  contact_number?: string | null;
+  occupation?: string | null;
+  employer?: string | null;
+  monthly_income?: number | null;
+  relationship_to_borrower?: string | null;
   status?: "active" | "inactive";
 }
 
