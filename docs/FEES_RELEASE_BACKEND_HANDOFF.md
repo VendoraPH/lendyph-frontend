@@ -1,6 +1,15 @@
 # Product fees at loan release
 
-## Confirmed backend gap
+**Shipped 2026-09-19** across `lendyph-backend#116` and `lendyph-frontend#323`. The backend work
+below is done; `app/Services/LoanReleaseFeeService.php` implements all six items and is wired into
+`LoanService::release()`, covered by `tests/Feature/LoanReleaseFeesTest.php`.
+
+Kept rather than deleted, per the convention the sibling handoffs follow: a contract that exists
+nowhere is how the Credit Scoring one was lost and had to be reconstructed from shipped TypeScript.
+See **As built** at the end for the two places the implementation says more than this document asked
+for.
+
+## Confirmed backend gap (as of September 14, 2026 — since closed)
 
 Checked `VendoraPH/lendyph-backend`, branch `development`, on September 14, 2026.
 
@@ -30,4 +39,31 @@ For a ₱10,000 loan under Product A, with a ₱500 fixed fee and a 2% fee appli
 - Preserve product-specific labels if product names cannot be loaded.
 - Show the loan's existing API-provided itemized deductions in the release dialog.
 
-Automatic application of Settings fees remains pending backend implementation. This branch does not send unsupported release fields or present locally calculated fees as persisted charges.
+## As built
+
+Two contract facts the implementation settled that this document never asked about. Both were
+recorded only in a PHP docblock, which is the wrong place for something the frontend has to know.
+
+**1. Release fees are APPENDED to the product's own deductions, not merged with them.**
+`LoanService::createLoan()` already derives deductions from the loan product's `processing_fee` /
+`service_fee` / `notarial_fee` columns at *application* time. That is a separate mechanism with a
+different owner and a different moment, and this handoff did not mention it.
+
+The consequence is visible to users: **a `fees` row named "Processing Fee" and a product carrying
+`processing_fee` will BOTH charge**, because they are two independently configured charges that
+happen to share a label. Suppressing one by matching names would silently drop a charge the borrower
+signed a disclosure for, so it is deliberately not done. If a co-op sees a doubled fee, the fix is
+configuration — remove one of the two — not code.
+
+**2. `fee_fingerprint` is OPTIONAL on release, and the 409 only fires when one is sent.**
+`ReleaseLoanRequest` types it `['nullable','string','max:255']`, and the guard returns early on a
+null or empty value. So a client that never sends a fingerprint is never protected against a fee
+configuration that changed between preview and confirm — it is opt-in, not automatic. Send back the
+fingerprint the preview returned to get the protection.
+
+The preview endpoint shipped as `GET /api/loans/{loan}/release-preview`.
+
+---
+
+*Original closing note, now superseded: "Automatic application of Settings fees remains pending
+backend implementation." That was true when written and is no longer.*
