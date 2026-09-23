@@ -13,9 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle, Paperclip } from "lucide-react";
 import type { CoMaker, Loan } from "@/types";
-import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { VALID_ID_OPTIONS } from "@/constants";
-import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
+import {
+  AddCoMakerDialog,
+  EditCoMakerDialog,
+  type AddCoMakerHandler,
+  type AddCoMakerIdHandler,
+  type EditCoMakerHandler,
+} from "./co-maker-form-dialog";
 import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
 import { formatCurrency } from "@/lib/format";
 
@@ -23,8 +28,9 @@ interface CoMakersTabProps {
   coMakers: CoMaker[];
   loans: Loan[];
   borrowerId: number;
-  onAdd: (data: CreateCoMakerData) => void;
-  onEdit: (id: number, data: UpdateCoMakerData) => void;
+  onAdd: AddCoMakerHandler;
+  onAddId: AddCoMakerIdHandler;
+  onEdit: EditCoMakerHandler;
   onDelete: (id: number) => void;
 }
 
@@ -33,6 +39,7 @@ export function CoMakersTab({
   loans,
   borrowerId,
   onAdd,
+  onAddId,
   onEdit,
   onDelete,
 }: CoMakersTabProps) {
@@ -54,6 +61,7 @@ export function CoMakersTab({
           coMakerCount={coMakers.length}
           existingCoMakers={coMakers}
           onAdd={onAdd}
+          onAddId={onAddId}
         />
       </div>
 
@@ -169,11 +177,10 @@ export function CoMakersTab({
           coMaker={editingCoMaker}
           loans={loans}
           open={!!editingCoMaker}
+          // The dialog closes itself once the save has finished — and only if it
+          // succeeded — through onOpenChange.
           onOpenChange={(v) => { if (!v) setEditingCoMaker(null); }}
-          onSave={(id, data) => {
-            onEdit(id, data);
-            setEditingCoMaker(null);
-          }}
+          onSave={onEdit}
         />
       )}
 

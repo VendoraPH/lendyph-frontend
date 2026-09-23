@@ -1,13 +1,16 @@
 import type { UpdateCoMakerData } from "@/services/co-maker.service";
-import type { CoMaker, CoMakerRelationship, ValidIdType } from "@/types";
+import type { CoMaker, CoMakerRelationship } from "@/types";
 
 /**
  * The co-maker dialog's fields, as the form holds them.
  *
- * `valid_id_type`, `valid_id_number`, `valid_id_photo`, `photo` and `loan_id`
- * are here because the form renders them, not because they are saved: the
- * `co_makers` table has no such columns and neither co-maker request validates
- * them. No payload carries them — see `coMakerUpdatePayload`.
+ * `loan_id` is here because the form renders the Linked Loan picker, not
+ * because it is saved: `co_makers` has no such column, and co-makers are linked
+ * to loans from the loan side. No payload carries it — see
+ * `coMakerUpdatePayload`.
+ *
+ * The valid ID is not part of this form at all. It has its own endpoint and
+ * its own draft — see `@/lib/co-maker-valid-id`.
  */
 export interface CoMakerFormData {
   first_name: string;
@@ -20,10 +23,6 @@ export interface CoMakerFormData {
   occupation: string;
   employer: string;
   monthly_income: string;
-  valid_id_type: ValidIdType | "";
-  valid_id_number: string;
-  valid_id_photo: string | undefined;
-  photo: string | undefined;
   loan_id: number | "";
 }
 
@@ -61,12 +60,55 @@ export function coMakerToForm(cm: CoMaker): CoMakerFormData {
     occupation: cm.occupation ?? "",
     employer: cm.employer ?? "",
     monthly_income: cm.monthly_income?.toString() ?? "",
-    valid_id_type: cm.valid_id_type ?? "",
-    valid_id_number: cm.valid_id_number ?? "",
-    valid_id_photo: cm.valid_id_photo,
-    photo: cm.photo,
     loan_id: cm.loan_id ?? "",
   };
+}
+
+/**
+ * Lay a fresh copy of the co-maker over the form without losing any typing.
+ *
+ * The edit dialog opens on the list's snapshot so it is usable at once, then
+ * fetches the co-maker again in case someone changed it since. When that copy
+ * landed it used to replace the whole form — wiping whatever had been typed in
+ * the meantime. Now it fills only the fields nobody has touched: what the
+ * person typed stays, and the fields they didn't touch are saved from the
+ * fresh copy, not the older snapshot.
+ */
+export function mergeFreshIntoForm(
+  fresh: CoMakerFormData,
+  current: CoMakerFormData,
+  touched: ReadonlySet<keyof CoMakerFormData>
+): CoMakerFormData {
+  const merged = { ...fresh };
+  for (const field of touched) keepField(merged, current, field);
+  return merged;
+}
+
+function keepField<K extends keyof CoMakerFormData>(
+  to: CoMakerFormData,
+  from: CoMakerFormData,
+  field: K
+): void {
+  to[field] = from[field];
+}
+
+export type CoMakerDetailsField = "first_name" | "last_name" | "relationship" | "phone";
+export type CoMakerDetailsErrors = Partial<Record<CoMakerDetailsField, string>>;
+
+/**
+ * What the form still needs before it can save, field by field. The dialog
+ * used to answer a missing relationship — the one required field the browser
+ * can't check, being a custom select — by not saving and saying nothing.
+ * Names or a phone of only spaces went the same way, since `required` counts
+ * spaces as filled in.
+ */
+export function coMakerDetailsProblems(form: CoMakerFormData): CoMakerDetailsErrors {
+  const errors: CoMakerDetailsErrors = {};
+  if (!form.first_name.trim()) errors.first_name = "Enter the first name.";
+  if (!form.last_name.trim()) errors.last_name = "Enter the last name.";
+  if (!form.relationship) errors.relationship = "Choose the relationship.";
+  if (!form.phone.trim()) errors.phone = "Enter a contact number.";
+  return errors;
 }
 
 /**

@@ -12,6 +12,13 @@ import { borrowerService, loanService, coMakerService, repaymentService } from "
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { notifyError } from "@/lib/notify";
 import { toBorrowerPayments, type RepaymentListShortfall } from "@/lib/repayment-list";
+import {
+  coMakerSaveNotice,
+  saveCoMaker,
+  type CoMakerSaveAction,
+  type CoMakerSaveResult,
+} from "@/lib/co-maker-save";
+import { coMakerIdFormData, type ReadyCoMakerId } from "@/lib/co-maker-valid-id";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -108,28 +115,53 @@ export default function BorrowerDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  // Errors go through notifyError so a field-level 422 — a contact number over
-  // the API's 20 characters, say — names the field instead of reading as a
-  // generic "please try again".
-  const handleAddCoMaker = async (data: CreateCoMakerData) => {
-    try {
-      await coMakerService.create(borrowerId, data);
-      toast.success("Co-maker added");
-      await fetchCoMakers();
-    } catch (err) {
-      notifyError(err, "We couldn't add the co-maker. Please try again.");
-    }
+  // Every co-maker save says how it ended — including a co-maker that saved
+  // while its ID didn't — and refreshes the list whenever anything was
+  // written. The result goes back to the dialog, which closes only on a full
+  // success. Errors are worded by getErrorMessage (via coMakerSaveNotice), so
+  // a field-level 422 names the field instead of "please try again".
+  const finishCoMakerSave = async (
+    result: CoMakerSaveResult,
+    action: CoMakerSaveAction
+  ): Promise<CoMakerSaveResult> => {
+    const notice = coMakerSaveNotice(result, action);
+    if (notice.tone === "success") toast.success(notice.message);
+    else toast.error(notice.message);
+    if (result.status !== "failed") await fetchCoMakers();
+    return result;
   };
 
-  const handleEditCoMaker = async (id: number, data: UpdateCoMakerData) => {
-    try {
-      await coMakerService.update(id, data);
-      toast.success("Co-maker updated");
-      await fetchCoMakers();
-    } catch (err) {
-      notifyError(err, "We couldn't update the co-maker. Please try again.");
-    }
-  };
+  const uploadCoMakerId = (validId: ReadyCoMakerId) => (coMakerId: number) =>
+    coMakerService.uploadValidId(coMakerId, coMakerIdFormData(validId));
+
+  const handleAddCoMaker = async (data: CreateCoMakerData, validId: ReadyCoMakerId | null) =>
+    finishCoMakerSave(
+      await saveCoMaker(
+        async () => (await coMakerService.create(borrowerId, data)).id,
+        validId ? uploadCoMakerId(validId) : undefined
+      ),
+      "add"
+    );
+
+  // After an add whose ID failed: the co-maker exists, so only the ID is sent.
+  const handleAddCoMakerId = async (coMakerId: number, validId: ReadyCoMakerId) =>
+    finishCoMakerSave(await saveCoMaker(async () => coMakerId, uploadCoMakerId(validId)), "id");
+
+  const handleEditCoMaker = async (
+    id: number,
+    data: UpdateCoMakerData,
+    validId: ReadyCoMakerId | null
+  ) =>
+    finishCoMakerSave(
+      await saveCoMaker(
+        async () => {
+          await coMakerService.update(id, data);
+          return id;
+        },
+        validId ? uploadCoMakerId(validId) : undefined
+      ),
+      "update"
+    );
 
   const handleDeleteCoMaker = async (id: number) => {
     try {
@@ -227,6 +259,7 @@ export default function BorrowerDetailPage() {
             loans={loans}
             borrowerId={borrower.id}
             onAdd={handleAddCoMaker}
+            onAddId={handleAddCoMakerId}
             onEdit={handleEditCoMaker}
             onDelete={handleDeleteCoMaker}
           />
