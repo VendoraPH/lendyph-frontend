@@ -582,7 +582,11 @@ function EditUserDialog({
         return;
       }
 
-      toast.error("We couldn't update the user. Please try again.");
+      // Everything else goes through the shared helper: a field-level 422 (a
+      // taken email), or the offline/timeout split. The `changes` case above
+      // must stay ahead of it — that message is prose, so the helper would show
+      // it as a red error and lose the info tone, the close and the refetch.
+      notifyError(error, "We couldn't update the user. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -715,8 +719,8 @@ function ResetPasswordDialog({
       setPassword("");
       setConfirm("");
       onOpenChange(false);
-    } catch {
-      toast.error("We couldn't reset the password. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't reset the password. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -810,8 +814,30 @@ function ToggleStatusDialog({
       }
       onOpenChange(false);
       onConfirm();
-    } catch {
-      toast.error(
+    } catch (err) {
+      // The account is already in the state we asked for — someone else
+      // toggled it first, so our row is stale. Both directions refuse on
+      // `changes` ("This account is already inactive." / "…already active.").
+      // Handle it the way the edit dialog handles its `changes` 422: say so,
+      // close, and refetch so the row catches up. A retry could never succeed.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const changes = (err as { response?: { data?: { errors?: Record<string, string[]> } } })
+        ?.response?.data?.errors?.changes;
+
+      if (status === 422 && changes) {
+        toast.info(
+          changes[0] ??
+            (isActive ? "This account is already inactive." : "This account is already active.")
+        );
+        onOpenChange(false);
+        onConfirm();
+        return;
+      }
+
+      // Anything else: the server's own wording where it has one, and a
+      // fallback that still says which way the toggle was going.
+      notifyError(
+        err,
         isActive
           ? "We couldn't deactivate the user. Please try again."
           : "We couldn't reactivate the user. Please try again."
@@ -1012,8 +1038,8 @@ export default function UsersPage() {
       setUsers(Array.isArray(u) ? u : (u as unknown as { data: User[] }).data ?? []);
       setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
       setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
-    } catch {
-      toast.error("We couldn't load the data. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't load the data. Please try again.");
     } finally {
       setLoading(false);
     }
