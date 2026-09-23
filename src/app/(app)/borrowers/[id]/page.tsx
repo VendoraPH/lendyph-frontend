@@ -5,11 +5,20 @@ import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
 import { PrintableMenu } from "@/components/common";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { notifyError } from "@/lib/notify";
+import { toBorrowerPayments, type RepaymentListShortfall } from "@/lib/repayment-list";
+import {
+  coMakerSaveNotice,
+  saveCoMaker,
+  type CoMakerSaveAction,
+  type CoMakerSaveResult,
+} from "@/lib/co-maker-save";
+import { coMakerIdFormData, type ReadyCoMakerId } from "@/lib/co-maker-valid-id";
 import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
@@ -28,6 +37,13 @@ export default function BorrowerDetailPage() {
   const [borrower, setBorrower] = useState<Borrower | undefined>();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  // Each set only when its drain gave up with pages outstanding, i.e. that
+  // list is knowingly short. Null means complete.
+  const [loanShortfall, setLoanShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
+  const [paymentShortfall, setPaymentShortfall] = useState<RepaymentListShortfall | null>(null);
   const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,9 +59,22 @@ export default function BorrowerDetailPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
 
-    const [borrowerResult, loansResult] = await Promise.allSettled([
+    const [borrowerResult, loansResult, paymentsResult] = await Promise.allSettled([
       borrowerService.detail(borrowerId),
-      loanService.list({ borrower_id: borrowerId }),
+      // Drained across pages. This was `loanService.list({ borrower_id })` —
+      // one default page of 15 — so a member past their fifteenth loan had the
+      // rest missing from the Loans tab, the Overview and every balance built
+      // on them, and missing from the Payments tab too, which was read loan by
+      // loan off that same list.
+      loanService.listAll({ borrower_id: borrowerId }),
+      // One drain over everything the member paid, across all their loans. This
+      // was one `repaymentService.list(loanId)` per loan, each the endpoint's
+      // default page of 15 and the OLDEST 15, so the tab lost every loan's
+      // newest payments and counted what was left. Draining per loan would fix
+      // the count but cost a request per loan against a shared 60-a-minute
+      // budget, and a member who renews a one-month loan every month holds
+      // dozens of them.
+      repaymentService.listAll({ borrower_id: borrowerId }),
     ]);
 
     if (borrowerResult.status === "fulfilled") {
@@ -54,35 +83,27 @@ export default function BorrowerDetailPage() {
       toast.error("We couldn't load the borrower details. Please try again.");
     }
 
-    let loanList: Loan[] = [];
     if (loansResult.status === "fulfilled") {
-      const loansRes = loansResult.value;
-      // Loans may be paginated or a plain array
-      if (Array.isArray(loansRes)) {
-        loanList = loansRes;
-      } else if (loansRes && typeof loansRes === "object" && "data" in loansRes) {
-        loanList = (loansRes as { data: Loan[] }).data ?? [];
-      }
-      setLoans(loanList);
+      const loanDrain = loansResult.value;
+      setLoans(loanDrain.rows);
+      setLoanShortfall(
+        loanDrain.truncated
+          ? { shown: loanDrain.rows.length, total: loanDrain.total }
+          : null,
+      );
     } else {
       toast.error("We couldn't load the loans. Please try again.");
     }
 
-    // Fetch repayments for all borrower loans
-    if (loanList.length > 0) {
-      try {
-        const repaymentResults = await Promise.all(
-          loanList.map((l: Loan) => repaymentService.list(l.id).catch(() => []))
-        );
-        const allPayments = repaymentResults.flatMap((res) =>
-          Array.isArray(res) ? res : (res as unknown as { data: Payment[] })?.data ?? []
-        );
-        setPayments(allPayments);
-      } catch {
-        setPayments([]);
-      }
+    if (paymentsResult.status === "fulfilled") {
+      const { payments, shortfall } = toBorrowerPayments(paymentsResult.value);
+      setPayments(payments);
+      setPaymentShortfall(shortfall);
     } else {
+      // Said out loud: an empty tab reads as "this member has paid nothing".
       setPayments([]);
+      setPaymentShortfall(null);
+      toast.error("We couldn't load the payments. Please try again.");
     }
 
     await fetchCoMakers();
@@ -94,28 +115,53 @@ export default function BorrowerDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  // Errors go through notifyError so a field-level 422 — a contact number over
-  // the API's 20 characters, say — names the field instead of reading as a
-  // generic "please try again".
-  const handleAddCoMaker = async (data: CreateCoMakerData) => {
-    try {
-      await coMakerService.create(borrowerId, data);
-      toast.success("Co-maker added");
-      await fetchCoMakers();
-    } catch (err) {
-      notifyError(err, "We couldn't add the co-maker. Please try again.");
-    }
+  // Every co-maker save says how it ended — including a co-maker that saved
+  // while its ID didn't — and refreshes the list whenever anything was
+  // written. The result goes back to the dialog, which closes only on a full
+  // success. Errors are worded by getErrorMessage (via coMakerSaveNotice), so
+  // a field-level 422 names the field instead of "please try again".
+  const finishCoMakerSave = async (
+    result: CoMakerSaveResult,
+    action: CoMakerSaveAction
+  ): Promise<CoMakerSaveResult> => {
+    const notice = coMakerSaveNotice(result, action);
+    if (notice.tone === "success") toast.success(notice.message);
+    else toast.error(notice.message);
+    if (result.status !== "failed") await fetchCoMakers();
+    return result;
   };
 
-  const handleEditCoMaker = async (id: number, data: UpdateCoMakerData) => {
-    try {
-      await coMakerService.update(id, data);
-      toast.success("Co-maker updated");
-      await fetchCoMakers();
-    } catch (err) {
-      notifyError(err, "We couldn't update the co-maker. Please try again.");
-    }
-  };
+  const uploadCoMakerId = (validId: ReadyCoMakerId) => (coMakerId: number) =>
+    coMakerService.uploadValidId(coMakerId, coMakerIdFormData(validId));
+
+  const handleAddCoMaker = async (data: CreateCoMakerData, validId: ReadyCoMakerId | null) =>
+    finishCoMakerSave(
+      await saveCoMaker(
+        async () => (await coMakerService.create(borrowerId, data)).id,
+        validId ? uploadCoMakerId(validId) : undefined
+      ),
+      "add"
+    );
+
+  // After an add whose ID failed: the co-maker exists, so only the ID is sent.
+  const handleAddCoMakerId = async (coMakerId: number, validId: ReadyCoMakerId) =>
+    finishCoMakerSave(await saveCoMaker(async () => coMakerId, uploadCoMakerId(validId)), "id");
+
+  const handleEditCoMaker = async (
+    id: number,
+    data: UpdateCoMakerData,
+    validId: ReadyCoMakerId | null
+  ) =>
+    finishCoMakerSave(
+      await saveCoMaker(
+        async () => {
+          await coMakerService.update(id, data);
+          return id;
+        },
+        validId ? uploadCoMakerId(validId) : undefined
+      ),
+      "update"
+    );
 
   const handleDeleteCoMaker = async (id: number) => {
     try {
@@ -165,6 +211,24 @@ export default function BorrowerDetailPage() {
         />
       </div>
 
+      {loanShortfall && (
+        <IncompleteListNotice
+          shown={loanShortfall.shown}
+          total={loanShortfall.total}
+          noun="loans"
+          consequence="The Loans tab, the Overview and the balances on the Payments tab cover only the loans that loaded."
+        />
+      )}
+
+      {paymentShortfall && (
+        <IncompleteListNotice
+          shown={paymentShortfall.shown}
+          total={paymentShortfall.total}
+          noun="payments"
+          consequence="The Payments tab's count and Total Paid cover only the payments that loaded."
+        />
+      )}
+
       <Tabs defaultValue="overview">
         <TabsList variant="line">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -195,6 +259,7 @@ export default function BorrowerDetailPage() {
             loans={loans}
             borrowerId={borrower.id}
             onAdd={handleAddCoMaker}
+            onAddId={handleAddCoMakerId}
             onEdit={handleEditCoMaker}
             onDelete={handleDeleteCoMaker}
           />

@@ -21,6 +21,11 @@ function formatTypeList(types: string[]): string {
   return types.map((t) => TYPE_LABELS[t] ?? t).join(", ");
 }
 
+function formatMegabytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return Number.isInteger(mb) ? String(mb) : mb.toFixed(1);
+}
+
 export interface FileValidationResult {
   ok: boolean;
   error?: string;
@@ -38,9 +43,12 @@ export function validateUploadFile(
     };
   }
   if (file.size > maxBytes) {
+    // The limit in the message is the one actually applied. It was the 5 MB
+    // default whatever `maxBytes` said, so a caller with another limit (the
+    // valid-ID endpoints take 10 MB) reported a number it wasn't enforcing.
     return {
       ok: false,
-      error: `File is too large (max ${MAX_UPLOAD_SIZE_MB}MB).`,
+      error: `File is too large (max ${formatMegabytes(maxBytes)}MB).`,
     };
   }
   return { ok: true };
