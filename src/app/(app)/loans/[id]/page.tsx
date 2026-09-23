@@ -31,6 +31,7 @@ import { PrintableMenu } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { PrintableId } from "@/lib/printables/types";
 import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
@@ -784,6 +785,9 @@ export default function LoanDetailPage({
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [repaymentsLoading, setRepaymentsLoading] = useState(false);
+  // Set only when the repayment drain gave up with pages outstanding, i.e. the
+  // ledger is knowingly missing payments. Null means complete.
+  const [repaymentsShortfall, setRepaymentsShortfall] = useState<RepaymentListShortfall | null>(null);
   // Ledger debit/credit entries (interest an extension accrues/collects) —
   // merged with repayments into `ledgerRows` below.
   const [ledgerEntries, setLedgerEntries] = useState<LoanLedgerEntry[]>([]);
@@ -1012,34 +1016,25 @@ export default function LoanDetailPage({
     }
   }, [loan?.id, loan?.status, fetchAmortizationPreview]);
 
-  // Fetch repayments for released+ loans, then enrich each with its detail
-  // so that breakdown fields (principal_paid, interest_paid, scb_paid, penalty_paid)
-  // are populated — the list endpoint omits them; the detail endpoint includes them.
+  // Fetch repayments for released+ loans. Each list row is the full
+  // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
+  // the ledger's breakdown fields (principal_paid, interest_paid, penalty_paid)
+  // are read off its `*_amount` aliases by withBreakdown(). This used to ask for
+  // every row's detail on the belief that the list omitted the breakdown; it
+  // never did, and each of those requests returned the row it started from.
   const fetchRepayments = useCallback(async (id: number) => {
     try {
       setRepaymentsLoading(true);
-      const res = await repaymentService.list(id);
-      const list: Repayment[] = Array.isArray(res) ? res : res.data ?? [];
-      const enriched = await Promise.all(
-        list.map(async (r) => {
-          try {
-            const detail = await repaymentService.detail(r.id);
-            // Merge: prefer detail fields (breakdown), keep list fields as fallback
-            const d = detail as Repayment & Record<string, unknown>;
-            return {
-              ...r,
-              ...detail,
-              principal_paid: (detail.principal_paid ?? (d.principal_amount as number)) || undefined,
-              interest_paid: (detail.interest_paid ?? (d.interest_amount as number)) || undefined,
-              scb_paid: (detail.scb_paid ?? (d.scb_amount as number)) || undefined,
-              penalty_paid: (detail.penalty_paid ?? (d.penalty_amount as number)) || undefined,
-            } as Repayment;
-          } catch {
-            return r;
-          }
-        })
+      // Drained across pages. This was `repaymentService.list(id)` — the
+      // endpoint's default page of 15, and the OLDEST 15, since the list is
+      // oldest-first — so from a loan's sixteenth payment on the ledger lost
+      // its newest payments and every running balance after them. A loan with
+      // N payments now costs ceil(N / 100) requests, and nothing per row.
+      const { rows, shortfall } = toLoanRepayments(
+        await repaymentService.listAllForLoan(id),
       );
-      setRepayments(enriched);
+      setRepayments(rows);
+      setRepaymentsShortfall(shortfall);
     } catch {
       // silently fail
     } finally {
@@ -3883,6 +3878,15 @@ export default function LoanDetailPage({
             </>
           }
         >
+            {repaymentsShortfall && !repaymentsLoading && (
+              <IncompleteListNotice
+                className="m-4"
+                shown={repaymentsShortfall.shown}
+                total={repaymentsShortfall.total}
+                noun="payments"
+                consequence="Payments missing from the ledger below are left out of its running principal, interest and SCB balances, so the balances it ends on are not the loan's current ones."
+              />
+            )}
             {repaymentsLoading || ledgerEntriesLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner className="size-5 text-muted-foreground" />
