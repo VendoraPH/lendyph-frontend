@@ -35,6 +35,17 @@ updates:
         update-types: [minor, patch]
         exclude-patterns:
           ["next", "react", "react-dom", "@types/react", "@types/react-dom"]
+    ignore:
+      # eslint 10 cannot run here yet, and no change on our side fixes that.
+      # It removed `context.getFilename()`, and eslint-plugin-react — pulled in
+      # by eslint-config-next — still calls it: #364's lint died with "Error
+      # while loading rule 'react/display-name': contextOrFilename.getFilename
+      # is not a function". 7.37.5 is the newest eslint-plugin-react on npm as
+      # of 2026-09-23 and declares eslint "^9.7" at most. Drop this rule once
+      # it (or eslint-config-next) supports eslint 10; until then a weekly red
+      # PR for the same upstream gap is noise.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
