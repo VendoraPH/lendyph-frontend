@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle, Paperclip } from "lucide-react";
 import type { CoMaker, Loan } from "@/types";
-import type { CreateCoMakerData } from "@/services/co-maker.service";
+import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
 import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
@@ -24,7 +24,7 @@ interface CoMakersTabProps {
   loans: Loan[];
   borrowerId: number;
   onAdd: (data: CreateCoMakerData) => void;
-  onEdit: (updated: CoMaker) => void;
+  onEdit: (id: number, data: UpdateCoMakerData) => void;
   onDelete: (id: number) => void;
 }
 
@@ -170,8 +170,8 @@ export function CoMakersTab({
           loans={loans}
           open={!!editingCoMaker}
           onOpenChange={(v) => { if (!v) setEditingCoMaker(null); }}
-          onSave={(updated) => {
-            onEdit(updated);
+          onSave={(id, data) => {
+            onEdit(id, data);
             setEditingCoMaker(null);
           }}
         />
