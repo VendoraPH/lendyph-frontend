@@ -815,10 +815,27 @@ function ToggleStatusDialog({
       onOpenChange(false);
       onConfirm();
     } catch (err) {
-      // The fallback still has to say which way the toggle was going. The
-      // server's own wording wins where it has one — deactivating an already
-      // inactive user answers 422, and "please try again" is the wrong advice
-      // for a condition that is benign and will never resolve on a retry.
+      // The account is already in the state we asked for — someone else
+      // toggled it first, so our row is stale. Both directions refuse on
+      // `changes` ("This account is already inactive." / "…already active.").
+      // Handle it the way the edit dialog handles its `changes` 422: say so,
+      // close, and refetch so the row catches up. A retry could never succeed.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const changes = (err as { response?: { data?: { errors?: Record<string, string[]> } } })
+        ?.response?.data?.errors?.changes;
+
+      if (status === 422 && changes) {
+        toast.info(
+          changes[0] ??
+            (isActive ? "This account is already inactive." : "This account is already active.")
+        );
+        onOpenChange(false);
+        onConfirm();
+        return;
+      }
+
+      // Anything else: the server's own wording where it has one, and a
+      // fallback that still says which way the toggle was going.
       notifyError(
         err,
         isActive
