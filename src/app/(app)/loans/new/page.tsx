@@ -97,6 +97,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatDateISO } from "@/lib/format";
+import { toUserList, type UserListShortfall } from "@/lib/user-list";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -365,6 +366,9 @@ function NewLoanApplicationInner() {
     shown: number;
     total: number | null;
   } | null>(null);
+  // Same, for the officer drain: set only when the Account Officer picker is
+  // knowingly missing staff. Null means complete.
+  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
   // ── Fetch borrowers, products, users — and the loan when editing ──
   useEffect(() => {
@@ -381,7 +385,11 @@ function NewLoanApplicationInner() {
           // be picked and could not be lent to from this screen at all.
           borrowerService.listAll({ members_only: 1 }),
           loanProductService.list(),
-          userService.list(),
+          // Drained, and filtered to active on the server. This was
+          // `userService.list()` with no arguments — the endpoint's default
+          // page of 15, newest first — so from the 16th user on, the
+          // longest-serving officers were the ones missing from the picker.
+          userService.listAll({ status: "active" }),
           feeService.list(),
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
@@ -416,10 +424,11 @@ function NewLoanApplicationInner() {
       }
 
       if (usersResult.status === "fulfilled") {
-        const userData = Array.isArray(usersResult.value)
-          ? usersResult.value
-          : (usersResult.value as unknown as { data: User[] }).data ?? [];
-        setUsers(userData.filter((u) => u.status === "active"));
+        const officers = toUserList(usersResult.value);
+        // Still filtered here too, so the picker's rule does not hang on the
+        // server honouring `?status=`.
+        setUsers(officers.users.filter((u) => u.status === "active"));
+        setOfficerShortfall(officers.shortfall);
       }
 
       // Hydrate form state from the loan being edited. Runs after products
@@ -1071,6 +1080,15 @@ function NewLoanApplicationInner() {
           total={memberShortfall.total}
           noun="members"
           consequence="Some members are missing from the member and co-maker pickers below and cannot be selected."
+        />
+      )}
+
+      {officerShortfall && (
+        <IncompleteListNotice
+          shown={officerShortfall.shown}
+          total={officerShortfall.total}
+          noun="active users"
+          consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
         />
       )}
 
