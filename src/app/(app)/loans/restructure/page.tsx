@@ -414,7 +414,7 @@ function RestructureLoanInner() {
 
       // Pre-fill co-makers
       const cmIds = Array.isArray(loan.co_makers)
-        ? loan.co_makers.map((c) => c.id).filter((id): id is number => typeof id === "number")
+        ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
         : [];
       setCoMakerIds(cmIds.length > 0 ? cmIds : [null]);
 
