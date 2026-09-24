@@ -5,7 +5,7 @@ import { RouteGuard, PermissionButton } from "@/components/common";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
-import { loanService, repaymentService, shareCapitalService } from "@/services";
+import { loanService, repaymentService } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import type { Loan } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -564,33 +564,15 @@ export default function PaymentsPage() {
       const receiptId = repayment?.id;
       if (receiptId) setLastReceiptId(receiptId);
 
+      const scbCredited = repayment?.scb_paid ?? 0;
       toast.success("Payment posted", {
-        description: `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
+        description: scbCredited > 0
+          ? `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
+          : `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
         action: receiptId
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
           : undefined,
       });
-
-      // Credit the portion of this payment that was allocated to SCB
-      const scbToCredit = displayAllocation?.scbApplied ?? 0;
-      if (scbToCredit > 0) {
-        try {
-          await shareCapitalService.ledgerCreate({
-            borrower_id: selectedLoan.borrower_id,
-            date: paymentDate,
-            description: `Share Capital Build-Up from payment — Loan ${selectedLoan.loan_account_number}`,
-            type: "credit",
-            amount: scbToCredit,
-          });
-          toast.info("Share Capital credited", {
-            description: `${formatCurrency(scbToCredit)} credited to ${selectedLoan.borrower_name}'s share capital.`,
-          });
-        } catch {
-          toast.warning("Payment recorded but share capital credit failed", {
-            description: "Please manually credit the share capital entry.",
-          });
-        }
-      }
 
       await fetchLoans();
       resetForm();
