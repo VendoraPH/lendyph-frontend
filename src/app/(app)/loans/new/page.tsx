@@ -443,7 +443,7 @@ function NewLoanApplicationInner() {
           const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
           if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
           const coMakerIdList: number[] = Array.isArray(loan.co_makers)
-            ? loan.co_makers.map((c) => c.id).filter((id): id is number => typeof id === "number")
+            ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
             : [];
           setCoMakerIds(coMakerIdList.length > 0 ? coMakerIdList : [null]);
           const aoId = (l.account_officer_id as number | undefined) ?? null;
