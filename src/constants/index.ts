@@ -24,6 +24,17 @@ export const TERM_UNIT_OPTIONS = [
   { value: "days", label: "Days" },
 ] as const;
 
+// The period each interest rate figure is quoted per (e.g. "3% per month").
+// Mirrors payment frequency's vocabulary minus "upon_maturity", which is a
+// repayment schedule shape rather than a rate period.
+export const INTEREST_RATE_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "semi_monthly", label: "Semi-Monthly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
+
 export const INTEREST_TYPE = {
   FIXED: "fixed",
   DIMINISHING: "diminishing",

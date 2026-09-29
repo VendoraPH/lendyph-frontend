@@ -7,6 +7,7 @@ export interface CreateLoanProductData {
   min_interest_rate: number;
   max_interest_rate: number;
   interest_method: "straight" | "diminishing" | "upon_maturity";
+  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
   min_term: number;
   max_term: number;
   term_unit?: "months" | "days";

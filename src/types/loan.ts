@@ -187,6 +187,10 @@ export interface LoanProduct {
   max_amount: number;
   interest_rate: number;
   interest_type: InterestType;
+  // Period the interest rate figure is quoted per (e.g. "3% per month").
+  // Absent on products created before this field existed — callers should
+  // default to "monthly", the rate's long-standing implicit basis.
+  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
   min_term: number;
   max_term: number;
   // Unit the term range is expressed in. Absent on products created before
