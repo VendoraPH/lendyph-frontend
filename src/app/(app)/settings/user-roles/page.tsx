@@ -24,7 +24,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ROLES } from "@/constants/rbac";
-import type { Module, Action, Permission } from "@/types";
+import type { Action, Permission } from "@/types";
+import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
 import { roleService } from "@/services/role.service";
 import type { ApiRole } from "@/services/role.service";
 import { PermissionGate } from "@/components/common";
@@ -56,19 +57,16 @@ import {
   ListTree,
   Receipt,
   Wallet,
-  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { notifyValidation } from "@/lib/notify";
+import { notifyError, notifyValidation } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Module metadata — describes each feature area protected by permissions
-// (Collections is excluded — no longer used in the system)
+// Module metadata — describes each feature area protected by permissions.
+// Which modules are offered at all is decided in _lib/permission-matrix.ts.
 // ---------------------------------------------------------------------------
-
-type UIModule = Exclude<Module, "collections">;
 
 interface ModuleMeta {
   label: string;
@@ -277,50 +275,8 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Move money between own accounts — a transfer, never income",
     ],
   },
-  credit_scoring: {
-    label: "Credit Scoring",
-    description: "Automated credit scoring, risk assessment and manual override for loan decisions.",
-    icon: Gauge,
-    features: [
-      "View borrower credit scores, risk levels and score history",
-      "Override an automated score with a manual credit decision",
-      "Configure scorecard weights, policy rules and module settings",
-    ],
-  },
 };
 
-// Applicable actions per module — only the actions that make sense for each area
-const MODULE_ACTIONS: Record<UIModule, Action[]> = {
-  fees: ["view", "create", "update", "delete"],
-  dashboard: ["view"],
-  borrowers: ["view", "create", "update", "delete", "approve"],
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
-  payments: ["view", "create", "update", "void"],
-  share_capital: ["view", "create", "update"],
-  collaterals: ["view", "create", "update", "delete"],
-  reports: ["view", "export"],
-  users: ["view", "create", "update", "delete"],
-  settings: ["view", "update"],
-  audit_logs: ["view", "export"],
-  auto_pay: ["view", "process", "toggle"],
-  gcash: ["view", "transact", "settings"],
-  // `process` only. There is no `imports:view`: the page has nothing to look at
-  // without running one, so a view-only grant would be a link to an empty
-  // wizard, and the template literal `Module:Action` type would happily mint it.
-  imports: ["process"],
-  // `close` and `settings` sit on `accounting` rather than on a module of their
-  // own because neither has a screen to view — they are verbs applied to the
-  // whole book.
-  accounting: ["view", "reconcile", "close", "settings"],
-  chart_of_accounts: ["view", "create", "update", "delete"],
-  // No `update` or `delete`: a posted entry is immutable, and the only lawful
-  // correction is `reverse`, which writes a second entry rather than editing
-  // the first. Granting "edit a journal" would be granting "rewrite history".
-  journals: ["view", "create", "post", "reverse"],
-  expenses: ["view", "create", "update"],
-  cash_accounts: ["view", "transfer"],
-  credit_scoring: ["view", "override", "settings"],
-};
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   view: { label: "View", colorClass: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
@@ -745,8 +701,10 @@ export default function UserRolesPage() {
       if (formMode === "edit") {
         await maybeRefreshCurrentUser(item.key);
       }
-    } catch {
-      toast.error(formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
+    } catch (err) {
+      // The API's own reason (a taken name, a permission it does not have)
+      // is what tells the admin what to change; a bare "try again" hid it.
+      notifyError(err, formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
     } finally {
       setActionLoading(false);
     }
