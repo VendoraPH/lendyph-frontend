@@ -41,8 +41,6 @@ const ID_TYPES = [
 interface Props {
   open: boolean;
   onOpenChange(open: boolean): void;
-  /** Omit to add a new walk-in; pass a row to edit it. */
-  nonMember?: GCashNonMember | null;
   /**
    * `saved` is the row the API echoed back, so a caller that opened this to
    * register someone standing at the counter can select them immediately
@@ -69,30 +67,14 @@ const EMPTY: FormState = {
   remarks: "",
 };
 
-export function NonMemberFormDialog({
-  open,
-  onOpenChange,
-  nonMember,
-  onSaved,
-}: Props) {
+export function NonMemberFormDialog({ open, onOpenChange, onSaved }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
-  const isEdit = Boolean(nonMember);
 
   useEffect(() => {
     if (!open) return;
-    setForm(
-      nonMember
-        ? {
-            full_name: nonMember.full_name ?? "",
-            mobile_number: nonMember.mobile_number ?? "",
-            id_type: nonMember.id_type ?? "",
-            id_number: nonMember.id_number ?? "",
-            remarks: nonMember.remarks ?? "",
-          }
-        : EMPTY,
-    );
-  }, [open, nonMember]);
+    setForm(EMPTY);
+  }, [open]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -121,14 +103,8 @@ export function NonMemberFormDialog({
         id_number: idNumber,
         remarks: form.remarks.trim() || null,
       };
-      let saved: GCashNonMember | undefined;
-      if (nonMember) {
-        saved = await gcashService.updateNonMember(nonMember.id, payload);
-        toast.success(`${name} updated.`);
-      } else {
-        saved = await gcashService.createNonMember(payload);
-        toast.success(`${name} added to GCash non-members.`);
-      }
+      const saved = await gcashService.createNonMember(payload);
+      toast.success(`${name} added.`);
       onSaved?.(saved);
       onOpenChange(false);
     } catch (err) {
@@ -142,9 +118,7 @@ export function NonMemberFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Non-Member" : "Add Non-Member"}
-          </DialogTitle>
+          <DialogTitle>Add Walk-in</DialogTitle>
           <DialogDescription>
             A walk-in customer who is not a coop member. Name, mobile number,
             and a presented ID are required — they are the only record you have
@@ -240,7 +214,7 @@ export function NonMemberFormDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting ? "Saving…" : isEdit ? "Save Changes" : "Add Non-Member"}
+            {submitting ? "Saving…" : "Add Walk-in"}
           </Button>
         </DialogFooter>
       </DialogContent>

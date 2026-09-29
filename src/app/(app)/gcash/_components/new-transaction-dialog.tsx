@@ -13,33 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { nonMemberParty } from "@/lib/gcash-party";
 import type { GCashParty, GCashTransactionType } from "@/types";
 import { useGCashParties } from "../_hooks/use-gcash-parties";
+import type { GCashPartyShortfall } from "../_hooks/use-gcash-parties";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
 import { GCashPartyPicker } from "./gcash-party-picker";
 import { NonMemberFormDialog } from "./non-member-form-dialog";
-
-type PartyKind = GCashParty["kind"];
-
-/**
- * Base UI resolves `<SelectValue>` labels from `items` or a render prop, NOT
- * from the mounted `<SelectItem>` children — without one of those the trigger
- * shows the raw value, so the teller picks a direction and the box reads
- * "cash_in". Same quirk as the loan-product select on the restructure screen.
- */
-const TRANSACTION_TYPES: { value: GCashTransactionType; label: string }[] = [
-  { value: "cash_in", label: "Cash In" },
-  { value: "cash_out", label: "Cash Out" },
-];
 
 interface Props {
   open: boolean;
@@ -51,8 +32,9 @@ interface Props {
  * The single entry point for recording a GCash transaction, for either side of
  * the counter: a coop member or a walk-in.
  *
- * Two steps on purpose. This dialog answers "who, and which way", then hands
- * off to the SAME `CashInDialog` / `CashOutDialog` the per-row buttons open.
+ * Two steps on purpose. This dialog answers "which way, and for whom", then
+ * hands off to the SAME `CashInDialog` / `CashOutDialog` the per-row buttons
+ * open.
  * Re-implementing the amount step here is what made the fields diverge: the
  * inline version sent neither `is_pending` nor `remarks`, so a Cash In started
  * from this button silently lost the deferred-income flag that the identical
@@ -62,28 +44,40 @@ interface Props {
 export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
   const { members, nonMembers, loading, error, refreshNonMembers } =
     useGCashParties();
-  const [kind, setKind] = useState<PartyKind>("member");
   const [party, setParty] = useState<GCashParty | null>(null);
   const [type, setType] = useState<GCashTransactionType>("cash_in");
   const [step, setStep] = useState<"party" | "amount">("party");
   const [addingWalkIn, setAddingWalkIn] = useState(false);
 
-  const isMember = kind === "member";
-  const list = isMember ? members : nonMembers;
-  const noun = isMember ? "members" : "walk-ins";
+  // One searchable list for both sides of the counter — there is no more
+  // upfront "who is this for" choice, so a member and a walk-in must be
+  // distinguishable by name/kind in the same picker rather than two lists
+  // gated behind a radio.
+  const options = useMemo(
+    () => [...members.options, ...nonMembers.options],
+    [members.options, nonMembers.options],
+  );
+  const shortfall = useMemo<GCashPartyShortfall | null>(() => {
+    if (!members.shortfall && !nonMembers.shortfall) return null;
+    return {
+      shown:
+        (members.shortfall?.shown ?? members.options.length) +
+        (nonMembers.shortfall?.shown ?? nonMembers.options.length),
+      total:
+        members.shortfall?.total != null && nonMembers.shortfall?.total != null
+          ? members.shortfall.total + nonMembers.shortfall.total
+          : null,
+    };
+  }, [members, nonMembers]);
 
   const contactNumber = useMemo(() => {
     if (!party) return null;
     return (
-      list.options.find((o) => o.party.id === party.id)?.contactNumber ?? null
+      options.find(
+        (o) => o.party.kind === party.kind && o.party.id === party.id,
+      )?.contactNumber ?? null
     );
-  }, [list.options, party]);
-
-  const handleKindChange = (next: PartyKind) => {
-    setKind(next);
-    // A borrower id means nothing once the picker is showing walk-ins.
-    setParty(null);
-  };
+  }, [options, party]);
 
   /**
    * Closing is the reset point, not an effect keyed on `open`. Reopening must
@@ -93,7 +87,6 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
    * component anyway.
    */
   const close = () => {
-    setKind("member");
     setParty(null);
     setType("cash_in");
     setStep("party");
@@ -123,19 +116,19 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Who is this for?</Label>
+              <Label>Transaction Type</Label>
               <RadioGroup
-                value={kind}
-                onValueChange={(v) => handleKindChange(v as PartyKind)}
+                value={type}
+                onValueChange={(v) => setType(v as GCashTransactionType)}
                 className="flex gap-6"
               >
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <RadioGroupItem value="member" />
-                  Member
+                  <RadioGroupItem value="cash_in" />
+                  Cash In
                 </label>
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <RadioGroupItem value="non_member" />
-                  Walk-in (non-member)
+                  <RadioGroupItem value="cash_out" />
+                  Cash Out
                 </label>
               </RadioGroup>
             </div>
@@ -143,27 +136,25 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="newtx-party">Name</Label>
-                {!isMember && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAddingWalkIn(true)}
-                  >
-                    <Plus className="size-4" />
-                    Add walk-in
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAddingWalkIn(true)}
+                >
+                  <Plus className="size-4" />
+                  Add walk-in
+                </Button>
               </div>
               <GCashPartyPicker
                 id="newtx-party"
-                options={list.options}
+                options={options}
                 value={party}
                 onChange={setParty}
-                noun={noun}
+                noun="names"
                 loading={loading}
                 disabled={Boolean(error)}
-                shortfall={list.shortfall}
+                shortfall={shortfall}
               />
               {error && (
                 <p role="alert" className="text-sm text-destructive">
@@ -177,30 +168,6 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
                 {contactNumber ?? "—"}
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="newtx-type">Transaction Type</Label>
-              <Select
-                value={type}
-                onValueChange={(v) => setType(v as GCashTransactionType)}
-              >
-                <SelectTrigger id="newtx-type" className="w-full">
-                  <SelectValue>
-                    {(value: GCashTransactionType | null) =>
-                      TRANSACTION_TYPES.find((t) => t.value === value)?.label ??
-                      value
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TRANSACTION_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
