@@ -23,7 +23,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const initAuth = useCallback(async () => {
     const token = tokenManager.getAccessToken();
 
+    // No token, but the persisted user can outlive it: a session that ended
+    // (the interceptor clears the tokens and leaves the user for the "Session
+    // Expired" dialog) and was then reloaded, or a logout in another tab.
+    // Left authenticated, this layout would render the page for a moment and
+    // every one of its requests would go out with no token and 401.
     if (!token) {
+      clearAuth();
       setLoading(false);
       router.replace("/login");
       return;
