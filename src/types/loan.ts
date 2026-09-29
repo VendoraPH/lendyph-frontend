@@ -72,6 +72,8 @@ export interface Loan {
   term?: number;
   /** Unit `term` is a length in; absent on older payloads, which mean months. */
   term_unit?: "months" | "days";
+  /** Period `interest_rate` is quoted per; absent on older payloads, which mean monthly. */
+  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
   /**
    * How many times this loan has been rolled forward via the Extend Loan
    * action. Distinct from `term`, which is the originally agreed term —

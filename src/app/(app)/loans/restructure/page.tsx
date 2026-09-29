@@ -103,8 +103,11 @@ import {
   instalments,
   maturityDate as loanMaturityDate,
   rateForDays,
+  ratePeriodWord,
+  readRateFrequency,
   readTermUnit,
   termUnitNoun,
+  type RateFrequency,
   type TermUnit,
 } from "@/lib/loan-terms";
 
@@ -137,6 +140,7 @@ function computeAmortization(
   interestType: InterestType,
   term: number,
   termUnit: TermUnit,
+  rateFrequency: RateFrequency,
   frequency: PaymentFrequency,
   startDate: Date,
   scbAmount = 0,
@@ -146,8 +150,8 @@ function computeAmortization(
   if (frequency === "upon_maturity") {
     const fraction =
       termUnit === "months"
-        ? rateForDays(interestRate, DAYS_PER_MONTH) * term
-        : rateForDays(interestRate, term);
+        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
+        : rateForDays(interestRate, term, rateFrequency);
     const totalInterest = Math.round(principal * fraction);
     return [{
       period: 1,
@@ -169,17 +173,17 @@ function computeAmortization(
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
-      const interest = Math.round(principal * rateForDays(interestRate, days));
+      const interest = Math.round(principal * rateForDays(interestRate, days, rateFrequency));
       rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interest + scb });
       remaining -= periodPrincipal;
     });
   } else if (interestType === "diminishing") {
-    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH);
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
     const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remaining * rateForDays(interestRate, days));
+      const interest = Math.round(remaining * rateForDays(interestRate, days, rateFrequency));
       const periodPrincipal = isLast ? remaining : Math.round(pmt - interest);
       const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
       rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
@@ -564,6 +568,8 @@ function RestructureLoanInner() {
 
   // `term` is a length in the product's unit — months unless it says days.
   const termUnit = readTermUnit(selectedProduct?.term_unit);
+  // …and the rate is quoted per the product's rate frequency.
+  const rateFrequency = readRateFrequency(selectedProduct?.interest_rate_frequency);
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
@@ -637,11 +643,12 @@ function RestructureLoanInner() {
       interestType as InterestType,
       term,
       termUnit,
+      rateFrequency,
       paymentFrequency as PaymentFrequency,
       restructureDate,
       scb,
     );
-  }, [principal, rate, term, termUnit, paymentFrequency, interestType, restructureDate, scb]);
+  }, [principal, rate, term, termUnit, rateFrequency, paymentFrequency, interestType, restructureDate, scb]);
 
   const amortTotals = useMemo(
     () =>
@@ -1232,7 +1239,7 @@ function RestructureLoanInner() {
 
                   {/* Interest Rate */}
                   <div className="space-y-1.5">
-                    <Label>Interest Rate (%)</Label>
+                    <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                     <Input
                       type="number"
                       min="0"

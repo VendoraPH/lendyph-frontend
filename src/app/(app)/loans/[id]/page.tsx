@@ -151,8 +151,10 @@ import {
   instalments,
   maturityDate as loanMaturityDate,
   rateForDays,
+  readRateFrequency,
   readTermUnit,
   stepsByCalendarMonth,
+  type RateFrequency,
   type TermUnit,
 } from "@/lib/loan-terms";
 
@@ -229,6 +231,7 @@ function generateSchedule(
   rate: number,
   term: number,
   termUnit: TermUnit,
+  rateFrequency: RateFrequency,
   frequency: PaymentFrequency,
   interestType: InterestType,
   startDate: Date,
@@ -241,8 +244,8 @@ function generateSchedule(
   if (frequency === "upon_maturity" || interestType === "upon_maturity") {
     const fraction =
       termUnit === "months"
-        ? rateForDays(rate, DAYS_PER_MONTH) * term
-        : rateForDays(rate, term);
+        ? rateForDays(rate, DAYS_PER_MONTH, rateFrequency) * term
+        : rateForDays(rate, term, rateFrequency);
     const totalInterest = principal * fraction;
     // SCB accumulates monthly, paid at maturity; a days term is one period.
     const totalScb = scbAmount * (termUnit === "months" ? term : 1);
@@ -265,7 +268,7 @@ function generateSchedule(
   let remainingBalance = principal;
 
   plan.forEach(({ dueDate, days }, index) => {
-    const periodRate = rateForDays(rate, days);
+    const periodRate = rateForDays(rate, days, rateFrequency);
 
     let interest: number;
     // Constant interest on the original principal for straight/fixed loans.
@@ -1135,19 +1138,20 @@ export default function LoanDetailPage({
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
     const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[4];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
+    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[5];
+    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
     return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
       termVal,
       readTermUnit(loan.term_unit),
+      readRateFrequency(loan.interest_rate_frequency),
       freqVal,
       methodVal,
       releaseDate,
       loan.scb_amount ?? 0,
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.interest_rate_frequency, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
 
   const scheduleTotals = useMemo(() => {
     return releaseSchedule.reduce(
@@ -1229,13 +1233,14 @@ export default function LoanDetailPage({
       }
       // Fallback to client-side generation
       const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = freq as Parameters<typeof generateSchedule>[4];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
+      const freqVal = freq as Parameters<typeof generateSchedule>[5];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
       return generateSchedule(
         loan.principal_amount,
         loan.interest_rate,
         termVal,
         readTermUnit(loan.term_unit),
+        readRateFrequency(loan.interest_rate_frequency),
         freqVal,
         methodVal,
         new Date(relDate),
@@ -1245,8 +1250,8 @@ export default function LoanDetailPage({
 
     if (isPreRelease) {
       const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[4];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
+      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[5];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
       const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
 
       // Use server preview only when it includes a principal/interest breakdown.
@@ -1281,6 +1286,7 @@ export default function LoanDetailPage({
         loan.interest_rate,
         termVal,
         readTermUnit(loan.term_unit),
+        readRateFrequency(loan.interest_rate_frequency),
         freqVal,
         methodVal,
         startDate,
@@ -1289,7 +1295,7 @@ export default function LoanDetailPage({
     }
 
     return [];
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.interest_rate_frequency, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
 
   // Single source of truth for the interest still OWED on the loan — used both
   // to decide whether to collect it before extending, and to render the

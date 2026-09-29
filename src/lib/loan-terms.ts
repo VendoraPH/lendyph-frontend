@@ -9,7 +9,8 @@
  *   Anything else is counted in days (a month is 30) and stepped by
  *   1 / 7 / 14 / 15 / 30 days, ending in a shorter instalment when the term
  *   does not split evenly.
- * - Each instalment is charged interest for the days it covers.
+ * - Each instalment is charged interest for the days it covers, at the rate
+ *   quoted per `interest_rate_frequency`.
  */
 
 export type TermUnit = "months" | "days";
@@ -30,6 +31,25 @@ export const PERIOD_DAYS: Record<RateFrequency, number> = {
 /** The unit a payload names; anything else is the backend default, months. */
 export function readTermUnit(value: unknown): TermUnit {
   return String(value ?? "").trim().toLowerCase() === "days" ? "days" : "months";
+}
+
+/** The period a payload's rate is quoted per; absent means monthly. */
+export function readRateFrequency(value: unknown): RateFrequency {
+  const key = String(value ?? "").trim().toLowerCase();
+  return key in PERIOD_DAYS ? (key as RateFrequency) : "monthly";
+}
+
+const RATE_PERIOD_WORD: Record<RateFrequency, string> = {
+  daily: "day",
+  weekly: "week",
+  bi_weekly: "bi-weekly period",
+  semi_monthly: "semi-monthly period",
+  monthly: "month",
+};
+
+/** "week", "month" — as in "3% per week". */
+export function ratePeriodWord(rateFrequency: RateFrequency): string {
+  return RATE_PERIOD_WORD[rateFrequency];
 }
 
 /** "day(s)" / "month(s)" — the noun for a term's unit. */

@@ -251,10 +251,11 @@ export function presentFields(items: (PrintField | null)[]): PrintField[] {
 // `term` is a LENGTH in the loan's `term_unit` (months or days), so it is
 // labelled by that unit and never by the payment frequency.
 //
-// The rate phrase and its annualisation follow the loan's frequency. So
-// `${rate}% per month` and `${(rate * 12)}% per annum` are true only for a
-// monthly loan. On a 1%-per-day loan they disclose 12.00% per annum against a
-// real nominal of 365%. Stating the annual rate correctly is the entire
+// The rate phrase and its annualisation follow the period the rate is quoted
+// per — the loan's `interest_rate_frequency` (see rateFrequencyFrom), not its
+// payment frequency. So `${rate}% per month` and `${(rate * 12)}% per annum`
+// are true only for a rate quoted per month. On a 1%-per-day rate they
+// disclose 12.00% per annum against a real nominal of 365%. Stating the annual rate correctly is the entire
 // statutory purpose of an R.A. 3765 disclosure, so no template may write either
 // phrase by hand; they call these instead.
 // ---------------------------------------------------------------------------
@@ -332,7 +333,18 @@ export function termLabelFrom(source: Record<string, unknown> | null): string | 
   return termLabel(pickNumber(source, ["term_months"]), "months");
 }
 
-/** `"1% per day"`, `"2.5% per month"`. The rate exactly as it is applied. */
+/**
+ * The period a payload's `interest_rate` is quoted per: its own
+ * `interest_rate_frequency`, or monthly when it carries none — the backend's
+ * default, and what every rate before that field meant. An unrecognised value
+ * passes through, so rateLabel and annualRateLabel treat it as unknown.
+ */
+export function rateFrequencyFrom(source: Record<string, unknown> | null): unknown {
+  const raw = pick(source, ["interest_rate_frequency"]);
+  return raw === null || raw === undefined || raw === "" ? "monthly" : raw;
+}
+
+/** `"1% per day"`, `"2.5% per month"`. The rate exactly as it is quoted. */
 export function rateLabel(rate: number | null, frequency: unknown): string | null {
   if (rate === null) return null;
   const key = readFrequency(frequency);

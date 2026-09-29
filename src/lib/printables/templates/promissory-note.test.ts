@@ -94,13 +94,18 @@ test("promissory note: the promise to pay states the sum in words and figures", 
 });
 
 test("promissory note: the rate promised is the rate the schedule charges", () => {
-  // "per month" was written into the operative sentence whatever the loan's
-  // frequency was, so a daily loan's Maker promised to pay 1% a month on an
-  // instrument they then signed.
+  // "per month" was written into the operative sentence whatever the rate
+  // was quoted per, so a 1%-a-day loan's Maker promised to pay 1% a month on
+  // an instrument they then signed.
   const text = prose(
     buildPromissoryNoteDoc({
       ...PAYLOAD,
-      loan_terms: { ...PAYLOAD.loan_terms, interest_rate: 1, frequency: "daily" },
+      loan_terms: {
+        ...PAYLOAD.loan_terms,
+        interest_rate: 1,
+        interest_rate_frequency: "daily",
+        frequency: "daily",
+      },
     })
   );
 
