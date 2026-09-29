@@ -53,14 +53,14 @@ test("amortization schedule: the loan's terms head the document", () => {
   assert.equal(fieldValue(doc, "Maturity Date"), formatValue(new Date(2026, 10, 1), "date"));
 });
 
-test("amortization schedule: rate and term take their unit from the frequency", () => {
-  // The same numbers on a daily loan. This document used to print
-  // "1% per month" beside "30 period(s)" — one wrong, the other unitless, and
-  // the disclosure statement for the same loan said "30 month(s)".
+test("amortization schedule: rate and term each carry their own unit", () => {
+  // The same numbers on a 30-day daily loan. This document used to print
+  // "1% per month" beside "30 period(s)" — one wrong, the other unitless.
   const doc = buildAmortizationScheduleDoc({
     ...LOAN,
     interest_rate: 1,
     term: 30,
+    term_unit: "days",
     frequency: "daily",
   });
 

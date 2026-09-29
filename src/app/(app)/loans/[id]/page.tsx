@@ -146,6 +146,15 @@ import {
 } from "@/constants";
 import type { Loan, LoanStatus } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
+import {
+  DAYS_PER_MONTH,
+  instalments,
+  maturityDate as loanMaturityDate,
+  rateForDays,
+  readTermUnit,
+  stepsByCalendarMonth,
+  type TermUnit,
+} from "@/lib/loan-terms";
 
 // ── Currency & Date Formatters ──
 
@@ -209,52 +218,17 @@ interface LedgerDisplayRow {
   scbBal: number;
 }
 
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return termMonths; // SCB accumulates monthly, paid as lump sum at maturity
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-      return Math.round(termMonths * 2.17);
-    case "monthly":
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return 30; // fallback, not used in upon_maturity path
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-      return 14;
-    case "monthly":
-      return 30;
-  }
-}
-
 function addMonths(date: Date, months: number): Date {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
   return result;
 }
 
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
 function generateSchedule(
   principal: number,
   rate: number,
-  termMonths: number,
+  term: number,
+  termUnit: TermUnit,
   frequency: PaymentFrequency,
   interestType: InterestType,
   startDate: Date,
@@ -262,12 +236,19 @@ function generateSchedule(
 ): AmortizationRow[] {
   // Upon Maturity = a single consolidated payment at the maturity date.
   // Triggered when payment_frequency OR interest_type is "upon_maturity".
+  // A months term accrues a month's interest per month; a days term accrues
+  // for its days.
   if (frequency === "upon_maturity" || interestType === "upon_maturity") {
-    const totalInterest = principal * (rate / 100) * termMonths;
-    const totalScb = scbAmount * termMonths; // SCB accumulates monthly, paid at maturity
+    const fraction =
+      termUnit === "months"
+        ? rateForDays(rate, DAYS_PER_MONTH) * term
+        : rateForDays(rate, term);
+    const totalInterest = principal * fraction;
+    // SCB accumulates monthly, paid at maturity; a days term is one period.
+    const totalScb = scbAmount * (termUnit === "months" ? term : 1);
     return [{
       period: 1,
-      dueDate: addMonths(startDate, termMonths),
+      dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: totalScb,
@@ -276,18 +257,15 @@ function generateSchedule(
     }];
   }
 
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
+  const plan = instalments(startDate, term, termUnit, frequency);
+  const totalPeriods = plan.length;
   const principalPerPeriod = principal / totalPeriods;
   const rows: AmortizationRow[] = [];
 
   let remainingBalance = principal;
 
-  for (let i = 1; i <= totalPeriods; i++) {
-    const dueDate =
-      frequency === "monthly"
-        ? addMonths(startDate, i)
-        : addDays(startDate, i * intervalDays);
+  plan.forEach(({ dueDate, days }, index) => {
+    const periodRate = rateForDays(rate, days);
 
     let interest: number;
     // Constant interest on the original principal for straight/fixed loans.
@@ -296,15 +274,15 @@ function generateSchedule(
     // anything else (straight/fixed) keeps it flat. Matching only "fixed" here
     // mis-treated straight loans as diminishing, understating total payable.
     if ((interestType as string) !== "diminishing") {
-      interest = principal * (rate / 100);
+      interest = principal * periodRate;
     } else {
-      interest = remainingBalance * (rate / 100);
+      interest = remainingBalance * periodRate;
     }
 
     remainingBalance -= principalPerPeriod;
 
     rows.push({
-      period: i,
+      period: index + 1,
       dueDate,
       principal: principalPerPeriod,
       interest,
@@ -312,7 +290,7 @@ function generateSchedule(
       totalPayment: principalPerPeriod + interest + scbAmount,
       balance: Math.max(0, remainingBalance),
     });
-  }
+  });
 
   return rows;
 }
@@ -1157,18 +1135,19 @@ export default function LoanDetailPage({
   const releaseSchedule = useMemo(() => {
     if (!loan) return [];
     const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[4];
+    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
     return generateSchedule(
       loan.principal_amount,
       loan.interest_rate,
       termVal,
+      readTermUnit(loan.term_unit),
       freqVal,
       methodVal,
       releaseDate,
       loan.scb_amount ?? 0,
     );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
 
   const scheduleTotals = useMemo(() => {
     return releaseSchedule.reduce(
@@ -1185,8 +1164,13 @@ export default function LoanDetailPage({
   // Maturity date computed from release date + term
   const computedMaturityDate = useMemo(() => {
     if (!loan) return null;
-    return addMonths(releaseDate, loan.term ?? loan.term_months ?? 0);
-  }, [releaseDate, loan?.term, loan?.term_months]);
+    return loanMaturityDate(
+      releaseDate,
+      loan.term ?? loan.term_months ?? 0,
+      readTermUnit(loan.term_unit),
+      loan.frequency ?? loan.payment_frequency ?? "monthly",
+    );
+  }, [releaseDate, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency]);
 
   // Post-release: prefer API schedule, fallback to client-side generation
   const storedSchedule = useMemo(() => {
@@ -1245,12 +1229,13 @@ export default function LoanDetailPage({
       }
       // Fallback to client-side generation
       const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = freq as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+      const freqVal = freq as Parameters<typeof generateSchedule>[4];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
       return generateSchedule(
         loan.principal_amount,
         loan.interest_rate,
         termVal,
+        readTermUnit(loan.term_unit),
         freqVal,
         methodVal,
         new Date(relDate),
@@ -1260,8 +1245,8 @@ export default function LoanDetailPage({
 
     if (isPreRelease) {
       const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
+      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[4];
+      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[5];
       const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
 
       // Use server preview only when it includes a principal/interest breakdown.
@@ -1295,6 +1280,7 @@ export default function LoanDetailPage({
         loan.principal_amount,
         loan.interest_rate,
         termVal,
+        readTermUnit(loan.term_unit),
         freqVal,
         methodVal,
         startDate,
@@ -1303,7 +1289,7 @@ export default function LoanDetailPage({
     }
 
     return [];
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
+  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
 
   // Single source of truth for the interest still OWED on the loan — used both
   // to decide whether to collect it before extending, and to render the
@@ -1612,10 +1598,16 @@ export default function LoanDetailPage({
   // keeps a rolled-forward loan from reading as if it had a longer original
   // term than the borrower agreed to.
   const loanExtensionCount = loan?.extension_count ?? 0;
+  const loanTermUnit = readTermUnit(loan?.term_unit);
+  const loanTermUnitWord =
+    loanTermUnit === "days" ? (loanTerm === 1 ? "day" : "days") : (loanTerm === 1 ? "month" : "months");
   const loanTermLabel =
-    `${loanTerm} ${loanTerm === 1 ? "month" : "months"}` +
+    `${loanTerm} ${loanTermUnitWord}` +
     (loanExtensionCount > 0 ? ` · extended ×${loanExtensionCount}` : "");
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
+  // A term extension adds instalments. Those are months only when the loan
+  // steps by calendar month; otherwise they are the loan's own payment periods.
+  const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
   // Extend-dialog preview: the extend endpoint always moves the due date
   // forward by exactly one cycle (1 month for upon-maturity loans, matching
   // the SCB build-up and computedMaturityDate math elsewhere on this page).
@@ -2346,9 +2338,10 @@ export default function LoanDetailPage({
       // no selection at all, which waived the penalty on *every* open schedule.
       newValues.waive_all = true;
     } else if (adjType === "term_extension") {
-      if (!adjAdditionalMonths) { toast.error("Please enter the additional months"); return; }
+      const extraWhat = extendsByMonth ? "months" : "instalments";
+      if (!adjAdditionalMonths) { toast.error(`Please enter the additional ${extraWhat}`); return; }
       const extraMonths = parseInt(adjAdditionalMonths);
-      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error("Additional months must be at least 1"); return; }
+      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error(`Additional ${extraWhat} must be at least 1`); return; }
       // `additional_terms` is the number of extra periods, not the resulting
       // term — `term` is the restructure field and is ignored here.
       newValues.additional_terms = extraMonths;
@@ -5679,7 +5672,9 @@ export default function LoanDetailPage({
             )}
             {adjType === "term_extension" && (
               <div className="space-y-1.5">
-                <Label htmlFor="adj-extend-term">Additional Months <span className="text-red-500">*</span></Label>
+                <Label htmlFor="adj-extend-term">
+                  {extendsByMonth ? "Additional Months" : "Additional Instalments"} <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="adj-extend-term"
                   type="number"
@@ -5689,9 +5684,11 @@ export default function LoanDetailPage({
                   onChange={(e) => setAdjAdditionalMonths(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Current term is {loanTerm ?? "—"} {loanTerm === 1 ? "month" : "months"}
+                  Current term is {loanTerm ?? "—"} {loanTermUnitWord}
                   {adjAdditionalMonths && Number(adjAdditionalMonths) > 0
-                    ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                    ? extendsByMonth
+                      ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                      : ` — this adds ${Number(adjAdditionalMonths)} instalment(s).`
                     : "."}
                 </p>
               </div>

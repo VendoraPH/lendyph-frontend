@@ -198,10 +198,10 @@ test("release voucher: dates are formatted and the term carries its unit", () =>
     fieldValue(doc, "Maturity Date"),
     formatValue(new Date(2027, 1, 1), "date")
   );
-  // A bare "6" read as months whatever the loan's frequency was.
+  // A bare "6" read as months whatever the loan's term unit was.
   assert.equal(fieldValue(doc, "Term"), "6 month(s)");
   assert.equal(
-    fieldValue(buildReleaseVoucherDoc({ ...LOAN, term: 90, frequency: "daily" }), "Term"),
+    fieldValue(buildReleaseVoucherDoc({ ...LOAN, term: 90, term_unit: "days", frequency: "daily" }), "Term"),
     "90 day(s)"
   );
 });

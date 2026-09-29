@@ -65,6 +65,7 @@ import {
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
   PAST_DUE_TRANSFER_UNIT_OPTIONS,
+  TERM_UNIT_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
 
@@ -87,6 +88,7 @@ function getProductField(product: LoanProduct, field: string): string {
     case "term": return String(p.term ?? p.min_term ?? "");
     case "min_term": return String(p.min_term ?? p.term ?? "");
     case "max_term": return String(p.max_term ?? p.term ?? "");
+    case "term_unit": return String(p.term_unit ?? "months");
     case "min_interest_rate": return String(p.min_interest_rate ?? p.interest_rate ?? "");
     case "max_interest_rate": return String(p.max_interest_rate ?? p.interest_rate ?? "");
     case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
@@ -132,8 +134,9 @@ function getInterestRateDisplay(product: LoanProduct): string {
 function getTermDisplay(product: LoanProduct): string {
   const min = getProductField(product, "min_term");
   const max = getProductField(product, "max_term");
-  if (min && max && min !== max) return `${min} – ${max} months`;
-  return `${min || max} months`;
+  const unit = getProductField(product, "term_unit") === "days" ? "days" : "months";
+  if (min && max && min !== max) return `${min} – ${max} ${unit}`;
+  return `${min || max} ${unit}`;
 }
 
 const INTEREST_METHOD_LABELS: Record<string, string> = {
@@ -180,6 +183,7 @@ interface ProductForm {
   max_amount: string;
   min_term: string;
   max_term: string;
+  term_unit: string;
   frequencies: string[];
   min_interest_rate: string;
   max_interest_rate: string;
@@ -211,6 +215,7 @@ const EMPTY_FORM: ProductForm = {
   max_amount: "",
   min_term: "",
   max_term: "",
+  term_unit: "months",
   frequencies: ["monthly"],
   min_interest_rate: "",
   max_interest_rate: "",
@@ -257,6 +262,7 @@ function productToForm(p: LoanProduct): ProductForm {
     max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
     min_term: String(apiProduct.min_term ?? p.min_term ?? ""),
     max_term: String(apiProduct.max_term ?? p.max_term ?? ""),
+    term_unit: String(apiProduct.term_unit ?? "months"),
     frequencies,
     min_interest_rate: minRate,
     max_interest_rate: maxRate,
@@ -317,6 +323,7 @@ function formToApiPayload(form: ProductForm) {
     interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
+    term_unit: form.term_unit as "months" | "days",
     frequencies: form.frequencies,
     processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
     min_processing_fee: form.min_processing_fee ? Number(form.min_processing_fee) : undefined,
@@ -476,7 +483,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-term">Minimum Term (months) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-term">Minimum Term <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-term"
                   type="number"
@@ -488,7 +495,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-term">Maximum Term (months) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-term">Maximum Term <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-term"
                   type="number"
@@ -499,6 +506,28 @@ function ProductFormDialog({
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
+              <Select
+                value={form.term_unit}
+                onValueChange={(v) => update("term_unit", v ?? "months")}
+              >
+                <SelectTrigger id="term-unit" className="w-full sm:w-1/2">
+                  <SelectValue>
+                    {(v: string | null) =>
+                      TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TERM_UNIT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

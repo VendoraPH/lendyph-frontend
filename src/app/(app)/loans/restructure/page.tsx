@@ -98,6 +98,15 @@ import {
 
 import type { Borrower, CollateralType, Loan, LoanStatus, User } from "@/types";
 import type { LoanProduct } from "@/types/loan";
+import {
+  DAYS_PER_MONTH,
+  instalments,
+  maturityDate as loanMaturityDate,
+  rateForDays,
+  readTermUnit,
+  termUnitNoun,
+  type TermUnit,
+} from "@/lib/loan-terms";
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -122,57 +131,27 @@ interface AmortizationRow {
 
 // ── Amortization helpers (mirrors new/page.tsx) ───────────────────────────────
 
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily": return Math.round(termMonths * 30);
-    case "weekly": return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-    case "semi_monthly": return Math.round(termMonths * 2);
-    case "monthly":
-    default: return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily": return 1;
-    case "weekly": return 7;
-    case "bi_weekly":
-    case "semi_monthly": return 15;
-    case "monthly":
-    default: return 30;
-  }
-}
-
-function addMonthsToDate(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
-
-function addDaysToDate(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 function computeAmortization(
   principal: number,
   interestRate: number,
   interestType: InterestType,
-  termMonths: number,
+  term: number,
+  termUnit: TermUnit,
   frequency: PaymentFrequency,
   startDate: Date,
   scbAmount = 0,
 ): AmortizationRow[] {
-  const r = interestRate / 100;
   const scb = Math.round(scbAmount);
 
   if (frequency === "upon_maturity") {
-    const totalInterest = Math.round(principal * r * termMonths);
+    const fraction =
+      termUnit === "months"
+        ? rateForDays(interestRate, DAYS_PER_MONTH) * term
+        : rateForDays(interestRate, term);
+    const totalInterest = Math.round(principal * fraction);
     return [{
       period: 1,
-      dueDate: addMonthsToDate(startDate, termMonths),
+      dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
@@ -180,35 +159,32 @@ function computeAmortization(
     }];
   }
 
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
+  const plan = instalments(startDate, term, termUnit, frequency);
+  const totalPeriods = plan.length;
   const rows: AmortizationRow[] = [];
   let remaining = principal;
 
   if (interestType === "straight" || interestType === "fixed") {
     const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r);
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonthsToDate(startDate, i)
-        : addDaysToDate(startDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
-      rows.push({ period: i, dueDate, principal: periodPrincipal, interest: interestPerPeriod, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interestPerPeriod + scb });
+      const interest = Math.round(principal * rateForDays(interestRate, days));
+      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interest + scb });
       remaining -= periodPrincipal;
-    }
+    });
   } else if (interestType === "diminishing") {
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH);
     const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonthsToDate(startDate, i)
-        : addDaysToDate(startDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remaining * r);
+      const interest = Math.round(remaining * rateForDays(interestRate, days));
       const periodPrincipal = isLast ? remaining : Math.round(pmt - interest);
       const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
       rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
       remaining -= periodPrincipal;
-    }
+    });
   }
 
   return rows;
@@ -278,7 +254,7 @@ function RestructureLoanInner() {
   const [purpose, setPurpose] = useState("");
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
-  const [termMonths, setTermMonths] = useState<string>("");
+  const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [scbAmount, setScbAmount] = useState<string>("");
@@ -434,7 +410,7 @@ function RestructureLoanInner() {
 
       // Terms. Interest type is not prefilled — it is snapshotted from the loan
       // product by the API, so the form derives it from the product instead.
-      setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+      setTermValue(String(loan.term ?? loan.term_months ?? ""));
       setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
       setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
@@ -586,8 +562,10 @@ function RestructureLoanInner() {
     [interestType],
   );
 
+  // `term` is a length in the product's unit — months unless it says days.
+  const termUnit = readTermUnit(selectedProduct?.term_unit);
   const principal = parseFloat(principalAmount) || 0;
-  const term = parseInt(termMonths) || 0;
+  const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
   const processingFeePercent = parseFloat(processingFeeRate) || 0;
@@ -658,11 +636,12 @@ function RestructureLoanInner() {
       rate,
       interestType as InterestType,
       term,
+      termUnit,
       paymentFrequency as PaymentFrequency,
       restructureDate,
       scb,
     );
-  }, [principal, rate, term, paymentFrequency, interestType, restructureDate, scb]);
+  }, [principal, rate, term, termUnit, paymentFrequency, interestType, restructureDate, scb]);
 
   const amortTotals = useMemo(
     () =>
@@ -690,14 +669,14 @@ function RestructureLoanInner() {
   }, [principalAmount, principal, selectedProduct]);
 
   const termError = useMemo(() => {
-    if (!termMonths) return null;
+    if (!termValue) return null;
     if (term <= 0) return "Term must be greater than 0";
     if (selectedProduct) {
-      if (term < selectedProduct.min_term) return `Minimum is ${selectedProduct.min_term} months`;
-      if (selectedProduct.max_term && term > selectedProduct.max_term) return `Maximum is ${selectedProduct.max_term} months`;
+      if (term < selectedProduct.min_term) return `Minimum is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
+      if (selectedProduct.max_term && term > selectedProduct.max_term) return `Maximum is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     }
     return null;
-  }, [termMonths, term, selectedProduct]);
+  }, [termValue, term, termUnit, selectedProduct]);
 
   // ── Handlers ──
   const handleBorrowerChange = useCallback((id: number | null) => {
@@ -1215,13 +1194,13 @@ function RestructureLoanInner() {
 
                   {/* Term */}
                   <div className="space-y-1.5">
-                    <Label>Term (months)</Label>
+                    <Label>Term ({termUnit})</Label>
                     <Input
                       type="number"
                       min="1"
                       placeholder="e.g. 12"
-                      value={termMonths}
-                      onChange={(e) => setTermMonths(e.target.value)}
+                      value={termValue}
+                      onChange={(e) => setTermValue(e.target.value)}
                     />
                   </div>
 
@@ -1482,7 +1461,7 @@ function RestructureLoanInner() {
                   <div className="space-y-1.5">
                     <Label>Projected Maturity Date</Label>
                     <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                      {formatDateObj(addMonthsToDate(restructureDate, term))}
+                      {formatDateObj(loanMaturityDate(restructureDate, term, termUnit, paymentFrequency ?? "monthly"))}
                     </div>
                   </div>
                 )}

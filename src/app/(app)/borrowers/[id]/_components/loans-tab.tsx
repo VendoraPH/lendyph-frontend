@@ -15,6 +15,7 @@ import {
 } from "@/constants";
 import { loanService } from "@/services";
 import { formatCurrency } from "@/lib/format";
+import { readTermUnit } from "@/lib/loan-terms";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -149,7 +150,7 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                       <TableCell className="text-right tabular-nums">{formatCurrency(loan.principal_amount)}</TableCell>
                       <TableCell>{loan.interest_rate}%</TableCell>
                       <TableCell>
-                        {loan.term ?? loan.term_months ?? 0}mo · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
+                        {loan.term ?? loan.term_months ?? 0}{readTermUnit(loan.term_unit) === "days" ? "d" : "mo"} · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium text-brand-orange">
                         {(loan.outstanding_balance ?? 0) > 0 ? formatCurrency(loan.outstanding_balance ?? 0) : "Paid"}

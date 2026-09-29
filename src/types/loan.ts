@@ -70,6 +70,8 @@ export interface Loan {
   interest_rate: number;
   interest_method?: string;
   term?: number;
+  /** Unit `term` is a length in; absent on older payloads, which mean months. */
+  term_unit?: "months" | "days";
   /**
    * How many times this loan has been rolled forward via the Extend Loan
    * action. Distinct from `term`, which is the originally agreed term —
@@ -187,6 +189,9 @@ export interface LoanProduct {
   interest_type: InterestType;
   min_term: number;
   max_term: number;
+  // Unit the term range is expressed in. Absent on products created before
+  // this field existed — callers should default to "months".
+  term_unit?: "months" | "days";
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee: number;
   service_fee: number;
