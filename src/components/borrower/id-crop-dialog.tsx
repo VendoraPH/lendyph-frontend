@@ -7,7 +7,6 @@ import ReactCrop, {
   centerCrop,
   makeAspectCrop,
 } from "react-image-crop";
-import "react-image-crop/dist/ReactCrop.css";
 import {
   Dialog,
   DialogContent,
