@@ -57,7 +57,7 @@ export function StepPersonal({
             id="first_name"
             placeholder="Juan"
             value={data.first_name}
-            onChange={(e) => onChange("first_name", e.target.value)}
+            onChange={(e) => onChange("first_name", e.target.value.toUpperCase())}
           />
         </div>
         <div className="space-y-1.5">
@@ -68,7 +68,7 @@ export function StepPersonal({
             id="last_name"
             placeholder="Santos"
             value={data.last_name}
-            onChange={(e) => onChange("last_name", e.target.value)}
+            onChange={(e) => onChange("last_name", e.target.value.toUpperCase())}
           />
         </div>
         <div className="space-y-1.5">
@@ -77,7 +77,7 @@ export function StepPersonal({
             id="middle_name"
             placeholder="Dela Cruz"
             value={data.middle_name}
-            onChange={(e) => onChange("middle_name", e.target.value)}
+            onChange={(e) => onChange("middle_name", e.target.value.toUpperCase())}
           />
         </div>
         <div className="space-y-1.5">
