@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth, usePasswordChangeGuard } from "@/hooks";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
@@ -23,6 +24,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const token = tokenManager.getAccessToken();
 
     if (!token) {
+      setLoading(false);
+      router.replace("/login");
+      return;
+    }
+
+    // A token we know has expired, e.g. a tab reopened or reloaded after the
+    // user walked away. Rendering the page would fire every one of its
+    // requests with it and collect a 401 from each, so go straight to login
+    // without asking the API anything.
+    if (isTokenExpired(tokenManager.getAccessTokenLifetime(), Date.now())) {
+      tokenManager.clearTokens();
+      clearAuth();
       setLoading(false);
       router.replace("/login");
       return;
