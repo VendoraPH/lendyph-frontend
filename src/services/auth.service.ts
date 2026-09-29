@@ -21,7 +21,7 @@ export const authService = {
     password: string;
     remember?: boolean;
   }) =>
-    api.rawPost<{ token: string; user: User }>(
+    api.rawPost<{ token: string; expires_in?: number; user: User }>(
       API_ENDPOINTS.AUTH.LOGIN,
       credentials
     ),
