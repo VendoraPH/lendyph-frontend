@@ -102,8 +102,11 @@ import {
   instalments,
   maturityDate as loanMaturityDate,
   rateForDays,
+  ratePeriodWord,
+  readRateFrequency,
   readTermUnit,
   termUnitNoun,
+  type RateFrequency,
   type TermUnit,
 } from "@/lib/loan-terms";
 import { toUserList, type UserListShortfall } from "@/lib/user-list";
@@ -153,6 +156,7 @@ function computeAmortization(
   interestType: InterestType,
   term: number,
   termUnit: TermUnit,
+  rateFrequency: RateFrequency,
   frequency: PaymentFrequency,
   releaseDate: Date,
   scbAmount: number = 0,
@@ -169,8 +173,8 @@ function computeAmortization(
   if (frequency === "upon_maturity") {
     const fraction =
       termUnit === "months"
-        ? rateForDays(interestRate, DAYS_PER_MONTH) * term
-        : rateForDays(interestRate, term);
+        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
+        : rateForDays(interestRate, term, rateFrequency);
     const totalInterest = Math.round(principal * fraction);
     return [{
       period: 1,
@@ -196,7 +200,7 @@ function computeAmortization(
       const i = index + 1;
       const isLast = i === totalPeriods;
       const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
-      const interest = Math.round(principal * rateForDays(interestRate, days));
+      const interest = Math.round(principal * rateForDays(interestRate, days, rateFrequency));
 
       rows.push({
         period: i,
@@ -213,7 +217,7 @@ function computeAmortization(
   // Diminishing: equal total payment (PMT) at one full instalment's rate,
   // decreasing interest, increasing principal
   else if (interestType === "diminishing") {
-    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH);
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
     const pmt = r > 0
       ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
       : principal / totalPeriods;
@@ -221,7 +225,7 @@ function computeAmortization(
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * rateForDays(interestRate, days));
+      const interest = Math.round(remainingBalance * rateForDays(interestRate, days, rateFrequency));
       const periodPrincipal = isLast
         ? remainingBalance
         : Math.round(pmt - interest);
@@ -586,6 +590,8 @@ function NewLoanApplicationInner() {
 
   // `term` is a length in the product's unit — months unless it says days.
   const termUnit = readTermUnit(selectedProduct?.term_unit);
+  // …and the rate is quoted per the product's rate frequency.
+  const rateFrequency = readRateFrequency(selectedProduct?.interest_rate_frequency);
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
@@ -712,6 +718,7 @@ function NewLoanApplicationInner() {
       interestType as InterestType,
       term,
       termUnit,
+      rateFrequency,
       paymentFrequency as PaymentFrequency,
       releaseDate,
       scb,
@@ -723,6 +730,7 @@ function NewLoanApplicationInner() {
     interestType,
     term,
     termUnit,
+    rateFrequency,
     paymentFrequency,
     releaseDate,
     scb,
@@ -1487,7 +1495,7 @@ function NewLoanApplicationInner() {
 
             {/* Interest Rate */}
             <div className="space-y-2">
-              <Label>Interest Rate (%)</Label>
+              <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
               <Input
                 type="number"
                 placeholder="0"

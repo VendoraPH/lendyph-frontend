@@ -4,6 +4,8 @@ import {
   instalments,
   maturityDate,
   rateForDays,
+  ratePeriodWord,
+  readRateFrequency,
   readTermUnit,
   termDays,
   termUnitNoun,
@@ -78,4 +80,25 @@ test("interest accrues for the days an instalment covers", () => {
   assert.equal(rateForDays(3, 30), 0.03);
   // 45 days at 3% a month is 4.5%.
   assert.equal(Math.round(100000 * rateForDays(3, 45)), 4500);
+});
+
+test("a rate converts from the period it is quoted per, on a 30-day month", () => {
+  assert.equal(readRateFrequency("weekly"), "weekly");
+  assert.equal(readRateFrequency(" Daily "), "daily");
+  assert.equal(readRateFrequency(undefined), "monthly");
+  assert.equal(readRateFrequency("upon_maturity"), "monthly");
+  assert.equal(ratePeriodWord("bi_weekly"), "bi-weekly period");
+
+  // 1% of 60,000, for one 30-day monthly instalment, per rate frequency.
+  const month = (frequency: Parameters<typeof rateForDays>[2]) =>
+    Math.round(60000 * rateForDays(1, 30, frequency) * 100) / 100;
+  assert.equal(month("daily"), 18000);
+  assert.equal(month("weekly"), 2571.43);
+  assert.equal(month("bi_weekly"), 1285.71);
+  assert.equal(month("semi_monthly"), 1200);
+  assert.equal(month("monthly"), 600);
+
+  // A week at 1% a week is exactly 1%; three days of it, 3/7.
+  assert.equal(rateForDays(1, 7, "weekly"), 0.01);
+  assert.equal(Math.round(70000 * rateForDays(1, 3, "weekly") * 100) / 100, 300);
 });

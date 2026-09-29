@@ -66,6 +66,7 @@ import {
   PAYMENT_FREQUENCY_LABELS,
   PAST_DUE_TRANSFER_UNIT_OPTIONS,
   TERM_UNIT_OPTIONS,
+  INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
 
@@ -91,6 +92,7 @@ function getProductField(product: LoanProduct, field: string): string {
     case "term_unit": return String(p.term_unit ?? "months");
     case "min_interest_rate": return String(p.min_interest_rate ?? p.interest_rate ?? "");
     case "max_interest_rate": return String(p.max_interest_rate ?? p.interest_rate ?? "");
+    case "interest_rate_frequency": return String(p.interest_rate_frequency ?? "monthly");
     case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
     case "notarial_fee": return String(p.notarial_fee ?? "0");
     case "min_processing_fee": return String(p.min_processing_fee ?? p.processing_fee ?? "0");
@@ -127,8 +129,10 @@ function getProductFrequencies(product: LoanProduct): string {
 function getInterestRateDisplay(product: LoanProduct): string {
   const min = formatRate(getProductField(product, "min_interest_rate"));
   const max = formatRate(getProductField(product, "max_interest_rate"));
-  if (min && max && min !== max) return `${min}% – ${max}%`;
-  return `${min || max}%`;
+  const freq = getProductField(product, "interest_rate_frequency");
+  const freqLabel = PAYMENT_FREQUENCY_LABELS[freq] ?? freq;
+  const rate = min && max && min !== max ? `${min}% – ${max}%` : `${min || max}%`;
+  return `${rate} / ${freqLabel}`;
 }
 
 function getTermDisplay(product: LoanProduct): string {
@@ -188,6 +192,7 @@ interface ProductForm {
   min_interest_rate: string;
   max_interest_rate: string;
   interest_method: string;
+  interest_rate_frequency: string;
   min_processing_fee: string;
   max_processing_fee: string;
   min_service_fee: string;
@@ -220,6 +225,7 @@ const EMPTY_FORM: ProductForm = {
   min_interest_rate: "",
   max_interest_rate: "",
   interest_method: "straight",
+  interest_rate_frequency: "monthly",
   min_processing_fee: "",
   max_processing_fee: "",
   min_service_fee: "",
@@ -267,6 +273,7 @@ function productToForm(p: LoanProduct): ProductForm {
     min_interest_rate: minRate,
     max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
+    interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
     min_processing_fee: String(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
     max_processing_fee: String(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
     min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
@@ -321,6 +328,12 @@ function formToApiPayload(form: ProductForm) {
     min_interest_rate: Number(form.min_interest_rate),
     max_interest_rate: Number(form.max_interest_rate),
     interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
+    interest_rate_frequency: form.interest_rate_frequency as
+      | "daily"
+      | "weekly"
+      | "bi_weekly"
+      | "semi_monthly"
+      | "monthly",
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
     term_unit: form.term_unit as "months" | "days",
@@ -563,6 +576,33 @@ function ProductFormDialog({
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="interest-rate-frequency">
+                Interest Rate Frequency <span className="text-red-500">*</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
+              </p>
+              <Select
+                value={form.interest_rate_frequency}
+                onValueChange={(v) => update("interest_rate_frequency", v ?? "monthly")}
+              >
+                <SelectTrigger id="interest-rate-frequency" className="w-full sm:w-1/2">
+                  <SelectValue>
+                    {(v: string | null) =>
+                      INTEREST_RATE_FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select frequency"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">

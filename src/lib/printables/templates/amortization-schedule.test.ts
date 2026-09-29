@@ -59,6 +59,7 @@ test("amortization schedule: rate and term each carry their own unit", () => {
   const doc = buildAmortizationScheduleDoc({
     ...LOAN,
     interest_rate: 1,
+    interest_rate_frequency: "daily",
     term: 30,
     term_unit: "days",
     frequency: "daily",

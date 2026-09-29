@@ -51,6 +51,7 @@ import {
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
   type PrintableBuildOptions,
 } from "./shared";
@@ -225,10 +226,10 @@ export function buildPromissoryNoteDoc(
             ? null
             : `${amountInWords(principal)} (${formatCurrency(principal)})`
         )}, ` +
-        // "per month" was written into this sentence whatever the loan's
-        // frequency was, so a daily loan promised to pay 1% a month. The rate
+        // "per month" was written into this sentence whatever the rate was
+        // quoted per, so a 1%-a-day loan promised to pay 1% a month. The rate
         // the Note states must be the rate the schedule charges.
-        `Philippine Currency, together with interest thereon at the rate of ${fill(rateLabel(rate, rawFrequency))}, ` +
+        `Philippine Currency, together with interest thereon at the rate of ${fill(rateLabel(rate, rateFrequencyFrom(terms)))}, ` +
         `computed on the basis of ${fill(`${interestMethod} Balance`)}.`,
     },
     {

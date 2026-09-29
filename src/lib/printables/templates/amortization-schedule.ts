@@ -25,6 +25,7 @@ import {
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
   sum,
   termLabelFrom,
@@ -95,7 +96,7 @@ export function buildAmortizationScheduleDoc(
           "Principal Amount",
           currencyOrDash(pick(loan, ["principal_amount", "principal"]))
         ),
-        field("Interest Rate", rateLabel(rate, rawFrequency)),
+        field("Interest Rate", rateLabel(rate, rateFrequencyFrom(loan))),
         field("Term", termLabelFrom(loan)),
         field("Payment Frequency", humanize(rawFrequency)),
         dateField("Start Date", pick(loan, ["start_date", "release_date"])),

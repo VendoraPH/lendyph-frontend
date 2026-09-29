@@ -72,6 +72,8 @@ export interface Loan {
   term?: number;
   /** Unit `term` is a length in; absent on older payloads, which mean months. */
   term_unit?: "months" | "days";
+  /** Period `interest_rate` is quoted per; absent on older payloads, which mean monthly. */
+  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
   /**
    * How many times this loan has been rolled forward via the Extend Loan
    * action. Distinct from `term`, which is the originally agreed term —
@@ -187,6 +189,10 @@ export interface LoanProduct {
   max_amount: number;
   interest_rate: number;
   interest_type: InterestType;
+  // Period the interest rate figure is quoted per (e.g. "3% per month").
+  // Absent on products created before this field existed — callers should
+  // default to "monthly", the rate's long-standing implicit basis.
+  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
   min_term: number;
   max_term: number;
   // Unit the term range is expressed in. Absent on products created before
