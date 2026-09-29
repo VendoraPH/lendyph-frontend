@@ -9,6 +9,7 @@ export interface CreateLoanProductData {
   interest_method: "straight" | "diminishing" | "upon_maturity";
   min_term: number;
   max_term: number;
+  term_unit?: "months" | "days";
   frequencies: string[];
   processing_fee?: number;
   service_fee?: number;

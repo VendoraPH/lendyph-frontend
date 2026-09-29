@@ -19,6 +19,11 @@ export const PAST_DUE_TRANSFER_UNIT_OPTIONS = [
   { value: "amortization_periods", label: "Amortization Periods" },
 ] as const;
 
+export const TERM_UNIT_OPTIONS = [
+  { value: "months", label: "Months" },
+  { value: "days", label: "Days" },
+] as const;
+
 export const INTEREST_TYPE = {
   FIXED: "fixed",
   DIMINISHING: "diminishing",

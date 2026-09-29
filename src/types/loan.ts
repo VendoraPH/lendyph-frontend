@@ -187,6 +187,9 @@ export interface LoanProduct {
   interest_type: InterestType;
   min_term: number;
   max_term: number;
+  // Unit the term range is expressed in. Absent on products created before
+  // this field existed — callers should default to "months".
+  term_unit?: "months" | "days";
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee: number;
   service_fee: number;
