@@ -89,33 +89,36 @@ export function GCashPartyPicker({
             <CommandList>
               <CommandEmpty>No {noun} found.</CommandEmpty>
               <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={`${option.party.kind}-${option.party.id}`}
-                    value={option.searchText}
-                    onSelect={() => {
-                      onChange(
-                        value?.id === option.party.id ? null : option.party,
-                      );
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 size-4 shrink-0",
-                        value?.id === option.party.id
-                          ? "opacity-100"
-                          : "opacity-0",
-                      )}
-                    />
-                    <span className="truncate">{option.party.full_name}</span>
-                    {option.hint && (
-                      <span className="ml-1 truncate text-muted-foreground">
-                        ({option.hint})
+                {options.map((option) => {
+                  const isSelected =
+                    value?.kind === option.party.kind &&
+                    value?.id === option.party.id;
+                  return (
+                    <CommandItem
+                      key={`${option.party.kind}-${option.party.id}`}
+                      value={option.searchText}
+                      onSelect={() => {
+                        onChange(isSelected ? null : option.party);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 size-4 shrink-0",
+                          isSelected ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="truncate">
+                        {option.party.full_name}
                       </span>
-                    )}
-                  </CommandItem>
-                ))}
+                      {option.hint && (
+                        <span className="ml-1 truncate text-muted-foreground">
+                          ({option.hint})
+                        </span>
+                      )}
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
           </Command>
