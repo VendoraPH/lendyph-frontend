@@ -101,7 +101,7 @@ test("disclosure: the annual rate is annualised by the loan's own frequency", ()
   // a fixed × 12 disclosed a 1%-per-day loan — 365% nominal — as 12.00% p.a.
   const daily = buildDisclosureDoc({
     ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: 1, term: 30, frequency: "daily" },
+    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: 1, term: 30, term_unit: "days", frequency: "daily" },
   });
 
   assert.equal(fieldValue(daily, "Contractual Interest Rate"), "1% per day");
@@ -113,10 +113,12 @@ test("disclosure: the annual rate is annualised by the loan's own frequency", ()
 
 test("disclosure: every frequency the loans enum allows is disclosed correctly", () => {
   const expected = [
-    ["daily", "2% per day", "730.00% per annum", "6 day(s)"],
-    ["weekly", "2% per week", "104.00% per annum", "6 week(s)"],
-    ["bi_weekly", "2% per bi-weekly period", "52.00% per annum", "6 bi-weekly period(s)"],
-    ["semi_monthly", "2% per semi-monthly period", "48.00% per annum", "6 semi-monthly period(s)"],
+    // `term` is 6 MONTHS on every row: it is labelled by its `term_unit`, not
+    // by the payment frequency.
+    ["daily", "2% per day", "730.00% per annum", "6 month(s)"],
+    ["weekly", "2% per week", "104.00% per annum", "6 month(s)"],
+    ["bi_weekly", "2% per bi-weekly period", "52.00% per annum", "6 month(s)"],
+    ["semi_monthly", "2% per semi-monthly period", "48.00% per annum", "6 month(s)"],
     ["monthly", "2% per month", "24.00% per annum", "6 month(s)"],
     ["upon_maturity", "2% per month", "24.00% per annum", "6 month(s)"],
   ] as const;
@@ -141,7 +143,9 @@ test("disclosure: an unknown frequency leaves the annual rate to be filled in", 
 
   assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per period");
   assert.ok(isBlankField(doc, "Nominal Annual Rate"));
-  assert.equal(fieldValue(doc, "Term of Loan"), "6 period(s)");
+  // The term is labelled by its own unit, which an unknown frequency cannot
+  // change.
+  assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)");
 });
 
 test("disclosure: finance charges add up to their own total", () => {

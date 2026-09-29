@@ -207,7 +207,7 @@ export function buildDisclosureDoc(
           pick(terms, ["start_date", "release_date", "released_at"])
         ),
         field("Type of Loan", pick(terms, ["loan_product_name"]) ?? interestMethod),
-        field("Term of Loan", termLabelFrom(terms, rawFrequency)),
+        field("Term of Loan", termLabelFrom(terms)),
         field("Mode of Payment", frequency),
       ]),
     },

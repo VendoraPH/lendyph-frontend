@@ -70,6 +70,8 @@ export interface Loan {
   interest_rate: number;
   interest_method?: string;
   term?: number;
+  /** Unit `term` is a length in; absent on older payloads, which mean months. */
+  term_unit?: "months" | "days";
   /**
    * How many times this loan has been rolled forward via the Extend Loan
    * action. Distinct from `term`, which is the originally agreed term —

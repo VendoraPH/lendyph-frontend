@@ -96,7 +96,7 @@ export function buildAmortizationScheduleDoc(
           currencyOrDash(pick(loan, ["principal_amount", "principal"]))
         ),
         field("Interest Rate", rateLabel(rate, rawFrequency)),
-        field("Term", termLabelFrom(loan, rawFrequency)),
+        field("Term", termLabelFrom(loan)),
         field("Payment Frequency", humanize(rawFrequency)),
         dateField("Start Date", pick(loan, ["start_date", "release_date"])),
         dateField("Maturity Date", pick(loan, ["maturity_date"])),

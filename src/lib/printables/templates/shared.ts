@@ -17,6 +17,7 @@
 
 import { asRecord, pick, pickNumber } from "@/lib/api-payload";
 import { escapeHtml } from "@/lib/html-escape";
+import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import {
   DASH,
   currencyOrDash,
@@ -247,14 +248,11 @@ export function presentFields(items: (PrintField | null)[]): PrintField[] {
 // The single most dangerous assumption a document in this folder can make is
 // that a loan is monthly.
 //
-// `LoanService` applies `interest_rate` ONCE PER PERIOD and counts `term` IN
-// PERIODS — `buildStraight`, `buildDiminishing` and `buildUponMaturity` all
-// multiply by the rate per iteration, and `computeMaturityDate` advances by
-// days / weeks / 14 days / 15 days / months depending on `frequency`. The
-// "monthly rate (PH convention)" comments in that service describe the common
-// case, not the arithmetic.
+// `term` is a LENGTH in the loan's `term_unit` (months or days), so it is
+// labelled by that unit and never by the payment frequency.
 //
-// So `${rate}% per month` and `${(rate * 12)}% per annum` are true only for a
+// The rate phrase and its annualisation follow the loan's frequency. So
+// `${rate}% per month` and `${(rate * 12)}% per annum` are true only for a
 // monthly loan. On a 1%-per-day loan they disclose 12.00% per annum against a
 // real nominal of 365%. Stating the annual rate correctly is the entire
 // statutory purpose of an R.A. 3765 disclosure, so no template may write either
@@ -282,34 +280,19 @@ interface FrequencyMeta {
    * unlike the 30× error these replace.
    */
   periodsPerYear: number;
-  /** Singular noun for one period, as a term is counted in them. */
-  termNoun: string;
   /** How a rate reads after the figure: "1% per day". */
   ratePhrase: string;
 }
 
 const FREQUENCY_META: Record<LoanFrequency, FrequencyMeta> = {
-  daily: { periodsPerYear: 365, termNoun: "day", ratePhrase: "per day" },
-  weekly: { periodsPerYear: 52, termNoun: "week", ratePhrase: "per week" },
-  bi_weekly: {
-    periodsPerYear: 26,
-    termNoun: "bi-weekly period",
-    ratePhrase: "per bi-weekly period",
-  },
-  semi_monthly: {
-    periodsPerYear: 24,
-    termNoun: "semi-monthly period",
-    ratePhrase: "per semi-monthly period",
-  },
-  monthly: { periodsPerYear: 12, termNoun: "month", ratePhrase: "per month" },
-  // A bullet loan's `term` is months-until-maturity — `computeMaturityDate`
-  // handles 'monthly' and 'upon_maturity' in the same arm — and its interest is
-  // principal × rate × term, i.e. still a monthly periodic rate.
-  upon_maturity: {
-    periodsPerYear: 12,
-    termNoun: "month",
-    ratePhrase: "per month",
-  },
+  daily: { periodsPerYear: 365, ratePhrase: "per day" },
+  weekly: { periodsPerYear: 52, ratePhrase: "per week" },
+  bi_weekly: { periodsPerYear: 26, ratePhrase: "per bi-weekly period" },
+  semi_monthly: { periodsPerYear: 24, ratePhrase: "per semi-monthly period" },
+  monthly: { periodsPerYear: 12, ratePhrase: "per month" },
+  // A bullet loan's interest is principal × rate per month of its term, i.e.
+  // still a monthly periodic rate.
+  upon_maturity: { periodsPerYear: 12, ratePhrase: "per month" },
 };
 
 /** The frequency a payload names, or null when it names none we know. */
@@ -326,35 +309,27 @@ export function periodsPerYear(frequency: unknown): number | null {
 }
 
 /**
- * `"6 month(s)"`, `"30 day(s)"`, `"12 week(s)"`.
+ * `"6 month(s)"`, `"45 day(s)"`.
  *
- * Falls back to the neutral "period(s)" when the frequency is unknown, which is
- * honest — `term` really is a count of periods — rather than guessing months.
+ * `term` is a length in `termUnit`; an absent or unknown unit is months, the
+ * backend's default and what every term before `term_unit` meant.
  */
-export function termLabel(term: number | null, frequency: unknown): string | null {
+export function termLabel(term: number | null, termUnit: unknown): string | null {
   if (term === null) return null;
-  const key = readFrequency(frequency);
-  const noun = key === null ? "period" : FREQUENCY_META[key].termNoun;
-  return `${term} ${noun}(s)`;
+  return `${term} ${termUnitNoun(readTermUnit(termUnit))}`;
 }
 
 /**
- * `termLabel` reading the term straight off a payload.
+ * `termLabel` reading the term and its unit straight off a payload.
  *
- * `term` is a count of the loan's OWN periods and takes the unit from
- * `frequency`. `term_months` — a key only the legacy flat shapes in
+ * `term_months` — a key only the legacy flat shapes in
  * `src/types/loan-document.ts` ever used — names its unit in its name, so a
- * value that arrives under it is labelled in months whatever `frequency` says.
- * Reading them through one `pick` list, as every template used to, silently
- * relabels one as the other.
+ * value that arrives under it is labelled in months.
  */
-export function termLabelFrom(
-  source: Record<string, unknown> | null,
-  frequency: unknown
-): string | null {
-  const periods = pickNumber(source, ["term"]);
-  if (periods !== null) return termLabel(periods, frequency);
-  return termLabel(pickNumber(source, ["term_months"]), "monthly");
+export function termLabelFrom(source: Record<string, unknown> | null): string | null {
+  const term = pickNumber(source, ["term"]);
+  if (term !== null) return termLabel(term, source?.term_unit);
+  return termLabel(pickNumber(source, ["term_months"]), "months");
 }
 
 /** `"1% per day"`, `"2.5% per month"`. The rate exactly as it is applied. */

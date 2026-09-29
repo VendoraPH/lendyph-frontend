@@ -97,6 +97,15 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatDateISO } from "@/lib/format";
+import {
+  DAYS_PER_MONTH,
+  instalments,
+  maturityDate as loanMaturityDate,
+  rateForDays,
+  readTermUnit,
+  termUnitNoun,
+  type TermUnit,
+} from "@/lib/loan-terms";
 import { toUserList, type UserListShortfall } from "@/lib/user-list";
 
 import type { LoanProduct } from "@/types/loan";
@@ -121,51 +130,6 @@ const formatCurrency = (amount: number) =>
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
 type InterestType = "straight" | "fixed" | "diminishing";
 
-function getPeriodsFromMonths(
-  termMonths: number,
-  frequency: PaymentFrequency
-): number {
-  switch (frequency) {
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-    case "semi_monthly":
-      return Math.round(termMonths * 2);
-    case "monthly":
-    default:
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-    case "semi_monthly":
-      return 15;
-    case "monthly":
-    default:
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-PH", {
     year: "numeric",
@@ -187,12 +151,12 @@ function computeAmortization(
   principal: number,
   interestRate: number,
   interestType: InterestType,
-  termMonths: number,
+  term: number,
+  termUnit: TermUnit,
   frequency: PaymentFrequency,
   releaseDate: Date,
   scbAmount: number = 0,
 ): AmortizationRow[] {
-  const r = interestRate / 100;
   const scb = Math.round(scbAmount);
 
   // Upon Maturity is a bullet / balloon repayment schedule: one single
@@ -200,12 +164,17 @@ function computeAmortization(
   // interest for the whole term + any SCB. It's a payment-frequency
   // concept, not an interest-type concept — the interest type is still
   // straight or diminishing, but with no intermediate paydowns the two
-  // converge to the same total here.
+  // converge to the same total here. A months term accrues a month's
+  // interest per month; a days term accrues for its days.
   if (frequency === "upon_maturity") {
-    const totalInterest = Math.round(principal * r * termMonths);
+    const fraction =
+      termUnit === "months"
+        ? rateForDays(interestRate, DAYS_PER_MONTH) * term
+        : rateForDays(interestRate, term);
+    const totalInterest = Math.round(principal * fraction);
     return [{
       period: 1,
-      dueDate: addMonths(releaseDate, termMonths),
+      dueDate: loanMaturityDate(releaseDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
@@ -213,47 +182,46 @@ function computeAmortization(
     }];
   }
 
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
+  const plan = instalments(releaseDate, term, termUnit, frequency);
+  const totalPeriods = plan.length;
   const rows: AmortizationRow[] = [];
   let remainingBalance = principal;
 
-  // Straight/Fixed: equal principal each period, constant interest on original principal
+  // Straight/Fixed: equal principal each period, interest on the original
+  // principal for the days each instalment covers
   if (interestType === "straight" || interestType === "fixed") {
     const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r);
 
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
       const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
+      const interest = Math.round(principal * rateForDays(interestRate, days));
 
       rows.push({
         period: i,
         dueDate,
         principal: periodPrincipal,
-        interest: interestPerPeriod,
+        interest,
         shareCapitalBuildUp: scb,
-        totalPayment: periodPrincipal + interestPerPeriod + scb,
+        totalPayment: periodPrincipal + interest + scb,
       });
       remainingBalance -= periodPrincipal;
-    }
+    });
   }
 
-  // Diminishing: equal total payment (PMT), decreasing interest, increasing principal
+  // Diminishing: equal total payment (PMT) at one full instalment's rate,
+  // decreasing interest, increasing principal
   else if (interestType === "diminishing") {
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH);
     const pmt = r > 0
       ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
       : principal / totalPeriods;
 
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * r);
+      const interest = Math.round(remainingBalance * rateForDays(interestRate, days));
       const periodPrincipal = isLast
         ? remainingBalance
         : Math.round(pmt - interest);
@@ -268,7 +236,7 @@ function computeAmortization(
         totalPayment: baseTotal + scb,
       });
       remainingBalance -= periodPrincipal;
-    }
+    });
   }
 
   return rows;
@@ -315,7 +283,7 @@ function NewLoanApplicationInner() {
   // ── Loan Product & Terms State ──
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
-  const [termMonths, setTermMonths] = useState<string>("");
+  const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [interestType, setInterestType] = useState<string | null>(null);
@@ -452,7 +420,7 @@ function NewLoanApplicationInner() {
           const productIdVal = loan.loan_product?.id ?? loan.loan_product_id ?? null;
           if (productIdVal) setProductId(String(productIdVal));
           setPrincipalAmount(String(loan.principal_amount ?? ""));
-          setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+          setTermValue(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
           setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
           const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
@@ -616,8 +584,10 @@ function NewLoanApplicationInner() {
     return raw ? [String(raw)] : [];
   }, [selectedProduct]);
 
+  // `term` is a length in the product's unit — months unless it says days.
+  const termUnit = readTermUnit(selectedProduct?.term_unit);
   const principal = parseFloat(principalAmount) || 0;
-  const term = parseInt(termMonths) || 0;
+  const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
 
@@ -632,13 +602,13 @@ function NewLoanApplicationInner() {
   }, [selectedProduct, principalAmount, principal]);
 
   const termError = useMemo(() => {
-    if (!selectedProduct || !termMonths) return null;
+    if (!selectedProduct || !termValue) return null;
     if (term < selectedProduct.min_term)
-      return `Minimum term is ${selectedProduct.min_term} month(s)`;
+      return `Minimum term is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
     if (term > selectedProduct.max_term)
-      return `Maximum term is ${selectedProduct.max_term} months`;
+      return `Maximum term is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     return null;
-  }, [selectedProduct, termMonths, term]);
+  }, [selectedProduct, termValue, term, termUnit]);
 
   // SCB validation — required when the product says so; range-checked when
   // the product defines min/max. Otherwise optional (any value >= 0 is fine).
@@ -717,8 +687,8 @@ function NewLoanApplicationInner() {
   // Maturity date
   const maturityDate = useMemo(() => {
     if (!releaseDate || !term) return null;
-    return addMonths(releaseDate, term);
-  }, [releaseDate, term]);
+    return loanMaturityDate(releaseDate, term, termUnit, paymentFrequency ?? "monthly");
+  }, [releaseDate, term, termUnit, paymentFrequency]);
 
   // Amortization preview — shown as soon as the core loan terms are valid.
   // SCB errors do NOT block the preview (we want the user to see the SCB
@@ -741,6 +711,7 @@ function NewLoanApplicationInner() {
       rate,
       interestType as InterestType,
       term,
+      termUnit,
       paymentFrequency as PaymentFrequency,
       releaseDate,
       scb,
@@ -751,6 +722,7 @@ function NewLoanApplicationInner() {
     rate,
     interestType,
     term,
+    termUnit,
     paymentFrequency,
     releaseDate,
     scb,
@@ -1442,7 +1414,7 @@ function NewLoanApplicationInner() {
                 <Info className="size-3" />
                 Amount: {formatCurrency(selectedProduct.min_amount)} –{" "}
                 {formatCurrency(selectedProduct.max_amount)} | Term:{" "}
-                {selectedProduct.min_term} – {selectedProduct.max_term} months
+                {selectedProduct.min_term} – {selectedProduct.max_term} {termUnit}
               </p>
             )}
           </div>
@@ -1467,14 +1439,14 @@ function NewLoanApplicationInner() {
             {/* Term */}
             <div className="space-y-2">
               <Label>
-                Term (months) <span className="text-destructive">*</span>
+                Term ({termUnit}) <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
                 placeholder="0"
                 step="1"
-                value={termMonths}
-                onChange={(e) => setTermMonths(e.target.value.replace(/\D/g, ""))}
+                value={termValue}
+                onChange={(e) => setTermValue(e.target.value.replace(/\D/g, ""))}
                 min={selectedProduct?.min_term}
                 max={selectedProduct?.max_term}
               />

@@ -139,10 +139,10 @@ export function buildReleaseVoucherDoc(
         ),
         dateField("Maturity Date", pick(loan, ["maturity_date"])),
         field(
-          // A bare "6" here read as months on a voucher whose loan may be
-          // daily. `term` is a count of the loan's own periods.
+          // A bare "6" here read as months on a voucher whose loan may be a
+          // days term. `term` is a length in the loan's own `term_unit`.
           "Term",
-          termLabelFrom(loan, pick(loan, ["frequency", "payment_frequency"]))
+          termLabelFrom(loan)
         ),
         field("Purpose", pick(loan, ["purpose"])),
       ]),
