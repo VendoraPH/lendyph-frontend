@@ -1,9 +1,10 @@
 /**
- * The two remaining "one page treated as the whole dataset" call sites, pinned.
+ * "One page treated as the whole dataset" call sites, pinned.
  *
  * These drive the REAL service functions over REAL HTTP against a stub that
  * mirrors the sibling repo's controllers — `LoanController::index()`,
- * `Loan::scopeForStatus()` and `AuditLogController::index()` — rather than
+ * `Loan::scopeForStatus()`, `AuditLogController::index()`, and the config
+ * lists that answer every row with `->get()` — rather than
  * asserting against a hand-written mock of what those services return. That
  * matters here specifically: the whole family of bugs is invisible to
  * TypeScript, because a truncated page and a complete dataset are the same
@@ -19,6 +20,7 @@ import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
+import type { DrainResult } from "../lib/paginate";
 
 // ── The contract, mirrored from the sibling repo ────────────────────────────
 
@@ -129,9 +131,67 @@ function seedAuditLogs(n: number): Row[] {
   }));
 }
 
+/**
+ * The endpoints behind the config lists. Each controller answers
+ * `Resource::collection($query->get())` — every row in one `{ data }` body, no
+ * `meta`, no `links`, and `page` / `per_page` ignored — so page 2 is page 1
+ * again. `RoleController`, `BranchController::index()` / `publicIndex()`,
+ * `FeeController`, `LoanProductController`, `CollateralTypeController`,
+ * `CollateralController` and `GCashReportController::pending()`.
+ */
+const WHOLE_COLLECTION_PATHS = new Set([
+  "/roles",
+  "/branches",
+  "/branches/public",
+  "/fees",
+  "/loan-products",
+  "/collateral-types",
+  "/collaterals",
+  "/gcash/reports/pending",
+]);
+
+/** More than one page of 100, which is what the old drain tripped over. */
+const WHOLE_COLLECTION_ROWS = 150;
+
+function seedWholeCollection(): Row[] {
+  return Array.from({ length: WHOLE_COLLECTION_ROWS }, (_, i) => ({
+    id: i + 1,
+    name: `Row ${i + 1}`,
+    status: i % 2 === 0 ? "active" : "inactive",
+    is_active: i % 2 === 0,
+    created_at: day(i),
+    borrower_id: (i % 10) + 1,
+    // Descending on the wire, so a sorted result proves the client sorted it.
+    display_order: WHOLE_COLLECTION_ROWS - i,
+  }));
+}
+
+/** The filters each `index()` honours; everything else in the query is ignored. */
+function wholeCollectionRows(path: string, query: Record<string, string>): Row[] {
+  let rows = seedWholeCollection();
+  // `request()->boolean('active_only')`
+  if (path === "/branches" && ["1", "true", "on", "yes"].includes(query.active_only)) {
+    rows = rows.filter((r) => r.is_active);
+  }
+  if (path === "/loan-products" && query.status) {
+    rows = rows.filter((r) => r.status === query.status);
+  }
+  if (path === "/collaterals" && query.borrower_id) {
+    rows = rows.filter((r) => String(r.borrower_id) === query.borrower_id);
+  }
+  return rows;
+}
+
 // ── Harness ────────────────────────────────────────────────────────────────
 
 const AUDIT_LOG_COUNT = 247;
+
+/**
+ * Whole-collection paths that a test has switched to paginating, with the
+ * server's own page-size ceiling — the day one of those controllers gains a
+ * paginator, rehearsed.
+ */
+const paginatesNow = new Map<string, number>();
 
 let server: Server;
 let requests: Array<{ path: string; query: Record<string, string> }> = [];
@@ -139,6 +199,15 @@ let loanRows = seedLoans();
 
 let loanService: typeof import("./loan.service").loanService;
 let auditService: typeof import("./audit.service").auditService;
+let roleService: typeof import("./role.service").roleService;
+let branchService: typeof import("./branch.service").branchService;
+let feeService: typeof import("./fee.service").feeService;
+let loanProductService: typeof import("./loan-product.service").loanProductService;
+let collateralTypeService: typeof import("./collateral-type.service").collateralTypeService;
+let collateralService: typeof import("./collateral.service").collateralService;
+let gcashService: typeof import("./gcash.service").gcashService;
+let completeRows: typeof import("../lib/paginate").completeRows;
+let IncompleteListError: typeof import("../lib/paginate").IncompleteListError;
 let BORROWER_OBLIGATION_STATUSES: typeof import("./loan.service").BORROWER_OBLIGATION_STATUSES;
 let BORROWER_OBLIGATION_STATUS_PARAM: string;
 let MAX_PER_PAGE: number;
@@ -185,6 +254,20 @@ before(async () => {
       return res.end("Timestamp,User,Action\n");
     }
 
+    if (WHOLE_COLLECTION_PATHS.has(path)) {
+      const rows = wholeCollectionRows(path, query);
+      const cap = paginatesNow.get(path);
+      const body =
+        cap === undefined
+          ? { data: rows }
+          : paginator(
+              rows,
+              Number.parseInt(query.page ?? "1", 10) || 1,
+              Math.min(clampLoan(query.per_page ?? null), cap),
+            );
+      return res.end(JSON.stringify(body));
+    }
+
     return res.end(JSON.stringify({ data: [], links: {}, meta: { total: 0 } }));
   });
 
@@ -203,6 +286,15 @@ before(async () => {
   BORROWER_OBLIGATION_STATUS_PARAM = loanMod.BORROWER_OBLIGATION_STATUS_PARAM;
   auditService = auditMod.auditService;
   MAX_PER_PAGE = paginate.MAX_PER_PAGE;
+  completeRows = paginate.completeRows;
+  IncompleteListError = paginate.IncompleteListError;
+  roleService = (await import("./role.service")).roleService;
+  branchService = (await import("./branch.service")).branchService;
+  feeService = (await import("./fee.service")).feeService;
+  loanProductService = (await import("./loan-product.service")).loanProductService;
+  collateralTypeService = (await import("./collateral-type.service")).collateralTypeService;
+  collateralService = (await import("./collateral.service")).collateralService;
+  gcashService = (await import("./gcash.service")).gcashService;
 });
 
 after(() => {
@@ -374,5 +466,141 @@ describe("audit trail pagination", () => {
     assert.equal(req.query.action, "deleted", "filters carry over");
     assert.equal(req.query.page, undefined, "no page — the CSV is the whole log");
     assert.equal(req.query.per_page, undefined, "and no page size to clamp");
+  });
+});
+
+// ── Config lists over endpoints that answer every row ──────────────────────
+
+describe("config list drains over `->get()` endpoints", () => {
+  const drains = (): Array<
+    [name: string, path: string, call: () => Promise<DrainResult<{ id: number }>>]
+  > => [
+    ["roleService.listAll", "/roles", () => roleService.listAll()],
+    ["branchService.listAll", "/branches", () => branchService.listAll()],
+    ["branchService.publicListAll", "/branches/public", () => branchService.publicListAll()],
+    ["feeService.listAll", "/fees", () => feeService.listAll()],
+    ["loanProductService.listAll", "/loan-products", () => loanProductService.listAll()],
+    ["collateralTypeService.listAll", "/collateral-types", () => collateralTypeService.listAll()],
+    ["collateralService.listAll", "/collaterals", () => collateralService.listAll()],
+    ["gcashService.pendingListAll", "/gcash/reports/pending", () => gcashService.pendingListAll()],
+  ];
+
+  test("the stub is faithful: these endpoints ignore `page`", async () => {
+    // The premise of every test below. A drain that asked one of these for
+    // page 2 would get page 1 again and append it.
+    const base = process.env.NEXT_PUBLIC_API_URL;
+    const read = async (page: number) =>
+      ((await (await fetch(`${base}/roles?page=${page}&per_page=100`)).json()) as {
+        data: Row[];
+      }).data.map((r) => r.id);
+
+    const p1 = await read(1);
+    assert.equal(p1.length, WHOLE_COLLECTION_ROWS, "every row, past the 100 clamp");
+    assert.deepEqual(await read(2), p1);
+  });
+
+  test("each drain reads more than 100 rows in ONE request, with no duplicates", async () => {
+    for (const [name, path, call] of drains()) {
+      requests = [];
+      const { rows, total, truncated, pagesFetched } = await call();
+
+      assert.equal(rows.length, WHOLE_COLLECTION_ROWS, name);
+      assert.equal(
+        new Set(rows.map((r) => r.id)).size,
+        WHOLE_COLLECTION_ROWS,
+        `${name}: no row served twice`,
+      );
+      assert.equal(total, WHOLE_COLLECTION_ROWS, name);
+      assert.equal(truncated, false, name);
+      assert.equal(pagesFetched, 1, name);
+      assert.equal(requests.filter((r) => r.path === path).length, 1, name);
+    }
+  });
+
+  test("the filters a caller passes go out on every request", async () => {
+    requests = [];
+    const branches = await branchService.listAll({ active_only: 1 });
+    const products = await loanProductService.listAll({ status: "active" });
+    const collaterals = await collateralService.listAll({ borrower_id: 7 });
+
+    const sent: Array<[path: string, key: string, value: string]> = [
+      ["/branches", "active_only", "1"],
+      ["/loan-products", "status", "active"],
+      ["/collaterals", "borrower_id", "7"],
+    ];
+    for (const [path, key, value] of sent) {
+      const reqs = requests.filter((r) => r.path === path);
+      assert.ok(reqs.length > 0, path);
+      for (const r of reqs) {
+        assert.equal(r.query[key], value, `${path} keeps ${key}`);
+        assert.equal(Number(r.query.per_page), MAX_PER_PAGE, `${path} asks for a full page`);
+      }
+    }
+    assert.ok(branches.rows.length > 0);
+    assert.ok(branches.rows.every((b) => b.is_active));
+    assert.equal(products.rows.length, WHOLE_COLLECTION_ROWS / 2);
+    assert.ok(collaterals.rows.length > 0);
+    assert.ok(collaterals.rows.every((c) => c.borrower_id === 7));
+  });
+
+  test("collateral types come back in display_order, not wire order", async () => {
+    const { rows } = await collateralTypeService.listAll();
+    const orders = rows.map((t) => t.display_order);
+
+    assert.equal(orders[0], 1);
+    assert.deepEqual(
+      orders,
+      [...orders].sort((a, b) => a - b),
+    );
+  });
+
+  test("the day an endpoint starts paginating, the same drain follows every page", async () => {
+    paginatesNow.set("/roles", 100);
+    paginatesNow.set("/collaterals", 100);
+    try {
+      const paging: Array<
+        [path: string, call: () => Promise<DrainResult<{ id: number }>>]
+      > = [
+        ["/roles", () => roleService.listAll()],
+        ["/collaterals", () => collateralService.listAll()],
+      ];
+      for (const [path, call] of paging) {
+        requests = [];
+        const { rows, total, truncated } = await call();
+
+        assert.equal(rows.length, WHOLE_COLLECTION_ROWS, path);
+        assert.equal(new Set(rows.map((r) => r.id)).size, WHOLE_COLLECTION_ROWS, path);
+        assert.equal(total, WHOLE_COLLECTION_ROWS, path);
+        assert.equal(truncated, false, path);
+        assert.deepEqual(
+          requests.filter((r) => r.path === path).map((r) => Number(r.query.page)),
+          [1, 2],
+          `${path}: every page followed, and no further`,
+        );
+      }
+    } finally {
+      paginatesNow.clear();
+    }
+  });
+
+  test("a drain that cannot finish throws through completeRows instead of rendering short", async () => {
+    // Paginated at 5 a page: 30 pages, past the drain's runaway guard of 20.
+    paginatesNow.set("/roles", 5);
+    try {
+      const drain = await roleService.listAll();
+
+      assert.equal(drain.truncated, true);
+      assert.equal(drain.rows.length, 100);
+      assert.equal(drain.total, WHOLE_COLLECTION_ROWS);
+      assert.throws(
+        () => completeRows(drain),
+        (err: unknown) =>
+          err instanceof IncompleteListError &&
+          err.shown === 100 &&
+          err.total === WHOLE_COLLECTION_ROWS,
+      );
+    } finally {
+      paginatesNow.clear();
+    }
   });
 });

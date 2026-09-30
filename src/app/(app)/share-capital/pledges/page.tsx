@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { shareCapitalService } from "@/services";
 import type { Pledge } from "@/types";
 import {
@@ -333,7 +334,11 @@ export default function PledgeEntryPage() {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-        setBulkEntries((e) => { const { [id]: _, ...rest } = e; return rest; });
+        setBulkEntries((e) => {
+          const rest = { ...e };
+          delete rest[id];
+          return rest;
+        });
       } else {
         next.add(id);
         setBulkEntries((e) => ({ ...e, [id]: { amount: "", transaction: "credit" } }));
@@ -382,15 +387,19 @@ export default function PledgeEntryPage() {
       toast.error("Enter an amount for at least one member");
       return;
     }
+    // `ShareCapitalBulkEntryRequest` requires a date on every entry; without
+    // one the whole batch was refused with a 422.
+    const date = todayISO();
     try {
       await shareCapitalService.pledgeBulkEntries({
         entries: valid.map(([id, entry]) => ({
           pledge_id: Number(id),
           amount: Math.round(parseFloat(entry.amount)),
           type: entry.transaction,
+          date,
         })),
       });
-      toast.success(`${valid.length} entries created`);
+      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
       setSelectedIds(new Set());
       setBulkEntries({});
     } catch {
@@ -792,7 +801,14 @@ export default function PledgeEntryPage() {
                       )}
                     </React.Fragment>
                   ))}
-                  {paginated.length === 0 && (
+                  {paginated.length === 0 && loading && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        <Spinner className="mx-auto size-5" />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {paginated.length === 0 && !loading && (
                     <TableRow>
                       <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                         <p>No pledges found.</p>

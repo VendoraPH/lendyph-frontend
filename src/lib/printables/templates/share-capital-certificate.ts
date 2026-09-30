@@ -28,10 +28,8 @@
  *     certifying clause and the balance column, says on its face that it is a
  *     partial extract, and is signed as one.
  *
- * Two shapes of entry are read for the same reason: `ShareCapitalLedgerResource`
- * serialises separate `debit` and `credit` columns, while
- * `ShareCapitalLedgerEntry` in `src/types/share-capital.ts` declares a
- * `type` + `amount` pair. The resource is what the API actually sends.
+ * Both sources send an entry as separate `debit` and `credit` columns, so that
+ * is the only shape read.
  */
 
 import { amountInWords } from "../amount-in-words";
@@ -79,14 +77,12 @@ type Coverage = "complete" | "partial" | "unavailable";
  * Lives here rather than in `catalog.ts` so the truncation rule is unit-tested
  * next to the document that depends on it.
  *
- * `meta.total` is the precise signal and is used when it is there — but note
- * that it usually is not: `api.get()` returns `response.data.data`, which for a
- * Laravel paginator is the row array with the `meta` block already discarded
- * (`api.getRaw()` is the method that keeps it). So the working signal is the
- * row count against the page size we asked for. That errs toward calling an
- * exactly-full page partial, which is the right direction to be wrong in: the
- * cost is a certificate reprinted once the statement endpoint is up, against
- * certifying a balance that is missing entries.
+ * `meta.total` is the precise signal, and `ledgerList()` reads through
+ * `api.getRaw()`, which keeps it. When a response carries none, the fallback
+ * signal is the row count against the page size we asked for. That errs toward
+ * calling an exactly-full page partial, which is the right direction to be
+ * wrong in: the cost is a certificate reprinted once the statement endpoint is
+ * up, against certifying a balance that is missing entries.
  */
 export function toShareCapitalLedgerFallback(
   raw: unknown,
@@ -102,16 +98,9 @@ export function toShareCapitalLedgerFallback(
   };
 }
 
-/** Split one entry into debit/credit, whichever convention it arrived in. */
+/** One entry's debit and credit; a missing column counts as 0. */
 function readAmounts(raw: Record<string, unknown>): { debit: number; credit: number } {
-  const debit = toNumber(raw.debit);
-  const credit = toNumber(raw.credit);
-  if (debit !== null || credit !== null) {
-    return { debit: debit ?? 0, credit: credit ?? 0 };
-  }
-  const amount = toNumber(pick(raw, ["amount", "value"])) ?? 0;
-  const isDebit = String(pick(raw, ["type", "entry_type"]) ?? "").toLowerCase() === "debit";
-  return { debit: isDebit ? amount : 0, credit: isDebit ? 0 : amount };
+  return { debit: toNumber(raw.debit) ?? 0, credit: toNumber(raw.credit) ?? 0 };
 }
 
 function entryTime(entry: Record<string, unknown>): number | null {

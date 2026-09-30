@@ -32,6 +32,11 @@ import { CollateralsTab } from "./_components/collaterals-tab";
 export default function BorrowerDetailPage() {
   const params = useParams();
   const borrowerId = Number(params.id);
+  // Anything can follow `/borrowers/` in a hand-edited URL. Only plain digits
+  // name a borrower — `Number()` alone reads `1e3` as 1000, `0x10` as 16 and
+  // ` 12 ` as 12 — so anything else is "not found" without asking the API.
+  const isBorrowerId =
+    typeof params.id === "string" && /^\d+$/.test(params.id) && borrowerId > 0;
 
   const router = useRouter();
   const [borrower, setBorrower] = useState<Borrower | undefined>();
@@ -45,7 +50,10 @@ export default function BorrowerDetailPage() {
   } | null>(null);
   const [paymentShortfall, setPaymentShortfall] = useState<RepaymentListShortfall | null>(null);
   const [coMakers, setCoMakers] = useState<CoMaker[]>([]);
-  const [loading, setLoading] = useState(true);
+  // A different id is a different page — Next remounts the segment — so this
+  // starts over with it. Only `reload` sets it back to true.
+  const [loading, setLoading] = useState(isBorrowerId);
+  const [reloadCount, setReloadCount] = useState(0);
 
   const fetchCoMakers = useCallback(async () => {
     try {
@@ -56,10 +64,11 @@ export default function BorrowerDetailPage() {
     }
   }, [borrowerId]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-
-    const [borrowerResult, loansResult, paymentsResult] = await Promise.allSettled([
+  // Runs on mount and on every `reload`. `loading` is already true when it
+  // starts, so state is only set once the requests settle.
+  useEffect(() => {
+    if (!isBorrowerId) return;
+    Promise.allSettled([
       borrowerService.detail(borrowerId),
       // Drained across pages. This was `loanService.list({ borrower_id })` —
       // one default page of 15 — so a member past their fifteenth loan had the
@@ -75,45 +84,47 @@ export default function BorrowerDetailPage() {
       // budget, and a member who renews a one-month loan every month holds
       // dozens of them.
       repaymentService.listAll({ borrower_id: borrowerId }),
-    ]);
+    ]).then(async ([borrowerResult, loansResult, paymentsResult]) => {
+      if (borrowerResult.status === "fulfilled") {
+        setBorrower(borrowerResult.value);
+      } else {
+        toast.error("We couldn't load the borrower details. Please try again.");
+      }
 
-    if (borrowerResult.status === "fulfilled") {
-      setBorrower(borrowerResult.value);
-    } else {
-      toast.error("We couldn't load the borrower details. Please try again.");
-    }
+      if (loansResult.status === "fulfilled") {
+        const loanDrain = loansResult.value;
+        setLoans(loanDrain.rows);
+        setLoanShortfall(
+          loanDrain.truncated
+            ? { shown: loanDrain.rows.length, total: loanDrain.total }
+            : null,
+        );
+      } else {
+        toast.error("We couldn't load the loans. Please try again.");
+      }
 
-    if (loansResult.status === "fulfilled") {
-      const loanDrain = loansResult.value;
-      setLoans(loanDrain.rows);
-      setLoanShortfall(
-        loanDrain.truncated
-          ? { shown: loanDrain.rows.length, total: loanDrain.total }
-          : null,
-      );
-    } else {
-      toast.error("We couldn't load the loans. Please try again.");
-    }
+      if (paymentsResult.status === "fulfilled") {
+        const { payments, shortfall } = toBorrowerPayments(paymentsResult.value);
+        setPayments(payments);
+        setPaymentShortfall(shortfall);
+      } else {
+        // Said out loud: an empty tab reads as "this member has paid nothing".
+        setPayments([]);
+        setPaymentShortfall(null);
+        toast.error("We couldn't load the payments. Please try again.");
+      }
 
-    if (paymentsResult.status === "fulfilled") {
-      const { payments, shortfall } = toBorrowerPayments(paymentsResult.value);
-      setPayments(payments);
-      setPaymentShortfall(shortfall);
-    } else {
-      // Said out loud: an empty tab reads as "this member has paid nothing".
-      setPayments([]);
-      setPaymentShortfall(null);
-      toast.error("We couldn't load the payments. Please try again.");
-    }
+      await fetchCoMakers();
 
-    await fetchCoMakers();
+      setLoading(false);
+    });
+  }, [borrowerId, isBorrowerId, fetchCoMakers, reloadCount]);
 
-    setLoading(false);
-  }, [borrowerId, fetchCoMakers]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // After a photo change: the whole page goes back to its spinner and reloads.
+  const reload = () => {
+    setLoading(true);
+    setReloadCount((n) => n + 1);
+  };
 
   // Every co-maker save says how it ended — including a co-maker that saved
   // while its ID didn't — and refreshes the list whenever anything was
@@ -194,7 +205,7 @@ export default function BorrowerDetailPage() {
       <BorrowerHeader
         borrower={borrower}
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
-        onPhotoUpdate={fetchData}
+        onPhotoUpdate={reload}
       />
 
       {/* Member documents — the same catalog `/printables` serves, opened for
@@ -246,7 +257,7 @@ export default function BorrowerDetailPage() {
         </TabsContent>
 
         <TabsContent value="loans" className="pt-4">
-          <LoansTab loans={loans} coMakers={coMakers} />
+          <LoansTab loans={loans} />
         </TabsContent>
 
         <TabsContent value="payments" className="pt-4">
@@ -256,8 +267,6 @@ export default function BorrowerDetailPage() {
         <TabsContent value="co-makers" className="pt-4">
           <CoMakersTab
             coMakers={coMakers}
-            loans={loans}
-            borrowerId={borrower.id}
             onAdd={handleAddCoMaker}
             onAddId={handleAddCoMakerId}
             onEdit={handleEditCoMaker}

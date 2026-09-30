@@ -42,13 +42,13 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { token, user } = await authService.login({
+      const { token, expires_in, user } = await authService.login({
         login: form.login,
         password: form.password,
         remember: rememberMe,
       });
 
-      tokenManager.setAccessToken(token);
+      tokenManager.setAccessToken(token, expires_in);
 
       if (rememberMe) {
         localStorage.setItem("lendy_remember_me", "true");

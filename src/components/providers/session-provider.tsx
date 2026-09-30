@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store";
-import { tokenManager } from "@/lib/axios-client";
+import { renewAccessToken, tokenManager } from "@/lib/axios-client";
+import { isRenewalDue } from "@/lib/session-token";
 import { env } from "@/config/env";
 import {
   Dialog,
@@ -33,6 +34,11 @@ const WARNING_BEFORE_MS = 2 * 60 * 1000;
 // is pure waste, so ignore activity that lands within this window of the last
 // reset — the idle deadline is minutes away, a second of slack costs nothing.
 const ACTIVITY_THROTTLE_MS = 1000;
+
+// How often to check whether the server token is due for renewal when the user
+// is not generating events of their own. Renewal is due from half-life, so a
+// minute of lag leaves most of the token's life to spare.
+const RENEW_CHECK_MS = 60 * 1000;
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -111,14 +117,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }, timeoutMs);
   }, [isAuthenticated, isRememberMe, timeoutMs, performLogout, clearTimers]);
 
+  // Keep the server's token ahead of the idle window. It expires a fixed time
+  // after it was issued and can only be renewed while still valid, so waiting
+  // for a 401 would be too late. See lib/session-token.ts for the rule.
+  const maybeRenew = useCallback(() => {
+    if (
+      isRenewalDue(
+        tokenManager.getAccessTokenLifetime(),
+        lastActivityRef.current,
+        Date.now()
+      )
+    ) {
+      // A rejected renewal ends the session inside renewAccessToken, which
+      // opens the dialog below; a network blip keeps the token and the next
+      // activity or tick tries again. Nothing is left to handle here.
+      renewAccessToken().catch(() => undefined);
+    }
+  }, []);
+
   const handleStaySignedIn = () => {
     showWarningRef.current = false;
     setShowWarning(false);
     resetTimer();
-    // Token refresh happens on-demand: the next API call will auto-refresh
-    // via the 401 interceptor in axios-client if the access token has
-    // expired. We deliberately do not proactively refresh here, to avoid
-    // racing the interceptor on the token-rotation endpoint.
+    maybeRenew();
   };
 
   const handleLogoutNow = () => {
@@ -133,8 +154,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // While the warning is up the only way back is the dialog's own button,
       // so a stray mousemove must not silently extend the session.
       if (showWarningRef.current) return;
-      if (Date.now() - lastActivityRef.current < ACTIVITY_THROTTLE_MS) return;
+      const sinceLast = Date.now() - lastActivityRef.current;
+      if (sinceLast < ACTIVITY_THROTTLE_MS) return;
+      // The idle deadline passed without the timeout firing, which is what a
+      // sleeping laptop does to timers. The session is over, and the first
+      // mousemove after waking must not quietly revive it.
+      if (lastActivityRef.current > 0 && sinceLast >= timeoutMs) {
+        performLogout("inactivity");
+        return;
+      }
       resetTimer();
+      maybeRenew();
     };
 
     ACTIVITY_EVENTS.forEach((event) => {
@@ -143,15 +173,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     // Start initial timer on next tick
     const id = setTimeout(() => resetTimer(), 0);
+    const renewCheck = setInterval(maybeRenew, RENEW_CHECK_MS);
 
     return () => {
       clearTimeout(id);
+      clearInterval(renewCheck);
       ACTIVITY_EVENTS.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
       clearTimers();
     };
-  }, [isAuthenticated, isRememberMe, resetTimer, clearTimers]);
+  }, [isAuthenticated, isRememberMe, resetTimer, clearTimers, maybeRenew, performLogout, timeoutMs]);
 
   // Listen for forced logout from the 401 interceptor, which fires when the
   // token refresh is rejected outright. This used to log out on the spot: the

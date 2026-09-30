@@ -14,15 +14,16 @@ export type CollateralValueRow = CollateralWithMeta & { value_unknown: boolean }
 /**
  * What a collateral is worth, and whether we are willing to say so.
  *
- * Four screens ask this exact question — the collateral listing, the collateral
- * form, a member's collaterals tab, and the two loan forms' security pickers —
- * and every one of them used to answer it with the same three lines:
+ * The collateral form, a member's collaterals tab and the two loan forms'
+ * security pickers ask this exact question (the collateral register is valued
+ * on the server), and every one of them used to answer it with the same three
+ * lines:
  *
  *     effective_value: isShareCapital ? scBalance : c.amount
  *
  * where `scBalance` had already been flattened to a number by an old
  * `getShareCapitalBalance` that returned 0 both for a member with no share
- * capital and for a request that failed. Four copies of a rule is how the
+ * capital and for a request that failed. A rule in several copies is how the
  * fix lands in one screen and not the others, so there is now one.
  *
  * The rule itself:

@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import { useAuth, usePasswordChangeGuard } from "@/hooks";
+import { useAuthStore } from "@/store";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { isSessionRejection, isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
@@ -12,7 +15,7 @@ import { Header } from "@/components/layout/header";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { user, isAuthenticated, setUser, clearAuth } = useAuth();
+  const { isAuthenticated, setUser, clearAuth } = useAuth();
   const router = useRouter();
 
   // This layout wraps every authenticated route, which makes it the one place
@@ -22,14 +25,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const initAuth = useCallback(async () => {
     const token = tokenManager.getAccessToken();
 
+    // No token, but the persisted user can outlive it: a session that ended
+    // (the interceptor clears the tokens and leaves the user for the "Session
+    // Expired" dialog) and was then reloaded, or a logout in another tab.
+    // Left authenticated, this layout would render the page for a moment and
+    // every one of its requests would go out with no token and 401.
     if (!token) {
+      clearAuth();
       setLoading(false);
       router.replace("/login");
       return;
     }
 
-    // Already have user in store — no need to fetch
-    if (user && isAuthenticated) {
+    // A token we know has expired, e.g. a tab reopened or reloaded after the
+    // user walked away. Rendering the page would fire every one of its
+    // requests with it and collect a 401 from each, so go straight to login
+    // without asking the API anything.
+    if (isTokenExpired(tokenManager.getAccessTokenLifetime(), Date.now())) {
+      tokenManager.clearTokens();
+      clearAuth();
+      setLoading(false);
+      router.replace("/login");
+      return;
+    }
+
+    // Already have the user — no need to fetch. Read from the store itself, not
+    // this render's `user`: on a full page load the first render is React
+    // hydrating from the store's initial, empty state, so `user` is still null
+    // here even when a signed-in user is persisted, and this used to call
+    // /auth/me on every load because of it.
+    const stored = useAuthStore.getState();
+    if (stored.user && stored.isAuthenticated) {
       setLoading(false);
       return;
     }
@@ -38,14 +64,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       const userData = await authService.me();
       setUser(userData);
-    } catch {
-      tokenManager.clearTokens();
-      clearAuth();
+    } catch (err) {
+      // Only a refused token ends the session. A throttled (429), failing or
+      // dropped /auth/me says nothing about it, and clearing the tokens over
+      // one signed people out mid-session; the next load simply asks again.
+      if (isSessionRejection(axios.isAxiosError(err) ? err.response?.status : undefined)) {
+        tokenManager.clearTokens();
+        clearAuth();
+      }
       router.replace("/login");
     } finally {
       setLoading(false);
     }
-  }, [user, isAuthenticated, setUser, clearAuth, router]);
+  }, [setUser, clearAuth, router]);
 
   useEffect(() => {
     initAuth();

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { loanService } from "@/services/loan.service";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -350,9 +351,9 @@ export default function LoansPage() {
     (async () => {
       try {
         setProductsLoading(true);
-        const res = await loanProductService.list();
+        const rows = completeRows(await loanProductService.listAll());
         if (cancelled) return;
-        setProducts(Array.isArray(res) ? res : []);
+        setProducts(rows);
       } catch {
         // Soft-fail: filter just shows empty product list, page still works.
       } finally {

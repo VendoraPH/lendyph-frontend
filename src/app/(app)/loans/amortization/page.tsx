@@ -149,10 +149,6 @@ export default function AmortizationPage() {
     setComparison({ fixed, diminishing, upon_maturity });
   }
 
-  const frequencyLabel =
-    PAYMENT_FREQUENCY_OPTIONS.find((o) => o.value === frequency)?.label ??
-    "Monthly";
-
   // Totals for footer
   const totals = useMemo(() => {
     if (!schedule) return null;
@@ -468,7 +464,7 @@ export default function AmortizationPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <MethodComparison comparison={comparison} frequency={frequencyLabel} />
+            <MethodComparison comparison={comparison} />
           </CardContent>
         </Card>
       )}
@@ -512,14 +508,12 @@ function ComparisonRow({ label, value }: { label: string; value: string }) {
 
 function MethodComparison({
   comparison,
-  frequency,
 }: {
   comparison: {
     fixed: GeneratedSchedule;
     diminishing: GeneratedSchedule;
     upon_maturity: GeneratedSchedule;
   };
-  frequency: string;
 }) {
   const methods = [
     {

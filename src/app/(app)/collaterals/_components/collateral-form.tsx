@@ -41,6 +41,7 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { collateralLock, holdersSentence, isLocked } from "@/lib/collateral-lock";
 import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { completeRows } from "@/lib/paginate";
 import { borrowerService } from "@/services/borrower.service";
 import {
   collateralService,
@@ -103,7 +104,7 @@ export function CollateralForm({ initial, mode }: Props) {
     // reads as "that member is not registered", not as a bug.
     Promise.all([
       borrowerService.listAll({ members_only: 1 }),
-      collateralTypeService.list(),
+      collateralTypeService.listAll().then(completeRows),
     ])
       .then(([memberDrain, tRes]) => {
         if (cancelled) return;
@@ -213,8 +214,11 @@ export function CollateralForm({ initial, mode }: Props) {
     setSubmitting(true);
     try {
       // Duplicate guard — prevent registering the same (member, type, detail)
-      // pair twice. Skips the current record when editing.
-      const existing = await collateralService.list({ borrower_id: borrowerId });
+      // pair twice. Skips the current record when editing. It needs the
+      // member's WHOLE set: a duplicate on a page it never read would pass.
+      const existing = completeRows(
+        await collateralService.listAll({ borrower_id: borrowerId }),
+      );
       const target = normalizeDetail(detailValue);
       const dup = existing.find(
         (c) =>
@@ -330,6 +334,7 @@ export function CollateralForm({ initial, mode }: Props) {
                 <button
                   id="collateral-member"
                   type="button"
+                  // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                   role="combobox"
                   aria-expanded={borrowerOpen}
                   className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"

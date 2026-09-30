@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserPlus, Loader2, Plus, X } from "lucide-react";
 import { usePermission } from "@/hooks";
-import type { CoMaker, Loan } from "@/types";
+import type { CoMaker } from "@/types";
 import {
   coMakerService,
   type CreateCoMakerData,
@@ -70,14 +70,7 @@ function emptyForm(): CoMakerFormData {
     occupation: "",
     employer: "",
     monthly_income: "",
-    loan_id: "",
   };
-}
-
-function generateCoMakerCode(count: number): string {
-  const year = new Date().getFullYear();
-  const seq = String(count + 1).padStart(4, "0");
-  return `CM-${year}${seq}`;
 }
 
 function coMakerCreatePayload(form: CoMakerFormData): CreateCoMakerData {
@@ -158,19 +151,11 @@ function ValidIdHeading({
 // ── Add Co-Maker Dialog ──
 
 interface AddCoMakerDialogProps {
-  loans: Loan[];
-  borrowerId: number;
-  coMakerCount: number;
-  existingCoMakers: CoMaker[];
   onAdd: AddCoMakerHandler;
   onAddId: AddCoMakerIdHandler;
 }
 
 export function AddCoMakerDialog({
-  loans,
-  borrowerId,
-  coMakerCount,
-  existingCoMakers,
   onAdd,
   onAddId,
 }: AddCoMakerDialogProps) {
@@ -192,11 +177,7 @@ export function AddCoMakerDialog({
     if (idOnly) retryNotice.current?.scrollIntoView({ block: "start" });
   }, [idOnly]);
 
-  const selectedLoanHasCoMaker = form.loan_id
-    ? existingCoMakers.some((cm) => cm.loan_id === form.loan_id)
-    : false;
-
-  const update = (field: keyof CoMakerFormData, value: string | number | undefined) => {
+  const update = (field: keyof CoMakerFormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setDetailErrors((prev) => withoutKey(prev, field));
   };
@@ -270,7 +251,8 @@ export function AddCoMakerDialog({
         <DialogHeader>
           <DialogTitle>Add Co-Maker</DialogTitle>
           <DialogDescription>
-            Register a co-maker linked to a loan for this borrower.
+            Register a co-maker for this member. To put them on a loan, add them
+            in that loan&apos;s Release dialog while it awaits release.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -278,10 +260,8 @@ export function AddCoMakerDialog({
             <CoMakerFormFields
               form={form}
               update={update}
-              loans={loans}
               errors={detailErrors}
               disabled={saving || idOnly}
-              loanWarning={selectedLoanHasCoMaker ? "This loan already has a co-maker assigned." : undefined}
             />
             <section className="space-y-3 border-t pt-4">
               {idOnly && (
@@ -332,7 +312,6 @@ export function AddCoMakerDialog({
 
 interface EditCoMakerDialogProps {
   coMaker: CoMaker;
-  loans: Loan[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: EditCoMakerHandler;
@@ -340,7 +319,6 @@ interface EditCoMakerDialogProps {
 
 export function EditCoMakerDialog({
   coMaker,
-  loans,
   open,
   onOpenChange,
   onSave,
@@ -352,7 +330,10 @@ export function EditCoMakerDialog({
   const [fresh, setFresh] = useState<CoMaker>(coMaker);
   const [form, setForm] = useState<CoMakerFormData>(() => coMakerToForm(coMaker));
   const [detailErrors, setDetailErrors] = useState<CoMakerDetailsErrors>({});
-  const [refreshing, setRefreshing] = useState(false);
+  // The co-maker whose fresh copy has come back, or failed to. Until it is
+  // this one, the title shows that the latest data is still on its way.
+  const [detailSettledFor, setDetailSettledFor] = useState<number | null>(null);
+  const refreshing = open && detailSettledFor !== coMaker.id;
   const [saving, setSaving] = useState(false);
   // Fields the person has typed in. The fresh copy never overwrites them.
   const touched = useRef(new Set<keyof CoMakerFormData>());
@@ -365,7 +346,6 @@ export function EditCoMakerDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setRefreshing(true);
     coMakerService
       .detail(coMaker.id)
       .then((data) => {
@@ -379,14 +359,14 @@ export function EditCoMakerDialog({
         // populated from it, so the user can still edit.
       })
       .finally(() => {
-        if (!cancelled) setRefreshing(false);
+        if (!cancelled) setDetailSettledFor(coMaker.id);
       });
     return () => {
       cancelled = true;
     };
   }, [open, coMaker.id]);
 
-  const update = (field: keyof CoMakerFormData, value: string | number | undefined) => {
+  const update = (field: keyof CoMakerFormData, value: string) => {
     touched.current.add(field);
     setForm((prev) => ({ ...prev, [field]: value }));
     setDetailErrors((prev) => withoutKey(prev, field));
@@ -469,7 +449,6 @@ export function EditCoMakerDialog({
             <CoMakerFormFields
               form={form}
               update={update}
-              loans={loans}
               errors={detailErrors}
               disabled={saving}
             />

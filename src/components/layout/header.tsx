@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/hooks";
+import { useAuth, usePermission } from "@/hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { SIDEBAR_NAV } from "@/constants";
+import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -120,13 +121,16 @@ interface Notification {
 // they read as real activity on a client's live dashboard.
 const INITIAL_NOTIFICATIONS: Notification[] = [];
 
-const QUICK_ACTIONS = [
-  { title: "New Loan", href: "/loans/new", icon: FilePlus },
-  { title: "Record Payment", href: "/payments", icon: CreditCard },
+// Each carries the permission its page needs to do the action, so the palette
+// offers only what the user can finish, as the sidebar does.
+const QUICK_ACTIONS: { title: string; href: string; icon: typeof FilePlus; permission: Permission }[] = [
+  { title: "New Loan", href: "/loans/new", icon: FilePlus, permission: "loans:create" },
+  { title: "Record Payment", href: "/payments", icon: CreditCard, permission: "payments:create" },
 ];
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
+  const { can } = usePermission();
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
@@ -329,7 +333,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Navigation">
-            {SIDEBAR_NAV.map((item) => (
+            {SIDEBAR_NAV.filter((item) => can(item.permission)).map((item) => (
               <CommandItem
                 key={item.href}
                 onSelect={() => handleSelect(item.href)}
@@ -340,7 +344,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            {QUICK_ACTIONS.map((action) => (
+            {QUICK_ACTIONS.filter((action) => can(action.permission)).map((action) => (
               <CommandItem
                 key={action.href}
                 onSelect={() => handleSelect(action.href)}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Plus, ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 import { PermissionGate } from "@/components/common";
 import { ShareCapitalUnavailableNotice } from "@/components/common/share-capital-unavailable-notice";
 import { collateralService, collateralTypeService } from "@/services";
+import { completeRows } from "@/lib/paginate";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -35,11 +37,7 @@ import {
   lockLabel,
 } from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
-import type {
-  Collateral,
-  CollateralType,
-  CollateralWithMeta,
-} from "@/types";
+import type { Collateral } from "@/types";
 
 interface CollateralsTabProps {
   borrowerId: number;
@@ -52,7 +50,10 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
   // ever needed and there is nothing to warn about.
   const [scBalance, setScBalance] = useState<ShareCapitalBalance | null>(null);
 
-  const load = useCallback(async () => {
+  // `isCancelled` is the effect's: a superseded or unmounted load must neither
+  // write state nor toast, which is also what keeps Strict Mode's double mount
+  // down to one message.
+  const load = useCallback(async (isCancelled: () => boolean) => {
     setLoading(true);
     try {
       // The borrower's loan list is no longer fetched: it was only ever there to
@@ -61,8 +62,8 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       // active book, so a collateral this member pledged to somebody else's loan
       // (which the API permits) is now visible here rather than invisible.
       const [collaterals, types] = await Promise.all([
-        collateralService.list({ borrower_id: borrowerId }),
-        collateralTypeService.list(),
+        collateralService.listAll({ borrower_id: borrowerId }).then(completeRows),
+        collateralTypeService.listAll().then(completeRows),
       ]);
 
       const typeById = new Map(types.map((t) => [t.id, t]));
@@ -76,6 +77,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       const balance = needsBalance
         ? await getShareCapitalBalance(borrowerId)
         : null;
+      if (isCancelled()) return;
       setScBalance(balance);
 
       const enriched: CollateralValueRow[] = collaterals.map((c) => {
@@ -93,15 +95,21 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       });
       setRows(enriched);
     } catch {
+      if (isCancelled()) return;
       setRows([]);
       setScBalance(null);
+      toast.error("We couldn't load this member's collaterals. Please try again.");
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
   }, [borrowerId]);
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    load(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   // Rows whose value is unknown are LEFT OUT of the total rather than counted
@@ -133,6 +141,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
         </div>
         <PermissionGate permission="collaterals:create">
           <Button
+            nativeButton={false}
             render={
               <Link href={`/collaterals/new?borrower_id=${borrowerId}`} />
             }

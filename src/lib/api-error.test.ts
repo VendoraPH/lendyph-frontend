@@ -1,8 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getErrorMessage, getFieldErrors, firstFieldError } from "./api-error";
+import { AxiosError, CanceledError } from "axios";
+import { getErrorMessage, getFieldErrors, firstFieldError, httpStatusOf } from "./api-error";
+import { IncompleteListError } from "./paginate";
 
 const httpErr = (status: number, data?: unknown) => ({ response: { status, data } });
+
+/**
+ * What axios actually rejects with when a request left and nothing came back:
+ * the request it sent, no response. Built with the real class so the shape
+ * cannot drift from the library.
+ */
+const noReply = (code: string, message: string) =>
+  new AxiosError(message, code, undefined, { sent: true });
+
+const OFFLINE = "You appear to be offline. Check your connection and try again.";
+const TIMEOUT =
+  "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again.";
+const GENERIC = "Something went wrong. Please try again.";
 
 test("422 surfaces the first field message", () => {
   const err = httpErr(422, {
@@ -80,10 +95,14 @@ test("500 maps to server copy, ignoring any raw backend message", () => {
   );
 });
 
-test("no response (offline) maps to connection copy", () => {
+test("a request that got no reply maps to connection copy", () => {
+  assert.equal(getErrorMessage(noReply("ERR_NETWORK", "Network Error")), OFFLINE);
+});
+
+test("no reply wins over the caller's fallback", () => {
   assert.equal(
-    getErrorMessage({ message: "Network Error" }),
-    "You appear to be offline. Check your connection and try again."
+    getErrorMessage(noReply("ERR_NETWORK", "Network Error"), "We couldn't load the roles."),
+    OFFLINE
   );
 });
 
@@ -92,23 +111,73 @@ test("no response (offline) maps to connection copy", () => {
 // someone mid-upload they are offline is what produced duplicate registrations.
 test("an axios timeout warns the submission may have gone through", () => {
   assert.equal(
-    getErrorMessage({ code: "ECONNABORTED", message: "timeout of 30000ms exceeded" }),
-    "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again."
+    getErrorMessage(noReply("ECONNABORTED", "timeout of 30000ms exceeded")),
+    TIMEOUT
   );
 });
 
 test("a connect timeout (ETIMEDOUT) gets the same warning", () => {
-  assert.equal(
-    getErrorMessage({ code: "ETIMEDOUT", message: "connect ETIMEDOUT" }),
-    "That took longer than expected, and your submission may still have gone through. Please wait a moment and check before trying again."
-  );
+  assert.equal(getErrorMessage(noReply("ETIMEDOUT", "connect ETIMEDOUT")), TIMEOUT);
 });
 
-test("a non-timeout code with no response is still offline", () => {
-  assert.equal(
-    getErrorMessage({ code: "ERR_NETWORK", message: "Network Error" }),
-    "You appear to be offline. Check your connection and try again."
-  );
+// "Offline" is only true of a request that went out and heard nothing. Every
+// case below also has no `response`, and none of them touched the network, so
+// the caller's own words are the honest answer.
+test("a thrown Error is the caller's fallback, not offline", () => {
+  const err = new Error("Unexpected approval workflow response shape");
+  assert.equal(getErrorMessage(err, "We couldn't load the approval workflow."), "We couldn't load the approval workflow.");
+  assert.equal(getErrorMessage(err), GENERIC);
+});
+
+test("a TypeError is the caller's fallback, not offline", () => {
+  let thrown: unknown;
+  try {
+    (undefined as unknown as { map: () => void }).map();
+  } catch (err) {
+    thrown = err;
+  }
+  assert.ok(thrown instanceof TypeError);
+  assert.equal(getErrorMessage(thrown, "We couldn't load the fees."), "We couldn't load the fees.");
+});
+
+test("null and undefined are the caller's fallback, not offline", () => {
+  assert.equal(getErrorMessage(null), GENERIC);
+  assert.equal(getErrorMessage(undefined, "Could not open the import."), "Could not open the import.");
+});
+
+test("a look-alike object with a network code but no request is not offline", () => {
+  assert.equal(getErrorMessage({ code: "ERR_NETWORK", message: "Network Error" }), GENERIC);
+  assert.equal(getErrorMessage({ code: "ECONNABORTED" }, "fallback"), "fallback");
+});
+
+test("an axios error raised before anything was sent is not offline", () => {
+  // No `request`: a bad option, a request interceptor that threw.
+  const err = new AxiosError("options must be an object", "ERR_BAD_OPTION_VALUE");
+  assert.equal(getErrorMessage(err, "We couldn't save this."), "We couldn't save this.");
+});
+
+test("a cancelled request is not offline", () => {
+  const err = new CanceledError(undefined, undefined, { sent: true });
+  assert.equal(err.code, "ERR_CANCELED");
+  assert.equal(getErrorMessage(err, "fallback"), "fallback");
+});
+
+test("httpStatusOf reads the status, and null when nothing answered", () => {
+  assert.equal(httpStatusOf(httpErr(403)), 403);
+  assert.equal(httpStatusOf(noReply("ERR_NETWORK", "Network Error")), null);
+  assert.equal(httpStatusOf(new Error("boom")), null);
+  assert.equal(httpStatusOf(null), null);
+});
+
+// Also arrives with no `response` — because every request succeeded. "Offline"
+// would send the user to retry a load that already worked; the error's own
+// message says what actually happened.
+test("an incomplete list is reported as incomplete, not as offline", () => {
+  const err = new IncompleteListError(2000, 2400);
+  const msg = getErrorMessage(err, "We couldn't load the data. Please try again.");
+  assert.equal(msg, err.message);
+  assert.match(msg, /Only 2000 of 2400 /);
+  assert.doesNotMatch(msg, /offline/i);
 });
 
 test("raw Axios status-code string never leaks even on unknown status", () => {

@@ -20,6 +20,14 @@ jobs:
     # test-merge against, so it is skipped on the push triggers above.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # The repository's default token is read-only, so the conflict comment
+    # below (POST /issues/{number}/comments) was refused with a 403. This job
+    # only needs to read the code and write that comment. The comment is on a
+    # pull request, and GITHUB_TOKEN needs `pull-requests: write` for that:
+    # `issues: write` alone was still refused (verified on #413).
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -43,25 +51,39 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
 
+      # actions/checkout sets no git identity, and without one `git merge`
+      # stops before computing anything (exit 128, "unable to auto-detect
+      # email address"). This step used to treat that as a conflict, so every
+      # PR whose base had moved since its merge ref was built was reported as
+      # conflicting, with an empty file list. So the merge gets a throwaway
+      # identity, and "conflict" means git left unmerged paths: a merge that
+      # fails without any is an error in this job, not a conflict in the PR.
       - name: Test merge with the base branch
         id: merge-test
         env:
           BASE: ${{ github.base_ref }}
         run: |
           git fetch origin "$BASE"
-          if git merge --no-commit --no-ff "origin/$BASE" 2>/dev/null; then
+          LOG="$RUNNER_TEMP/merge.log"
+          if git -c user.name=merge-check -c user.email=merge-check@localhost \
+              merge --no-commit --no-ff "origin/$BASE" > "$LOG" 2>&1; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
-            git merge --abort 2>/dev/null || true
           else
+            CONFLICTS=$(git diff --name-only --diff-filter=U | paste -sd, -)
+            if [ -z "$CONFLICTS" ]; then
+              cat "$LOG"
+              echo "::error::The test merge failed without leaving a conflict."
+              exit 1
+            fi
             echo "conflict=true" >> "$GITHUB_OUTPUT"
-            # List conflicting files
-            CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ', ' | sed 's/,$//')
             echo "files=$CONFLICTS" >> "$GITHUB_OUTPUT"
-            git merge --abort 2>/dev/null || true
           fi
+          git merge --abort 2>/dev/null || true
 
       - name: Comment on PR if conflicts found
-        if: steps.merge-test.outputs.conflict == 'true'
+        # Dependabot's runs always get a read-only token, which the job's
+        # `permissions` cannot raise, so its comment would still be refused.
+        if: steps.merge-test.outputs.conflict == 'true' && github.actor != 'dependabot[bot]'
         uses: actions/github-script@v9
         with:
           script: |

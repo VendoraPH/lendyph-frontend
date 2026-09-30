@@ -66,7 +66,7 @@ npm run test:e2e
 
 With the credentials unset the suite **skips** with a stated reason rather than
 failing, so `npm run test:e2e` is safe to run on a machine that has no secrets.
-`e2e/auth.setup.ts` signs in once and saves the session to `.auth/user.json`
+`e2e/auth.setup.ts` signs in once and saves the session to `e2e/.auth/user.json`
 (gitignored); the specs reuse it.
 
 Deliberately **not** wired into the required CI check — a credentialed browser

@@ -1,7 +1,10 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   Collateral,
+  CollateralRegisterParams,
+  CollateralRegisterResponse,
   LoanCollateral,
   PaginatedResponse,
 } from "@/types";
@@ -30,13 +33,41 @@ function unwrapList<T>(res: unknown): T[] {
 }
 
 export const collateralService = {
-  list: async (params?: CollateralListParams): Promise<Collateral[]> => {
-    const res = await api.get<PaginatedResponse<Collateral> | Collateral[]>(
-      API_ENDPOINTS.COLLATERALS.LIST,
-      { params },
-    );
-    return unwrapList<Collateral>(res);
-  },
+  /**
+   * Every collateral matching `params` — one member's with `borrower_id`, the
+   * whole register with none.
+   *
+   * `CollateralController::index()` answers with `->get()`, not a paginator, so
+   * today this is one request whatever the filter. It is a drain so that stays
+   * true of the result if the endpoint ever paginates: a single read would
+   * silently become page 1, while this keeps reading and reports `truncated` if
+   * it has to stop. Every caller needs the whole set — the loan forms' pickers
+   * and the duplicate guard need all of one member's. The register does not
+   * read this; it pages `registerPage` instead. `DrainResult` for the reason on
+   * `borrowerService.listAll`; `page` and `per_page` are set by the drain.
+   */
+  listAll: (params?: CollateralListParams): Promise<DrainResult<Collateral>> =>
+    fetchAllPages<Collateral>(({ page, per_page }) =>
+      api.getRaw<{ data: Collateral[] }>(API_ENDPOINTS.COLLATERALS.LIST, {
+        params: { ...params, page, per_page },
+      }),
+    ),
+
+  /**
+   * One page of the collateral register: collaterals grouped by member, with
+   * the filtering, grouping, valuation, sorting and paging all done on the
+   * server. Pages are of MEMBERS, so `meta.total` counts groups.
+   *
+   * `getRaw` because the body is a paginator and `meta` carries more than the
+   * paging — the KPI `totals` and `names_hidden` — all of which `api.get`
+   * would discard. `per_page` is clamped to 100 like every list.
+   */
+  registerPage: (
+    params: CollateralRegisterParams,
+  ): Promise<CollateralRegisterResponse> =>
+    api.getRaw<CollateralRegisterResponse>(API_ENDPOINTS.COLLATERALS.REGISTER, {
+      params,
+    }),
 
   detail: (id: number): Promise<Collateral> =>
     api.get<Collateral>(API_ENDPOINTS.COLLATERALS.DETAIL(id)),

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   hasShareCapitalBalance,
+  ledgerAmounts,
   shareCapitalUnavailableReason,
   toShareCapitalBalance,
 } from "./share-capital";
@@ -13,15 +14,23 @@ import type { ShareCapitalLedgerEntry } from "@/types";
 type Entry = ShareCapitalLedgerEntry;
 
 let nextId = 0;
-const entry = (type: "credit" | "debit", amount: number): Entry =>
-  ({
-    id: ++nextId,
+/** One `ShareCapitalLedgerResource` row: the amount sits in one column, the other is 0. */
+const entry = (side: "credit" | "debit", amount: number): Entry => {
+  const id = ++nextId;
+  return {
+    id,
     borrower_id: 7,
+    borrower_name: "Juana Dela Cruz",
+    borrower_code: "MBR-0001",
     date: "2026-01-01",
-    description: type === "credit" ? "Monthly contribution" : "Partial withdrawal",
-    type,
-    amount,
-  }) as Entry;
+    description: side === "credit" ? "Monthly contribution" : "Partial withdrawal",
+    reference: `SC-20260101-${String(id).padStart(6, "0")}`,
+    debit: side === "debit" ? amount : 0,
+    credit: side === "credit" ? amount : 0,
+    created_by_user: { id: 1, name: "Carlo Uy" },
+    created_at: "2026-01-01T01:00:00.000000Z",
+  };
+};
 
 const drain = (rows: Entry[], over: Partial<DrainResult<Entry>> = {}): DrainResult<Entry> => ({
   rows,
@@ -52,6 +61,32 @@ function stubLedger(rows: Entry[], maxPerPage = 100): PageFetcher {
     };
   };
 }
+
+// ---------------------------------------------------------------------------
+// The wire shape
+// ---------------------------------------------------------------------------
+
+test("a ledger exactly as the API serialises it sums to credits minus debits", () => {
+  // Verbatim `ShareCapitalLedgerResource` rows, newest first as the controller
+  // orders them. The entry type used to declare `type` + `amount`, neither of
+  // which the API sends, so this ledger — and every other — read ₱0.
+  const rows = JSON.parse(`[
+    {"id":3,"borrower_id":7,"borrower_name":"Juana Dela Cruz","borrower_code":"MBR-0001","date":"2026-03-10","description":"Partial withdrawal","reference":"SC-20260310-000001","debit":200,"credit":0,"created_by_user":{"id":1,"name":"Carlo Uy"},"created_at":"2026-03-10T02:15:00.000000Z"},
+    {"id":2,"borrower_id":7,"borrower_name":"Juana Dela Cruz","borrower_code":"MBR-0001","date":"2026-02-15","description":"Monthly contribution","reference":"SC-20260215-000001","debit":0,"credit":500,"created_by_user":{"id":1,"name":"Carlo Uy"},"created_at":"2026-02-15T01:04:00.000000Z"},
+    {"id":1,"borrower_id":7,"borrower_name":"Juana Dela Cruz","borrower_code":"MBR-0001","date":"2026-01-15","description":"Monthly contribution","reference":"SC-20260115-000001","debit":0,"credit":500,"created_by_user":{"id":1,"name":"Carlo Uy"},"created_at":"2026-01-15T01:02:00.000000Z"}
+  ]`) as Entry[];
+
+  const result = toShareCapitalBalance(drain(rows));
+
+  assert.equal(result.status, "ok");
+  assert.equal(hasShareCapitalBalance(result) && result.balance, 800);
+  assert.equal(hasShareCapitalBalance(result) && result.entries, 3);
+});
+
+test("a ledger that has paid out more than it took in stays negative", () => {
+  const result = toShareCapitalBalance(drain([entry("credit", 500), entry("debit", 800)]));
+  assert.equal(hasShareCapitalBalance(result) && result.balance, -300);
+});
 
 // ---------------------------------------------------------------------------
 // The bug, in both directions
@@ -168,12 +203,23 @@ test("a genuine zero is distinguishable from a failure to read the ledger", () =
 test("unparseable amounts are skipped rather than poisoning the total with NaN", () => {
   const rows = [
     entry("credit", 1000),
-    { ...entry("credit", 0), amount: "not a number" as unknown as number },
-    { ...entry("debit", 0), amount: undefined as unknown as number },
+    { ...entry("credit", 0), credit: "not a number" as unknown as number },
+    { ...entry("debit", 0), debit: undefined as unknown as number },
     entry("debit", 250),
   ];
   const result = toShareCapitalBalance(drain(rows));
   assert.equal(hasShareCapitalBalance(result) && result.balance, 750);
+});
+
+test("a bad column counts as 0 without discarding the other side of the entry", () => {
+  assert.deepEqual(
+    ledgerAmounts({ debit: 100, credit: "not a number" as unknown as number }),
+    { debit: 100, credit: 0 },
+  );
+  assert.deepEqual(
+    ledgerAmounts({ debit: Number.NaN, credit: 300 }),
+    { debit: 0, credit: 300 },
+  );
 });
 
 test("a non-finite total is reported as unknown, never as 0", () => {
@@ -184,8 +230,8 @@ test("a non-finite total is reported as unknown, never as 0", () => {
 
 test("string amounts off the wire still add up", () => {
   const rows = [
-    { ...entry("credit", 0), amount: "1500.50" as unknown as number },
-    { ...entry("debit", 0), amount: "500.25" as unknown as number },
+    { ...entry("credit", 0), credit: "1500.50" as unknown as number },
+    { ...entry("debit", 0), debit: "500.25" as unknown as number },
   ];
   const result = toShareCapitalBalance(drain(rows));
   assert.equal(hasShareCapitalBalance(result) && result.balance, 1000.25);

@@ -8,7 +8,6 @@ export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: "/auth/login",
     LOGOUT: "/auth/logout",
-    REFRESH: "/auth/refresh",
     ME: "/auth/me",
     UPDATE_ME: "/auth/me",
     CHANGE_PASSWORD: "/auth/change-password",
@@ -83,9 +82,8 @@ export const API_ENDPOINTS = {
     CREATE: "/loans",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
-    APPROVE: (id: number) => `/loans/${id}/approve`,
-    REJECT: (id: number) => `/loans/${id}/reject`,
     RELEASE: (id: number) => `/loans/${id}/release`,
+    RELEASE_PREVIEW: (id: number) => `/loans/${id}/release-preview`,
     SUBMIT: (id: number) => `/loans/${id}/submit`,
     VOID: (id: number) => `/loans/${id}/void`,
     AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
@@ -93,6 +91,8 @@ export const API_ENDPOINTS = {
     SUMMARY: (id: number) => `/loans/${id}/summary`,
     EXTEND: (id: number) => `/loans/${id}/extend`,
     TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
+    ACCOUNT_OFFICER: (id: number) => `/loans/${id}/account-officer`,
+    CO_MAKERS: (id: number) => `/loans/${id}/co-makers`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
     LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
   },
@@ -159,6 +159,7 @@ export const API_ENDPOINTS = {
   },
   COLLATERALS: {
     LIST: "/collaterals",
+    REGISTER: "/collaterals/register",
     CREATE: "/collaterals",
     DETAIL: (id: number) => `/collaterals/${id}`,
     UPDATE: (id: number) => `/collaterals/${id}`,
@@ -209,6 +210,9 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+  },
+  STAFF: {
+    LIST: "/staff",
   },
   AUDIT_LOGS: {
     LIST: "/audit-logs",
@@ -274,19 +278,17 @@ export const API_ENDPOINTS = {
     PUBLIC: "/branding/public",
   },
   /**
-   * Accounting — NOT YET IN SWAGGER.
+   * Accounting. The backend serves every path here under `/accounting`; its
+   * `routes/api.php` is the source of truth. Only paths the app calls are
+   * listed; add one alongside the service method that needs it.
    *
-   * Every path below is a proposal, written here so the service layer has one
-   * place to be wrong rather than thirteen. None of them answer today; the
-   * handoff covering payloads and responses went to the backend team. Re-check
-   * against the spec before trusting any of these.
-   *
-   * The three that matter most, because they cannot be done from the client at
-   * all: POST /accounting/journals/{id}/post, /reverse, and the automatic
-   * postings raised by loan release and collection. A journal has to be written
-   * in the same database transaction as the lending event that caused it — do
-   * it in a second request and a crash between the two leaves the books
-   * disagreeing with the portfolio, with nothing to point at the difference.
+   * Posting and reversing are verbs on the server (POST
+   * /accounting/journals/{id}/post and /reverse), and the automatic postings
+   * for loan release and collection happen there too, never from the client.
+   * A journal has to be written in the same database transaction as the
+   * lending event that caused it — do it in a second request and a crash
+   * between the two leaves the books disagreeing with the portfolio, with
+   * nothing to point at the difference.
    */
   ACCOUNTING: {
     // Dashboard
@@ -294,19 +296,13 @@ export const API_ENDPOINTS = {
 
     // Chart of accounts
     ACCOUNTS_LIST: "/accounting/accounts",
-    ACCOUNTS_DETAIL: (id: number) => `/accounting/accounts/${id}`,
-    ACCOUNTS_CREATE: "/accounting/accounts",
-    ACCOUNTS_UPDATE: (id: number) => `/accounting/accounts/${id}`,
-    ACCOUNTS_DELETE: (id: number) => `/accounting/accounts/${id}`,
     ACCOUNTS_SEED: "/accounting/accounts/seed",
 
     // Journals. Posting and reversing are separate verbs, not a PUT on the
     // entry — a posted journal is immutable, and `reverse` writes a second
     // entry rather than editing the first.
     JOURNALS_LIST: "/accounting/journals",
-    JOURNALS_DETAIL: (id: number) => `/accounting/journals/${id}`,
     JOURNALS_CREATE: "/accounting/journals",
-    JOURNALS_UPDATE: (id: number) => `/accounting/journals/${id}`,
     JOURNALS_POST: (id: number) => `/accounting/journals/${id}/post`,
     JOURNALS_REVERSE: (id: number) => `/accounting/journals/${id}/reverse`,
 
@@ -337,31 +333,24 @@ export const API_ENDPOINTS = {
 
     // Expenses and payables
     EXPENSES_LIST: "/accounting/expenses",
-    EXPENSES_DETAIL: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_CREATE: "/accounting/expenses",
-    EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
-    EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
 
     // Reconciliation
     RECONCILIATIONS_LIST: "/accounting/reconciliations",
-    RECONCILIATIONS_CREATE: "/accounting/reconciliations",
-    RECONCILIATIONS_DETAIL: (id: number) => `/accounting/reconciliations/${id}`,
-    RECONCILIATIONS_MATCH: (id: number) => `/accounting/reconciliations/${id}/match`,
 
     // Periods
     PERIODS_LIST: "/accounting/periods",
     PERIODS_CLOSE: (id: number) => `/accounting/periods/${id}/close`,
     PERIODS_REOPEN: (id: number) => `/accounting/periods/${id}/reopen`,
 
-    // Settings and opening balances
-    SETTINGS: "/accounting/settings",
+    // Settings
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
-    OPENING_BALANCES: "/accounting/opening-balances",
   },
   /**
-   * None of these exist yet. Typed and wired now so the service layer has
-   * one place to be wrong rather than eleven, same rationale as ACCOUNTING
-   * above. Re-check against the backend handoff before trusting any path.
+   * None of these exist yet: the credit-scoring backend is not built, and
+   * docs/CREDIT_SCORING_BACKEND_HANDOFF.md is its contract. Typed and wired now
+   * so the UI-only screens have one place to be wrong. Re-check against the
+   * handoff before trusting any path.
    */
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
@@ -370,7 +359,6 @@ export const API_ENDPOINTS = {
     BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
     SCORE_HISTORY: "/credit-scoring/score-history",
     RISK_MONITORING: "/credit-scoring/risk-monitoring",
-    ALERTS_LIST: "/credit-scoring/alerts",
     SCORECARD_CONFIG: "/credit-scoring/scorecard-config",
     POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
     DECISIONS_CREATE: "/credit-scoring/decisions",

@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
   holdersSentence,
@@ -17,16 +18,16 @@ import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText
 import { Spinner } from "@/components/ui/spinner";
 import {
   borrowerService,
-  coMakerService,
   collateralService,
   collateralTypeService,
   documentService,
   feeService,
   loanProductService,
   loanService,
-  userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
+import { httpStatusOf } from "@/lib/api-error";
+import { completeRows } from "@/lib/paginate";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -41,12 +42,10 @@ import {
 } from "@/types/collateral";
 import type {
   Borrower,
-  CoMaker,
   CollateralType,
-  CollateralWithMeta,
   Fee,
   Loan,
-  User,
+  StaffMember,
 } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,7 +96,19 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatDateISO } from "@/lib/format";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import {
+  DAYS_PER_MONTH,
+  instalments,
+  maturityDate as loanMaturityDate,
+  rateForDays,
+  ratePeriodWord,
+  readRateFrequency,
+  readTermUnit,
+  termUnitNoun,
+  type RateFrequency,
+  type TermUnit,
+} from "@/lib/loan-terms";
+import { editedAccountOfficer } from "@/lib/loan-account-officer";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -121,51 +132,6 @@ const formatCurrency = (amount: number) =>
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
 type InterestType = "straight" | "fixed" | "diminishing";
 
-function getPeriodsFromMonths(
-  termMonths: number,
-  frequency: PaymentFrequency
-): number {
-  switch (frequency) {
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-    case "semi_monthly":
-      return Math.round(termMonths * 2);
-    case "monthly":
-    default:
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-    case "semi_monthly":
-      return 15;
-    case "monthly":
-    default:
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-PH", {
     year: "numeric",
@@ -187,12 +153,13 @@ function computeAmortization(
   principal: number,
   interestRate: number,
   interestType: InterestType,
-  termMonths: number,
+  term: number,
+  termUnit: TermUnit,
+  rateFrequency: RateFrequency,
   frequency: PaymentFrequency,
   releaseDate: Date,
   scbAmount: number = 0,
 ): AmortizationRow[] {
-  const r = interestRate / 100;
   const scb = Math.round(scbAmount);
 
   // Upon Maturity is a bullet / balloon repayment schedule: one single
@@ -200,12 +167,17 @@ function computeAmortization(
   // interest for the whole term + any SCB. It's a payment-frequency
   // concept, not an interest-type concept — the interest type is still
   // straight or diminishing, but with no intermediate paydowns the two
-  // converge to the same total here.
+  // converge to the same total here. A months term accrues a month's
+  // interest per month; a days term accrues for its days.
   if (frequency === "upon_maturity") {
-    const totalInterest = Math.round(principal * r * termMonths);
+    const fraction =
+      termUnit === "months"
+        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
+        : rateForDays(interestRate, term, rateFrequency);
+    const totalInterest = Math.round(principal * fraction);
     return [{
       period: 1,
-      dueDate: addMonths(releaseDate, termMonths),
+      dueDate: loanMaturityDate(releaseDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
@@ -213,47 +185,46 @@ function computeAmortization(
     }];
   }
 
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
+  const plan = instalments(releaseDate, term, termUnit, frequency);
+  const totalPeriods = plan.length;
   const rows: AmortizationRow[] = [];
   let remainingBalance = principal;
 
-  // Straight/Fixed: equal principal each period, constant interest on original principal
+  // Straight/Fixed: equal principal each period, interest on the original
+  // principal for the days each instalment covers
   if (interestType === "straight" || interestType === "fixed") {
     const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r);
 
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
       const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
+      const interest = Math.round(principal * rateForDays(interestRate, days, rateFrequency));
 
       rows.push({
         period: i,
         dueDate,
         principal: periodPrincipal,
-        interest: interestPerPeriod,
+        interest,
         shareCapitalBuildUp: scb,
-        totalPayment: periodPrincipal + interestPerPeriod + scb,
+        totalPayment: periodPrincipal + interest + scb,
       });
       remainingBalance -= periodPrincipal;
-    }
+    });
   }
 
-  // Diminishing: equal total payment (PMT), decreasing interest, increasing principal
+  // Diminishing: equal total payment (PMT) at one full instalment's rate,
+  // decreasing interest, increasing principal
   else if (interestType === "diminishing") {
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
     const pmt = r > 0
       ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
       : principal / totalPeriods;
 
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * r);
+      const interest = Math.round(remainingBalance * rateForDays(interestRate, days, rateFrequency));
       const periodPrincipal = isLast
         ? remainingBalance
         : Math.round(pmt - interest);
@@ -268,10 +239,21 @@ function computeAmortization(
         totalPayment: baseTotal + scb,
       });
       remainingBalance -= periodPrincipal;
-    }
+    });
   }
 
   return rows;
+}
+
+/**
+ * A 403 from a list this form only reads for reference. The edit mode below is
+ * open to `loans:update`, which `loan_processor` holds without `fees:view` or
+ * `collaterals:view` — so for that role these reads are refused on every load.
+ * Expected, and nothing a retry fixes, so it is not announced; any other
+ * failure is.
+ */
+function isRoleWithoutAccess(err: unknown): boolean {
+  return httpStatusOf(err) === 403;
 }
 
 // ── Main Page Component ──
@@ -301,21 +283,17 @@ function NewLoanApplicationInner() {
   const [submitting, setSubmitting] = useState(false);
   const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
 
-  // ── Users (Account Officers) ──
-  const [users, setUsers] = useState<User[]>([]);
-
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
   const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
-  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
-  const [aoOpen, setAoOpen] = useState(false);
+  const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
 
   // ── Loan Product & Terms State ──
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
-  const [termMonths, setTermMonths] = useState<string>("");
+  const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [interestType, setInterestType] = useState<string | null>(null);
@@ -366,16 +344,16 @@ function NewLoanApplicationInner() {
     shown: number;
     total: number | null;
   } | null>(null);
-  // Same, for the officer drain: set only when the Account Officer picker is
-  // knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
-  // ── Fetch borrowers, products, users — and the loan when editing ──
+  // ── Fetch borrowers, products — and the loan when editing ──
   useEffect(() => {
+    // Set by the cleanup, so Strict Mode's discarded first mount (or a real
+    // unmount) neither writes state nor toasts.
+    let cancelled = false;
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, usersResult, feesResult, loanResult] =
+      const [borrowersResult, productsResult, feesResult, loanResult] =
         await Promise.allSettled([
           // members_only: pending and rejected applicants are not loan-eligible,
           // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
@@ -384,21 +362,18 @@ function NewLoanApplicationInner() {
           // BorrowerController without a word, so member 101 onwards could not
           // be picked and could not be lent to from this screen at all.
           borrowerService.listAll({ members_only: 1 }),
-          loanProductService.list(),
-          // Drained, and filtered to active on the server. This was
-          // `userService.list()` with no arguments — the endpoint's default
-          // page of 15, newest first — so from the 16th user on, the
-          // longest-serving officers were the ones missing from the picker.
-          userService.listAll({ status: "active" }),
-          feeService.list(),
+          loanProductService.listAll().then(completeRows),
+          feeService.listAll().then(completeRows),
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
+      if (cancelled) return;
 
       if (feesResult.status === "fulfilled") {
-        const feeData = Array.isArray(feesResult.value)
-          ? feesResult.value
-          : (feesResult.value as unknown as { data: Fee[] }).data ?? [];
-        setFees(feeData);
+        setFees(feesResult.value);
+      } else if (!isRoleWithoutAccess(feesResult.reason)) {
+        // A preview only — the server applies configured fees itself — but a
+        // preview that silently drops them understates every deduction.
+        toast.error("We couldn't load the configured fees, so the deductions shown leave them out. Please try again.");
       }
 
       if (borrowersResult.status === "fulfilled") {
@@ -413,22 +388,10 @@ function NewLoanApplicationInner() {
         toast.error("We couldn't load members. Please try again.");
       }
 
-      let productsList: LoanProduct[] = [];
       if (productsResult.status === "fulfilled") {
-        productsList = Array.isArray(productsResult.value)
-          ? productsResult.value
-          : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
-        setProducts(productsList);
+        setProducts(productsResult.value);
       } else {
         toast.error("We couldn't load loan products. Please try again.");
-      }
-
-      if (usersResult.status === "fulfilled") {
-        const officers = toUserList(usersResult.value);
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
       }
 
       // Hydrate form state from the loan being edited. Runs after products
@@ -439,20 +402,18 @@ function NewLoanApplicationInner() {
         if (loanResult.status === "fulfilled" && loanResult.value) {
           const loan = loanResult.value;
           setExistingLoan(loan);
-          const l = loan as unknown as Record<string, unknown>;
           const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
           if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
           const coMakerIdList: number[] = Array.isArray(loan.co_makers)
             ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
             : [];
           setCoMakerIds(coMakerIdList.length > 0 ? coMakerIdList : [null]);
-          const aoId = (l.account_officer_id as number | undefined) ?? null;
-          if (aoId) setAccountOfficerId(aoId);
+          if (loan.account_officer) setAccountOfficer(loan.account_officer);
           setPurpose(loan.purpose ?? "");
           const productIdVal = loan.loan_product?.id ?? loan.loan_product_id ?? null;
           if (productIdVal) setProductId(String(productIdVal));
           setPrincipalAmount(String(loan.principal_amount ?? ""));
-          setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+          setTermValue(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
           setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
           const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
@@ -472,6 +433,9 @@ function NewLoanApplicationInner() {
       setLoadingData(false);
     }
     fetchData();
+    return () => {
+      cancelled = true;
+    };
     // Re-fetch if user switches between create and edit in the same tab
   }, [editLoanId, router]);
 
@@ -479,12 +443,18 @@ function NewLoanApplicationInner() {
   useEffect(() => {
     let cancelled = false;
     collateralTypeService
-      .list()
+      .listAll()
+      .then(completeRows)
       .then((rows) => {
         if (!cancelled) setCollateralTypes(rows);
       })
-      .catch(() => {
-        // Non-blocking — picker will just lack type metadata.
+      .catch((err) => {
+        // Non-blocking, but not silent: without types a share-capital
+        // collateral is valued at its recorded amount instead of the member's
+        // balance.
+        if (!cancelled && !isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load the collateral types, so collateral values may be wrong. Please reload before attaching collateral.");
+        }
       });
     return () => {
       cancelled = true;
@@ -502,12 +472,14 @@ function NewLoanApplicationInner() {
     let cancelled = false;
     (async () => {
       try {
-        // One request. `active_loans` on each row is the server's answer to
-        // "is this already pledged", across the whole active loan book — no
+        // One request today. `active_loans` on each row is the server's answer
+        // to "is this already pledged", across the whole active loan book — no
         // loan list to page and no per-loan attachment fan-out to bound.
-        const collateralRows = await collateralService.list({
-          borrower_id: borrowerId,
-        });
+        // Drained so a paginated `/collaterals` cannot hand the picker page 1
+        // as the member's whole set.
+        const collateralRows = completeRows(
+          await collateralService.listAll({ borrower_id: borrowerId }),
+        );
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsScBalance = collateralRows.some(
           (c) =>
@@ -533,8 +505,12 @@ function NewLoanApplicationInner() {
           };
         });
         if (!cancelled) setAvailableCollaterals(enriched);
-      } catch {
-        if (!cancelled) setAvailableCollaterals([]);
+      } catch (err) {
+        if (cancelled) return;
+        setAvailableCollaterals([]);
+        if (!isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load this member's collaterals. Please try again.");
+        }
       }
     })();
     return () => {
@@ -616,8 +592,12 @@ function NewLoanApplicationInner() {
     return raw ? [String(raw)] : [];
   }, [selectedProduct]);
 
+  // `term` is a length in the product's unit — months unless it says days.
+  const termUnit = readTermUnit(selectedProduct?.term_unit);
+  // …and the rate is quoted per the product's rate frequency.
+  const rateFrequency = readRateFrequency(selectedProduct?.interest_rate_frequency);
   const principal = parseFloat(principalAmount) || 0;
-  const term = parseInt(termMonths) || 0;
+  const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
 
@@ -632,13 +612,13 @@ function NewLoanApplicationInner() {
   }, [selectedProduct, principalAmount, principal]);
 
   const termError = useMemo(() => {
-    if (!selectedProduct || !termMonths) return null;
+    if (!selectedProduct || !termValue) return null;
     if (term < selectedProduct.min_term)
-      return `Minimum term is ${selectedProduct.min_term} month(s)`;
+      return `Minimum term is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
     if (term > selectedProduct.max_term)
-      return `Maximum term is ${selectedProduct.max_term} months`;
+      return `Maximum term is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     return null;
-  }, [selectedProduct, termMonths, term]);
+  }, [selectedProduct, termValue, term, termUnit]);
 
   // SCB validation — required when the product says so; range-checked when
   // the product defines min/max. Otherwise optional (any value >= 0 is fine).
@@ -717,8 +697,8 @@ function NewLoanApplicationInner() {
   // Maturity date
   const maturityDate = useMemo(() => {
     if (!releaseDate || !term) return null;
-    return addMonths(releaseDate, term);
-  }, [releaseDate, term]);
+    return loanMaturityDate(releaseDate, term, termUnit, paymentFrequency ?? "monthly");
+  }, [releaseDate, term, termUnit, paymentFrequency]);
 
   // Amortization preview — shown as soon as the core loan terms are valid.
   // SCB errors do NOT block the preview (we want the user to see the SCB
@@ -741,6 +721,8 @@ function NewLoanApplicationInner() {
       rate,
       interestType as InterestType,
       term,
+      termUnit,
+      rateFrequency,
       paymentFrequency as PaymentFrequency,
       releaseDate,
       scb,
@@ -751,6 +733,8 @@ function NewLoanApplicationInner() {
     rate,
     interestType,
     term,
+    termUnit,
+    rateFrequency,
     paymentFrequency,
     releaseDate,
     scb,
@@ -910,7 +894,12 @@ function NewLoanApplicationInner() {
         interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
-        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        // A new loan states its officer, `null` for none. An edit sends one
+        // only when it changed, so an officer deactivated since does not
+        // block saving the rest of the loan.
+        ...(isEditMode
+          ? editedAccountOfficer(accountOfficer, existingLoan?.account_officer ?? null)
+          : { account_officer_id: accountOfficer?.id ?? null }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
         ...(policyException && {
           policy_exception: true,
@@ -1083,15 +1072,6 @@ function NewLoanApplicationInner() {
         />
       )}
 
-      {officerShortfall && (
-        <IncompleteListNotice
-          shown={officerShortfall.shown}
-          total={officerShortfall.total}
-          noun="active users"
-          consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
-        />
-      )}
-
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
         <CardHeader>
@@ -1111,6 +1091,7 @@ function NewLoanApplicationInner() {
                   render={
                     <button
                       type="button"
+                      // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                       role="combobox"
                       aria-expanded={borrowerOpen}
                       className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
@@ -1192,6 +1173,7 @@ function NewLoanApplicationInner() {
                           render={
                             <button
                               type="button"
+                              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                               role="combobox"
                               aria-expanded={isOpen}
                               disabled={options.length === 0}
@@ -1258,57 +1240,13 @@ function NewLoanApplicationInner() {
 
           {/* Account Officer */}
           <div className="space-y-2">
-            <Label>Account Officer (AO)</Label>
-            <Popover open={aoOpen} onOpenChange={setAoOpen}>
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    role="combobox"
-                    aria-expanded={aoOpen}
-                    className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                  />
-                }
-              >
-                <span className={cn("truncate", !accountOfficerId && "text-muted-foreground")}>
-                  {accountOfficerId
-                    ? users.find((u) => u.id === accountOfficerId)?.full_name ?? "Select AO"
-                    : "Select account officer"}
-                </span>
-                <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-              </PopoverTrigger>
-              <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search officer..." />
-                  <CommandList>
-                    <CommandEmpty>No users found.</CommandEmpty>
-                    <CommandGroup>
-                      {users.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          value={user.full_name}
-                          onSelect={() => {
-                            setAccountOfficerId(user.id);
-                            setAoOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 size-4",
-                              accountOfficerId === user.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div>
-                            <p className="text-sm">{user.full_name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="account-officer">Account Officer (AO)</Label>
+            <StaffPicker
+              id="account-officer"
+              value={accountOfficer}
+              onChange={setAccountOfficer}
+              clearable
+            />
           </div>
 
           {/* Purpose */}
@@ -1445,7 +1383,7 @@ function NewLoanApplicationInner() {
                 <Info className="size-3" />
                 Amount: {formatCurrency(selectedProduct.min_amount)} –{" "}
                 {formatCurrency(selectedProduct.max_amount)} | Term:{" "}
-                {selectedProduct.min_term} – {selectedProduct.max_term} months
+                {selectedProduct.min_term} – {selectedProduct.max_term} {termUnit}
               </p>
             )}
           </div>
@@ -1470,14 +1408,14 @@ function NewLoanApplicationInner() {
             {/* Term */}
             <div className="space-y-2">
               <Label>
-                Term (months) <span className="text-destructive">*</span>
+                Term ({termUnit}) <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
                 placeholder="0"
                 step="1"
-                value={termMonths}
-                onChange={(e) => setTermMonths(e.target.value.replace(/\D/g, ""))}
+                value={termValue}
+                onChange={(e) => setTermValue(e.target.value.replace(/\D/g, ""))}
                 min={selectedProduct?.min_term}
                 max={selectedProduct?.max_term}
               />
@@ -1518,7 +1456,7 @@ function NewLoanApplicationInner() {
 
             {/* Interest Rate */}
             <div className="space-y-2">
-              <Label>Interest Rate (%)</Label>
+              <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
               <Input
                 type="number"
                 placeholder="0"
