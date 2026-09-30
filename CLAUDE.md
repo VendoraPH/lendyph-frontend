@@ -78,7 +78,7 @@ npx playwright test e2e/fees-settings.spec.ts
 **Auth and permissions are client-side only.**
 - There is no `middleware.ts` / `proxy.ts`. `src/app/(app)/layout.tsx` redirects to `/login` when there is no token, and renders nothing until the user is loaded. The API is the real enforcer.
 - The bearer token is stored in localStorage.
-- The axios interceptor does one queued refresh on 401. On **423** (`password_change_required`) it sends the user to `/change-password`. A 423 must never reach the refresh path.
+- A token can only be renewed while it is still valid (`POST /auth/refresh` is authenticated by the token it replaces), so `SessionProvider` renews it ahead of expiry through `renewAccessToken()` (rules in `src/lib/session-token.ts`). A 401 never triggers a refresh: the interceptor replays the request if the token rotated mid-flight, otherwise it ends the session. On **423** (`password_change_required`) it sends the user to `/change-password`; a 423 must never end the session or reach a renewal.
 - Permissions are `module:action` strings from the server's `user.permissions`. Check them with `usePermission()`, and gate with:
   - `RouteGuard`: a whole page.
   - `PermissionGate`: hide something.
