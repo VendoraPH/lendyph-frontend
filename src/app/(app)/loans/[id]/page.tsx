@@ -882,8 +882,14 @@ export default function LoanDetailPage({
     return () => { cancelled = true; };
   }, [loanId]);
 
+  // Assigning an officer needs `loans:update`, and filling the picker needs the
+  // staff list, which is behind `users:view`. Without both, the picker would
+  // only 403 or come up empty, so the control and its fetch are skipped.
+  const canAssignOfficer = usePermission().canAll(["loans:update", "users:view"]);
+
   // Fetch users for AO tagging
   useEffect(() => {
+    if (!canAssignOfficer) return;
     async function fetchUsers() {
       try {
         // Drained, and filtered to active on the server. This was
@@ -898,23 +904,25 @@ export default function LoanDetailPage({
       } catch { /* non-critical */ }
     }
     fetchUsers();
-  }, []);
+  }, [canAssignOfficer]);
 
-  // Save AO assignment
+  // Save AO assignment. This goes through its own endpoint, not `update`: PUT
+  // /loans/{id} refuses every loan past for_review, and it silently dropped
+  // the field on a draft. The page shows what the server saved, not what was picked.
   const handleSaveAO = useCallback(async (userId: number) => {
     if (!loan) return;
     setAoSaving(true);
     try {
-      await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
-      setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
+      const saved = (await loanService.assignAccountOfficer(loan.id, userId)) as unknown as Record<string, unknown>;
+      setLoan((prev) => prev ? { ...prev, account_officer_id: saved.account_officer_id, account_officer: saved.account_officer } as Loan : prev);
       toast.success("Account officer updated");
       setAoEditing(false);
-    } catch {
-      toast.error("We couldn't update the account officer. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't update the account officer. Please try again.");
     } finally {
       setAoSaving(false);
     }
-  }, [loan, users]);
+  }, [loan]);
 
   // Fetch schedule for released+ loans
   const fetchSchedule = useCallback(async (id: number) => {
@@ -3292,7 +3300,7 @@ export default function LoanDetailPage({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && (
+                {!aoEditing && canAssignOfficer && (
                   <button
                     type="button"
                     onClick={() => setAoEditing(true)}
