@@ -13,23 +13,14 @@ import {
   loanAdjustmentService,
   repaymentService,
   coMakerService,
-  userService,
   reportService,
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { PrintableMenu } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { loadLoan } from "./_lib/load-loan";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
@@ -46,7 +37,7 @@ import {
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
-import type { LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
@@ -101,7 +92,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
-  Check,
   X,
   Clock,
   FileText,
@@ -117,7 +107,6 @@ import {
   CalendarPlus,
   Plus,
   DollarSign,
-  ChevronsUpDown,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -804,12 +793,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
 
   // Account Officer state
-  const [users, setUsers] = useState<User[]>([]);
-  // Set only when the officer drain gave up with pages outstanding, i.e. the
-  // AO picker is knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
   const [aoEditing, setAoEditing] = useState(false);
-  const [aoOpen, setAoOpen] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
 
   // Fetch loan on mount
@@ -830,39 +814,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
     return () => { cancelled = true; };
   }, [loanId]);
 
-  // Assigning an officer needs `loans:update`, and filling the picker needs the
-  // staff list, which is behind `users:view`. Without both, the picker would
-  // only 403 or come up empty, so the control and its fetch are skipped.
-  const canAssignOfficer = usePermission().canAll(["loans:update", "users:view"]);
-
-  // Fetch users for AO tagging
-  useEffect(() => {
-    if (!canAssignOfficer) return;
-    async function fetchUsers() {
-      try {
-        // Drained, and filtered to active on the server. This was
-        // `userService.list()` with no arguments — the endpoint's default page
-        // of 15, newest first — so from the 16th user on, the longest-serving
-        // officers could not be assigned from here.
-        const officers = toUserList(await userService.listAll({ status: "active" }));
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
-      } catch { /* non-critical */ }
-    }
-    fetchUsers();
-  }, [canAssignOfficer]);
+  // Saving goes through `PATCH /loans/{id}/account-officer`, which needs
+  // `loans:update`, and the picker's `GET /staff` accepts that same permission.
+  // It used to require `users:view` as well, which only admins hold, so loan
+  // officers never saw the control.
+  const canAssignOfficer = usePermission().can("loans:update");
 
   // Save AO assignment. This goes through its own endpoint, not `update`: PUT
-  // /loans/{id} refuses every loan past for_review, and it silently dropped
-  // the field on a draft. The page shows what the server saved, not what was picked.
+  // /loans/{id} refuses every loan past for_review. The page shows what the
+  // server saved, not what was picked.
   const handleSaveAO = useCallback(async (userId: number) => {
     if (!loan) return;
     setAoSaving(true);
     try {
-      const saved = (await loanService.assignAccountOfficer(loan.id, userId)) as unknown as Record<string, unknown>;
-      setLoan((prev) => prev ? { ...prev, account_officer_id: saved.account_officer_id, account_officer: saved.account_officer } as Loan : prev);
+      const saved = await loanService.assignAccountOfficer(loan.id, userId);
+      setLoan((prev) => prev ? { ...prev, account_officer_id: saved.account_officer_id, account_officer: saved.account_officer } : prev);
       toast.success("Account officer updated");
       setAoEditing(false);
     } catch (err) {
@@ -3232,67 +3198,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     className="text-xs text-brand-orange hover:underline flex items-center gap-1"
                   >
                     <Pencil className="h-3 w-3" />
-                    {(loan as unknown as Record<string, unknown>).account_officer_id ? "Change" : "Assign"}
+                    {loan.account_officer_id ? "Change" : "Assign"}
                   </button>
                 )}
               </div>
               {aoEditing ? (
                 <div className="space-y-2">
-                  {officerShortfall && (
-                    <IncompleteListNotice
-                      shown={officerShortfall.shown}
-                      total={officerShortfall.total}
-                      noun="active users"
-                      consequence="Some staff are missing from this picker and cannot be assigned as account officer."
-                    />
-                  )}
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={
-                        <button
-                          type="button"
-                          // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
-                          role="combobox"
-                          disabled={aoSaving}
-                          className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                        />
-                      }
-                    >
-                      <span className="text-muted-foreground text-sm">Select account officer...</span>
-                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer..." />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((user) => (
-                              <CommandItem
-                                key={user.id}
-                                value={user.full_name}
-                                onSelect={() => {
-                                  handleSaveAO(user.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 size-4",
-                                    (loan as unknown as Record<string, unknown>).account_officer_id === user.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div>
-                                  <p className="text-sm">{user.full_name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <StaffPicker
+                    aria-label="Account officer"
+                    value={loan.account_officer ?? null}
+                    onChange={(officer) => {
+                      if (officer) handleSaveAO(officer.id);
+                    }}
+                    disabled={aoSaving}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -3304,10 +3223,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
               ) : (
                 <p className="text-sm font-medium">
-                  {(() => {
-                    const ao = (loan as unknown as Record<string, unknown>).account_officer as { id?: number; full_name?: string; name?: string } | undefined;
-                    return ao?.full_name ?? ao?.name ?? "Not assigned";
-                  })()}
+                  {loan.account_officer?.full_name ?? "Not assigned"}
                 </p>
               )}
             </div>

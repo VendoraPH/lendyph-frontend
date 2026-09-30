@@ -16,6 +16,7 @@ import {
 
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
   holdersSentence,
@@ -75,7 +76,6 @@ import {
   collateralTypeService,
   loanProductService,
   loanService,
-  userService,
 } from "@/services";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
@@ -88,7 +88,6 @@ import {
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
 import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
 import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
@@ -96,7 +95,7 @@ import {
   LOAN_STATUS_LABELS,
 } from "@/constants";
 
-import type { Borrower, CollateralType, Loan, LoanStatus, User } from "@/types";
+import type { Borrower, CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import type { LoanProduct } from "@/types/loan";
 import {
   DAYS_PER_MONTH,
@@ -236,7 +235,6 @@ function RestructureLoanInner() {
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   // ── Source loan selection ──
@@ -253,8 +251,7 @@ function RestructureLoanInner() {
   // ── Form state ──
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
   const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
-  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
-  const [aoOpen, setAoOpen] = useState(false);
+  const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
@@ -295,25 +292,17 @@ function RestructureLoanInner() {
     shown: number;
     total: number | null;
   } | null>(null);
-  // Same, for the officer drain: set only when the Account Officer picker is
-  // knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
   // ── Load seed data on mount ──
   useEffect(() => {
     async function fetchData() {
-      const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
+      const [borrowersRes, productsRes] = await Promise.allSettled([
         // members_only: a rejected applicant must never be restructurable.
         // Drained across pages. `per_page: 200` was clamped to 100 by
         // BorrowerController without a word, so member 101 onwards could not be
         // picked and their loans could not be restructured from this screen.
         borrowerService.listAll({ members_only: 1 }),
         loanProductService.list(),
-        // Drained, and filtered to active on the server. This was
-        // `userService.list()` with no arguments — the endpoint's default page
-        // of 15, newest first — so from the 16th user on, the longest-serving
-        // officers were the ones missing from the Account Officer picker.
-        userService.listAll({ status: "active" }),
       ]);
 
       if (borrowersRes.status === "fulfilled") {
@@ -328,13 +317,6 @@ function RestructureLoanInner() {
       if (productsRes.status === "fulfilled") {
         const raw = productsRes.value;
         setProducts(Array.isArray(raw) ? raw : (raw as { data: LoanProduct[] }).data ?? []);
-      }
-      if (usersRes.status === "fulfilled") {
-        const officers = toUserList(usersRes.value);
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
       }
 
       setLoadingData(false);
@@ -399,8 +381,7 @@ function RestructureLoanInner() {
       setCoMakerIds(cmIds.length > 0 ? cmIds : [null]);
 
       // Pre-fill AO + purpose
-      const l = loan as unknown as Record<string, unknown>;
-      setAccountOfficerId((l.account_officer_id as number | undefined) ?? null);
+      setAccountOfficer(loan.account_officer ?? null);
       setPurpose(loan.purpose ?? "");
 
       // Pre-fill product
@@ -763,7 +744,7 @@ function RestructureLoanInner() {
         start_date: formatDateISO(restructureDate),
         deductions,
         ...(scb > 0 && { scb_amount: scb }),
-        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        account_officer_id: accountOfficer?.id ?? null,
         ...(purpose.trim() && { purpose: purpose.trim() }),
         ...(remarks.trim() && { remarks: remarks.trim() }),
         ...(policyException && {
@@ -859,15 +840,6 @@ function RestructureLoanInner() {
             total={loanShortfall.total}
             noun="loans"
             consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
-          />
-        )}
-
-        {officerShortfall && (
-          <IncompleteListNotice
-            shown={officerShortfall.shown}
-            total={officerShortfall.total}
-            noun="active users"
-            consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
           />
         )}
 
@@ -1087,43 +1059,13 @@ function RestructureLoanInner() {
 
                 {/* Account Officer */}
                 <div className="space-y-1.5">
-                  <Label>Account Officer <span className="text-muted-foreground">(optional)</span></Label>
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={<Button variant="outline" role="combobox" className="w-full justify-between font-normal" />}
-                    >
-                      {accountOfficerId
-                        ? (() => {
-                            const u = users.find((u) => u.id === accountOfficerId);
-                            return u?.full_name ?? "Unknown";
-                          })()
-                        : "Select account officer…"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer…" />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((u) => (
-                              <CommandItem
-                                key={u.id}
-                                value={u.full_name}
-                                onSelect={() => {
-                                  setAccountOfficerId(u.id === accountOfficerId ? null : u.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", accountOfficerId === u.id ? "opacity-100" : "opacity-0")} />
-                                {u.full_name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <Label htmlFor="account-officer">Account Officer <span className="text-muted-foreground">(optional)</span></Label>
+                  <StaffPicker
+                    id="account-officer"
+                    value={accountOfficer}
+                    onChange={setAccountOfficer}
+                    clearable
+                  />
                 </div>
 
                 {/* Purpose */}
