@@ -11,6 +11,7 @@
  * disclosure describes the loan as granted, not as it stands today.
  */
 
+import { restructureSuccessor } from "@/lib/loan-restructure";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
@@ -18,6 +19,7 @@ import {
   asRecord,
   currencyOrDash,
   dateField,
+  dateOrDash,
   field,
   formatCurrency,
   generatedAt,
@@ -47,6 +49,32 @@ function normalizeRow(raw: Record<string, unknown>): Record<string, unknown> {
     balance: pick(raw, ["remaining_balance", "balance"]),
     status: humanize(pick(raw, ["status"])),
   };
+}
+
+/**
+ * Why the schedule table is empty. A loan closed by a restructure has had its
+ * unpaid periods deleted, so it has no schedule left rather than none yet, and
+ * the member holding this page needs to know where the balance went.
+ */
+function emptyScheduleText(loan: Record<string, unknown> | null): string {
+  if (pick(loan, ["status"]) !== "restructured") {
+    return "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released.";
+  }
+  const restructuredAt = pick(loan, ["restructured_at"]);
+  const balance = pickNumber(loan, ["restructured_balance"]);
+  const writeOff = pickNumber(loan, ["write_off_amount"]) ?? 0;
+  const successor = restructureSuccessor(asArray(pick(loan, ["restructured_into"])));
+  const successorNumber = pick(successor, ["loan_account_number", "application_number"]);
+  return (
+    (restructuredAt
+      ? `This loan was restructured on ${dateOrDash(restructuredAt)}`
+      : "This loan was restructured") +
+    ", and its remaining balance" +
+    (balance !== null ? ` of ${formatCurrency(balance)}` : "") +
+    (successorNumber ? ` moved to loan ${String(successorNumber)}` : " moved to a new loan") +
+    (writeOff > 0 ? `, less ${formatCurrency(writeOff)} written off` : "") +
+    ". No instalments remain on it."
+  );
 }
 
 export function buildAmortizationScheduleDoc(
@@ -130,8 +158,7 @@ export function buildAmortizationScheduleDoc(
               amount_paid: formatCurrency(sum(rows, "amount_paid")),
             }
           : undefined,
-      emptyText:
-        "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released.",
+      emptyText: emptyScheduleText(loan),
     },
     {
       kind: "note",

@@ -132,6 +132,52 @@ test("amortization schedule: an unreleased loan says so instead of showing nothi
   assert.match(table.emptyText ?? "", /A schedule is created when the loan is released\./);
 });
 
+test("amortization schedule: a restructured loan says where its balance went", () => {
+  // A restructure's release deletes every period nothing was paid on, so the
+  // source loan's schedule is empty for a reason "not released yet" misstates.
+  const table = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      status: "restructured",
+      amortization_schedules: [],
+      restructured_at: "2026-09-20T02:30:00.000000Z",
+      restructured_balance: 33850.5,
+      write_off_amount: 850.5,
+      restructured_into: [
+        { id: 60, application_number: "APP-2026-0060", loan_account_number: null, status: "rejected", principal_amount: 33850.5, start_date: null },
+        { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20" },
+      ],
+    })
+  );
+  assert.equal(table.rows.length, 0);
+  assert.equal(
+    table.emptyText,
+    `This loan was restructured on ${formatValue(new Date("2026-09-20T02:30:00.000000Z"), "date")}, ` +
+      `and its remaining balance of ${formatCurrency(33850.5)} moved to loan LN-2026-0061, ` +
+      `less ${formatCurrency(850.5)} written off. No instalments remain on it.`
+  );
+});
+
+test("amortization schedule: a restructured loan with no released successor names none", () => {
+  const table = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      status: "restructured",
+      amortization_schedules: [],
+      restructured_at: null,
+      restructured_balance: 1200,
+      write_off_amount: 0,
+      restructured_into: [
+        { id: 70, application_number: "APP-2026-0070", loan_account_number: null, status: "void", principal_amount: 1200, start_date: null },
+      ],
+    })
+  );
+  assert.equal(
+    table.emptyText,
+    `This loan was restructured, and its remaining balance of ${formatCurrency(1200)} moved to a new loan. No instalments remain on it.`
+  );
+});
+
 test("amortization schedule: a null payload still prints a blank schedule form", () => {
   const doc = buildAmortizationScheduleDoc(null);
   assertPrintableShape(doc, "amortization_schedule");

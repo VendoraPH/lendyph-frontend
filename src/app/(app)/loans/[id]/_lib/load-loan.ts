@@ -1,3 +1,4 @@
+import { httpStatusOf } from "@/lib/api-error";
 import { loanService } from "@/services/loan.service";
 import { loanProductService } from "@/services/loan-product.service";
 import type { Loan } from "@/types/loan";
@@ -58,4 +59,18 @@ async function resolveLoan(prev: Loan | null, updated: Loan): Promise<Loan> {
  */
 export async function loadLoan(id: number, prev: Loan | null): Promise<Loan> {
   return resolveLoan(prev, await loanService.detail(id));
+}
+
+/**
+ * What a rejected `loadLoan` means for the page.
+ *
+ * Only a 404 says the loan does not exist. A rate limit, a server error or a
+ * dropped connection says nothing about the loan, so it is a failed load the
+ * user can retry: calling it "not found" told staff on staging that a loan
+ * which was there all along did not exist, when the API had only answered 429.
+ * A 401, 403 or 423 is a failed load here too; the app's own handling of those
+ * (the expired-session dialog, the password-change redirect) runs regardless.
+ */
+export function loanLoadFailure(err: unknown): "not_found" | "failed" {
+  return httpStatusOf(err) === 404 ? "not_found" : "failed";
 }

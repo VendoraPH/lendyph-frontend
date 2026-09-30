@@ -174,6 +174,8 @@ export {
   LOAN_STATUS_COLORS,
   ACTIVE_LOAN_STATUSES,
   isActiveLoanStatus,
+  EVER_RELEASED_LOAN_STATUSES,
+  isEverReleasedLoanStatus,
 } from "./loan-status";
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";
