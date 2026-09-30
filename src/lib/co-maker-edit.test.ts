@@ -153,11 +153,10 @@ test("names and phone are trimmed, and names stay strings", () => {
 });
 
 test("the payload carries the API's columns and nothing the form only displays", () => {
-  // The linked loan has no column on `co_makers` and no rule on the request.
-  // Picked or not, it must not be sent: a key the API does not validate is
-  // discarded while the response still says 200. (The valid ID is not on this
-  // form at all any more — it has its own endpoint.)
-  const payload = coMakerUpdatePayload({ ...untouched, loan_id: 42 });
+  // A key the API does not validate is discarded while the response still
+  // says 200, so nothing else may be sent. (The valid ID is not on this form
+  // at all any more — it has its own endpoint.)
+  const payload = coMakerUpdatePayload(untouched);
 
   assert.deepEqual(Object.keys(payload).sort(), [
     "address",

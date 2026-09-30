@@ -91,6 +91,7 @@ export const API_ENDPOINTS = {
     EXTEND: (id: number) => `/loans/${id}/extend`,
     TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
     ACCOUNT_OFFICER: (id: number) => `/loans/${id}/account-officer`,
+    CO_MAKERS: (id: number) => `/loans/${id}/co-makers`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
     LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
   },

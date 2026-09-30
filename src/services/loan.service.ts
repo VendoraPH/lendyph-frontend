@@ -1,8 +1,9 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { Loan, LoanCoMaker, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
+import type { CreateCoMakerData } from "./co-maker.service";
 
 export type ReleaseLoanPayload = {
   insurance_premium_percentage?: number;
@@ -11,6 +12,13 @@ export type ReleaseLoanPayload = {
   insurance_partial_amount?: number;
   insurance_remaining_balance?: number;
 };
+
+/**
+ * `POST /loans/{id}/co-makers`: link one of the borrower's registered
+ * co-makers by its co-maker record id, or send a new co-maker's details to
+ * create it on the borrower and link it in the same request.
+ */
+export type AddLoanCoMakerPayload = { co_maker_id: number } | CreateCoMakerData;
 
 /**
  * The statuses that count as "this borrower already owes us something", as one
@@ -191,4 +199,13 @@ export const loanService = {
   /** Works at any status, unlike `update`, which refuses a loan past for_review. */
   assignAccountOfficer: (id: number, accountOfficerId: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.ACCOUNT_OFFICER(id), { account_officer_id: accountOfficerId }),
+
+  /**
+   * Link a co-maker to the loan, answering with the linked co-maker. Needs
+   * `loans:release`, and only while the loan is `approved`: past release the
+   * API refuses with a 422 whose message says so, which the caller should show.
+   * `POST /borrowers/{id}/co-makers` is not a substitute, it links to no loan.
+   */
+  addCoMaker: (id: number, payload: AddLoanCoMakerPayload) =>
+    api.post<LoanCoMaker>(API_ENDPOINTS.LOANS.CO_MAKERS(id), payload),
 };

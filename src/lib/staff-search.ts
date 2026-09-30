@@ -23,7 +23,7 @@ export function normaliseStaffQuery(raw: string): string {
   return raw.trim().replace(/\s+/g, " ").slice(0, STAFF_SEARCH_MAX_LENGTH).trimEnd();
 }
 
-/** A 403: the caller holds neither `loans:create` nor `loans:update`. */
+/** A 403: the caller holds none of `loans:create`, `loans:update` or `loans:restructure`. */
 export function isStaffListForbidden(err: unknown): boolean {
   return (err as { response?: { status?: number } } | null)?.response?.status === 403;
 }
