@@ -141,6 +141,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
         </div>
         <PermissionGate permission="collaterals:create">
           <Button
+            nativeButton={false}
             render={
               <Link href={`/collaterals/new?borrower_id=${borrowerId}`} />
             }

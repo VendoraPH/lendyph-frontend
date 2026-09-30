@@ -816,7 +816,7 @@ export function ProductMappingGate({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button render={<Link href={LOAN_PRODUCTS_HREF} />}>
+          <Button nativeButton={false} render={<Link href={LOAN_PRODUCTS_HREF} />}>
             Go to Loan Products
             <ExternalLink aria-hidden="true" />
           </Button>
