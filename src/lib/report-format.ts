@@ -18,12 +18,16 @@ export const DASH = "—";
 /**
  * How a value is rendered. Report columns and print columns share this
  * vocabulary so one `formatValue` serves both.
+ *
+ * `rate` is an interest rate (a loan's own, or the server's average of them),
+ * shown to every place it has; `percent` is a share or ratio, to one decimal.
  */
 export type ColumnFormat =
   | "text"
   | "currency"
   | "number"
   | "percent"
+  | "rate"
   | "date"
   | "datetime";
 
@@ -69,6 +73,15 @@ const percentFmt = new Intl.NumberFormat("en-PH", {
   maximumFractionDigits: 1,
 });
 
+// An interest rate keeps every place of its `decimal(8,4)` column. The single
+// decimal above is right for a share or ratio and wrong here: it printed a
+// 1.25%-a-month loan as 1.3%. The minimum of one keeps 3 printing as "3.0%".
+const rateFmt = new Intl.NumberFormat("en-PH", {
+  style: "percent",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 4,
+});
+
 const dateFmt = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
   month: "short",
@@ -102,6 +115,11 @@ export function formatPercent(value: number): string {
   return percentFmt.format(value / 100);
 }
 
+/** An interest rate, exact to the four places a rate is stored to. */
+export function formatRatePercent(value: number): string {
+  return rateFmt.format(value / 100);
+}
+
 export function currencyOrDash(value: unknown): string {
   const n = toNumber(value);
   return n === null ? DASH : formatCurrency(n);
@@ -115,6 +133,11 @@ export function countOrDash(value: unknown): string {
 export function percentOrDash(value: unknown): string {
   const n = toNumber(value);
   return n === null ? DASH : formatPercent(n);
+}
+
+export function rateOrDash(value: unknown): string {
+  const n = toNumber(value);
+  return n === null ? DASH : formatRatePercent(n);
 }
 
 export function formatValue(value: unknown, format?: ColumnFormat): string {
@@ -134,6 +157,11 @@ export function formatValue(value: unknown, format?: ColumnFormat): string {
       const n = toNumber(value);
       if (n === null) return String(value);
       return formatPercent(n);
+    }
+    case "rate": {
+      const n = toNumber(value);
+      if (n === null) return String(value);
+      return formatRatePercent(n);
     }
     case "date": {
       const d = new Date(value as string | number | Date);

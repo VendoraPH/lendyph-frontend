@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatCurrency } from "@/lib/format";
+import { INSURANCE_PCT_DECIMALS, sanitizeDecimalInput } from "@/lib/percent";
 import type {
   InsurancePaymentType,
   InsurancePremiumValue,
@@ -44,8 +45,10 @@ export function InsurancePremiumSection({
       setField("percentage", "");
       return;
     }
+    // Already at most two places — the field refuses a third — so this only
+    // caps it at 100%; it never rounds what was typed.
     const clamped = Math.max(0, Math.min(100, n));
-    setField("percentage", String(round2(clamped)));
+    setField("percentage", String(clamped));
   };
 
   const handlePartialBlur = () => {
@@ -71,14 +74,12 @@ export function InsurancePremiumSection({
             <div className="relative">
               <Input
                 id="insurance-pct"
-                type="number"
                 inputMode="decimal"
-                min={0}
-                max={100}
-                step="0.01"
                 placeholder="0.00"
                 value={value.percentage}
-                onChange={(e) => setField("percentage", e.target.value)}
+                onChange={(e) =>
+                  setField("percentage", sanitizeDecimalInput(e.target.value, INSURANCE_PCT_DECIMALS))
+                }
                 onBlur={handlePercentageBlur}
                 disabled={disabled}
                 className="h-9 pr-8"

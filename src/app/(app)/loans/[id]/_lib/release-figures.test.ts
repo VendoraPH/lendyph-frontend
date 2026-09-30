@@ -144,4 +144,15 @@ describe("releaseInsurancePayload", () => {
       180,
     );
   });
+
+  test("a fractional premium is charged at its exact rate, to the centavo", () => {
+    assert.equal(typed({ percentage: "1.5" }).insurance_premium_amount, 225);
+    assert.equal(typed({ percentage: "2.25" }).insurance_premium_amount, 337.5);
+    // round(10001 * 1.5 / 100, 2) is 150.02; Math.round(x * 100) / 100 gave 150.01.
+    assert.equal(
+      releaseInsurancePayload(10001, { percentage: "1.5", paymentType: "full", partialAmount: "" })
+        .insurance_premium_amount,
+      150.02,
+    );
+  });
 });

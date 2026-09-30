@@ -24,21 +24,28 @@ export interface OtherDeductionInput {
 
 export const PROCESSING_FEE_LABEL = "Processing Fee";
 export const SERVICE_FEE_LABEL = "Service Fee";
+export const NOTARIAL_FEE_LABEL = "Notarial Fee";
 export const OTHER_DEDUCTION_LABEL = "Other Deduction";
 
 /**
  * Flatten the form's fee inputs into the API's `deductions[]` shape.
  * Zero/blank rows are dropped — a 0% fee is not a deduction — and an unnamed
  * custom row falls back to a generic label so the API never gets a blank name.
+ *
+ * `carried` are items the form shows but has no field for (a product's
+ * notarial fee), sent as they are after the two fees: the order
+ * `LoanService::createLoan()` itself adds the product's fees in.
  */
 export function buildLoanDeductions({
   processingFeePercent,
   serviceFeePercent,
   otherDeductions,
+  carried = [],
 }: {
   processingFeePercent: number;
   serviceFeePercent: number;
   otherDeductions: OtherDeductionInput[];
+  carried?: LoanDeduction[];
 }): LoanDeduction[] {
   const deductions: LoanDeduction[] = [];
 
@@ -57,6 +64,8 @@ export function buildLoanDeductions({
       type: "percentage",
     });
   }
+
+  deductions.push(...carried);
 
   for (const row of otherDeductions) {
     const amount = parseFloat(row.amount) || 0;

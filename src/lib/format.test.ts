@@ -19,6 +19,7 @@ import {
   formatDateFull,
   formatDateISO,
   formatDateLong,
+  formatRate,
   formatTime,
   todayISO,
 } from "./format";
@@ -237,4 +238,23 @@ test("formatCurrencyExact treats absent amounts as zero, never NaN", () => {
   for (const empty of [null, undefined, "", "not a number"]) {
     assert.equal(formatCurrencyExact(empty), "₱0");
   }
+});
+
+// ── formatRate ─────────────────────────────────────────────────────────────
+
+test("formatRate shows a fractional rate exactly", () => {
+  assert.equal(formatRate(2.5), "2.5");
+  assert.equal(formatRate(1.75), "1.75");
+  assert.equal(formatRate("1.1234"), "1.1234");
+});
+
+test("formatRate drops the API's decimal padding", () => {
+  assert.equal(formatRate("1.5000"), "1.5");
+  assert.equal(formatRate("2.5000"), "2.5");
+});
+
+test("formatRate leaves whole numbers whole", () => {
+  assert.equal(formatRate(5), "5");
+  assert.equal(formatRate("5.0000"), "5");
+  assert.equal(formatRate(""), "0");
 });

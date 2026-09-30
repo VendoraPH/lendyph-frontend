@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
 import { completeRows } from "@/lib/paginate";
+import { decimalInputValue } from "@/lib/percent";
 import { RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,13 +106,12 @@ function getProductField(product: LoanProduct, field: string): string {
   }
 }
 
-// Format a numeric rate/percentage with up to 2 decimals, trimming trailing zeros.
-// Examples: "0.0000" → "0", "5.50" → "5.5", "5.25" → "5.25", "" → "".
+// Format a numeric rate/percentage exactly, trimming trailing zeros.
+// Examples: "0.0000" → "0", "5.50" → "5.5", "1.1250" → "1.125", "" → "".
+// Never rounded: this also fills the edit form, so two places here saved a
+// 1.125% rate back as 1.13% whenever anything else on the product was edited.
 function formatRate(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "";
-  return n.toFixed(2).replace(/\.?0+$/, "");
+  return decimalInputValue(value);
 }
 
 function getFeeRange(product: LoanProduct, feeKey: "processing_fee" | "service_fee"): string {
@@ -250,7 +250,7 @@ function productToForm(p: LoanProduct): ProductForm {
     ? (rawFreq as string[])
     : [String(rawFreq)];
 
-  // Parse interest rate range — keep up to 2 decimals, strip trailing zeros from API
+  // Parse interest rate range — exact, with the API's trailing zeros stripped
   const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
   const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
   const minRate = minRateRaw != null ? formatRate(minRateRaw) : "";
@@ -271,11 +271,11 @@ function productToForm(p: LoanProduct): ProductForm {
     max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
     interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
-    min_processing_fee: String(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
-    max_processing_fee: String(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
-    min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
-    max_service_fee: String(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
-    notarial_fee: String(apiProduct.notarial_fee ?? ""),
+    min_processing_fee: formatRate(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
+    max_processing_fee: formatRate(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
+    min_service_fee: formatRate(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee),
+    max_service_fee: formatRate(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee),
+    notarial_fee: formatRate(apiProduct.notarial_fee),
     penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
@@ -551,7 +551,7 @@ function ProductFormDialog({
                   id="min-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="1"
                   value={form.min_interest_rate}
                   onChange={(e) => update("min_interest_rate", e.target.value)}
@@ -564,7 +564,7 @@ function ProductFormDialog({
                   id="max-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="5"
                   value={form.max_interest_rate}
                   onChange={(e) => update("max_interest_rate", e.target.value)}
@@ -714,7 +714,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Min"
                     value={form.min_processing_fee}
                     onChange={(e) => update("min_processing_fee", e.target.value)}
@@ -723,7 +723,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Max"
                     value={form.max_processing_fee}
                     onChange={(e) => update("max_processing_fee", e.target.value)}
@@ -736,7 +736,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Min"
                     value={form.min_service_fee}
                     onChange={(e) => update("min_service_fee", e.target.value)}
@@ -745,7 +745,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Max"
                     value={form.max_service_fee}
                     onChange={(e) => update("max_service_fee", e.target.value)}
@@ -760,7 +760,7 @@ function ProductFormDialog({
                   id="notarial-fee"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="1"
                   value={form.notarial_fee}
                   onChange={(e) => update("notarial_fee", e.target.value)}
@@ -772,7 +772,7 @@ function ProductFormDialog({
                   id="penalty-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="3"
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
@@ -1005,7 +1005,7 @@ function ProductFormDialog({
                         <Input
                           type="number"
                           min={0}
-                          step={fee.type === "fixed" ? "1" : "0.01"}
+                          step={fee.type === "fixed" ? "0.01" : "0.0001"}
                           placeholder={fee.type === "fixed" ? "500" : "2"}
                           value={fee.value}
                           onChange={(e) => updateFee(idx, "value", e.target.value)}

@@ -96,7 +96,14 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { formatDateISO } from "@/lib/format";
+import { formatDateISO, formatRate } from "@/lib/format";
+import {
+  decimalInputValue,
+  PESO_DECIMALS,
+  percentOf,
+  roundCentavos,
+  sanitizeDecimalInput,
+} from "@/lib/percent";
 import {
   DAYS_PER_MONTH,
   instalments,
@@ -110,6 +117,14 @@ import {
   type TermUnit,
 } from "@/lib/loan-terms";
 import { editedAccountOfficer } from "@/lib/loan-account-officer";
+import {
+  applicationDeductions,
+  deductionAmount,
+  feePercent,
+  productDeductionFields,
+  storedDeductionFields,
+} from "@/lib/loan-application-deductions";
+import type { LoanDeduction } from "@/lib/loan-restructure";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -176,14 +191,14 @@ function computeAmortization(
       termUnit === "months"
         ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
         : rateForDays(interestRate, term, rateFrequency);
-    const totalInterest = Math.round(principal * fraction);
+    const totalInterest = roundCentavos(principal * fraction);
     return [{
       period: 1,
       dueDate: loanMaturityDate(releaseDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
-      totalPayment: principal + totalInterest + scb,
+      totalPayment: roundCentavos(principal + totalInterest) + scb,
     }];
   }
 
@@ -193,15 +208,16 @@ function computeAmortization(
   let remainingBalance = principal;
 
   // Straight/Fixed: equal principal each period, interest on the original
-  // principal for the days each instalment covers
+  // principal for the days each instalment covers. To the centavo, as the
+  // server's schedule rounds each figure.
   if (interestType === "straight" || interestType === "fixed") {
-    const principalPerPeriod = Math.round(principal / totalPeriods);
+    const principalPerPeriod = roundCentavos(principal / totalPeriods);
 
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const isLast = i === totalPeriods;
       const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
-      const interest = Math.round(principal * rateForDays(interestRate, days, rateFrequency));
+      const interest = roundCentavos(principal * rateForDays(interestRate, days, rateFrequency));
 
       rows.push({
         period: i,
@@ -209,9 +225,9 @@ function computeAmortization(
         principal: periodPrincipal,
         interest,
         shareCapitalBuildUp: scb,
-        totalPayment: periodPrincipal + interest + scb,
+        totalPayment: roundCentavos(periodPrincipal + interest) + scb,
       });
-      remainingBalance -= periodPrincipal;
+      remainingBalance = roundCentavos(remainingBalance - periodPrincipal);
     });
   }
 
@@ -222,15 +238,17 @@ function computeAmortization(
     const pmt = r > 0
       ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
       : principal / totalPeriods;
+    // To the centavo, at the points the server rounds its schedule.
+    const payment = roundCentavos(pmt);
 
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * rateForDays(interestRate, days, rateFrequency));
+      const interest = roundCentavos(remainingBalance * rateForDays(interestRate, days, rateFrequency));
       const periodPrincipal = isLast
         ? remainingBalance
-        : Math.round(pmt - interest);
-      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
+        : roundCentavos(payment - interest);
+      const baseTotal = roundCentavos(periodPrincipal + interest);
 
       rows.push({
         period: i,
@@ -240,7 +258,7 @@ function computeAmortization(
         shareCapitalBuildUp: scb,
         totalPayment: baseTotal + scb,
       });
-      remainingBalance -= periodPrincipal;
+      remainingBalance = roundCentavos(remainingBalance - periodPrincipal);
     });
   }
 
@@ -341,6 +359,9 @@ function NewLoanApplicationInner() {
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
+  // Deductions the form shows but does not edit — the product's notarial fee,
+  // or one stored on the loan being edited — sent back unchanged.
+  const [carriedDeductions, setCarriedDeductions] = useState<LoanDeduction[]>([]);
   // Configured fees (Settings → Fees) that auto-apply to the selected product,
   // e.g. a percentage "Insurance Premium" scoped to Cash Advance + Salary Loan.
   const [fees, setFees] = useState<Fee[]>([]);
@@ -421,7 +442,7 @@ function NewLoanApplicationInner() {
           setPrincipalAmount(String(loan.principal_amount ?? ""));
           setTermValue(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-          setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
+          setInterestRate(decimalInputValue(loan.interest_rate));
           const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
           setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
@@ -429,6 +450,20 @@ function NewLoanApplicationInner() {
           if (loan.policy_exception) {
             setPolicyException(true);
             setPolicyExceptionDetails(loan.policy_exception_details ?? "");
+          }
+          // Fees as saved on this loan, not as its product has them today. The
+          // product is only the starting point for a loan with none stored.
+          const loanProduct = productsResult.status === "fulfilled"
+            ? productsResult.value.find((p) => p.id === Number(productIdVal))
+            : undefined;
+          const deductionFields =
+            storedDeductionFields(loan.deductions) ??
+            (loanProduct ? productDeductionFields(loanProduct) : null);
+          if (deductionFields) {
+            setProcessingFeeRate(deductionFields.processingFeeRate);
+            setServiceFeeRate(deductionFields.serviceFeeRate);
+            setOtherDeductions(deductionFields.otherDeductions);
+            setCarriedDeductions(deductionFields.carried);
           }
         } else {
           toast.error("We couldn't load this loan. Redirecting…");
@@ -647,19 +682,20 @@ function NewLoanApplicationInner() {
   // Fees — percent × principal. The percent is user-editable but bounded
   // by the product's min/max range (if defined on the product).
   const processingFeeRange = useMemo(() => ({
-    min: Math.round(Number(selectedProduct?.min_processing_fee ?? 0)),
-    max: Math.round(Number(selectedProduct?.max_processing_fee ?? selectedProduct?.processing_fee ?? 0)),
+    min: Number(selectedProduct?.min_processing_fee ?? 0),
+    max: Number(selectedProduct?.max_processing_fee ?? selectedProduct?.processing_fee ?? 0),
   }), [selectedProduct]);
   const serviceFeeRange = useMemo(() => ({
-    min: Math.round(Number(selectedProduct?.min_service_fee ?? 0)),
-    max: Math.round(Number(selectedProduct?.max_service_fee ?? selectedProduct?.service_fee ?? 0)),
+    min: Number(selectedProduct?.min_service_fee ?? 0),
+    max: Number(selectedProduct?.max_service_fee ?? selectedProduct?.service_fee ?? 0),
   }), [selectedProduct]);
 
 
-  const processingFeePercent = parseFloat(processingFeeRate) || (selectedProduct?.processing_fee ?? 0);
-  const serviceFeePercent = parseFloat(serviceFeeRate) || (selectedProduct?.service_fee ?? 0);
-  const processingFee = Math.round(principal * (processingFeePercent / 100));
-  const serviceFee = Math.round(principal * (serviceFeePercent / 100));
+  // A blank field stands for the product's rate; "0" waives the fee.
+  const processingFeePercent = feePercent(processingFeeRate, selectedProduct?.processing_fee);
+  const serviceFeePercent = feePercent(serviceFeeRate, selectedProduct?.service_fee);
+  const processingFee = percentOf(principal, processingFeePercent);
+  const serviceFee = percentOf(principal, serviceFeePercent);
 
   const processingFeePercentError = useMemo(() => {
     if (!selectedProduct || processingFeeRange.max <= 0) return null;
@@ -677,11 +713,27 @@ function NewLoanApplicationInner() {
     return null;
   }, [selectedProduct, serviceFeePercent, serviceFeeRange]);
 
-  const otherDed = otherDeductions.reduce((sum, d) => sum + Math.round(parseFloat(d.amount) || 0), 0);
+  // The deductions the application states, exactly as sent, and what the
+  // server will book for them.
+  const deductions = useMemo(
+    () =>
+      applicationDeductions({
+        processingFeePercent,
+        serviceFeePercent,
+        otherDeductions,
+        carried: carriedDeductions,
+      }),
+    [processingFeePercent, serviceFeePercent, otherDeductions, carriedDeductions],
+  );
+  const statedDeductionsTotal = deductions.reduce(
+    (sum, d) => sum + deductionAmount(principal, d),
+    0,
+  );
 
   // Configured fees scoped to the selected product. Percentage fees are
   // computed off the principal; fixed fees use their flat value. These are a
-  // preview only — the backend re-applies them via computeDeductions on submit.
+  // preview only: the server appends them at release (LoanReleaseFeeService),
+  // so they are never part of the `deductions` an application sends.
   const applicableFees = useMemo(() => {
     const pid = Number(productId);
     if (!pid) return [];
@@ -691,14 +743,14 @@ function NewLoanApplicationInner() {
         name: f.name,
         amount:
           f.type === "percentage"
-            ? Math.round(principal * (Number(f.value) / 100))
-            : Math.round(Number(f.value)),
+            ? percentOf(principal, Number(f.value))
+            : roundCentavos(Number(f.value)),
       }))
       .filter((f) => f.amount > 0);
   }, [fees, productId, principal]);
   const configuredFeesTotal = applicableFees.reduce((sum, f) => sum + f.amount, 0);
 
-  const totalDeductions = processingFee + serviceFee + configuredFeesTotal + otherDed;
+  const totalDeductions = statedDeductionsTotal + configuredFeesTotal;
   const netProceeds = principal - totalDeductions;
 
   // Maturity date
@@ -796,7 +848,7 @@ function NewLoanApplicationInner() {
       if (product) {
         const apiProduct = product as unknown as Record<string, unknown>;
         const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
-        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
+        setInterestRate(decimalInputValue(rawRate));
         // Map API field names: interest_method/interest_type, "fixed" -> "straight"
         const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
         setInterestType(rawType === "fixed" ? "straight" : rawType);
@@ -804,18 +856,13 @@ function NewLoanApplicationInner() {
         const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
         const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
         setPaymentFrequency(String(freqArray[0] ?? "monthly"));
-        // Seed fee percent with the product's default (max of the range if available,
-        // else the legacy single fee field). Rounded to whole numbers.
-        const rawProcessingPct =
-          apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? product.processing_fee;
-        const rawServicePct =
-          apiProduct.max_service_fee ?? apiProduct.service_fee ?? product.service_fee;
-        setProcessingFeeRate(
-          rawProcessingPct != null ? String(Math.round(Number(rawProcessingPct))) : ""
-        );
-        setServiceFeeRate(
-          rawServicePct != null ? String(Math.round(Number(rawServicePct))) : ""
-        );
+        // Seed the fees with exactly what the server charges from this product
+        // when it adds them itself. Other deductions are the operator's own and
+        // stay.
+        const productFees = productDeductionFields(product);
+        setProcessingFeeRate(productFees.processingFeeRate);
+        setServiceFeeRate(productFees.serviceFeeRate);
+        setCarriedDeductions(productFees.carried);
         // Seed SCB amount when the product requires it: default to the product's
         // minimum. The loan officer can adjust up to the product's maximum.
         if (product.scb_required) {
@@ -901,6 +948,12 @@ function NewLoanApplicationInner() {
         interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
+        // Stated whenever the product is known. Sent none, the server charged
+        // the product's own fee rates and dropped every edit and other
+        // deduction made here. Without the product (its list failed to load)
+        // they are left to the server, as before: an edit stating an empty list
+        // would clear the loan's fees.
+        ...(selectedProduct && { deductions }),
         // A new loan states its officer, `null` for none. An edit sends one
         // only when it changed, so an officer deactivated since does not
         // block saving the rest of the loan.
@@ -1366,8 +1419,11 @@ function NewLoanApplicationInner() {
               </SelectTrigger>
               <SelectContent>
                 {products.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>
+                  <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
                     {p.name}
+                    {!p.is_active && (
+                      <span className="text-muted-foreground"> (Inactive)</span>
+                    )}
                     {p.description && (
                       <span className="text-muted-foreground">
                         {" "}
@@ -1458,16 +1514,10 @@ function NewLoanApplicationInner() {
             <div className="space-y-2">
               <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
               <Input
-                type="number"
+                inputMode="decimal"
                 placeholder="0"
-                step="1"
-                min={0}
                 value={interestRate}
-                onChange={(e) => {
-                  // Accept digits only — keep the value a whole number
-                  const v = e.target.value.replace(/\D/g, "");
-                  setInterestRate(v);
-                }}
+                onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
               />
             </div>
 
@@ -1739,14 +1789,11 @@ function NewLoanApplicationInner() {
                 <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                 {editingFeeRate === "processing" ? (
                   <input
-                    type="number"
-                    min={processingFeeRange.min || 0}
-                    max={processingFeeRange.max || 100}
-                    step="1"
+                    inputMode="decimal"
                     autoFocus
-                    className="w-10 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-14 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     value={processingFeeRate}
-                    onChange={(e) => setProcessingFeeRate(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                    onChange={(e) => setProcessingFeeRate(sanitizeDecimalInput(e.target.value))}
                     onBlur={() => setEditingFeeRate(null)}
                     onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
                   />
@@ -1756,7 +1803,7 @@ function NewLoanApplicationInner() {
                     onClick={() => setEditingFeeRate("processing")}
                     title="Click to edit"
                   >
-                    {processingFeeRate ? Math.round(Number(processingFeeRate)) : "0"}
+                    {formatRate(processingFeePercent)}
                   </span>
                 )}
                 <span className="text-muted-foreground font-normal text-xs">%)</span>
@@ -1781,14 +1828,11 @@ function NewLoanApplicationInner() {
                 <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                 {editingFeeRate === "service" ? (
                   <input
-                    type="number"
-                    min={serviceFeeRange.min || 0}
-                    max={serviceFeeRange.max || 100}
-                    step="1"
+                    inputMode="decimal"
                     autoFocus
-                    className="w-10 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-14 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     value={serviceFeeRate}
-                    onChange={(e) => setServiceFeeRate(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                    onChange={(e) => setServiceFeeRate(sanitizeDecimalInput(e.target.value))}
                     onBlur={() => setEditingFeeRate(null)}
                     onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
                   />
@@ -1798,7 +1842,7 @@ function NewLoanApplicationInner() {
                     onClick={() => setEditingFeeRate("service")}
                     title="Click to edit"
                   >
-                    {serviceFeeRate ? Math.round(Number(serviceFeeRate)) : "0"}
+                    {formatRate(serviceFeePercent)}
                   </span>
                 )}
                 <span className="text-muted-foreground font-normal text-xs">%)</span>
@@ -1816,6 +1860,24 @@ function NewLoanApplicationInner() {
               )}
             </div>
 
+            {/* Carried fees — the notarial fee: charged, but not editable here */}
+            {carriedDeductions.map((d, idx) => (
+              <div key={`${d.name}-${idx}`} className="space-y-2">
+                <Label className="flex items-center gap-0.5">
+                  {d.name}
+                  <span className="text-muted-foreground font-normal text-xs ml-0.5">
+                    ({formatRate(d.amount)}%)
+                  </span>
+                </Label>
+                <Input
+                  type="text"
+                  readOnly
+                  value={formatCurrency(deductionAmount(principal, d))}
+                  className="bg-muted/40 cursor-default font-medium tabular-nums"
+                />
+                <p className="text-[10px] text-muted-foreground">Set by loan product</p>
+              </div>
+            ))}
           </div>
 
             {/* Configured fees that auto-apply to the selected product */}
@@ -1861,14 +1923,12 @@ function NewLoanApplicationInner() {
                         className="flex-1"
                       />
                       <Input
-                        type="number"
+                        inputMode="decimal"
                         placeholder="Amount"
-                        min={0}
-                        step="1"
                         value={ded.amount}
                         onChange={(e) =>
                           setOtherDeductions((prev) =>
-                            prev.map((d, i) => (i === idx ? { ...d, amount: e.target.value.replace(/\D/g, "") } : d))
+                            prev.map((d, i) => (i === idx ? { ...d, amount: sanitizeDecimalInput(e.target.value, PESO_DECIMALS) } : d))
                           )
                         }
                         className="w-32"

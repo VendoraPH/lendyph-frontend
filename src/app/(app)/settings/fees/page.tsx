@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatCurrencyExact } from "@/lib/format";
+import { formatCurrencyExact, formatRate } from "@/lib/format";
+import { decimalInputValue } from "@/lib/percent";
 import { buildFeePayload } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
@@ -63,7 +64,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
     if (fee) {
       setName(fee.name);
       setType(fee.type);
-      setValue(String(fee.value));
+      setValue(decimalInputValue(fee.value));
       setSelectedProducts(fee.applicable_product_ids ?? []);
       setConditions(fee.conditions ?? {});
     } else {
@@ -171,7 +172,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               id="fee-value"
               type="number"
               min="0"
-              step={type === "fixed" ? "1" : "0.01"}
+              step={type === "fixed" ? "0.01" : "0.0001"}
               placeholder={type === "fixed" ? "500" : "2"}
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -353,7 +354,7 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 // ---------------------------------------------------------------------------
 
 function formatFeeValue(fee: Fee): string {
-  if (fee.type === "percentage") return `${fee.value}%`;
+  if (fee.type === "percentage") return `${formatRate(fee.value)}%`;
   // Same reason as formatConditions below: this is the amount that will be
   // deducted, and a ₱250.50 notarial fee must not be listed as ₱251.
   return formatCurrencyExact(fee.value);
