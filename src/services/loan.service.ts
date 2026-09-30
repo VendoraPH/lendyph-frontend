@@ -193,4 +193,8 @@ export const loanService = {
 
   toggleAutoPay: (id: number, data: AutoPayToggleData) =>
     api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),
+
+  /** Works at any status, unlike `update`, which refuses a loan past for_review. */
+  assignAccountOfficer: (id: number, accountOfficerId: number) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.ACCOUNT_OFFICER(id), { account_officer_id: accountOfficerId }),
 };
