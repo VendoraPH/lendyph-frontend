@@ -8,7 +8,6 @@ export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: "/auth/login",
     LOGOUT: "/auth/logout",
-    REFRESH: "/auth/refresh",
     ME: "/auth/me",
     UPDATE_ME: "/auth/me",
     CHANGE_PASSWORD: "/auth/change-password",
@@ -274,9 +273,9 @@ export const API_ENDPOINTS = {
     PUBLIC: "/branding/public",
   },
   /**
-   * Accounting. The backend serves these under `/accounting`; its
-   * `routes/api.php` is the source of truth. SETTINGS and OPENING_BALANCES are
-   * the exceptions: neither has a backend route, and nothing here calls them.
+   * Accounting. The backend serves every path here under `/accounting`; its
+   * `routes/api.php` is the source of truth. Only paths the app calls are
+   * listed; add one alongside the service method that needs it.
    *
    * Posting and reversing are verbs on the server (POST
    * /accounting/journals/{id}/post and /reverse), and the automatic postings
@@ -292,19 +291,13 @@ export const API_ENDPOINTS = {
 
     // Chart of accounts
     ACCOUNTS_LIST: "/accounting/accounts",
-    ACCOUNTS_DETAIL: (id: number) => `/accounting/accounts/${id}`,
-    ACCOUNTS_CREATE: "/accounting/accounts",
-    ACCOUNTS_UPDATE: (id: number) => `/accounting/accounts/${id}`,
-    ACCOUNTS_DELETE: (id: number) => `/accounting/accounts/${id}`,
     ACCOUNTS_SEED: "/accounting/accounts/seed",
 
     // Journals. Posting and reversing are separate verbs, not a PUT on the
     // entry — a posted journal is immutable, and `reverse` writes a second
     // entry rather than editing the first.
     JOURNALS_LIST: "/accounting/journals",
-    JOURNALS_DETAIL: (id: number) => `/accounting/journals/${id}`,
     JOURNALS_CREATE: "/accounting/journals",
-    JOURNALS_UPDATE: (id: number) => `/accounting/journals/${id}`,
     JOURNALS_POST: (id: number) => `/accounting/journals/${id}/post`,
     JOURNALS_REVERSE: (id: number) => `/accounting/journals/${id}/reverse`,
 
@@ -335,31 +328,24 @@ export const API_ENDPOINTS = {
 
     // Expenses and payables
     EXPENSES_LIST: "/accounting/expenses",
-    EXPENSES_DETAIL: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_CREATE: "/accounting/expenses",
-    EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
-    EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
 
     // Reconciliation
     RECONCILIATIONS_LIST: "/accounting/reconciliations",
-    RECONCILIATIONS_CREATE: "/accounting/reconciliations",
-    RECONCILIATIONS_DETAIL: (id: number) => `/accounting/reconciliations/${id}`,
-    RECONCILIATIONS_MATCH: (id: number) => `/accounting/reconciliations/${id}/match`,
 
     // Periods
     PERIODS_LIST: "/accounting/periods",
     PERIODS_CLOSE: (id: number) => `/accounting/periods/${id}/close`,
     PERIODS_REOPEN: (id: number) => `/accounting/periods/${id}/reopen`,
 
-    // Settings and opening balances
-    SETTINGS: "/accounting/settings",
+    // Settings
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
-    OPENING_BALANCES: "/accounting/opening-balances",
   },
   /**
-   * None of these exist yet. Typed and wired now so the service layer has
-   * one place to be wrong rather than eleven, same rationale as ACCOUNTING
-   * above. Re-check against the backend handoff before trusting any path.
+   * None of these exist yet: the credit-scoring backend is not built, and
+   * docs/CREDIT_SCORING_BACKEND_HANDOFF.md is its contract. Typed and wired now
+   * so the UI-only screens have one place to be wrong. Re-check against the
+   * handoff before trusting any path.
    */
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
@@ -368,7 +354,6 @@ export const API_ENDPOINTS = {
     BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
     SCORE_HISTORY: "/credit-scoring/score-history",
     RISK_MONITORING: "/credit-scoring/risk-monitoring",
-    ALERTS_LIST: "/credit-scoring/alerts",
     SCORECARD_CONFIG: "/credit-scoring/scorecard-config",
     POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
     DECISIONS_CREATE: "/credit-scoring/decisions",

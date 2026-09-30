@@ -30,9 +30,6 @@ export const authService = {
 
   me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),
 
-  refresh: () =>
-    api.post<{ token: string }>(API_ENDPOINTS.AUTH.REFRESH),
-
   /**
    * Self-service profile update. Backend whitelists full_name, email, and
    * mobile_number — username and role are admin-only and ignored if sent.
