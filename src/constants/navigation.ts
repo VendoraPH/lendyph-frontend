@@ -11,8 +11,6 @@ import {
   Settings,
   UserCog,
   History,
-  FilePlus,
-  Package,
   Landmark,
   ShieldCheck,
   BookOpenCheck,

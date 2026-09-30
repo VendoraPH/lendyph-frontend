@@ -101,8 +101,7 @@ function roundWhole(value: number): number {
  */
 export function getPeriodsCount(
   termMonths: number,
-  frequency: PaymentFrequency,
-  interestMethod?: InterestMethod
+  frequency: PaymentFrequency
 ): number {
   switch (frequency) {
     case "monthly":

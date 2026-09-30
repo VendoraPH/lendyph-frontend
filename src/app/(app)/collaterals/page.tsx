@@ -72,12 +72,7 @@ import {
   lockLabel,
 } from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
-import type {
-  Borrower,
-  Collateral,
-  CollateralType,
-  CollateralWithMeta,
-} from "@/types";
+import type { Borrower, CollateralType } from "@/types";
 
 export default function CollateralListingPage() {
   const [collaterals, setCollaterals] = useState<CollateralValueRow[]>([]);

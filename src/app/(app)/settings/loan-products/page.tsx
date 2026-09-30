@@ -36,7 +36,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -147,11 +146,6 @@ const INTEREST_METHOD_LABELS: Record<string, string> = {
   straight: "Straight",
   fixed: "Fixed",
   diminishing: "Diminishing",
-};
-
-const statusBadge = {
-  active: "bg-green-100 text-green-700 border-green-200",
-  inactive: "bg-red-100 text-red-700 border-red-200",
 };
 
 // ── Form Types ──

@@ -257,7 +257,6 @@ export default function BorrowerDetailPage() {
           <CoMakersTab
             coMakers={coMakers}
             loans={loans}
-            borrowerId={borrower.id}
             onAdd={handleAddCoMaker}
             onAddId={handleAddCoMakerId}
             onEdit={handleEditCoMaker}

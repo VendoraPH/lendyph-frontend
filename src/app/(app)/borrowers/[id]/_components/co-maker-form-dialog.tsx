@@ -74,12 +74,6 @@ function emptyForm(): CoMakerFormData {
   };
 }
 
-function generateCoMakerCode(count: number): string {
-  const year = new Date().getFullYear();
-  const seq = String(count + 1).padStart(4, "0");
-  return `CM-${year}${seq}`;
-}
-
 function coMakerCreatePayload(form: CoMakerFormData): CreateCoMakerData {
   return {
     first_name: form.first_name,
@@ -159,8 +153,6 @@ function ValidIdHeading({
 
 interface AddCoMakerDialogProps {
   loans: Loan[];
-  borrowerId: number;
-  coMakerCount: number;
   existingCoMakers: CoMaker[];
   onAdd: AddCoMakerHandler;
   onAddId: AddCoMakerIdHandler;
@@ -168,8 +160,6 @@ interface AddCoMakerDialogProps {
 
 export function AddCoMakerDialog({
   loans,
-  borrowerId,
-  coMakerCount,
   existingCoMakers,
   onAdd,
   onAddId,

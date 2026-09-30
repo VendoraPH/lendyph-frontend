@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert, Landmark } from "lucide-react";
+import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
 import { formatDateFull } from "@/lib/format";
 import { fetchAllPages } from "@/lib/paginate";

@@ -35,11 +35,7 @@ import {
   lockLabel,
 } from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
-import type {
-  Collateral,
-  CollateralType,
-  CollateralWithMeta,
-} from "@/types";
+import type { Collateral } from "@/types";
 
 interface CollateralsTabProps {
   borrowerId: number;
