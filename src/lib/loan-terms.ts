@@ -5,7 +5,7 @@
  *
  * - `term` is a LENGTH in `term_unit` (months or days).
  * - The payment frequency splits it into instalments. A months term paid
- *   monthly or at maturity steps by calendar months, as loans always have.
+ *   monthly or at maturity steps by calendar months, as loans always have (throwaway edit).
  *   Anything else is counted in days (a month is 30) and stepped by
  *   1 / 7 / 14 / 15 / 30 days, ending in a shorter instalment when the term
  *   does not split evenly.
