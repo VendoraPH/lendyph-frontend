@@ -1,4 +1,5 @@
 import type { ApiScheduleRow } from "@/lib/amortization";
+import type { StaffMember } from "./staff";
 
 export type LoanStatus =
   | "draft"
@@ -66,6 +67,9 @@ export interface Loan {
   released_by_user?: { id: number; full_name?: string; name?: string };
   rejected_by_user?: { id: number; full_name?: string; name?: string };
   created_by_user?: { id: number; full_name?: string; name?: string };
+  account_officer_id?: number | null;
+  /** Null when no officer is assigned; absent when the endpoint did not load it. */
+  account_officer?: StaffMember | null;
   // Flat fields matching API
   interest_rate: number;
   interest_method?: string;
