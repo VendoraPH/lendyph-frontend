@@ -5,7 +5,8 @@
  *
  * - `term` is a LENGTH in `term_unit` (months or days).
  * - The payment frequency splits it into instalments. A months term paid
- *   monthly or at maturity steps by calendar months, as loans always have.
+ *   monthly or at maturity steps by calendar months, each due on the start
+ *   date's day of the month, or on the last day of a month too short for it.
  *   Anything else is counted in days (a month is 30) and stepped by
  *   1 / 7 / 14 / 15 / 30 days, ending in a shorter instalment when the term
  *   does not split evenly.
@@ -71,9 +72,19 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
+/**
+ * `months` calendar months after `start`, on the start's day of the month, or
+ * on the last day of a month too short to have it: Jan 31 steps to Feb 28
+ * (Feb 29 in a leap year), then Mar 31 and Apr 30. Always counted from the
+ * start, never from a previous result, so one short month does not pull every
+ * later date back. Works on local date parts and keeps the time of day.
+ */
+export function addMonthsAnchored(start: Date, months: number): Date {
+  const year = start.getFullYear();
+  const month = start.getMonth() + months;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const result = new Date(start);
+  result.setFullYear(year, month, Math.min(start.getDate(), lastDay));
   return result;
 }
 
@@ -99,11 +110,10 @@ export function instalments(
 ): Instalment[] {
   if (stepsByCalendarMonth(termUnit, frequency)) {
     const rows: Instalment[] = [];
-    let date = start;
     for (let i = 1; i <= term; i++) {
-      // One month after the previous due date, as the server steps it.
-      date = addMonths(date, 1);
-      rows.push({ dueDate: date, days: DAYS_PER_MONTH });
+      // i months after the start, anchored to its day of the month, as the
+      // server dates it. Not chained from the previous due date.
+      rows.push({ dueDate: addMonthsAnchored(start, i), days: DAYS_PER_MONTH });
     }
     return rows;
   }
@@ -125,14 +135,18 @@ export function instalments(
   return rows;
 }
 
-/** The date the last instalment falls due. */
+/**
+ * The date the last instalment falls due. For a calendar-month loan that is
+ * `term` months after the start on the same anchored day, so it always equals
+ * the last instalment's due date.
+ */
 export function maturityDate(
   start: Date,
   term: number,
   termUnit: TermUnit,
   frequency: string
 ): Date {
-  if (stepsByCalendarMonth(termUnit, frequency)) return addMonths(start, term);
+  if (stepsByCalendarMonth(termUnit, frequency)) return addMonthsAnchored(start, term);
   return addDays(start, termDays(term, termUnit));
 }
 

@@ -4,7 +4,12 @@ process.env.TZ = "Asia/Manila";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildIdealSchedule, type BinhsInput } from "./binhs";
+import {
+  buildCustomSchedule,
+  buildIdealSchedule,
+  buildWorstCaseSchedule,
+  type BinhsInput,
+} from "./binhs";
 
 const input = (over: Partial<BinhsInput> = {}): BinhsInput => ({
   principal: 10000,
@@ -41,6 +46,32 @@ test("a leap-day-adjacent start rolls through February correctly", () => {
     dueDates({ startDate: "2027-01-31", termMonths: 3 }),
     ["2027-01-31", "2027-02-28", "2027-03-31"]
   );
+});
+
+test("in a leap year a 31st start falls due on Feb 29, then the 31st again", () => {
+  assert.deepEqual(
+    dueDates({ startDate: "2028-01-31", termMonths: 4 }),
+    ["2028-01-31", "2028-02-29", "2028-03-31", "2028-04-30"]
+  );
+});
+
+test("a 30th start caps only in February and returns to the 30th after it", () => {
+  assert.deepEqual(
+    dueDates({ startDate: "2026-09-30", termMonths: 7 }),
+    ["2026-09-30", "2026-10-30", "2026-11-30", "2026-12-30", "2027-01-30", "2027-02-28", "2027-03-30"]
+  );
+});
+
+test("a 29th start caps to Feb 28 in a common year only", () => {
+  assert.deepEqual(dueDates({ startDate: "2027-01-29", termMonths: 3 }), ["2027-01-29", "2027-02-28", "2027-03-29"]);
+  assert.deepEqual(dueDates({ startDate: "2028-01-29", termMonths: 3 }), ["2028-01-29", "2028-02-29", "2028-03-29"]);
+});
+
+test("every BINHS schedule dates its rows the same way", () => {
+  const over = { startDate: "2027-01-31", termMonths: 4 };
+  const expected = ["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"];
+  assert.deepEqual(buildWorstCaseSchedule(input(over)).map((r) => r.dueDate), expected);
+  assert.deepEqual(buildCustomSchedule(input(over), [true, false, true, false]).map((r) => r.dueDate), expected);
 });
 
 test("a start date carrying a time component still yields its calendar day", () => {
