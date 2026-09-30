@@ -21,12 +21,6 @@ export interface ShareCapitalUnavailableNoticeProps {
    */
   result: ShareCapitalBalance | null;
   /**
-   * How many members are affected. Only meaningful on the screens that read
-   * several ledgers at once (the collateral listing); omit it for the
-   * single-member screens.
-   */
-  memberCount?: number;
-  /**
    * What the operator will actually notice on THIS screen, in one sentence —
    * "the submit button is disabled", "these rows are left out of the total".
    * Required for the same reason `IncompleteListNotice` requires it:
@@ -47,25 +41,18 @@ export interface ShareCapitalUnavailableNoticeProps {
  * Forcing this through `shown`/`total` would have meant inventing a row count
  * for the failure case, and the whole point is that there is no number.
  *
- * The wording lives here rather than at the three call sites so the collateral
- * listing, the collateral form and a member's collaterals tab cannot drift into
- * describing the same condition three different ways.
+ * The wording lives here rather than at each call site so the screens that
+ * show it cannot drift into describing the same condition different ways.
  *
  * `role="alert"` so a screen reader announces it when it appears mid-load,
  * rather than leaving it to be discovered by sighted scanning alone.
  */
 export function ShareCapitalUnavailableNotice({
   result,
-  memberCount,
   consequence,
   className,
 }: ShareCapitalUnavailableNoticeProps) {
   if (!result || result.status === "ok") return null;
-
-  const heading =
-    memberCount !== undefined && memberCount > 1
-      ? `${memberCount} members' share capital ledgers could not be read in full`
-      : "This member's share capital balance could not be read";
 
   return (
     <div
@@ -81,7 +68,7 @@ export function ShareCapitalUnavailableNotice({
       />
       <div className="text-sm">
         <p className="font-medium text-amber-900 dark:text-amber-200">
-          {heading}
+          This member&apos;s share capital balance could not be read
         </p>
         <p className="mt-0.5 text-muted-foreground">
           {shareCapitalUnavailableReason(result)} {consequence}
