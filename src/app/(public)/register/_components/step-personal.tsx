@@ -26,6 +26,19 @@ export interface StepOneData {
   branch_id: string;
 }
 
+/**
+ * Uppercases a name as it is typed without moving the caret. The input's own
+ * value is replaced in place, keeping the selection, so the controlled
+ * re-render finds the same value and leaves the caret where the user put it;
+ * handing React a different value instead sends the caret to the end.
+ */
+function upperCaseInPlace(input: HTMLInputElement): string {
+  const { selectionStart, selectionEnd } = input;
+  input.value = input.value.toUpperCase();
+  input.setSelectionRange(selectionStart, selectionEnd);
+  return input.value;
+}
+
 interface Props {
   data: StepOneData;
   onChange: <K extends keyof StepOneData>(field: K, value: StepOneData[K]) => void;
@@ -57,7 +70,7 @@ export function StepPersonal({
             id="first_name"
             placeholder="Juan"
             value={data.first_name}
-            onChange={(e) => onChange("first_name", e.target.value)}
+            onChange={(e) => onChange("first_name", upperCaseInPlace(e.target))}
           />
         </div>
         <div className="space-y-1.5">
@@ -68,7 +81,7 @@ export function StepPersonal({
             id="last_name"
             placeholder="Santos"
             value={data.last_name}
-            onChange={(e) => onChange("last_name", e.target.value)}
+            onChange={(e) => onChange("last_name", upperCaseInPlace(e.target))}
           />
         </div>
         <div className="space-y-1.5">
@@ -77,7 +90,7 @@ export function StepPersonal({
             id="middle_name"
             placeholder="Dela Cruz"
             value={data.middle_name}
-            onChange={(e) => onChange("middle_name", e.target.value)}
+            onChange={(e) => onChange("middle_name", upperCaseInPlace(e.target))}
           />
         </div>
         <div className="space-y-1.5">
