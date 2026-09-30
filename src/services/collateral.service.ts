@@ -31,14 +31,6 @@ function unwrapList<T>(res: unknown): T[] {
 }
 
 export const collateralService = {
-  list: async (params?: CollateralListParams): Promise<Collateral[]> => {
-    const res = await api.get<PaginatedResponse<Collateral> | Collateral[]>(
-      API_ENDPOINTS.COLLATERALS.LIST,
-      { params },
-    );
-    return unwrapList<Collateral>(res);
-  },
-
   /**
    * Every collateral matching `params` — one member's with `borrower_id`, the
    * whole register with none.
