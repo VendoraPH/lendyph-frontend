@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
   holdersSentence,
@@ -23,7 +24,6 @@ import {
   feeService,
   loanProductService,
   loanService,
-  userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
 import { httpStatusOf } from "@/lib/api-error";
@@ -45,7 +45,7 @@ import type {
   CollateralType,
   Fee,
   Loan,
-  User,
+  StaffMember,
 } from "@/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,7 +108,7 @@ import {
   type RateFrequency,
   type TermUnit,
 } from "@/lib/loan-terms";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import { editedAccountOfficer } from "@/lib/loan-account-officer";
 
 import type { LoanProduct } from "@/types/loan";
 import {
@@ -283,15 +283,11 @@ function NewLoanApplicationInner() {
   const [submitting, setSubmitting] = useState(false);
   const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
 
-  // ── Users (Account Officers) ──
-  const [users, setUsers] = useState<User[]>([]);
-
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
   const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
-  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
-  const [aoOpen, setAoOpen] = useState(false);
+  const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
 
   // ── Loan Product & Terms State ──
@@ -348,11 +344,8 @@ function NewLoanApplicationInner() {
     shown: number;
     total: number | null;
   } | null>(null);
-  // Same, for the officer drain: set only when the Account Officer picker is
-  // knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
-  // ── Fetch borrowers, products, users — and the loan when editing ──
+  // ── Fetch borrowers, products — and the loan when editing ──
   useEffect(() => {
     // Set by the cleanup, so Strict Mode's discarded first mount (or a real
     // unmount) neither writes state nor toasts.
@@ -360,7 +353,7 @@ function NewLoanApplicationInner() {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, usersResult, feesResult, loanResult] =
+      const [borrowersResult, productsResult, feesResult, loanResult] =
         await Promise.allSettled([
           // members_only: pending and rejected applicants are not loan-eligible,
           // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
@@ -370,11 +363,6 @@ function NewLoanApplicationInner() {
           // be picked and could not be lent to from this screen at all.
           borrowerService.listAll({ members_only: 1 }),
           loanProductService.listAll().then(completeRows),
-          // Drained, and filtered to active on the server. This was
-          // `userService.list()` with no arguments — the endpoint's default
-          // page of 15, newest first — so from the 16th user on, the
-          // longest-serving officers were the ones missing from the picker.
-          userService.listAll({ status: "active" }),
           feeService.listAll().then(completeRows),
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
@@ -406,14 +394,6 @@ function NewLoanApplicationInner() {
         toast.error("We couldn't load loan products. Please try again.");
       }
 
-      if (usersResult.status === "fulfilled") {
-        const officers = toUserList(usersResult.value);
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
-      }
-
       // Hydrate form state from the loan being edited. Runs after products
       // are loaded so the product-change handler (if used) has them, but
       // we set fields directly to avoid clobbering fee ranges the user may
@@ -422,15 +402,13 @@ function NewLoanApplicationInner() {
         if (loanResult.status === "fulfilled" && loanResult.value) {
           const loan = loanResult.value;
           setExistingLoan(loan);
-          const l = loan as unknown as Record<string, unknown>;
           const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
           if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
           const coMakerIdList: number[] = Array.isArray(loan.co_makers)
             ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
             : [];
           setCoMakerIds(coMakerIdList.length > 0 ? coMakerIdList : [null]);
-          const aoId = (l.account_officer_id as number | undefined) ?? null;
-          if (aoId) setAccountOfficerId(aoId);
+          if (loan.account_officer) setAccountOfficer(loan.account_officer);
           setPurpose(loan.purpose ?? "");
           const productIdVal = loan.loan_product?.id ?? loan.loan_product_id ?? null;
           if (productIdVal) setProductId(String(productIdVal));
@@ -916,7 +894,12 @@ function NewLoanApplicationInner() {
         interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
-        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        // A new loan states its officer, `null` for none. An edit sends one
+        // only when it changed, so an officer deactivated since does not
+        // block saving the rest of the loan.
+        ...(isEditMode
+          ? editedAccountOfficer(accountOfficer, existingLoan?.account_officer ?? null)
+          : { account_officer_id: accountOfficer?.id ?? null }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
         ...(policyException && {
           policy_exception: true,
@@ -1089,15 +1072,6 @@ function NewLoanApplicationInner() {
         />
       )}
 
-      {officerShortfall && (
-        <IncompleteListNotice
-          shown={officerShortfall.shown}
-          total={officerShortfall.total}
-          noun="active users"
-          consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
-        />
-      )}
-
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
         <CardHeader>
@@ -1266,58 +1240,13 @@ function NewLoanApplicationInner() {
 
           {/* Account Officer */}
           <div className="space-y-2">
-            <Label>Account Officer (AO)</Label>
-            <Popover open={aoOpen} onOpenChange={setAoOpen}>
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
-                    role="combobox"
-                    aria-expanded={aoOpen}
-                    className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                  />
-                }
-              >
-                <span className={cn("truncate", !accountOfficerId && "text-muted-foreground")}>
-                  {accountOfficerId
-                    ? users.find((u) => u.id === accountOfficerId)?.full_name ?? "Select AO"
-                    : "Select account officer"}
-                </span>
-                <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-              </PopoverTrigger>
-              <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search officer..." />
-                  <CommandList>
-                    <CommandEmpty>No users found.</CommandEmpty>
-                    <CommandGroup>
-                      {users.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          value={user.full_name}
-                          onSelect={() => {
-                            setAccountOfficerId(user.id);
-                            setAoOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 size-4",
-                              accountOfficerId === user.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div>
-                            <p className="text-sm">{user.full_name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="account-officer">Account Officer (AO)</Label>
+            <StaffPicker
+              id="account-officer"
+              value={accountOfficer}
+              onChange={setAccountOfficer}
+              clearable
+            />
           </div>
 
           {/* Purpose */}
