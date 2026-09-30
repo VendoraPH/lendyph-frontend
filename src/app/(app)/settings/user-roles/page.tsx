@@ -23,9 +23,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ROLES } from "@/constants/rbac";
 import type { Action, Permission } from "@/types";
 import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
+import {
+  roleItemFromApi,
+  setModulePermissions,
+  togglePermission as togglePermissionIn,
+  type RoleItem,
+} from "./_lib/role-item";
 import { roleService } from "@/services/role.service";
 import type { ApiRole } from "@/services/role.service";
 import { PermissionGate } from "@/components/common";
@@ -302,20 +307,6 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
 };
 
-// ---------------------------------------------------------------------------
-// Role model — local state (no mutation endpoints yet)
-// ---------------------------------------------------------------------------
-
-interface RoleItem {
-  id?: number;
-  key: string;
-  label: string;
-  description: string;
-  permissions: Permission[];
-  isSystem: boolean;
-  isActive: boolean;
-}
-
 const ROLE_BADGE: Record<string, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   loan_officer: "bg-blue-500/10 text-blue-700 border-blue-500/30",
@@ -332,34 +323,6 @@ const ROLE_BADGE: Record<string, string> = {
   bod6: "bg-sky-500/10 text-sky-700 border-sky-500/30",
   bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
-
-function stripCollections(perms: Permission[]): Permission[] {
-  return perms.filter((p) => !p.startsWith("collections:"));
-}
-
-function titleCase(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-// Map an API role to the UI RoleItem shape, enriching snake_case keys
-// with local label/description when the frontend recognises the role.
-function apiRoleToItem(api: ApiRole): RoleItem {
-  const key = api.name;
-  const known = (ROLES as Record<string, { label: string; description: string }>)[key];
-  return {
-    id: api.id,
-    key,
-    label: known?.label ?? titleCase(key),
-    description: api.description ?? known?.description ?? "",
-    permissions: stripCollections(api.permissions as Permission[]),
-    isSystem: api.is_system === true,
-    isActive: api.is_active ?? true,
-  };
-}
 
 function groupByModule(permissions: Permission[]): Record<string, Action[]> {
   const map: Record<string, Action[]> = {};
@@ -387,6 +350,8 @@ interface RoleFormDialogProps {
   existingKeys: string[];
   onSave: (role: RoleItem) => void;
   readOnly?: boolean;
+  /** Switch a read-only view into the editor. */
+  onEdit?: () => void;
   saving?: boolean;
 }
 
@@ -397,6 +362,7 @@ function RoleFormDialog({
   existingKeys,
   onSave,
   readOnly = false,
+  onEdit,
   saving = false,
 }: RoleFormDialogProps) {
   const isEdit = !!role;
@@ -413,25 +379,11 @@ function RoleFormDialog({
   }, [open, role]);
 
   function togglePermission(mod: UIModule, act: Action) {
-    const perm = `${mod}:${act}` as Permission;
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      if (next.has(perm)) next.delete(perm);
-      else next.add(perm);
-      return next;
-    });
+    setPermissions((prev) => togglePermissionIn(prev, `${mod}:${act}` as Permission));
   }
 
   function toggleModule(mod: UIModule, enable: boolean) {
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      for (const act of MODULE_ACTIONS[mod]) {
-        const perm = `${mod}:${act}` as Permission;
-        if (enable) next.add(perm);
-        else next.delete(perm);
-      }
-      return next;
-    });
+    setPermissions((prev) => setModulePermissions(prev, mod, enable));
   }
 
   function handleSave() {
@@ -486,7 +438,7 @@ function RoleFormDialog({
           </DialogTitle>
           <DialogDescription>
             {readOnly
-              ? "System role — permissions are built-in and cannot be changed."
+              ? "What this role can do. Choose Edit to change it."
               : isEdit
                 ? "Update role details and configure permissions per module."
                 : "Define a new role and select which permissions it should grant."}
@@ -624,6 +576,17 @@ function RoleFormDialog({
           >
             {readOnly ? "Close" : "Cancel"}
           </Button>
+          {readOnly && onEdit && (
+            <PermissionGate permission="settings:update">
+              <Button
+                onClick={onEdit}
+                className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Button>
+            </PermissionGate>
+          )}
           {!readOnly && (
             <Button
               onClick={handleSave}
@@ -669,7 +632,7 @@ export default function UserRolesPage() {
       const list = Array.isArray(res)
         ? res
         : (res as unknown as { data: ApiRole[] })?.data ?? [];
-      setRoles(list.map(apiRoleToItem));
+      setRoles(list.map(roleItemFromApi));
     } catch {
       toast.error("We couldn't load the roles. Please try again.");
     } finally {
@@ -762,6 +725,12 @@ export default function UserRolesPage() {
   const customCount = roles.filter((r) => !r.isSystem).length;
 
   function openView(role: RoleItem) {
+    setFormRole(role);
+    setFormMode("view");
+    setFormOpen(true);
+  }
+
+  function openEdit(role: RoleItem) {
     setFormRole(role);
     setFormMode("edit");
     setFormOpen(true);
@@ -921,7 +890,7 @@ export default function UserRolesPage() {
                                   className="h-7 gap-1 text-xs"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openView(r);
+                                    openEdit(r);
                                   }}
                                 >
                                   <Pencil className="h-3 w-3" />
@@ -1018,6 +987,7 @@ export default function UserRolesPage() {
           existingKeys={roles.map((r) => r.key)}
           onSave={handleSaveRole}
           readOnly={formMode === "view"}
+          onEdit={() => setFormMode("edit")}
           saving={actionLoading}
         />
 
