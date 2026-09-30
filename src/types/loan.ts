@@ -54,6 +54,30 @@ export interface LoanDeduction {
   original_value: number;
 }
 
+/**
+ * A loan in a restructure chain, as `LoanResource` flattens it. Flat rather
+ * than a nested `Loan` so a chain of restructures cannot recurse.
+ */
+interface RestructureLinkedLoan {
+  id: number;
+  application_number: string;
+  loan_account_number: string | null;
+  status: LoanStatus;
+  principal_amount: number;
+}
+
+/** `Loan.source_loan`. */
+export interface RestructureSourceLoan extends RestructureLinkedLoan {
+  restructured_at: string | null;
+  restructured_balance: number | null;
+  write_off_amount: number | null;
+}
+
+/** One entry of `Loan.restructured_into`. */
+export interface RestructuredIntoLoan extends RestructureLinkedLoan {
+  start_date: string | null;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -120,6 +144,19 @@ export interface Loan {
   // Restructure — set on the new loan that was created from a restructure
   is_restructure?: boolean;
   source_loan_id?: number;
+  /** When a restructure's release closed this loan; null on any other loan. */
+  restructured_at?: string | null;
+  /** What was still owed on this loan when the restructure closed it. */
+  restructured_balance?: number | null;
+  /** The part of `restructured_balance` the new loan did not take on. */
+  write_off_amount?: number | null;
+  /** The loan this one was restructured out of. Only `GET /loans/{id}` loads it. */
+  source_loan?: RestructureSourceLoan | null;
+  /**
+   * Every restructure application raised on this loan, rejected and voided ones
+   * included. Only `GET /loans/{id}` loads it.
+   */
+  restructured_into?: RestructuredIntoLoan[];
 
   // Auto-Pay
   auto_pay_enabled?: boolean;

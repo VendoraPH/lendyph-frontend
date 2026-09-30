@@ -17,12 +17,15 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import type { Loan } from "@/types/loan";
 
-type Reply = [status: number, body: unknown];
+/** A status and body to answer with, or DROP to close the connection unanswered. */
+type Reply = [status: number, body: unknown] | typeof DROP;
+const DROP = "drop";
 
 let server: Server;
 let routes: Record<string, Reply> = {};
 const seen: string[] = [];
 let loadLoan: typeof import("./load-loan").loadLoan;
+let loanLoadFailure: typeof import("./load-loan").loanLoadFailure;
 
 const ok = (data: unknown): Reply => [200, { success: true, data }];
 const missing: Reply = [404, { message: "Not found." }];
@@ -32,7 +35,12 @@ before(async () => {
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname.replace(/^\/api/, "");
     const key = `${req.method} ${path}`;
     seen.push(key);
-    const [status, body] = routes[key] ?? missing;
+    const reply = routes[key] ?? missing;
+    if (reply === DROP) {
+      req.socket.destroy();
+      return;
+    }
+    const [status, body] = reply;
     res.statusCode = status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(body));
@@ -41,7 +49,7 @@ before(async () => {
   const { port } = server.address() as AddressInfo;
   // Outside the browser the client calls NEXT_PUBLIC_API_URL directly.
   process.env.NEXT_PUBLIC_API_URL = `http://127.0.0.1:${port}/api`;
-  ({ loadLoan } = await import("./load-loan"));
+  ({ loadLoan, loanLoadFailure } = await import("./load-loan"));
 });
 
 after(() => {
@@ -144,5 +152,52 @@ describe("loadLoan", () => {
   test("a failed loan read rejects, so the caller can tell it apart from a loaded loan", async () => {
     await assert.rejects(loadLoan(7, null));
     assert.deepEqual(seen, ["GET /loans/7"]);
+  });
+});
+
+describe("loanLoadFailure", () => {
+  /** The error a `GET /loans/7` answered with `reply` rejects `loadLoan` with. */
+  async function failureFor(reply: Reply): Promise<unknown> {
+    routes["GET /loans/7"] = reply;
+    try {
+      await loadLoan(7, null);
+    } catch (err) {
+      return err;
+    }
+    throw new Error("loadLoan resolved; expected it to reject");
+  }
+
+  test("a 404 is a loan that does not exist", async () => {
+    assert.equal(loanLoadFailure(await failureFor([404, { message: "Not found." }])), "not_found");
+  });
+
+  test("a rate limit is a failed load, never a missing loan", async () => {
+    // What staging showed as "Loan Not Found".
+    assert.equal(loanLoadFailure(await failureFor([429, { message: "Too Many Attempts." }])), "failed");
+  });
+
+  test("server errors are failed loads", async () => {
+    for (const status of [500, 502, 503]) {
+      assert.equal(
+        loanLoadFailure(await failureFor([status, { message: "Server Error" }])),
+        "failed",
+        String(status),
+      );
+    }
+  });
+
+  test("auth refusals are failed loads, not missing loans", async () => {
+    for (const status of [401, 403, 423]) {
+      assert.equal(loanLoadFailure(await failureFor([status, { message: "No." }])), "failed", String(status));
+    }
+  });
+
+  test("a connection that drops without an answer is a failed load", async () => {
+    assert.equal(loanLoadFailure(await failureFor(DROP)), "failed");
+  });
+
+  test("a throw that never reached the network is a failed load", () => {
+    assert.equal(loanLoadFailure(new TypeError("Cannot read properties of undefined")), "failed");
+    assert.equal(loanLoadFailure(undefined), "failed");
   });
 });
