@@ -274,19 +274,17 @@ export const API_ENDPOINTS = {
     PUBLIC: "/branding/public",
   },
   /**
-   * Accounting — NOT YET IN SWAGGER.
+   * Accounting. The backend serves these under `/accounting`; its
+   * `routes/api.php` is the source of truth. SETTINGS and OPENING_BALANCES are
+   * the exceptions: neither has a backend route, and nothing here calls them.
    *
-   * Every path below is a proposal, written here so the service layer has one
-   * place to be wrong rather than thirteen. None of them answer today; the
-   * handoff covering payloads and responses went to the backend team. Re-check
-   * against the spec before trusting any of these.
-   *
-   * The three that matter most, because they cannot be done from the client at
-   * all: POST /accounting/journals/{id}/post, /reverse, and the automatic
-   * postings raised by loan release and collection. A journal has to be written
-   * in the same database transaction as the lending event that caused it — do
-   * it in a second request and a crash between the two leaves the books
-   * disagreeing with the portfolio, with nothing to point at the difference.
+   * Posting and reversing are verbs on the server (POST
+   * /accounting/journals/{id}/post and /reverse), and the automatic postings
+   * for loan release and collection happen there too, never from the client.
+   * A journal has to be written in the same database transaction as the
+   * lending event that caused it — do it in a second request and a crash
+   * between the two leaves the books disagreeing with the portfolio, with
+   * nothing to point at the difference.
    */
   ACCOUNTING: {
     // Dashboard

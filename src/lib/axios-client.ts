@@ -57,19 +57,10 @@ export const tokenManager = {
     if (typeof window === "undefined") return null;
     return parseTokenLifetime(localStorage.getItem(TOKEN_LIFETIME_KEY));
   },
-  getRefreshToken: (): string | null => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(env.auth.refreshTokenKey);
-  },
-  setRefreshToken: (token: string): void => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(env.auth.refreshTokenKey, token);
-  },
   clearTokens: (): void => {
     if (typeof window === "undefined") return;
     localStorage.removeItem(env.auth.tokenKey);
     localStorage.removeItem(TOKEN_LIFETIME_KEY);
-    localStorage.removeItem(env.auth.refreshTokenKey);
   },
 };
 
