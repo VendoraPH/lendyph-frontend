@@ -6,6 +6,7 @@ import {
 } from "./password-change-required";
 import {
   bearerToken,
+  isSessionRejection,
   parseTokenLifetime,
   tokenLifetime,
   unauthorizedOutcome,
@@ -190,10 +191,7 @@ async function rotateToken(): Promise<string> {
     // rejections, because the token we hold cannot be renewed by whatever
     // is answering.
     const sessionIsGone =
-      status === 401 ||
-      status === 403 ||
-      status === 419 ||
-      renewError instanceof MalformedRefreshError;
+      isSessionRejection(status) || renewError instanceof MalformedRefreshError;
     if (sessionIsGone) endSession();
 
     throw renewError;

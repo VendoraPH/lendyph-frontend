@@ -82,6 +82,17 @@ export function isRenewalDue(
   return now >= halfLife && lastActivity > lifetime.issuedAt;
 }
 
+/**
+ * Whether an HTTP status from the API means the session itself was refused.
+ *
+ * Only an outright rejection does. A throttled request (429), a server error
+ * or a dropped connection says nothing about whether the user is still signed
+ * in, so treating one as a logout signs people out over a blip.
+ */
+export function isSessionRejection(status: number | undefined): boolean {
+  return status === 401 || status === 403 || status === 419;
+}
+
 /** The token a request carried, from its `Authorization` header. */
 export function bearerToken(header: unknown): string | null {
   if (typeof header !== "string") return null;

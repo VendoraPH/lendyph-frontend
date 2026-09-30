@@ -27,7 +27,6 @@ import { formatCurrency } from "@/lib/format";
 interface CoMakersTabProps {
   coMakers: CoMaker[];
   loans: Loan[];
-  borrowerId: number;
   onAdd: AddCoMakerHandler;
   onAddId: AddCoMakerIdHandler;
   onEdit: EditCoMakerHandler;
@@ -37,7 +36,6 @@ interface CoMakersTabProps {
 export function CoMakersTab({
   coMakers,
   loans,
-  borrowerId,
   onAdd,
   onAddId,
   onEdit,
@@ -57,8 +55,6 @@ export function CoMakersTab({
         </p>
         <AddCoMakerDialog
           loans={loans}
-          borrowerId={borrowerId}
-          coMakerCount={coMakers.length}
           existingCoMakers={coMakers}
           onAdd={onAdd}
           onAddId={onAddId}

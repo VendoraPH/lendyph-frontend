@@ -117,7 +117,6 @@ import {
   CalendarPlus,
   Plus,
   DollarSign,
-  Settings2,
   ChevronsUpDown,
   ChevronDown,
   ChevronUp,
@@ -144,7 +143,7 @@ import {
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
 } from "@/constants";
-import type { Loan, LoanStatus } from "@/types/loan";
+import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
 import {
   DAYS_PER_MONTH,
@@ -807,7 +806,6 @@ export default function LoanDetailPage({
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
   const [adjRemarks, setAdjRemarks] = useState("");
-  const [adjNewValues, setAdjNewValues] = useState("");
   // User-friendly adjustment fields
   const [adjNewBalance, setAdjNewBalance] = useState("");
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
@@ -1362,45 +1360,6 @@ export default function LoanDetailPage({
     );
   }, [storedSchedule]);
 
-  // Remaining-due totals for the Schedule tab footer — excludes fully-paid periods.
-  const scheduleRemainingTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => {
-        if (row.status === "paid") return acc;
-        return {
-          principal: acc.principal + row.principal,
-          interest: acc.interest + row.interest,
-          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-          totalPayment: acc.totalPayment + row.totalPayment,
-        };
-      },
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
-
-  // Opening running-balance per period: how much Principal / Interest / SCB
-  // is still owed at the START of period N (before that period's payment).
-  // First row shows the full original obligation; last row shows what the
-  // final payment will settle; after the term everything reaches zero.
-  const balancesRows = useMemo(() => {
-    if (storedSchedule.length === 0) return [];
-    let remainingPrincipal = storedScheduleTotals.principal;
-    let remainingInterest = storedScheduleTotals.interest;
-    let remainingScb = storedScheduleTotals.shareCapitalBuildUp;
-    return storedSchedule.map((row) => {
-      const opening = {
-        principal: remainingPrincipal,
-        interest: remainingInterest,
-        scb: remainingScb,
-        total: remainingPrincipal + remainingInterest + remainingScb,
-      };
-      remainingPrincipal = Math.max(0, remainingPrincipal - row.principal);
-      remainingInterest = Math.max(0, remainingInterest - row.interest);
-      remainingScb = Math.max(0, remainingScb - row.shareCapitalBuildUp);
-      return { ...row, opening };
-    });
-  }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
-
   // Ledger rows: repayments merged with debit/credit ledger entries (interest
   // a loan extension accrues or collects), sorted by date so the table reads
   // as one chronological history with running Principal/Interest/SCB balances.
@@ -1639,9 +1598,6 @@ export default function LoanDetailPage({
   const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
   const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
-  const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
-  const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
-  const loanRejectedBy = loan?.rejected_by_user?.full_name ?? loan?.rejected_by_user?.name ?? loan?.rejected_by;
   // total_payable from API is computed by summing amortization_schedules. For
   // unreleased loans (draft/for_review/approved) those rows don't exist yet,
   // so the API returns 0. Fall back to a straight-line projection — same math
@@ -2313,7 +2269,6 @@ export default function LoanDetailPage({
     setAdjType("balance_adjustment");
     setAdjDescription("");
     setAdjRemarks("");
-    setAdjNewValues("");
     resetAdjustmentValueFields();
   };
 
@@ -3741,7 +3696,6 @@ export default function LoanDetailPage({
                           const isOverdue = row.status === "overdue" || (
                             !isPaid && !isPartial && row.dueDate < today
                           );
-                          const isUpcoming = !isPaid && !isPartial && !isOverdue;
 
                           type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
                           const displayStatus: DisplayStatus =

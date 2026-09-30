@@ -146,6 +146,7 @@ export default function AutoCreditPage() {
               </div>
               <Button
                 onClick={handleInitiate}
+                disabled={loading}
                 size="lg"
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark mt-2"
               >
@@ -167,7 +168,9 @@ export default function AutoCreditPage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Active Members</span>
-                <span className="text-2xl font-bold">{activeMembers.length}</span>
+                <span className="text-2xl font-bold">
+                  {loading ? <Spinner className="size-5 text-muted-foreground" /> : activeMembers.length}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -175,7 +178,9 @@ export default function AutoCreditPage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Total to Credit</span>
-                <span className="text-2xl font-bold text-green-600">{formatCurrency(totalPledge)}</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {loading ? <Spinner className="size-5 text-muted-foreground" /> : formatCurrency(totalPledge)}
+                </span>
               </div>
             </CardContent>
           </Card>

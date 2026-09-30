@@ -17,7 +17,6 @@ import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText
 import { Spinner } from "@/components/ui/spinner";
 import {
   borrowerService,
-  coMakerService,
   collateralService,
   collateralTypeService,
   documentService,
@@ -41,9 +40,7 @@ import {
 } from "@/types/collateral";
 import type {
   Borrower,
-  CoMaker,
   CollateralType,
-  CollateralWithMeta,
   Fee,
   Loan,
   User,
