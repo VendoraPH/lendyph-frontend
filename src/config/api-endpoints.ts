@@ -82,8 +82,6 @@ export const API_ENDPOINTS = {
     CREATE: "/loans",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
-    APPROVE: (id: number) => `/loans/${id}/approve`,
-    REJECT: (id: number) => `/loans/${id}/reject`,
     RELEASE: (id: number) => `/loans/${id}/release`,
     SUBMIT: (id: number) => `/loans/${id}/submit`,
     VOID: (id: number) => `/loans/${id}/void`,
