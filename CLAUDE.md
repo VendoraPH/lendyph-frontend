@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `lendyph-web` — the Next.js 16 (App Router) / React 19 / TypeScript frontend of Lendyph, a cooperative lending app. Its only backend is the separate Laravel API, `lendyph-backend`. One codebase serves several **single-tenant deployments that differ only by build-time env**: there is no tenant model, so anything one client needs goes behind an env flag (e.g. `NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION`), never a branch.
 
-The backend's `routes/api.php` is the endpoint source of truth. `docs/API_ENDPOINTS.md` is an April 2026 snapshot, and "not built yet" notes in code lag the backend. For example, `src/services/accounting.service.ts` says none of its endpoints exist, but the backend serves `/accounting/*`. Check the backend before assuming an endpoint is missing or present.
+The backend's `routes/api.php` is the endpoint source of truth. `docs/API_ENDPOINTS.md` is an April 2026 snapshot, and "not built yet" notes in code can lag the backend. Check the backend before assuming an endpoint is missing or present.
 
 ## Commands
 

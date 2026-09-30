@@ -104,10 +104,6 @@ export const env = {
   },
   auth: {
     tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendy_access_token"),
-    refreshTokenKey: getEnvVar(
-      "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
-      "lendy_refresh_token",
-    ),
     // Minutes of genuine inactivity before the idle warning appears.
     //
     // This was briefly 60, on the reasonable complaint that thirty was short

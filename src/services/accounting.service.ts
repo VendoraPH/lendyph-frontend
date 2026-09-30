@@ -1,9 +1,9 @@
 /**
  * Accounting API client.
  *
- * NONE of these endpoints exist yet — see the note on `API_ENDPOINTS.ACCOUNTING`.
- * They are typed and wired now so that the day the backend lands, the only
- * thing that changes is the paths file, not thirteen call sites.
+ * Every call here goes to a route the backend serves under `/accounting`. The
+ * backend's `routes/api.php` is the source of truth for paths and payloads;
+ * see the note on `API_ENDPOINTS.ACCOUNTING`.
  *
  * Deliberately NO fixtures. Every other module here can show sample rows and
  * the worst case is a confusing demo; a ledger that shows invented figures is
