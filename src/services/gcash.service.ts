@@ -81,9 +81,6 @@ export const gcashService = {
       params: { start_date, end_date },
     }),
 
-  pendingList: () =>
-    api.get<GCashPendingItem[]>(API_ENDPOINTS.GCASH.REPORTS_PENDING),
-
   /**
    * Every Cash In still awaiting payment.
    *

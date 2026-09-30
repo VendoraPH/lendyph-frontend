@@ -95,6 +95,12 @@ export default function CollateralListingPage() {
     shown: number;
     total: number | null;
   } | null>(null);
+  // Same, for the collaterals themselves: set only when the register below,
+  // and every total and member group computed from it, is knowingly short.
+  const [collateralShortfall, setCollateralShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
   // Members whose nested collateral rows are expanded in the table.
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(
     new Set(),
@@ -116,8 +122,10 @@ export default function CollateralListingPage() {
       // now carries `active_loans` per row, so the lock question is answered by
       // the one request that fetches the rows. This screen used to issue
       // `1 + ceil(N/100) + N` requests to derive an index that never worked.
-      const [collateralRows, typeRows, memberDrain] = await Promise.all([
-        collateralService.list(),
+      const [collateralDrain, typeRows, memberDrain] = await Promise.all([
+        // Drained, not read as one response: the register groups and totals
+        // the WHOLE book, and a total over one page of it still looks right.
+        collateralService.listAll(),
         collateralTypeService.listAll().then(completeRows),
         // members_only: collateral belongs to members, not to applicants.
         // Drained across pages: this used to ask for `per_page: 9999`, which
@@ -125,6 +133,12 @@ export default function CollateralListingPage() {
         // past the hundredth rendered as a bare "Member #<id>".
         borrowerService.listAll({ members_only: 1 }),
       ]);
+      const collateralRows = collateralDrain.rows;
+      setCollateralShortfall(
+        collateralDrain.truncated
+          ? { shown: collateralRows.length, total: collateralDrain.total }
+          : null,
+      );
       const borrowers: Borrower[] = memberDrain.rows;
       setMemberShortfall(
         memberDrain.truncated
@@ -289,6 +303,15 @@ export default function CollateralListingPage() {
           memberCount={unreadableBalances}
           consequence="Those collaterals are shown without a value and left out of the totals, so do not appraise against them until they load."
         />
+
+        {collateralShortfall && (
+          <IncompleteListNotice
+            shown={collateralShortfall.shown}
+            total={collateralShortfall.total}
+            noun="collaterals"
+            consequence="The totals and member groups below cover only the collaterals that loaded, and a collateral missing here cannot be found, edited or deleted from this screen."
+          />
+        )}
 
         {memberShortfall && (
           <IncompleteListNotice
