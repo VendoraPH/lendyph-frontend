@@ -72,9 +72,8 @@ export function shareCapitalUnavailableReason(
         : `Only ${result.shown} share capital entries could be read, so the balance would be wrong in either direction.`;
     case "unavailable":
       // Deliberately member-NEUTRAL ("the balance", not "this member's"): the
-      // same sentence is rendered under a singular heading on a member's own
-      // record and under a plural one on the collateral listing, where several
-      // ledgers may have failed at once.
+      // same sentence sits under a banner heading on one screen and beside a
+      // form control on another, and each of those names the member itself.
       return "The share capital ledger could not be loaded, so the balance is unknown — which is not the same as zero.";
   }
 }
