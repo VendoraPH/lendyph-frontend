@@ -36,7 +36,7 @@ export const loanApprovalService = {
    * Sign off on the pending step and move the chain forward.
    *
    * The server advances the chain and, on the last `approve` step, moves the
-   * loan itself to `approved` — so do NOT pair this with `loanService.approve`.
+   * loan itself to `approved` — so do NOT pair this with `PATCH /loans/{id}/approve`.
    * Returns nothing useful on purpose: re-read `state()` (and the loan) after,
    * rather than patching what is on screen from a response body.
    */
