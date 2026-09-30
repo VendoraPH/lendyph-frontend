@@ -506,6 +506,7 @@ export default function EditBorrowerPage() {
                 <div className="relative">
                   {photoPreview ? (
                     <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
                       <img
                         src={photoPreview}
                         alt="Profile preview"
