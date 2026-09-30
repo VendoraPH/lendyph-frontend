@@ -56,6 +56,20 @@ test("frequency: a 1%-per-day loan discloses 365%, not 12%", () => {
   assert.equal(annualRateLabel(2.5, "weekly"), "130.00% per annum");
 });
 
+test("rate: a fractional rate is stated and annualised without rounding", () => {
+  assert.equal(rateLabel(1.75, "monthly"), "1.75% per month");
+  assert.equal(annualRateLabel(1.5, "monthly"), "18.00% per annum");
+  assert.equal(annualRateLabel(1.75, "monthly"), "21.00% per annum");
+  assert.equal(annualRateLabel(1.125, "monthly"), "13.50% per annum");
+  // Not 13.48%: every stored place of the rate carries into the annual figure.
+  assert.equal(annualRateLabel(1.1234, "monthly"), "13.4808% per annum");
+  assert.equal(annualRateLabel(0.0125, "daily"), "4.5625% per annum");
+});
+
+test("rate: a four-digit annual rate prints without a thousands separator", () => {
+  assert.equal(annualRateLabel(3, "daily"), "1095.00% per annum");
+});
+
 test("frequency: an unknown frequency annualises to nothing at all", () => {
   // A rule to be completed by hand beats a confident wrong figure — `field()`
   // turns null into exactly that.

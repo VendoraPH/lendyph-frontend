@@ -4,6 +4,16 @@ import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { Loan, LoanCoMaker, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
+import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
+
+/**
+ * `POST /loans` and `PUT /loans/{id}`. `deductions` go up as rates and pesos
+ * and the API works out each item's amount, so they are not the stored items
+ * a `Loan` reads back.
+ */
+export type LoanApplicationPayload = Omit<Partial<Loan>, "deductions"> & {
+  deductions?: LoanDeductionInput[];
+};
 
 export type ReleaseLoanPayload = {
   insurance_premium_percentage?: number;
@@ -150,10 +160,10 @@ export const loanService = {
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),
 
-  create: (data: Partial<Loan>) =>
+  create: (data: LoanApplicationPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.CREATE, data),
 
-  update: (id: number, data: Partial<Loan>) =>
+  update: (id: number, data: LoanApplicationPayload) =>
     api.put<Loan>(API_ENDPOINTS.LOANS.UPDATE(id), data),
 
   delete: (id: number) =>

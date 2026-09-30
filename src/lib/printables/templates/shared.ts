@@ -352,6 +352,15 @@ export function rateLabel(rate: number | null, frequency: unknown): string | nul
   return `${rate}% ${phrase}`;
 }
 
+// At least two places, as the disclosure has always printed; up to four, the
+// places a rate is stored to, so the product of a whole number of periods is
+// never rounded — 1.1234% a month is 13.4808% a year, not 13.48%.
+const annualRateFmt = new Intl.NumberFormat("en-PH", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+  useGrouping: false,
+});
+
 /**
  * `"365.00% per annum"` for 1% per day. Null when the loan's frequency is
  * unknown, because there is then no honest multiplier — and a `fields` row
@@ -364,7 +373,7 @@ export function annualRateLabel(
   if (rate === null) return null;
   const periods = periodsPerYear(frequency);
   if (periods === null) return null;
-  return `${(rate * periods).toFixed(2)}% per annum`;
+  return `${annualRateFmt.format(rate * periods)}% per annum`;
 }
 
 // ---------------------------------------------------------------------------

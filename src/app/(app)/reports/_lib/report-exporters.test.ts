@@ -190,6 +190,28 @@ test("excel: KPI hints reach the sheet instead of stopping at the preview", asyn
   }
 });
 
+test("excel: a stored rate keeps its places instead of one decimal", async () => {
+  const doc: ReportDocument = {
+    ...everySectionDoc(),
+    sections: [
+      {
+        kind: "table",
+        title: "Releases",
+        columns: [
+          { key: "loan", header: "Loan" },
+          { key: "interest_rate", header: "Rate", format: "rate", align: "right" },
+        ],
+        rows: [{ loan: "LN-2026-0001", interest_rate: "1.1250" }],
+      },
+    ],
+  };
+  const cell = rowForLabel(await readBackSheet(doc), "LN-2026-0001").getCell(2);
+
+  assert.equal(cell.value, 0.01125);
+  // "0.0%" would show 1.1%; this shows 1.125%, and 3 still as 3.0%.
+  assert.equal(cell.numFmt, "0.0###%");
+});
+
 test("excel: a title containing a slash exports instead of throwing", async () => {
   const doc = everySectionDoc();
   assert.match(doc.meta.title, /\//, "fixture must exercise the crash");

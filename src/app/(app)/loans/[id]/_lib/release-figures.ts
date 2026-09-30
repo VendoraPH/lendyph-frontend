@@ -5,11 +5,14 @@
 import type { ReleaseLoanPayload } from "@/services/loan.service";
 import type { LoanReleasePreview } from "@/types/loan";
 import type { InsurancePremiumValue } from "../_components/insurance-premium.types";
+import { percentOf, roundCentavos } from "@/lib/percent";
 
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
-
+/**
+ * The premium off the principal, and what is left of it after a partial
+ * payment. The server takes the premium as sent (it checks only that it is to
+ * the centavo), so it is worked out here the way the server rounds every other
+ * percentage fee; the remainder is the server's own `round($premium - $partial, 2)`.
+ */
 export function computeInsurancePremium(
   principalAmount: number,
   value: InsurancePremiumValue,
@@ -21,7 +24,7 @@ export function computeInsurancePremium(
 } {
   const principal = Math.max(0, Number(principalAmount) || 0);
   const pct = Math.max(0, Math.min(100, Number(value.percentage) || 0));
-  const totalPremium = round2(principal * (pct / 100));
+  const totalPremium = percentOf(principal, pct);
 
   if (value.paymentType === "full") {
     return {
@@ -39,7 +42,7 @@ export function computeInsurancePremium(
   return {
     totalPremium,
     upfrontDeduction: partial,
-    remainingBalance: round2(totalPremium - partial),
+    remainingBalance: roundCentavos(totalPremium - partial),
     partialOverflow,
   };
 }

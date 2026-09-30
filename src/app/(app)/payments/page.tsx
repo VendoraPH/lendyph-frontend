@@ -52,7 +52,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { todayISO } from "@/lib/format";
+import { formatRate, todayISO } from "@/lib/format";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
 
 // ---------------------------------------------------------------------------
@@ -869,7 +869,7 @@ export default function PaymentsPage() {
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
-                  <p className="text-sm font-medium">{selectedLoan.interest_rate}% ({selectedLoan.interest_type})</p>
+                  <p className="text-sm font-medium">{formatRate(selectedLoan.interest_rate)}% ({selectedLoan.interest_type})</p>
                 </div>
               </div>
 
