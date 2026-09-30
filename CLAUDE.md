@@ -83,6 +83,7 @@ npx playwright test e2e/fees-settings.spec.ts
   - `RouteGuard`: a whole page.
   - `PermissionGate`: hide something.
   - `PermissionButton`: a disabled button with a tooltip.
+- **Check permission before requesting data.** `RouteGuard` only swaps its children, so a page's data hooks and effects must live in an inner component rendered *inside* the guard, or they fire (and 403) for users the guard refuses. A read under another module's permission (members, fees, collaterals, share capital, …) is skipped when the user lacks it; `emptyDrain()` (`src/lib/paginate.ts`) stands in for a skipped `listAll()`.
 - `src/constants/rbac.ts` only documents roles for the roles screen; editing it grants nothing.
 - The sidebar is `SIDEBAR_NAV` in `src/constants/navigation.ts`, filtered by permission.
 
