@@ -33,7 +33,6 @@ import {
   type RoleItem,
 } from "./_lib/role-item";
 import { roleService } from "@/services/role.service";
-import type { ApiRole } from "@/services/role.service";
 import { PermissionGate } from "@/components/common";
 import { useAuthStore } from "@/store";
 import { Spinner } from "@/components/ui/spinner";
@@ -67,6 +66,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -627,10 +627,7 @@ export default function UserRolesPage() {
   async function loadRoles() {
     setLoading(true);
     try {
-      const res = await roleService.list();
-      const list = Array.isArray(res)
-        ? res
-        : (res as unknown as { data: ApiRole[] })?.data ?? [];
+      const list = completeRows(await roleService.listAll());
       setRoles(list.map(roleItemFromApi));
     } catch {
       toast.error("We couldn't load the roles. Please try again.");

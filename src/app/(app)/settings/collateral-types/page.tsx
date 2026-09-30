@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import {
   ShieldCheck,
   Plus,
@@ -86,8 +87,7 @@ export default function CollateralTypesSettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await collateralTypeService.list();
-      setTypes(rows);
+      setTypes(completeRows(await collateralTypeService.listAll()));
     } catch {
       toast.error("We couldn't load the collateral types. Please try again.");
     } finally {

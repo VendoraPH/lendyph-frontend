@@ -4,6 +4,8 @@
 // Detection is structural (checks `err.response.status`) rather than
 // `instanceof AxiosError`, which is fragile when axios is bundled more than once.
 
+import { IncompleteListError } from "./paginate";
+
 export interface ApiErrorBody {
   message?: string;
   errors?: Record<string, string[]>;
@@ -126,25 +128,62 @@ function isTimeout(err: unknown): boolean {
 }
 
 /**
+ * A request that went out and got no reply: an axios error that carries the
+ * request it sent and no response. Read off `isAxiosError`, not `instanceof`,
+ * for the bundling reason at the top of this file.
+ *
+ * This is the ONLY thing "offline" or "took longer than expected" can
+ * describe. A TypeError, a thrown validation Error, an unexpected response
+ * shape or `null` also has no response — but never reached the network, and
+ * telling that user to check their connection sends them after a problem they
+ * do not have. Nor does an axios error with no `request`, which failed before
+ * anything was sent, or a cancellation, which the app asked for.
+ */
+function isNoReply(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { isAxiosError?: unknown; request?: unknown; response?: unknown; code?: unknown };
+  return (
+    e.isAxiosError === true &&
+    e.request != null &&
+    e.response == null &&
+    e.code !== "ERR_CANCELED"
+  );
+}
+
+/** The HTTP status a thrown value carries, or null when there was no reply. */
+export function httpStatusOf(err: unknown): number | null {
+  const status = asHttpError(err)?.response?.status;
+  return typeof status === "number" ? status : null;
+}
+
+/**
  * Turn any thrown value into a safe, friendly message.
  *
  * Priority: server message (only where the status may carry an explanation and
  * the text passes the human check) > fixed status-code copy > caller fallback.
- * Never returns a raw Axios/Error message or an internal backend flag.
+ * Offline and timeout copy only for a request that got no reply. Never returns
+ * a raw Axios/Error message or an internal backend flag.
  */
 export function getErrorMessage(err: unknown, fallback: string = GENERIC): string {
-  const http = asHttpError(err);
+  // Not a failed request at all: every request succeeded and the list was still
+  // short, so the caller's "couldn't load" fallback would be the wrong advice.
+  // Its message is copy written for the user; see `completeRows`.
+  if (err instanceof IncompleteListError) return err.message;
 
-  // No HTTP response at all: a genuine offline, a DNS failure, a CORS block —
-  // and a timeout, which axios reports identically. They need opposite advice.
-  // "You appear to be offline" tells someone whose request timed out mid-upload
-  // that nothing was sent, so they resubmit immediately; that is how a member
-  // on a slow mobile connection ended up registered twice. A timeout means the
-  // request left the device and may well have been processed, so say so and ask
-  // them to wait rather than retry.
-  if (!http || http.response?.status == null) {
-    return isTimeout(err) ? TIMEOUT : OFFLINE;
-  }
+  // No reply: a genuine offline, a DNS failure, a CORS block — and a timeout,
+  // which axios reports identically. They need opposite advice. "You appear to
+  // be offline" tells someone whose request timed out mid-upload that nothing
+  // was sent, so they resubmit immediately; that is how a member on a slow
+  // mobile connection ended up registered twice. A timeout means the request
+  // left the device and may well have been processed, so say so and ask them
+  // to wait rather than retry.
+  if (isNoReply(err)) return isTimeout(err) ? TIMEOUT : OFFLINE;
+
+  // Anything else without a status never produced an HTTP answer to explain —
+  // a bug, a bad response shape, a thrown check. The caller's fallback says
+  // what failed; there is nothing more specific to say about why.
+  const http = asHttpError(err);
+  if (!http || http.response?.status == null) return fallback;
 
   const status = http.response.status;
   const body = http.response.data;

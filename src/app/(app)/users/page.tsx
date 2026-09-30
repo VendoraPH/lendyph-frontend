@@ -62,6 +62,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
 import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
 import {
@@ -1054,16 +1055,18 @@ export default function UsersPage() {
         // counts. From the 16th user on all four were short, and the oldest
         // accounts could not be found, edited or deactivated from here at all.
         userService.listAll(),
-        // Not drained, and not truncated: RoleController and BranchController
-        // answer every row (`->get()`), not a paginator.
-        roleService.list(),
-        branchService.list(),
+        // RoleController and BranchController answer every row (`->get()`)
+        // today, so these are one request each. The pickers below need every
+        // role and branch or none, so a shortfall fails the load instead of
+        // rendering short.
+        roleService.listAll().then(completeRows),
+        branchService.listAll().then(completeRows),
       ]);
       const list = toUserList(userDrain);
       setUsers(list.users);
       setShortfall(list.shortfall);
-      setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
-      setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
+      setRoles(r);
+      setBranches(b);
     } catch (err) {
       notifyError(err, "We couldn't load the data. Please try again.");
     } finally {

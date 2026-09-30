@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { branchService } from "@/services";
 import type { ApiBranch, CreateBranchData, UpdateBranchData } from "@/services/branch.service";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -184,8 +185,7 @@ export default function BranchesPage() {
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await branchService.list();
-      setBranches(Array.isArray(data) ? data : []);
+      setBranches(completeRows(await branchService.listAll()));
     } catch {
       toast.error("We couldn't load the branches. Please try again.");
     } finally {

@@ -83,4 +83,21 @@ export const gcashService = {
 
   pendingList: () =>
     api.get<GCashPendingItem[]>(API_ENDPOINTS.GCASH.REPORTS_PENDING),
+
+  /**
+   * Every Cash In still awaiting payment.
+   *
+   * `GCashReportController::pending()` answers the whole set with `->get()`,
+   * not a paginator — one request today, however many are outstanding. Drained
+   * regardless: this is a worklist, and a pending Cash In that falls off a
+   * clamped page cannot be marked paid from the screen that exists to do it.
+   * `DrainResult` for the reason on `borrowerService.listAll` — the Reports tab
+   * renders `truncated`.
+   */
+  pendingListAll: (): Promise<DrainResult<GCashPendingItem>> =>
+    fetchAllPages<GCashPendingItem>(({ page, per_page }) =>
+      api.getRaw<{ data: GCashPendingItem[] }>(API_ENDPOINTS.GCASH.REPORTS_PENDING, {
+        params: { page, per_page },
+      }),
+    ),
 };

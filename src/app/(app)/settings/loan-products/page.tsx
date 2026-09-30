@@ -5,6 +5,7 @@ import { useDialogOpening } from "@/hooks";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1335,8 +1336,7 @@ export default function LoanProductsPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await loanProductService.list();
-      setProducts(Array.isArray(res) ? res : (res as unknown as { data: LoanProduct[] }).data ?? []);
+      setProducts(completeRows(await loanProductService.listAll()));
     } catch {
       toast.error("We couldn't load the loan products. Please try again.");
     } finally {

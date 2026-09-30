@@ -98,11 +98,9 @@ export function ChangePasswordForm({
     if (saving) return;
 
     // These two go straight to `toast.error`, NOT through `notifyError`.
-    // notifyError runs its argument through getErrorMessage, which reads the
-    // status off an HTTP error — and a non-error like `null` has no response,
-    // which it correctly reads as "no reply from the server" and reports as
-    // "You appear to be offline". Right for a dropped request, nonsense for a
-    // typo in a confirmation field.
+    // notifyError runs its argument through getErrorMessage, which words HTTP
+    // and network failures. A typo in a confirmation field is neither, so it
+    // would come back as the generic fallback instead of saying what is wrong.
     if (form.next !== form.confirm) {
       toast.error("New password and confirmation do not match");
       return;

@@ -1,5 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   Collateral,
   LoanCollateral,
@@ -37,6 +38,26 @@ export const collateralService = {
     );
     return unwrapList<Collateral>(res);
   },
+
+  /**
+   * Every collateral matching `params` — one member's with `borrower_id`, the
+   * whole register with none.
+   *
+   * `CollateralController::index()` answers with `->get()`, not a paginator, so
+   * today this is one request whatever the filter. It is a drain so that stays
+   * true of the result if the endpoint ever paginates: a single read would
+   * silently become page 1, while this keeps reading and reports `truncated` if
+   * it has to stop. Every caller needs the whole set — the register totals the
+   * book, the loan forms' pickers and the duplicate guard need all of one
+   * member's. `DrainResult` for the reason on `borrowerService.listAll`; `page`
+   * and `per_page` are set by the drain.
+   */
+  listAll: (params?: CollateralListParams): Promise<DrainResult<Collateral>> =>
+    fetchAllPages<Collateral>(({ page, per_page }) =>
+      api.getRaw<{ data: Collateral[] }>(API_ENDPOINTS.COLLATERALS.LIST, {
+        params: { ...params, page, per_page },
+      }),
+    ),
 
   detail: (id: number): Promise<Collateral> =>
     api.get<Collateral>(API_ENDPOINTS.COLLATERALS.DETAIL(id)),
