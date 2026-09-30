@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   bearerToken,
+  isSessionRejection,
   isRenewalDue,
   isTokenExpired,
   parseTokenLifetime,
@@ -108,4 +109,14 @@ test("a 401 on the current token ends the session, with no refresh attempt", () 
 
 test("a 401 after the tokens were cleared ends the session", () => {
   assert.equal(unauthorizedOutcome("12|old", null), "session-over");
+});
+
+// ── isSessionRejection ──
+
+test("only a refused token is a rejected session", () => {
+  for (const status of [401, 403, 419]) assert.equal(isSessionRejection(status), true);
+});
+
+test("a throttle, a server error or no response at all is not a logout", () => {
+  for (const status of [429, 500, 502, 503, undefined]) assert.equal(isSessionRejection(status), false);
 });
