@@ -246,9 +246,14 @@ function SidebarContent({
   // which is the count for the whole filtered query at any page size. Pulling
   // the default 100 BorrowerResource rows to read it also mints 100 signed
   // photo URLs on every page load.
+  //
+  // Only asked for by someone who can see members: the badge sits on the
+  // Members item, which needs `borrowers:view`, and for anyone else the
+  // request is a 403 on every page they open.
   const { total: pendingRegistrationsCount } = useRegistrations({
     status: "pending",
     per_page: 1,
+    enabled: can("borrowers:view"),
   });
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
