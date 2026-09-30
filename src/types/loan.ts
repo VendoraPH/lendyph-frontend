@@ -52,6 +52,30 @@ export interface LoanDeduction {
   amount: number;
   type: "fixed" | "percentage";
   original_value: number;
+  /** Set on an item charged from a fee rule in Settings, at or for release. */
+  fee_id?: number;
+}
+
+/**
+ * `GET /loans/{id}/release-preview`: what releasing the loan would withhold,
+ * computed the way the release itself computes it
+ * (`LoanReleaseFeeService::preview()`).
+ *
+ * `deductions` are the loan's recorded deductions plus one item per
+ * configured fee that applies to it; `total_deductions` and `net_proceeds`
+ * include them. Insurance is not in any of it: it is typed at release. The two
+ * totals arrive as 2-decimal strings.
+ *
+ * `fee_fingerprint` goes back with the release, which is refused with a 409 if
+ * the fee configuration changed in between. `overlap_warnings` name configured
+ * fees that repeat one of the product's own; both are charged.
+ */
+export interface LoanReleasePreview {
+  deductions: LoanDeduction[];
+  total_deductions: string;
+  net_proceeds: string;
+  fee_fingerprint: string;
+  overlap_warnings?: { fee_id: number; fee_name: string; message: string }[];
 }
 
 /**
