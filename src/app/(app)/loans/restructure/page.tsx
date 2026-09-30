@@ -820,7 +820,7 @@ function RestructureLoanInner() {
       // Auto-forward for review. Exactly one outcome is reported: this used to
       // announce "submitted" even after the submit had failed.
       if (!canSubmitForReview) {
-        toast.info("Restructure application saved as a draft", {
+        toast.info("Restructure application saved as a draft (throwaway conflict check)", {
           description: "Submitting it for review needs permission to edit loans.",
         });
       } else {
