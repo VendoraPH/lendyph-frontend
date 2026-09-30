@@ -136,3 +136,27 @@ export function isActiveLoanStatus(status: string | null | undefined): boolean {
     !!status && (ACTIVE_LOAN_STATUSES as readonly string[]).includes(status)
   );
 }
+
+/**
+ * The statuses of a loan whose money went out: released, whatever became of it
+ * since. The backend's `Loan::EVER_RELEASED_STATUSES`, and the set that has a
+ * persisted schedule, repayments and a ledger to read.
+ *
+ * Only values `loans.status` can hold. `current`, `past_due` and `closed` stay
+ * in `LoanStatus` for old payloads, but the enum has no such values (`closed`
+ * rows were migrated to `completed`), so they are not listed here.
+ */
+export const EVER_RELEASED_LOAN_STATUSES: readonly LoanStatus[] = [
+  LOAN_STATUS.RELEASED,
+  LOAN_STATUS.ONGOING,
+  LOAN_STATUS.COMPLETED,
+  LOAN_STATUS.DEFAULTED,
+  LOAN_STATUS.RESTRUCTURED,
+];
+
+/** Whether a loan status is one of EVER_RELEASED_LOAN_STATUSES. */
+export function isEverReleasedLoanStatus(status: string | null | undefined): boolean {
+  return (
+    !!status && (EVER_RELEASED_LOAN_STATUSES as readonly string[]).includes(status)
+  );
+}

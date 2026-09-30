@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
+import { getErrorMessage } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -22,7 +23,13 @@ import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
-import { loadLoan } from "./_lib/load-loan";
+import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
+import { readScheduleRows, toDisplaySchedule, type AmortizationRow } from "./_lib/server-schedule";
+import {
+  RestructuredBalanceFigures,
+  ScheduleNotice,
+  type ScheduleLoad,
+} from "./_components/schedule-notice";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
@@ -116,6 +123,7 @@ import {
   Loader2,
   BookOpen,
   Zap,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -131,6 +139,7 @@ import {
   PAYMENT_FREQUENCY_LABELS,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
+  isEverReleasedLoanStatus,
 } from "@/constants";
 import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
@@ -173,18 +182,6 @@ const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
 type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
 type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-  balance: number;
-  status?: "pending" | "paid" | "partial" | "overdue";
-  amountPaid?: number;
-}
-
 // One row of the Ledger table — either a Repayment or a LoanLedgerEntry
 // (interest a loan extension accrues or collects), flattened to a common
 // shape so both render in one chronological list with running balances.
@@ -204,7 +201,8 @@ interface LedgerDisplayRow {
   status?: Repayment["status"];
   repaymentId?: number;
   principalBal: number;
-  interestBal: number;
+  /** Null while the interest still owed is unknown (the schedule is not loaded). */
+  interestBal: number | null;
   scbBal: number;
 }
 
@@ -682,6 +680,30 @@ function LoanNotFound() {
   );
 }
 
+/**
+ * The loan read failed for a reason that says nothing about the loan — a rate
+ * limit, a server error, a dropped connection. Only a 404 is "not found".
+ */
+function LoanLoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+      <AlertCircle className="h-12 w-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">We couldn&apos;t load this loan</h2>
+      <p className="text-muted-foreground max-w-md">{message}</p>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="ghost" nativeButton={false} render={<Link href="/loans" />}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Loans
+        </Button>
+        <Button variant="outline" onClick={onRetry}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Retry
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function LoanDetailPage({
   params,
 }: {
@@ -703,8 +725,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   const [loan, setLoan] = useState<Loan | undefined>();
   const [loading, setLoading] = useState(true);
+  // Why the loan could not be read, when it could not: `not_found` (a 404) is
+  // the only answer that means the loan does not exist.
+  const [loadFailure, setLoadFailure] = useState<{
+    kind: ReturnType<typeof loanLoadFailure>;
+    message: string;
+  } | null>(null);
+  // Bumped by the failed-load Retry, which re-runs the load effect below.
+  const [loanReloadCount, setLoanReloadCount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  // The persisted schedule, for released loans. Null until the server has
+  // answered; `scheduleFailed` says whether it could not be asked. An empty list
+  // is an answer: the loan has no instalments.
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+  const [scheduleFailed, setScheduleFailed] = useState(false);
   // Raw amortization rows exactly as the backend returns them. The mapped
   // `apiSchedule` above folds each row's interest_paid into amount_paid, which
   // loses the per-row interest breakdown; we keep the raw rows so the extend
@@ -727,8 +761,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Server-computed amortization preview (for pre-release loans). Populated
   // via loanService.amortizationPreview — lets approvers see the same schedule
-  // the server will persist on release.
+  // the server will persist on release. Null and `previewFailed` as above.
   const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  // Bumped by the schedule card's Retry, which re-runs the effects that read it.
+  const [scheduleReloadCount, setScheduleReloadCount] = useState(0);
 
   // Statement of Account dialog state
   const [soaOpen, setSoaOpen] = useState(false);
@@ -796,23 +833,33 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [aoEditing, setAoEditing] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
 
-  // Fetch loan on mount
+  // Fetch loan on mount, and again on Retry. `loading` is already true when
+  // this runs (initially, or set by `reloadLoan`), so state is only set once
+  // the request settles.
   useEffect(() => {
     let cancelled = false;
-    async function fetchLoan() {
-      try {
-        setLoading(true);
-        const loaded = await loadLoan(loanId, null);
+    loadLoan(loanId, null)
+      .then((loaded) => {
         if (!cancelled) setLoan(loaded);
-      } catch {
-        if (!cancelled) toast.error("We couldn't load the loan details. Please try again.");
-      } finally {
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadFailure({
+          kind: loanLoadFailure(err),
+          message: getErrorMessage(err, "Please try again in a moment."),
+        });
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    }
-    fetchLoan();
+      });
     return () => { cancelled = true; };
-  }, [loanId]);
+  }, [loanId, loanReloadCount]);
+
+  const reloadLoan = () => {
+    setLoading(true);
+    setLoadFailure(null);
+    setLoanReloadCount((n) => n + 1);
+  };
 
   // Saving goes through `PATCH /loans/{id}/account-officer`, which needs
   // `loans:update`, and the picker's `GET /staff` accepts that same permission.
@@ -838,42 +885,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   }, [loan]);
 
-  // Fetch schedule for released+ loans
+  // Fetch schedule for released+ loans. A failed or unreadable answer is
+  // recorded as such: nothing stands in for the server's rows.
   const fetchSchedule = useCallback(async (id: number) => {
     try {
-      const res = await loanService.schedule(id);
-      // API may return { schedule: [...], summary: {...} } or a plain array
-      const rows = Array.isArray(res) ? res : (res as unknown as { schedule: unknown[] })?.schedule;
-      if (Array.isArray(rows) && rows.length > 0) {
-        // Map ApiScheduleRow field names to LoanSchedule field names
-        const first = rows[0] as Record<string, unknown>;
-        const isApiFormat = "principal_due" in first;
-        // Keep the raw rows only when they carry the API breakdown fields
-        // (interest_due / interest_paid); otherwise fall back to null so the
-        // outstanding-interest memo uses the client-side schedule instead.
-        setRawSchedule(isApiFormat ? (rows as unknown as ApiScheduleRow[]) : null);
-        setApiSchedule(
-          isApiFormat
-            ? (rows as Record<string, unknown>[]).map((r) => ({
-                id: Number(r.id) || 0,
-                loan_id: Number(r.loan_id) || id,
-                due_date: String(r.due_date ?? ""),
-                principal: parseFloat(String(r.principal_due ?? 0)),
-                interest: parseFloat(String(r.interest_due ?? 0)),
-                amount_due: parseFloat(String(r.total_due ?? 0)),
-                amount_paid: parseFloat(String(r.principal_paid ?? 0)) + parseFloat(String(r.interest_paid ?? 0)),
-                balance: parseFloat(String(r.remaining_balance ?? 0)),
-                status: (r.status as LoanSchedule["status"]) ?? "pending",
-              }) as LoanSchedule)
-            : rows as unknown as LoanSchedule[]
-        );
-      } else {
-        setApiSchedule([]);
-        setRawSchedule(null);
-      }
+      const read = readScheduleRows(await loanService.schedule(id), id);
+      setApiSchedule(read?.schedule ?? null);
+      setRawSchedule(read?.raw ?? null);
+      setScheduleFailed(read === null);
     } catch {
-      setApiSchedule(null); // fallback to client-side generation
+      setApiSchedule(null);
       setRawSchedule(null);
+      setScheduleFailed(true);
     }
   }, []);
 
@@ -890,16 +913,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   }, []);
 
-  // Fetch server-computed amortization preview for draft/for_review loans
+  // Fetch server-computed amortization preview for draft/for_review loans.
+  // Its rows carry the same `*_due` fields as the persisted schedule.
   const fetchAmortizationPreview = useCallback(async (id: number) => {
     try {
-      const res = await loanService.amortizationPreview(id);
-      const rows = Array.isArray(res)
-        ? res
-        : ((res as unknown as { data?: LoanSchedule[] })?.data ?? []);
+      const rows = readScheduleRows(await loanService.amortizationPreview(id), id)?.schedule ?? null;
       setPreviewSchedule(rows);
+      setPreviewFailed(rows === null);
     } catch {
       setPreviewSchedule(null);
+      setPreviewFailed(true);
     }
   }, []);
 
@@ -909,13 +932,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // undefined until the loan arrives, unlike the route's `loanId`.
   const loadedLoanId = loan?.id;
   const loanStatus = loan?.status;
-  // Statuses for which the backend has schedule / repayment / adjustment data.
-  // Unlike isLocked, this includes `current` and `past_due` (the primary active
-  // states), so the Adjustments & History card shows for loans that can be
-  // extended/adjusted, not just terminal ones.
-  const hasServerLoanData =
-    loanStatus !== undefined &&
-    ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loanStatus);
+  // Statuses for which the backend has schedule / repayment / adjustment data:
+  // every loan that was released, whatever became of it since.
+  const hasServerLoanData = isEverReleasedLoanStatus(loanStatus);
 
   // Released-loan data is read when the loan is first known to have it: on
   // first load, and when a release moves it into that set. These effects key
@@ -928,14 +947,39 @@ function LoanDetail({ loanId }: { loanId: number }) {
       fetchSchedule(loadedLoanId);
       fetchLoanSummary(loadedLoanId);
     }
-  }, [loadedLoanId, hasServerLoanData, fetchSchedule, fetchLoanSummary]);
+  }, [loadedLoanId, hasServerLoanData, fetchSchedule, fetchLoanSummary, scheduleReloadCount]);
 
   // Pre-release preview (draft / for_review / approved)
   useEffect(() => {
     if (loadedLoanId !== undefined && loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)) {
       fetchAmortizationPreview(loadedLoanId);
     }
-  }, [loadedLoanId, loanStatus, fetchAmortizationPreview]);
+  }, [loadedLoanId, loanStatus, fetchAmortizationPreview, scheduleReloadCount]);
+
+  // Where this loan's schedule comes from: the persisted schedule once it is
+  // released, the server's preview before that, nowhere for a rejected or void
+  // loan. `scheduleRows` is that source's answer, null until there is one.
+  const scheduleSource: "persisted" | "preview" | null = hasServerLoanData
+    ? "persisted"
+    : loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)
+      ? "preview"
+      : null;
+  const scheduleRows =
+    scheduleSource === "persisted" ? apiSchedule : scheduleSource === "preview" ? previewSchedule : null;
+  const scheduleLoad: ScheduleLoad =
+    scheduleRows !== null
+      ? "loaded"
+      : (scheduleSource === "persisted" ? scheduleFailed : previewFailed)
+        ? "failed"
+        : "loading";
+
+  // Retry from the schedule card: back to loading, then the effects above read
+  // the schedule (and the summary beside it) again.
+  const retrySchedule = () => {
+    setScheduleFailed(false);
+    setPreviewFailed(false);
+    setScheduleReloadCount((n) => n + 1);
+  };
 
   // Fetch repayments for released+ loans. Each list row is the full
   // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
@@ -1106,126 +1150,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
     );
   }, [releaseDate, loan?.id, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency]);
 
-  // Post-release: prefer API schedule, fallback to client-side generation
+  // The schedule on screen: the server's rows, persisted or previewed, and
+  // nothing else. The browser never builds a schedule of its own for a loan it
+  // shows — no rows from the server (a restructured loan whose open periods the
+  // release deleted, a request that failed) means no rows here, and the card
+  // says which. `generateSchedule` only drives the Release dialog's preview for
+  // a release date the server has not seen yet.
   const storedSchedule = useMemo(() => {
-    if (!loan?.id) return [];
-    const scb = loan.scb_amount ?? 0;
-    const isReleased = ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-    const isPreRelease = ["draft", "for_review", "approved"].includes(loan.status);
-
-    if (isReleased) {
-      const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
-      if (!relDate) return [];
-      const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
-      const isUponMaturity = freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity";
-      // Use API schedule if available, map to display format
-      if (apiSchedule && apiSchedule.length > 0) {
-        if (isUponMaturity) {
-          // Backend may return one row per period; collapse everything into a single maturity payment
-          const lastRow = apiSchedule[apiSchedule.length - 1];
-          const totalPrincipal = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.principal)) || 0), 0);
-          const totalInterest = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.interest)) || 0), 0);
-          const totalAmountDue = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_due)) || 0), 0);
-          const totalAmountPaid = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_paid)) || 0), 0);
-          const totalScb = scb * apiSchedule.length;
-          return [{
-            period: 1,
-            dueDate: new Date(lastRow.due_date),
-            principal: totalPrincipal,
-            interest: totalInterest,
-            shareCapitalBuildUp: totalScb,
-            totalPayment: totalAmountDue + totalScb,
-            balance: parseFloat(String(lastRow.balance)) || 0,
-            status: lastRow.status,
-            amountPaid: totalAmountPaid,
-          }];
-        }
-        // Compute running principal balance ourselves; backend often returns 0
-        // for `remaining_balance`, which leaves the Balance column blank.
-        // Starts at the full loan principal and decreases by each row's principal portion.
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return apiSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Fallback to client-side generation
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = freq as Parameters<typeof generateSchedule>[5];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        readTermUnit(loan.term_unit),
-        readRateFrequency(loan.interest_rate_frequency),
-        freqVal,
-        methodVal,
-        new Date(relDate),
-        scb,
-      );
-    }
-
-    if (isPreRelease) {
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[5];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
-      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
-
-      // Use server preview only when it includes a principal/interest breakdown.
-      // The preview endpoint sometimes returns amount_due only (principal=0, interest=0)
-      // for newly created draft loans — in that case fall back to client-side generation.
-      const hasBreakdown = previewSchedule && previewSchedule.length > 0 &&
-        previewSchedule.some(r => (parseFloat(String(r.principal)) || 0) > 0 || (parseFloat(String(r.interest)) || 0) > 0);
-
-      if (hasBreakdown && previewSchedule) {
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return previewSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Client-side generation as primary fallback
-      if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        readTermUnit(loan.term_unit),
-        readRateFrequency(loan.interest_rate_frequency),
-        freqVal,
-        methodVal,
-        startDate,
-        scb,
-      );
-    }
-
-    return [];
-  }, [loan?.id, loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.interest_rate_frequency, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
+    if (!loan?.id || !scheduleRows) return [];
+    const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
+    return toDisplaySchedule(scheduleRows, {
+      principalAmount: loan.principal_amount,
+      scb: loan.scb_amount ?? 0,
+      isUponMaturity:
+        freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity",
+    });
+  }, [loan?.id, loan?.principal_amount, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
 
   // Single source of truth for the interest still OWED on the loan — used both
   // to decide whether to collect it before extending, and to render the
@@ -1242,6 +1182,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   //
   // Rounded to centavos so the displayed figure and the posted amount match to
   // the last decimal (formatCurrencyPrecise shows the same value we charge).
+  //
+  // Null while the server's schedule is loading or could not be read: the
+  // interest owed is then unknown, which is not the same as none.
   const currentInterestDue = useMemo(() => {
     if (rawSchedule && rawSchedule.length > 0) {
       const outstanding = rawSchedule.reduce((sum, row) => {
@@ -1251,11 +1194,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
       }, 0);
       return Math.round(outstanding * 100) / 100;
     }
-    // No raw API rows (client-generated schedule): nothing has been paid yet,
-    // so the first open period's interest is the full amount owed.
+    if (scheduleLoad !== "loaded") return null;
+    // No raw API rows: the server answered with no instalments (nothing is
+    // owed), or with rows lacking the paid breakdown, where the first open
+    // period's interest is the amount owed.
     const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
     return Math.round(fallback * 100) / 100;
-  }, [rawSchedule, storedSchedule]);
+  }, [rawSchedule, storedSchedule, scheduleLoad]);
 
   /**
    * What the new period will owe in interest if the outstanding amount is
@@ -1268,7 +1213,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
    */
   const extendDeferredInterestTotal = useMemo(() => {
     const rate = parseFloat(String(loan?.interest_rate ?? 0)) || 0;
-    if (!rate || !rawSchedule || rawSchedule.length === 0) return null;
+    if (!rate || !rawSchedule || rawSchedule.length === 0 || currentInterestDue === null) return null;
 
     const outstandingPrincipal = rawSchedule.reduce((sum, row) => {
       const due = parseFloat(String(row.principal_due ?? 0)) || 0;
@@ -1385,13 +1330,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
     const paidTotal = keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0);
 
     let principalBal = principalStart;
-    let interestBal = round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
+    // Unknown until the schedule is read, so the Interest balance column shows
+    // a dash rather than a walk from a guessed opening figure.
+    let interestBal =
+      currentInterestDue === null ? null : round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
     let scbBal = scbStart;
 
     return sorted.map((row) => {
       principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
       scbBal = Math.max(0, scbBal - (row.scbPaid ?? 0));
-      interestBal = round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
+      interestBal =
+        interestBal === null ? null : round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
       return { ...row, principalBal, interestBal, scbBal };
     });
   }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
@@ -1473,7 +1422,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   }, [sendBackTargets]);
 
-  const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
+  const isLocked = hasServerLoanData;
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
@@ -1523,19 +1472,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
   // total_payable from API is computed by summing amortization_schedules. For
   // unreleased loans (draft/for_review/approved) those rows don't exist yet,
-  // so the API returns 0. Fall back to a straight-line projection — same math
-  // the loan-creation form uses for its preview — so the value matches what
-  // the user expected when they filled out the form.
+  // so the API returns 0 and the server's preview schedule is summed instead.
+  // With no server rows at all both figures are unknown and shown as a dash,
+  // never projected from the loan's terms; `expectedInterest` is only the
+  // Interest Amount of a schedule whose rows carry no interest.
   const expectedInterest =
     Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
-  const loanTotalPayable =
+  const loanTotalPayable: number | null =
     Number(loan?.total_payable ?? 0) > 0
       ? Number(loan!.total_payable)
       : storedSchedule.length > 0
         ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
-        : Number(loan?.principal_amount ?? 0) + expectedInterest;
-  const loanInterestAmount =
-    storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
+        : null;
+  const loanInterestAmount: number | null =
+    storedSchedule.length === 0
+      ? null
+      : storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly
@@ -1582,7 +1534,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   }
 
   if (!loan) {
-    return <LoanNotFound />;
+    return loadFailure?.kind === "failed" ? (
+      <LoanLoadFailed message={loadFailure.message} onRetry={reloadLoan} />
+    ) : (
+      <LoanNotFound />
+    );
   }
 
   const handleRelease = async () => {
@@ -1831,7 +1787,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // ── Repayment Handlers ──
 
   // Whether the current loan qualifies for "Upon Maturity" extension flows.
-  // Mirrors the predicate used by storedSchedule (line ~1136).
+  // Mirrors the predicate storedSchedule passes as `isUponMaturity`.
   const isUponMaturityLoan = (() => {
     if (!loan) return false;
     const freq = loan.frequency ?? loan.payment_frequency ?? "";
@@ -2972,7 +2928,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Interest Amount
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
-                <p className="text-sm font-semibold">{formatCurrency(loanInterestAmount)}</p>
+                <p className="text-sm font-semibold">
+                  {loanInterestAmount === null ? "—" : formatCurrency(loanInterestAmount)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -3005,7 +2963,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     Share Capital Build-Up
                   </p>
                   <p className="text-sm font-semibold">
-                    {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                    {storedSchedule.length > 0
+                      ? formatCurrency(storedScheduleTotals.shareCapitalBuildUp)
+                      : "—"}
                   </p>
                 </div>
               )}
@@ -3025,7 +2985,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div>
                 <p className="text-xs text-muted-foreground">Total Payable</p>
                 <p className="text-sm font-semibold">
-                  {formatCurrency(loanTotalPayable)}
+                  {loanTotalPayable === null ? "—" : formatCurrency(loanTotalPayable)}
                 </p>
               </div>
               <div>
@@ -3341,8 +3301,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
       )}
 
 
-      {/* Amortization Schedule — collapsible, collapsed by default */}
-      {storedSchedule.length > 0 && (
+      {/* Amortization Schedule — collapsible, collapsed by default. Shown for
+          every loan that has a server schedule to read, rows or not: loading,
+          failed and empty each say so in place of the rows. */}
+      {scheduleSource !== null && (
         <Card>
           <CardHeader
             className="cursor-pointer select-none"
@@ -3394,10 +3356,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
           {scheduleOpen && (
             <CardContent className="pt-0">
               {(() => {
-                const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+                const isReleased = hasServerLoanData;
                 const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+                // In place of the rows on both tabs when there are none to draw.
+                const scheduleNotice =
+                  storedSchedule.length > 0 ? null : (
+                    <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+                  );
 
-                const scheduleTable = (
+                const scheduleTable = scheduleNotice ?? (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -3470,6 +3437,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         )}
                       </div>
                     )}
+                    <RestructuredBalanceFigures loan={loan} />
+                  {scheduleNotice ?? (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -3540,6 +3509,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       </TableBody>
                     </Table>
                   </div>
+                  )}
                   </div>
                 );
 
@@ -3722,7 +3692,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 {/* Interest */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestDebit)}</td>
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestCredit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{r.interestBal === null ? dash : formatCurrency(r.interestBal)}</td>
                                 {/* Past Due */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">
                                   {r.penaltyPaid != null && r.penaltyPaid > 0 ? (
@@ -4719,10 +4689,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 {/* Per-schedule allocation table */}
                 {Array.isArray(paymentPreview.allocations) && paymentPreview.allocations.length > 0 && (() => {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
+                  // A dash with no schedule on screen to read the build-up from.
                   const periodScb = (period: number | undefined) => {
-                    if (typeof period !== "number") return 0;
+                    if (storedSchedule.length === 0) return "—";
+                    if (typeof period !== "number") return formatCurrency(0);
                     const row = storedSchedule.find((r) => r.period === period);
-                    return row?.shareCapitalBuildUp ?? 0;
+                    return formatCurrency(row?.shareCapitalBuildUp ?? 0);
                   };
                   return (
                   <div className="rounded-lg border overflow-hidden">
@@ -4775,7 +4747,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
-                                    {formatCurrency(periodScb(a.period))}
+                                    {periodScb(a.period)}
                                   </TableCell>
                                 )}
                                 <TableCell
@@ -4926,7 +4898,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 : "Interest Due — carried into the new period"}
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {formatCurrencyPrecise(currentInterestDue)}
+              {currentInterestDue === null ? "—" : formatCurrencyPrecise(currentInterestDue)}
             </p>
             {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
               // Spells out the stacking the team described: ₱50 already due
