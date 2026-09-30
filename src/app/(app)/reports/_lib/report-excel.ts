@@ -34,6 +34,8 @@ function excelNumFormat(col: ReportColumn): string | undefined {
       return "#,##0.##";
     case "percent":
       return "0.0%";
+    case "rate":
+      return "0.0###%";
     case "date":
       return "mmm d, yyyy";
     case "datetime":
@@ -51,7 +53,8 @@ function coerceValue(value: unknown, col: ReportColumn): unknown {
       const n = typeof value === "number" ? value : Number(value);
       return Number.isFinite(n) ? n : value;
     }
-    case "percent": {
+    case "percent":
+    case "rate": {
       const n = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(n)) return value;
       // The API returns whole percents (12.5 = 12.5%); Excel's 0.0% format

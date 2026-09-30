@@ -91,6 +91,12 @@ import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO, form
 import { usePermission } from "@/hooks/use-permission";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
 import {
+  decimalInputValue,
+  percentOf,
+  roundCentavos,
+  sanitizeDecimalInput,
+} from "@/lib/percent";
+import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
@@ -164,14 +170,14 @@ function computeAmortization(
       termUnit === "months"
         ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
         : rateForDays(interestRate, term, rateFrequency);
-    const totalInterest = Math.round(principal * fraction);
+    const totalInterest = roundCentavos(principal * fraction);
     return [{
       period: 1,
       dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
-      totalPayment: principal + totalInterest + scb,
+      totalPayment: roundCentavos(principal + totalInterest) + scb,
     }];
   }
 
@@ -181,25 +187,28 @@ function computeAmortization(
   let remaining = principal;
 
   if (interestType === "straight" || interestType === "fixed") {
-    const principalPerPeriod = Math.round(principal / totalPeriods);
+    // To the centavo, as the server's schedule rounds each figure.
+    const principalPerPeriod = roundCentavos(principal / totalPeriods);
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
-      const interest = Math.round(principal * rateForDays(interestRate, days, rateFrequency));
-      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interest + scb });
-      remaining -= periodPrincipal;
+      const interest = roundCentavos(principal * rateForDays(interestRate, days, rateFrequency));
+      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: roundCentavos(periodPrincipal + interest) + scb });
+      remaining = roundCentavos(remaining - periodPrincipal);
     });
   } else if (interestType === "diminishing") {
     const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
     const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
+    // To the centavo, at the points the server rounds its schedule.
+    const payment = roundCentavos(pmt);
     plan.forEach(({ dueDate, days }, index) => {
       const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remaining * rateForDays(interestRate, days, rateFrequency));
-      const periodPrincipal = isLast ? remaining : Math.round(pmt - interest);
-      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
+      const interest = roundCentavos(remaining * rateForDays(interestRate, days, rateFrequency));
+      const periodPrincipal = isLast ? remaining : roundCentavos(payment - interest);
+      const baseTotal = roundCentavos(periodPrincipal + interest);
       rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
-      remaining -= periodPrincipal;
+      remaining = roundCentavos(remaining - periodPrincipal);
     });
   }
 
@@ -424,7 +433,7 @@ function RestructureLoanInner() {
       // product by the API, so the form derives it from the product instead.
       setTermValue(String(loan.term ?? loan.term_months ?? ""));
       setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-      setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
+      setInterestRate(decimalInputValue(loan.interest_rate));
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
 
       // Restructure date defaults to today
@@ -436,8 +445,8 @@ function RestructureLoanInner() {
         const ap = prod as unknown as Record<string, unknown>;
         const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
         const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
-        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
-        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+        setProcessingFeeRate(decimalInputValue(procPct));
+        setServiceFeeRate(decimalInputValue(svcPct));
       } else {
         setProcessingFeeRate("");
         setServiceFeeRate("");
@@ -607,8 +616,8 @@ function RestructureLoanInner() {
   const processingFeePercent = parseFloat(processingFeeRate) || 0;
   const serviceFeePercent = parseFloat(serviceFeeRate) || 0;
 
-  const processingFeeAmount = Math.round((processingFeePercent / 100) * principal);
-  const serviceFeeAmount = Math.round((serviceFeePercent / 100) * principal);
+  const processingFeeAmount = percentOf(principal, processingFeePercent);
+  const serviceFeeAmount = percentOf(principal, serviceFeePercent);
   const otherDeductionsTotal = otherDeductions.reduce(
     (s, d) => s + (parseFloat(d.amount) || 0), 0,
   );
@@ -734,14 +743,14 @@ function RestructureLoanInner() {
       if (prod) {
         const ap = prod as unknown as Record<string, unknown>;
         const rawRate = ap.min_interest_rate ?? ap.interest_rate ?? prod.interest_rate;
-        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
+        setInterestRate(decimalInputValue(rawRate));
         const rawFreqs = ap.frequencies ?? ap.frequency ?? prod.payment_frequency;
         const freqArr = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
         setPaymentFrequency(String(freqArr[0] ?? "monthly"));
         const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
         const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
-        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
-        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+        setProcessingFeeRate(decimalInputValue(procPct));
+        setServiceFeeRate(decimalInputValue(svcPct));
         if (prod.scb_required) setScbAmount(String(prod.min_scb ?? ""));
         else setScbAmount("");
       }
@@ -1236,12 +1245,10 @@ function RestructureLoanInner() {
                   <div className="space-y-1.5">
                     <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      inputMode="decimal"
                       placeholder="e.g. 2"
                       value={interestRate}
-                      onChange={(e) => setInterestRate(e.target.value)}
+                      onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
                     />
                   </div>
 
@@ -1504,14 +1511,11 @@ function RestructureLoanInner() {
                     <Label>Processing Fee (%)</Label>
                     <div className="flex gap-2">
                       <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
+                        inputMode="decimal"
                         value={editingFeeRate === "processing" ? processingFeeRate : processingFeeRate}
                         onChange={(e) => {
                           setEditingFeeRate("processing");
-                          setProcessingFeeRate(e.target.value);
+                          setProcessingFeeRate(sanitizeDecimalInput(e.target.value));
                         }}
                         onBlur={() => setEditingFeeRate(null)}
                         className="w-24"
@@ -1527,14 +1531,11 @@ function RestructureLoanInner() {
                     <Label>Service Fee (%)</Label>
                     <div className="flex gap-2">
                       <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
+                        inputMode="decimal"
                         value={serviceFeeRate}
                         onChange={(e) => {
                           setEditingFeeRate("service");
-                          setServiceFeeRate(e.target.value);
+                          setServiceFeeRate(sanitizeDecimalInput(e.target.value));
                         }}
                         onBlur={() => setEditingFeeRate(null)}
                         className="w-24"

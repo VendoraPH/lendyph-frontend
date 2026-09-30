@@ -21,6 +21,24 @@ test("percentage fees carry their percent, not the peso amount", () => {
   );
 });
 
+test("carried items go after the two fees and before custom rows, unchanged", () => {
+  // The order LoanService::createLoan() adds a product's fees in.
+  assert.deepEqual(
+    buildLoanDeductions({
+      processingFeePercent: 1.5,
+      serviceFeePercent: 2.5,
+      otherDeductions: [{ name: "Membership Fee", amount: "250.50" }],
+      carried: [{ name: "Notarial Fee", amount: 1.25, type: "percentage" }],
+    }),
+    [
+      { name: "Processing Fee", amount: 1.5, type: "percentage" },
+      { name: "Service Fee", amount: 2.5, type: "percentage" },
+      { name: "Notarial Fee", amount: 1.25, type: "percentage" },
+      { name: "Membership Fee", amount: 250.5, type: "fixed" },
+    ],
+  );
+});
+
 test("zero-rate fees are omitted", () => {
   assert.deepEqual(
     buildLoanDeductions({

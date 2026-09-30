@@ -139,6 +139,24 @@ test("disclosure: every rate frequency is disclosed correctly", () => {
   }
 });
 
+test("disclosure: a fractional rate is disclosed exactly, as the API sends it", () => {
+  // `decimal:4` arrives as a padded string. The rate is stated without the
+  // padding and annualised without rounding.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: "1.5000" },
+  });
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "1.5% per month");
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "18.00% per annum");
+
+  const fourPlaces = buildDisclosureDoc({
+    ...PAYLOAD,
+    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: "1.1234" },
+  });
+  assert.equal(fieldValue(fourPlaces, "Contractual Interest Rate"), "1.1234% per month");
+  assert.equal(fieldValue(fourPlaces, "Nominal Annual Rate"), "13.4808% per annum");
+});
+
 test("disclosure: a payload without a rate frequency is quoted per month", () => {
   // The backend's default, and what every rate before the field meant — even
   // on a daily loan.

@@ -15,7 +15,7 @@ import {
 } from "@/constants";
 import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatRate } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 
@@ -149,7 +149,7 @@ export function LoansTab({ loans }: LoansTabProps) {
                       </TableCell>
                       <TableCell className="font-medium">{loan.purpose || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(loan.principal_amount)}</TableCell>
-                      <TableCell>{loan.interest_rate}%</TableCell>
+                      <TableCell>{formatRate(loan.interest_rate)}%</TableCell>
                       <TableCell>
                         {loan.term ?? loan.term_months ?? 0}{readTermUnit(loan.term_unit) === "days" ? "d" : "mo"} · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
                       </TableCell>
