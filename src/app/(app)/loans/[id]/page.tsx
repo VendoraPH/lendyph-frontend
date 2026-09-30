@@ -771,11 +771,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
     setLoanReloadCount((n) => n + 1);
   };
 
-  // Saving goes through `PATCH /loans/{id}/account-officer`, which needs
-  // `loans:update`, and the picker's `GET /staff` accepts that same permission.
-  // It used to require `users:view` as well, which only admins hold, so loan
+  // `loans:update` edits a loan application and assigns its account officer.
+  // The officer is saved through `PATCH /loans/{id}/account-officer`, which
+  // needs it, and the picker's `GET /staff` accepts that same permission. It
+  // used to require `users:view` as well, which only admins hold, so loan
   // officers never saw the control.
-  const canAssignOfficer = usePermission().can("loans:update");
+  const canUpdateLoan = usePermission().can("loans:update");
 
   // Save AO assignment. This goes through its own endpoint, not `update`: PUT
   // /loans/{id} refuses every loan past for_review. The page shows what the
@@ -1010,11 +1011,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // precisely who sits on a draft, so an ungated Void button offers that role
   // an action it can never complete — QA measured it: 403, loan unchanged, and
   // a toast saying "please try again" for a permission wall that retrying will
-  // never clear. Gated the same way Edit is.
+  // never clear. Edit and Submit are gated for the same reason.
   //
   // Called up here with the other hooks, not beside the flag it feeds: this
   // component has early returns below, and a hook after one breaks the order.
   const canVoidLoan = usePermission().can("loans:void");
+  // Submitting a restructure application needs only `loans:restructure`.
+  const canRestructureLoan = usePermission().can("loans:restructure");
+  // The documents card's own defaults offered upload and delete to anyone who
+  // can open a loan. Uploading to a loan needs `loans:update` and deleting a
+  // document `borrowers:delete` (DocumentController).
+  const canDeleteDocuments = usePermission().can("borrowers:delete");
 
   const currentUser = useAuthStore((s) => s.user);
   const currentUserDisplayName =
@@ -1569,12 +1576,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Edit Loan Application — available to the Loan Processor while the loan
   // is still a draft OR has been sent back by an approver. The button links
-  // to /loans/new?edit={id} so the full New Loan form is used for editing.
+  // to /loans/new?edit={id} so the full New Loan form is used for editing,
+  // and saving there is `PUT /loans/{id}`, which needs `loans:update`.
   const canEditLoanApplication =
+    canUpdateLoan &&
     !isLocked &&
     !isApprovalChainHidden(loan.status) &&
     (isUnseededDraft ||
       (!!currentStep && currentStep.kind === "submit" && canActOnCurrentStep));
+
+  // Who may send a draft for review: `PATCH /loans/{id}/submit` takes
+  // `loans:update`, or `loans:restructure` for a restructure application.
+  const canSubmitDraft = canUpdateLoan || (!!loan.is_restructure && canRestructureLoan);
 
   // Loan Processor's submit step.
   //
@@ -1591,10 +1604,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // Guarding on one made the draft Submit button a silent no-op: it
     // rendered, it was enabled, and it returned on the first line.
     //
-    // Authorisation is the server's here rather than the client's: with no
-    // step there is no role to compare against, and `submit` is gated on
-    // `loans:update`, which the page cannot evaluate. A 403 surfaces through
-    // notifyError like any other failure.
+    // With no step there is no role to compare against. The button is shown
+    // only to `canSubmitDraft`, the rule `submit` enforces, and a 403 still
+    // surfaces through notifyError like any other failure.
     if (!isUnseededDraft) {
       if (!currentStep || currentStep.kind !== "submit") return;
       if (!assertCanActOnStep("submit the draft")) return;
@@ -2298,14 +2310,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       Edit Loan Application
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    disabled={stepActionLoading}
-                    onClick={handleStepSubmit}
-                  >
-                    {stepActionLoading ? "Submitting…" : "Submit for Review"}
-                  </Button>
+                  {canSubmitDraft && (
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      disabled={stepActionLoading}
+                      onClick={handleStepSubmit}
+                    >
+                      {stepActionLoading ? "Submitting…" : "Submit for Review"}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -3040,7 +3054,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && canAssignOfficer && (
+                {!aoEditing && canUpdateLoan && (
                   <button
                     type="button"
                     onClick={() => setAoEditing(true)}
@@ -3504,7 +3518,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
       {/* Attached documents — available for every loan, including drafts so
           the policy exception letter is reachable from the very first save. */}
-      <LoanDocumentsCard loanId={loan.id} />
+      <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
 
       {/* Ledger — shown for every status that has server-side repayment data
           (incl. current / past_due), matching the Adjustments & History card. */}

@@ -16,17 +16,17 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
   const router = useRouter();
   const { role, permissions } = usePermission();
 
+  const titleCase = (name: string) =>
+    name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // A role made on the roles screen has no entry in ROLES; its own name is
+  // still a better answer than "Unknown".
   const roleConfig = role ? ROLES[role] : null;
-  const roleLabel = roleConfig?.label ?? "Unknown";
+  const roleLabel = roleConfig?.label ?? (role ? titleCase(role) : "Unknown");
 
   const accessibleModules = permissions
     .filter((p) => p.endsWith(":view"))
-    .map((p) => {
-      const moduleName = p.split(":")[0];
-      return moduleName
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-    });
+    .map((p) => titleCase(p.split(":")[0]));
 
   return (
     <div className="flex min-h-[80vh] flex-col items-center justify-center px-4">

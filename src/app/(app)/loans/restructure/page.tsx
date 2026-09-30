@@ -133,6 +133,17 @@ interface AmortizationRow {
   totalPayment: number;
 }
 
+/**
+ * A collateral on the form. `carried` marks one the source loan holds:
+ * `LoanService::restructure()` copies every one of those onto the new loan
+ * with its snapshot, so the form can neither drop nor re-attach it.
+ */
+interface SelectedCollateral {
+  collateral: CollateralValueRow;
+  snapshot_value: number;
+  carried: boolean;
+}
+
 // ── Amortization helpers (mirrors new/page.tsx) ───────────────────────────────
 
 function computeAmortization(
@@ -233,10 +244,11 @@ const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 function RestructureLoanInner() {
   const router = useRouter();
-  // Forwarding the new application for review is `PATCH /loans/{id}/submit`,
-  // which needs `loans:update`. A role that can restructure without it gets
-  // the draft and a note saying so, not a request bound to be refused.
-  const canSubmitForReview = usePermission().can("loans:update");
+  const { can } = usePermission();
+  // Attaching a collateral is `POST /loans/{loan}/collaterals`, which needs
+  // both of these. A role that can only restructure still gets the source
+  // loan's collaterals (the server carries them over) but cannot add others.
+  const canAddCollateral = can("loans:update") && can("collaterals:update");
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -278,9 +290,7 @@ function RestructureLoanInner() {
   // ── Collaterals ──
   const [availableCollaterals, setAvailableCollaterals] = useState<CollateralValueRow[]>([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
-  const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralValueRow; snapshot_value: number }[]
-  >([]);
+  const [selectedCollaterals, setSelectedCollaterals] = useState<SelectedCollateral[]>([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -525,17 +535,18 @@ function RestructureLoanInner() {
         // they were both undefined, so the source loan's collaterals never
         // carried into the restructure form.
         const prefilled = links
-          .map((link) => {
+          .map((link): SelectedCollateral | null => {
             const c = byId.get(link.id);
             return c
               ? {
                   collateral: c,
                   snapshot_value:
                     link.pivot?.snapshot_value ?? c.effective_value,
+                  carried: true,
                 }
               : null;
           })
-          .filter((v): v is { collateral: CollateralValueRow; snapshot_value: number } => v !== null);
+          .filter((v): v is SelectedCollateral => v !== null);
         if (!cancelled) setSelectedCollaterals(prefilled);
       } catch {
         // Non-blocking
@@ -636,9 +647,13 @@ function RestructureLoanInner() {
   // Picker rows for collateral dialog
   const pickerRows = useMemo(() => {
     const selectedIds = new Set(selectedCollaterals.map((c) => c.collateral.id));
+    const carriedIds = new Set(
+      selectedCollaterals.filter((c) => c.carried).map((c) => c.collateral.id),
+    );
     return availableCollaterals.map((c) => ({
       collateral: c,
       isSelected: selectedIds.has(c.id),
+      isCarried: carriedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
       // No value to snapshot onto the replacement loan, so it cannot be picked.
       isValueUnknown: c.value_unknown,
@@ -793,20 +808,19 @@ function RestructureLoanInner() {
 
       const newLoan = await loanService.restructure(sourceLoanId, payload);
 
-      // Attach the picked collaterals to the new loan — skipping any the API
-      // already carried over. `LoanService::restructure()` is gaining that
-      // carry-over, and `attach()` answers 422 for a collateral the loan
-      // already holds, so attaching blind would turn the happy path into
-      // "some collaterals failed to attach". Today this reads an empty list
-      // and behaves exactly as before.
-      if (selectedCollaterals.length > 0 && newLoan.id) {
+      // The source loan's collaterals are already on the new loan: the API
+      // copies them as it creates it. Only the ones added on this form are
+      // attached, skipping any the new loan already holds, because `attach()`
+      // answers 422 for a collateral the loan has.
+      const added = selectedCollaterals.filter((s) => !s.carried);
+      if (added.length > 0 && newLoan.id) {
         try {
-          const carried = await collateralService
+          const held = await collateralService
             .listForLoan(newLoan.id)
             .catch(() => []);
-          const alreadyHeld = new Set(carried.map((l) => l.id));
+          const alreadyHeld = new Set(held.map((l) => l.id));
           await Promise.all(
-            selectedCollaterals
+            added
               .filter((s) => !alreadyHeld.has(s.collateral.id))
               .map((s) =>
                 collateralService.attachToLoan(newLoan.id, s.collateral.id, s.snapshot_value),
@@ -817,21 +831,16 @@ function RestructureLoanInner() {
         }
       }
 
-      // Auto-forward for review. Exactly one outcome is reported: this used to
-      // announce "submitted" even after the submit had failed.
-      if (!canSubmitForReview) {
-        toast.info("Restructure application saved as a draft", {
-          description: "Submitting it for review needs permission to edit loans.",
+      // Forward it for review. Submitting a restructure application needs only
+      // `loans:restructure`, the same permission as this page, so everyone
+      // who gets here can. Exactly one outcome is reported.
+      const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
+      if (forwarded) {
+        toast.success("Restructure application submitted", {
+          description: "Forwarded for review.",
         });
       } else {
-        const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
-        if (forwarded) {
-          toast.success("Restructure application submitted", {
-            description: "Forwarded for review.",
-          });
-        } else {
-          toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
-        }
+        toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
       }
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
@@ -1295,12 +1304,18 @@ function RestructureLoanInner() {
                     The source loan&rsquo;s collaterals carry over to the
                     replacement loan. Restructuring does not release them.
                   </p>
+                  {!canAddCollateral && (
+                    <p className="text-sm text-muted-foreground">
+                      Adding other collateral needs permission to edit loans
+                      and collaterals.
+                    </p>
+                  )}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCollateralPickerOpen(true)}
-                  disabled={!borrowerId}
+                  disabled={!borrowerId || !canAddCollateral}
                 >
                   <Plus className="mr-1.5 h-4 w-4" />
                   Manage
@@ -1311,7 +1326,7 @@ function RestructureLoanInner() {
                   <p className="text-sm text-muted-foreground">No collaterals attached.</p>
                 ) : (
                   <div className="space-y-2">
-                    {selectedCollaterals.map(({ collateral, snapshot_value }) => (
+                    {selectedCollaterals.map(({ collateral, snapshot_value, carried }) => (
                       <div
                         key={collateral.id}
                         className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
@@ -1319,17 +1334,26 @@ function RestructureLoanInner() {
                         <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{formatCurrency(snapshot_value)}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              setSelectedCollaterals((prev) =>
-                                prev.filter((c) => c.collateral.id !== collateral.id),
-                              )
-                            }
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          {/* A carried collateral cannot be dropped here: the
+                              API copies it onto the new loan regardless. */}
+                          {carried ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Carries over
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Remove collateral"
+                              onClick={() =>
+                                setSelectedCollaterals((prev) =>
+                                  prev.filter((c) => c.collateral.id !== collateral.id),
+                                )
+                              }
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1353,10 +1377,14 @@ function RestructureLoanInner() {
                       No collaterals found for this borrower.
                     </p>
                   ) : (
-                    pickerRows.map(({ collateral, isSelected, isLocked, isValueUnknown }) => (
+                    pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (
                       <button
                         key={collateral.id}
-                        disabled={(isLocked && !isSelected) || (isValueUnknown && !isSelected)}
+                        disabled={
+                          isCarried ||
+                          (isLocked && !isSelected) ||
+                          (isValueUnknown && !isSelected)
+                        }
                         onClick={() => {
                           if (isSelected) {
                             setSelectedCollaterals((prev) =>
@@ -1365,7 +1393,11 @@ function RestructureLoanInner() {
                           } else {
                             setSelectedCollaterals((prev) => [
                               ...prev,
-                              { collateral, snapshot_value: collateral.effective_value ?? collateral.amount },
+                              {
+                                collateral,
+                                snapshot_value: collateral.effective_value ?? collateral.amount,
+                                carried: false,
+                              },
                             ]);
                           }
                         }}
@@ -1374,6 +1406,7 @@ function RestructureLoanInner() {
                           isSelected
                             ? "border-brand-orange bg-brand-orange/5"
                             : "hover:bg-muted/50",
+                          isCarried && "cursor-not-allowed",
                           isLocked && !isSelected && "opacity-50 cursor-not-allowed",
                           isValueUnknown && !isSelected && "opacity-50 cursor-not-allowed",
                         )}
@@ -1390,11 +1423,9 @@ function RestructureLoanInner() {
                           <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
                           {/* Shown even when selected. A collateral carried over
                               from the source loan can ALSO be held by a third
-                              active loan, and that is exactly the case
-                              `attach()` will refuse with a 422 — so the conflict
-                              has to be visible before submit, not after. Still
-                              clickable when selected, so the operator can drop
-                              it and proceed. */}
+                              active loan, and releasing the new loan is then
+                              refused (CollateralPledgeGuard) — so the conflict
+                              has to be visible now, not at release. */}
                           {isLocked && (
                             <Badge
                               variant="outline"
