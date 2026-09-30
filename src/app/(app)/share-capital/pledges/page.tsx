@@ -399,7 +399,7 @@ export default function PledgeEntryPage() {
           date,
         })),
       });
-      toast.success(`${valid.length} entries created`);
+      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
       setSelectedIds(new Set());
       setBulkEntries({});
     } catch {

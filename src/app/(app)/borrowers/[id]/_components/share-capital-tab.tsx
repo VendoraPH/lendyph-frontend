@@ -78,10 +78,12 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     return { totalCredits: credits, totalDebits: debits, balance: credits - debits };
   }, [entries]);
 
-  // Compute running balance
+  // Running balance in posting order: by date, then by id within a day. The
+  // API lists newest first, so without the id tiebreak a day's entries summed
+  // in reverse and showed balances the member never had.
   const entriesWithBalance = useMemo(() => {
     const sorted = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id - b.id
     );
     let running = 0;
     return sorted.map((e) => {
