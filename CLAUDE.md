@@ -62,10 +62,12 @@ npx playwright test e2e/fees-settings.spec.ts
 - ESLint enforces `per_page <= 100` (`pagination/no-oversized-per-page`).
 
 **Data and state.**
-- The house pattern is a service call in a `useCallback` fetcher, run by `useEffect`, with results in `useState`.
+- The house pattern: `useEffect` makes the service call and sets `useState` only in `.then`. `react-hooks/set-state-in-effect` does not model `await`, so an async fetcher that sets state and is called from an effect is flagged.
   - Parallel loads use `Promise.allSettled`.
-  - Refetch after a mutation through callbacks such as `onSave={fetchData}`.
+  - Loading starts `true`. A reload (Retry, or a refetch after a mutation such as `onSave={reload}`) resets loading and errors in its handler and bumps a `reloadCount` in the effect's deps. Or derive loading from whether the stored result belongs to the current request.
   - `useApiResource` (`src/hooks/use-api-resource.ts`) wraps this and treats 404/501 as `unavailable`.
+  - Refill a dialog's form as it opens with `useDialogOpening(open, source)`, and gate browser-only rendering with `useIsClient()`. Neither needs an effect.
+  - The React Compiler skips any component containing `try/finally`, so the hooks lint rules silently don't check it.
 - Global state is zustand (`src/store/`: auth, persisted as `lendy-auth`; ui; branding).
 - Forms are hand-rolled `useState` objects with `notifyValidation`. Toasts go through `src/lib/notify.ts`.
 - These are installed but unused, so don't introduce them as if they were the pattern:

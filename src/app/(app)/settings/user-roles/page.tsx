@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { RouteGuard } from "@/components/common";
+import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -370,13 +371,11 @@ function RoleFormDialog({
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
 
-  useEffect(() => {
-    if (open) {
-      setLabel(role?.label ?? "");
-      setDescription(role?.description ?? "");
-      setPermissions(new Set(role?.permissions ?? []));
-    }
-  }, [open, role]);
+  if (useDialogOpening(open, role)) {
+    setLabel(role?.label ?? "");
+    setDescription(role?.description ?? "");
+    setPermissions(new Set(role?.permissions ?? []));
+  }
 
   function togglePermission(mod: UIModule, act: Action) {
     setPermissions((prev) => togglePermissionIn(prev, `${mod}:${act}` as Permission));
