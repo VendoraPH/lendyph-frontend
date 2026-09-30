@@ -1,8 +1,8 @@
 /**
  * The house borrower-label fallback chain, narrowed to what a score row carries.
  *
- * Elsewhere (`src/app/(app)/share-capital/ledger/page.tsx:92` and its two
- * siblings) the chain reads
+ * Elsewhere (`src/app/(app)/share-capital/pledges/page.tsx` and
+ * `auto-credit/page.tsx`) the chain reads
  * "borrower?.full_name ?? borrower?.name ?? borrower_name ?? Borrower #{id}".
  * `CreditScoreHistoryEntry` has no embedded `borrower` relation — only the flat
  * `borrower_name`, which the backend does not send yet — so the chain here is

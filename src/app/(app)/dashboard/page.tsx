@@ -29,6 +29,7 @@ import { formatDateFull } from "@/lib/format";
 import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
+import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -217,11 +218,8 @@ export default function DashboardPage() {
       .then(({ rows, truncated }) => {
         let total = 0;
         for (const e of rows) {
-          // Defensive coercion — bad/missing amounts shouldn't poison the running
-          // total with NaN (which would propagate to "₱NaN" in the UI).
-          const amount = Number(e.amount);
-          if (!Number.isFinite(amount)) continue;
-          total += e.type === "credit" ? amount : -amount;
+          const { debit, credit } = ledgerAmounts(e);
+          total += credit - debit;
         }
         const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
         // The drain hit its runaway guard, so this is a floor rather than the
