@@ -412,6 +412,7 @@ function AddUserDialog({
                 <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
                 <Input
                   id="add-username"
+                  autoComplete="off"
                   placeholder="juan.dc"
                   value={form.username}
                   onChange={(e) => update("username", e.target.value)}
@@ -437,6 +438,7 @@ function AddUserDialog({
                 <Input
                   id="add-password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Min 8 characters"
                   value={form.password}
                   onChange={(e) => update("password", e.target.value)}
@@ -449,6 +451,7 @@ function AddUserDialog({
                 <Input
                   id="add-confirm"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Re-enter password"
                   value={form.password_confirmation}
                   onChange={(e) =>
@@ -749,6 +752,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-password"
               type="password"
+              autoComplete="new-password"
               placeholder="Minimum 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -761,6 +765,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-confirm"
               type="password"
+              autoComplete="new-password"
               placeholder="Re-enter password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
