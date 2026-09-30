@@ -78,6 +78,28 @@ export interface RestructuredIntoLoan extends RestructureLinkedLoan {
   start_date: string | null;
 }
 
+/**
+ * A co-maker linked to a loan, as a loan payload embeds it: the co-maker
+ * record (`CoMakerResource`) plus who linked it to the loan and when, `null`
+ * where the server has no record of that. Absent on payloads from before the
+ * API sent them.
+ */
+export interface LoanCoMaker {
+  id: number;
+  borrower_id?: number;
+  full_name?: string;
+  name?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  suffix?: string;
+  address?: string;
+  contact_number?: string;
+  relationship_to_borrower?: string;
+  added_by?: number | null;
+  added_at?: string | null;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -86,7 +108,8 @@ export interface Loan {
   borrower?: { id: number; full_name?: string; name?: string; address?: string; borrower_code?: string };
   loan_product?: { id: number; name?: string; description?: string };
   branch?: { id: number; name?: string };
-  co_makers?: { id: number; borrower_id?: number; full_name?: string; name?: string; first_name?: string; middle_name?: string; last_name?: string; suffix?: string; address?: string; relationship?: string }[];
+  /** Exactly the co-makers linked to this loan; `GET /loans/{id}` always loads them. */
+  co_makers?: LoanCoMaker[];
   approved_by_user?: { id: number; full_name?: string; name?: string };
   released_by_user?: { id: number; full_name?: string; name?: string };
   rejected_by_user?: { id: number; full_name?: string; name?: string };
@@ -167,8 +190,6 @@ export interface Loan {
   // Legacy aliases — kept for backward compat with components that use old field names
   borrower_id?: number;
   borrower_name?: string;
-  co_maker_id?: number;
-  co_maker_name?: string;
   loan_product_id?: number;
   loan_product_name?: string;
   interest_type?: InterestType;
@@ -181,7 +202,6 @@ export interface Loan {
   outstanding_balance?: number;
   purpose?: string;
   collateral?: string;
-  co_maker?: string;
   approved_by?: string;
   rejected_by?: string;
   released_by?: string;

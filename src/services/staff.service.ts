@@ -22,7 +22,8 @@ export const staffService = {
    * The Account Officer pickers read this, not `/users`: that endpoint is
    * behind `users:view`, which only admin and super_admin hold, so a loan
    * officer got an empty picker. This one answers anyone holding
-   * `loans:create` or `loans:update`, and 403s everyone else.
+   * `loans:create`, `loans:update` or `loans:restructure`, and 403s everyone
+   * else.
    *
    * A raw Laravel paginator (`{ data, links, meta }`), hence `getRaw`: `api.get`
    * would hand back the rows alone and drop `meta.total`, which the picker
