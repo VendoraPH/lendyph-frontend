@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
+import { httpStatusOf } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
@@ -24,7 +25,7 @@ import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
-import { readScheduleRows, toDisplaySchedule, type AmortizationRow } from "./_lib/server-schedule";
+import { readScheduleRows, toDisplaySchedule } from "./_lib/server-schedule";
 import { ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
   RestructuredBalanceFigures,
@@ -36,10 +37,10 @@ import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
-import {
-  InsurancePremiumSection,
-  computeInsurancePremium,
-} from "./_components/insurance-premium-section";
+import { InsurancePremiumSection } from "./_components/insurance-premium-section";
+import { releaseFigures, releaseInsurancePayload } from "./_lib/release-figures";
+import { extensionDueDate } from "./_lib/extension-due-date";
+import { useReleasePreview } from "./_hooks/use-release-preview";
 import {
   INSURANCE_PREMIUM_INITIAL,
   type InsurancePremiumValue,
@@ -128,6 +129,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  formatCurrencyExact,
   formatDate,
   formatDateISO,
   formatDateObj,
@@ -144,17 +146,7 @@ import {
 } from "@/constants";
 import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
-import {
-  DAYS_PER_MONTH,
-  instalments,
-  maturityDate as loanMaturityDate,
-  rateForDays,
-  readRateFrequency,
-  readTermUnit,
-  stepsByCalendarMonth,
-  type RateFrequency,
-  type TermUnit,
-} from "@/lib/loan-terms";
+import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 
 // ── Currency & Date Formatters ──
 
@@ -178,11 +170,6 @@ const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
   }).format(parseFloat(String(amount ?? 0)) || 0);
 
 
-// ── Amortization Schedule Helpers ──
-
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
-type InterestType = "fixed" | "diminishing" | "upon_maturity";
-
 // One row of the Ledger table — either a Repayment or a LoanLedgerEntry
 // (interest a loan extension accrues or collects), flattened to a common
 // shape so both render in one chronological list with running balances.
@@ -205,84 +192,6 @@ interface LedgerDisplayRow {
   /** Null while the balance's opening is unknown (no schedule rows on screen). */
   interestBal: number | null;
   scbBal: number | null;
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function generateSchedule(
-  principal: number,
-  rate: number,
-  term: number,
-  termUnit: TermUnit,
-  rateFrequency: RateFrequency,
-  frequency: PaymentFrequency,
-  interestType: InterestType,
-  startDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  // Upon Maturity = a single consolidated payment at the maturity date.
-  // Triggered when payment_frequency OR interest_type is "upon_maturity".
-  // A months term accrues a month's interest per month; a days term accrues
-  // for its days.
-  if (frequency === "upon_maturity" || interestType === "upon_maturity") {
-    const fraction =
-      termUnit === "months"
-        ? rateForDays(rate, DAYS_PER_MONTH, rateFrequency) * term
-        : rateForDays(rate, term, rateFrequency);
-    const totalInterest = principal * fraction;
-    // SCB accumulates monthly, paid at maturity; a days term is one period.
-    const totalScb = scbAmount * (termUnit === "months" ? term : 1);
-    return [{
-      period: 1,
-      dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: totalScb,
-      totalPayment: principal + totalInterest + totalScb,
-      balance: 0,
-    }];
-  }
-
-  const plan = instalments(startDate, term, termUnit, frequency);
-  const totalPeriods = plan.length;
-  const principalPerPeriod = principal / totalPeriods;
-  const rows: AmortizationRow[] = [];
-
-  let remainingBalance = principal;
-
-  plan.forEach(({ dueDate, days }, index) => {
-    const periodRate = rateForDays(rate, days, rateFrequency);
-
-    let interest: number;
-    // Constant interest on the original principal for straight/fixed loans.
-    // The API stores this method as "straight" (label "Straight (Fixed)"), so
-    // only "diminishing" should reduce interest on the falling balance —
-    // anything else (straight/fixed) keeps it flat. Matching only "fixed" here
-    // mis-treated straight loans as diminishing, understating total payable.
-    if ((interestType as string) !== "diminishing") {
-      interest = principal * periodRate;
-    } else {
-      interest = remainingBalance * periodRate;
-    }
-
-    remainingBalance -= principalPerPeriod;
-
-    rows.push({
-      period: index + 1,
-      dueDate,
-      principal: principalPerPeriod,
-      interest,
-      shareCapitalBuildUp: scbAmount,
-      totalPayment: principalPerPeriod + interest + scbAmount,
-      balance: Math.max(0, remainingBalance),
-    });
-  });
-
-  return rows;
 }
 
 // ── Status Colors ──
@@ -1050,13 +959,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
-  const [releaseDatePickerOpen, setReleaseDatePickerOpen] = useState(false);
   const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
   const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
-  const [releaseDate, setReleaseDate] = useState<Date>(new Date());
   const [insurancePremium, setInsurancePremium] = useState<InsurancePremiumValue>(
     INSURANCE_PREMIUM_INITIAL,
+  );
+  // What the release will withhold and pay out before insurance, read from the
+  // server once while the loan awaits release. The Release dialog and, for
+  // whoever can release it, the Loan Information card show no deduction, total
+  // or net for an approved loan that does not come from here. The endpoint
+  // needs `loans:release`, so without it the card keeps the recorded figures
+  // and nothing is asked for unless the dialog is opened.
+  const canReleaseLoan = usePermission().can("loans:release");
+  const releasePreviewOnCard = loan?.status === "approved" && canReleaseLoan;
+  const { state: releasePreview, reload: reloadReleasePreview } = useReleasePreview(
+    loanId,
+    loan?.status === "approved" && (canReleaseLoan || releaseOpen),
   );
 
   // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
@@ -1104,59 +1023,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
     currentUser?.username ||
     "Unknown User";
 
-  // Amortization schedule preview for release dialog.
-  //
-  // This memo, computedMaturityDate and storedSchedule list the loan FIELDS
-  // they read rather than `loan`, so a refetch that returns the same terms does
-  // not recompute them. That only holds while every read goes through a listed
-  // field, which is why the has-a-loan guard reads `loan?.id`, not `loan`.
-  const releaseSchedule = useMemo(() => {
-    if (!loan?.id) return [];
-    const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[5];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[6];
-    return generateSchedule(
-      loan.principal_amount,
-      loan.interest_rate,
-      termVal,
-      readTermUnit(loan.term_unit),
-      readRateFrequency(loan.interest_rate_frequency),
-      freqVal,
-      methodVal,
-      releaseDate,
-      loan.scb_amount ?? 0,
-    );
-  }, [loan?.id, loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.term_unit, loan?.interest_rate_frequency, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
-
-  const scheduleTotals = useMemo(() => {
-    return releaseSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [releaseSchedule]);
-
-  // Maturity date computed from release date + term
-  const computedMaturityDate = useMemo(() => {
-    if (!loan?.id) return null;
-    return loanMaturityDate(
-      releaseDate,
-      loan.term ?? loan.term_months ?? 0,
-      readTermUnit(loan.term_unit),
-      loan.frequency ?? loan.payment_frequency ?? "monthly",
-    );
-  }, [releaseDate, loan?.id, loan?.term, loan?.term_months, loan?.term_unit, loan?.frequency, loan?.payment_frequency]);
-
   // The schedule on screen: the server's rows, persisted or previewed, and
   // nothing else. The browser never builds a schedule of its own for a loan it
   // shows — no rows from the server (a restructured loan whose open periods the
   // release deleted, a request that failed) means no rows here, and the card
-  // says which. `generateSchedule` only drives the Release dialog's preview for
-  // a release date the server has not seen yet.
+  // says which. For an approved loan these are the preview rows, which is what
+  // the Release dialog shows: the schedule the release will store.
+  //
+  // The memo lists the loan FIELDS it reads rather than `loan`, so a refetch
+  // that returns the same terms does not recompute it. That only holds while
+  // every read goes through a listed field, which is why the has-a-loan guard
+  // reads `loan?.id`, not `loan`.
   const storedSchedule = useMemo(() => {
     if (!loan?.id || !scheduleRows) return [];
     const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
@@ -1167,6 +1044,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
         freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity",
     });
   }, [loan?.id, loan?.principal_amount, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
+
+  // Column totals of the Release dialog's schedule preview.
+  const scheduleTotals = useMemo(
+    () =>
+      storedSchedule.reduce(
+        (acc, row) => ({
+          principal: acc.principal + row.principal,
+          interest: acc.interest + row.interest,
+          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
+          totalPayment: acc.totalPayment + row.totalPayment,
+        }),
+        { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
+      ),
+    [storedSchedule],
+  );
 
   // Single source of truth for the interest still OWED on the loan — used both
   // to decide whether to collect it before extending, and to render the
@@ -1435,13 +1327,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // A term extension adds instalments. Those are months only when the loan
   // steps by calendar month; otherwise they are the loan's own payment periods.
   const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
-  // Extend-dialog preview: the extend endpoint always moves the due date
-  // forward by exactly one cycle (1 month for upon-maturity loans, matching
-  // the SCB build-up and computedMaturityDate math elsewhere on this page).
-  // This is display-only — it does not drive the actual extend() call.
-  const extendCurrentMaturity = loan?.maturity_date ?? loanSummary?.next_due_date ?? loan?.next_due_date;
-  const extendPreviewMaturityDate = extendCurrentMaturity
-    ? addMonths(new Date(extendCurrentMaturity), 1)
+  // Extend-dialog preview: the maturity date the extension will store, stepped
+  // from the server's own schedule the way the extend endpoint steps it. This
+  // is display-only — it does not drive the actual extend() call.
+  const extendPreviewMaturityDate = rawSchedule
+    ? extensionDueDate(rawSchedule, loanFrequency)
     : null;
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
@@ -1531,44 +1421,73 @@ function LoanDetail({ loanId }: { loanId: number }) {
     );
   }
 
+  // The insurance the release sends, and what the release will then store: the
+  // server's preview with that insurance applied the way the server applies
+  // it. Null until the preview is in, and Confirm Release stays off until then.
+  const releaseInsurance = releaseInsurancePayload(
+    Number(loan.principal_amount) || 0,
+    insurancePremium,
+  );
+  const releaseAmounts =
+    releasePreview.status === "loaded"
+      ? releaseFigures(releasePreview.preview, releaseInsurance)
+      : null;
+  const canConfirmRelease =
+    releaseAmounts !== null && !releaseAmounts.exceedsNetProceeds && !actionLoading;
+
   const handleRelease = async () => {
+    if (releasePreview.status !== "loaded" || !canConfirmRelease) return;
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      const { totalPremium, upfrontDeduction, remainingBalance } =
-        computeInsurancePremium(
-          Number(loan.principal_amount) || 0,
-          insurancePremium,
-        );
-      const releasePayload = {
-        insurance_premium_percentage: Number(insurancePremium.percentage) || 0,
-        insurance_premium_amount: totalPremium,
-        insurance_payment_type: insurancePremium.paymentType,
-        insurance_partial_amount:
-          insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
-        insurance_remaining_balance: remainingBalance,
-      };
-      await loanService.release(loan.id, releasePayload);
-      // Refetch the full loan detail rather than trusting the PATCH body —
-      // the GET endpoint returns the complete server state (deductions
-      // including the insurance premium added on release, total_deductions,
-      // net_proceeds, and embedded relations). The server-generated schedule,
-      // summary, payments, adjustments and ledger are then read once by the
-      // effects above, which run when the status enters the released set.
-      setLoan(await loadLoan(loan.id, loan));
-      toast.success("Loan released");
-      setReleaseOpen(false);
-      setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
-      setAutoPayIsPostRelease(true);
-      setAutoPayDialogOpen(true);
-      // Re-read the chain rather than marking the release step approved here.
-      // Releasing is a server-side event; whether it closes the release step is
-      // the server's call to record and ours to display.
-      void refreshApproval();
+      // The fingerprint of the fees quoted on screen: if they have changed
+      // since, the server refuses the release (409) rather than pay out a
+      // different amount from the one the cashier just read.
+      await loanService.release(loan.id, {
+        ...releaseInsurance,
+        fee_fingerprint: releasePreview.preview.fee_fingerprint,
+      });
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      notifyError(err, "We couldn't release this loan. Please try again.");
-    } finally {
+      if (httpStatusOf(err) === 409) {
+        // Nothing was released: the fees changed after they were quoted. Quote
+        // them again, and the dialog stays open on the new figures.
+        notifyError(
+          err,
+          "We couldn't release this loan. Please try again.",
+          "The release figures have been read again. Check them before confirming.",
+        );
+        reloadReleasePreview();
+      } else {
+        notifyError(err, "We couldn't release this loan. Please try again.");
+      }
       setActionLoading(false);
+      return;
+    }
+    // The loan is released. A failure from here on is only the re-read, and
+    // must not read as a failed release: trying again would be refused, the
+    // loan no longer being approved.
+    //
+    // Refetch the full loan detail rather than trusting the PATCH body — the
+    // GET endpoint returns the complete server state (deductions including the
+    // insurance premium added on release, total_deductions, net_proceeds, and
+    // embedded relations). The server-generated schedule, summary, payments,
+    // adjustments and ledger are then read once by the effects above, which run
+    // when the status enters the released set.
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setActionLoading(false);
+    setReleaseOpen(false);
+    setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
+    toast.success("Loan released");
+    // Re-read the chain rather than marking the release step approved here.
+    // Releasing is a server-side event; whether it closes the release step is
+    // the server's call to record and ours to display.
+    void refreshApproval();
+    if (reloaded) {
+      setLoan(reloaded);
+      setAutoPayIsPostRelease(true);
+      setAutoPayDialogOpen(true);
+    } else {
+      notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
   };
 
@@ -2981,10 +2900,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div>
                 <p className="text-xs text-muted-foreground">Net Proceeds</p>
                 <p className="text-sm font-semibold">
-                  {loan.net_proceeds != null
-                    ? formatCurrency(loan.net_proceeds)
-                    : "N/A"}
+                  {releasePreviewOnCard
+                    ? releasePreview.status === "loaded"
+                      ? formatCurrencyExact(releasePreview.preview.net_proceeds)
+                      : "—"
+                    : loan.net_proceeds != null
+                      ? formatCurrency(loan.net_proceeds)
+                      : "N/A"}
                 </p>
+                {loan.status === "approved" && !canReleaseLoan && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Fees configured in Settings are added when the loan is released.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2993,7 +2921,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
             {/* Deductions */}
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              {(() => {
+              {/* Awaiting release: what the release will withhold, as the
+                  server's release preview has it (the Release dialog's figures). */}
+              {releasePreviewOnCard ? (
+                releasePreview.status === "loaded" ? (
+                  releasePreview.preview.deductions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
+                  ) : releasePreview.preview.deductions.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-muted-foreground">
+                        {item.name}
+                        {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                      </span>
+                      <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
+                    </div>
+                  ))
+                ) : releasePreview.status === "loading" ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="size-4" />
+                    Getting the release figures…
+                  </div>
+                ) : (
+                  <p role="alert" className="text-sm text-destructive">{releasePreview.message}</p>
+                )
+              ) : (() => {
                 // Render every backend-computed deduction as its own line —
                 // including configured fees like "Insurance Premium" — so
                 // product-specific fees aren't silently folded into "Other".
@@ -3029,7 +2980,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Total Deductions</span>
                 <span className="text-sm font-semibold">
-                  {formatCurrency(totalDeductions)}
+                  {releasePreviewOnCard
+                    ? releasePreview.status === "loaded"
+                      ? formatCurrencyExact(releasePreview.preview.total_deductions)
+                      : "—"
+                    : formatCurrency(totalDeductions)}
                 </span>
               </div>
             </div>
@@ -3939,7 +3894,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div>
                   <p className="text-xs text-muted-foreground">Net Proceeds</p>
                   <p className="text-sm font-semibold text-green-600">
-                    {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : "N/A"}
+                    {releaseAmounts && !releaseAmounts.exceedsNetProceeds
+                      ? formatCurrencyExact(releaseAmounts.netProceeds)
+                      : "—"}
                   </p>
                 </div>
                 <div>
@@ -3957,50 +3914,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
             </div>
 
-            <ReleaseDeductions deductions={loan.deductions} totalDeductions={loan.total_deductions} />
+            <ReleaseDeductions preview={releasePreview} onRetry={reloadReleasePreview} />
 
             <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
 
-            {/* Release Date Picker */}
-            <div className="space-y-1.5">
-              <Label>Release Date</Label>
-              <Popover open={releaseDatePickerOpen} onOpenChange={setReleaseDatePickerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                  }
-                >
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{formatDateObj(releaseDate)}</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={releaseDate}
-                    onSelect={(date) => {
-                      if (date) setReleaseDate(date);
-                      setReleaseDatePickerOpen(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Computed dates */}
+            {/* Dates the release will store: the loan's maturity and the
+                server schedule's first instalment. */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Maturity Date</p>
                 <p className="text-sm font-medium">
-                  {computedMaturityDate ? formatDateObj(computedMaturityDate) : "N/A"}
+                  {loan.maturity_date ? formatDate(loan.maturity_date) : "N/A"}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">First Due Date</p>
                 <p className="text-sm font-medium">
-                  {releaseSchedule.length > 0 ? formatDateObj(releaseSchedule[0].dueDate) : "N/A"}
+                  {storedSchedule.length > 0 ? formatDateObj(storedSchedule[0].dueDate) : "N/A"}
                 </p>
               </div>
             </div>
@@ -4012,10 +3942,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
               disabled={actionLoading}
             />
 
-            {/* Amortization Preview */}
-            {releaseSchedule.length > 0 && (
-              <div className="space-y-2">
-                <Label>Amortization Schedule Preview</Label>
+            {/* Amortization Preview: the server's preview rows */}
+            <div className="space-y-2">
+              <Label>Amortization Schedule Preview</Label>
+              {storedSchedule.length === 0 ? (
+                <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+              ) : (
                 <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border">
                   <Table>
                     <TableHeader>
@@ -4032,7 +3964,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {releaseSchedule.map((row) => (
+                      {storedSchedule.map((row) => (
                         <TableRow key={row.period}>
                           <TableCell className="text-center text-xs">{row.period}</TableCell>
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
@@ -4064,43 +3996,44 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </TableFooter>
                   </Table>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Warning */}
-            {(() => {
-              const baseNetProceeds =
-                loan.net_proceeds != null
-                  ? Number(loan.net_proceeds)
-                  : Number(loan.principal_amount) || 0;
-              const { upfrontDeduction } = computeInsurancePremium(
-                Number(loan.principal_amount) || 0,
-                insurancePremium,
-              );
-              const adjustedNetProceeds = Math.max(
-                0,
-                baseNetProceeds - upfrontDeduction,
-              );
-              return (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <p className="text-sm text-amber-700">
-                    Releasing this loan will lock the principal, interest rate, and term.
-                    The borrower will receive{" "}
-                    <span className="font-semibold">
-                      {formatCurrency(adjustedNetProceeds)}
-                    </span>{" "}
-                    as net proceeds
-                    {upfrontDeduction > 0 && (
-                      <>
-                        {" "}(after {formatCurrency(upfrontDeduction)} insurance premium)
-                      </>
-                    )}
-                    .
-                  </p>
-                </div>
-              );
-            })()}
+            {releaseAmounts?.exceedsNetProceeds ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-sm text-destructive">
+                  Insurance collected exceeds the loan net proceeds. Lower the
+                  premium, or collect part of it now and the rest later.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-700">
+                  Releasing this loan will lock the principal, interest rate, and term.
+                  {releaseAmounts && (
+                    <>
+                      {" "}The borrower will receive{" "}
+                      <span className="font-semibold">
+                        {formatCurrencyExact(releaseAmounts.netProceeds)}
+                      </span>{" "}
+                      as net proceeds
+                      {releaseAmounts.insuranceCollected > 0 && (
+                        <>
+                          {" "}(after {formatCurrencyExact(releaseAmounts.insuranceCollected)} insurance premium)
+                        </>
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
@@ -4116,9 +4049,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRelease}
+              disabled={!canConfirmRelease}
             >
-              <Unlock className="mr-2 h-4 w-4" />
-              Confirm Release
+              {actionLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Unlock className="mr-2 h-4 w-4" />
+              )}
+              {actionLoading ? "Releasing..." : "Confirm Release"}
             </Button>
           </div>
         </DialogContent>
@@ -4959,7 +4897,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">New Maturity Date</p>
               <p className="text-sm font-medium">
-                {extendPreviewMaturityDate ? formatDateObj(extendPreviewMaturityDate) : "—"}
+                {extendPreviewMaturityDate ? formatDate(extendPreviewMaturityDate) : "—"}
               </p>
             </div>
           </div>
