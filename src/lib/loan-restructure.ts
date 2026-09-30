@@ -1,8 +1,11 @@
-// Payload helpers for POST /loans/{loan}/restructure.
+// Payload helpers for POST /loans/{loan}/restructure, and where a restructured
+// loan's balance went.
 //
 // The endpoint accepts the terms and deductions the user configured on the form
 // rather than re-deriving them from the loan product, so these helpers keep the
 // created loan matching the amortization preview the user just approved.
+
+import { isEverReleasedLoanStatus } from "@/constants/loan-status";
 
 export type LoanDeductionType = "fixed" | "percentage";
 
@@ -83,4 +86,21 @@ export function calcRestructureShortfall(
   if (outstandingBalance == null || principal <= 0) return 0;
   const shortfall = outstandingBalance - principal;
   return shortfall > 0 ? shortfall : 0;
+}
+
+/**
+ * The loan a restructure moved this loan's balance to: the entry of its
+ * `restructured_into` that was released. That list holds every restructure
+ * application raised on the loan, and a rejected or voided one never took the
+ * balance, so only a released child is the loan the balance went to. Null when
+ * there is none.
+ */
+export function restructureSuccessor<T extends { status?: unknown }>(
+  restructuredInto: readonly T[] | null | undefined,
+): T | null {
+  return (
+    restructuredInto?.find(
+      (child) => typeof child.status === "string" && isEverReleasedLoanStatus(child.status),
+    ) ?? null
+  );
 }
