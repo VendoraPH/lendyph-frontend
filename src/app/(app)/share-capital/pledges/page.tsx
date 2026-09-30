@@ -387,12 +387,16 @@ export default function PledgeEntryPage() {
       toast.error("Enter an amount for at least one member");
       return;
     }
+    // `ShareCapitalBulkEntryRequest` requires a date on every entry; without
+    // one the whole batch was refused with a 422.
+    const date = todayISO();
     try {
       await shareCapitalService.pledgeBulkEntries({
         entries: valid.map(([id, entry]) => ({
           pledge_id: Number(id),
           amount: Math.round(parseFloat(entry.amount)),
           type: entry.transaction,
+          date,
         })),
       });
       toast.success(`${valid.length} entries created`);

@@ -261,14 +261,14 @@ test("share capital: a truncated ledger certifies nothing", () => {
   assert.deepEqual(signatureLabels(doc), ["Prepared by", "Checked by"]);
 });
 
-test("share capital: a type/amount entry is read as well as debit/credit", () => {
-  // The shape `ShareCapitalLedgerEntry` in src/types/share-capital.ts declares,
-  // under the `period` alias for the totals block.
+test("share capital: a withdrawal is read from its debit column, under any totals alias", () => {
+  // Wire-shaped entries, one of each side, with the totals block under the
+  // `period` alias.
   const doc = buildShareCapitalCertificateDoc(
     {
       data: [
-        { id: 1, borrower_name: "Pedro Santos", date: "2026-01-15", description: "Contribution", type: "credit", amount: 1200 },
-        { id: 2, borrower_name: "Pedro Santos", date: "2026-02-15", description: "Withdrawal", type: "debit", amount: 200 },
+        { id: 1, borrower_name: "Pedro Santos", date: "2026-01-15", description: "Contribution", debit: 0, credit: 1200 },
+        { id: 2, borrower_name: "Pedro Santos", date: "2026-02-15", description: "Withdrawal", debit: 200, credit: 0 },
       ],
       period: { credits: 1200, debits: 200 },
     },
