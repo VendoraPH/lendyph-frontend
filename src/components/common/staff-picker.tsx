@@ -161,8 +161,8 @@ export function StaffPicker({
       {search.forbidden && (
         <p id={noteId} className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          Choosing an account officer needs permission to create or edit loans,
-          which your role does not have.
+          Choosing an account officer needs permission to create, edit or
+          restructure loans, which your role does not have.
         </p>
       )}
     </div>
