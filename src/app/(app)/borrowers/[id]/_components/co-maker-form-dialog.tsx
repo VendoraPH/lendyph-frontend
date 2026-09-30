@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserPlus, Loader2, Plus, X } from "lucide-react";
 import { usePermission } from "@/hooks";
-import type { CoMaker, Loan } from "@/types";
+import type { CoMaker } from "@/types";
 import {
   coMakerService,
   type CreateCoMakerData,
@@ -70,7 +70,6 @@ function emptyForm(): CoMakerFormData {
     occupation: "",
     employer: "",
     monthly_income: "",
-    loan_id: "",
   };
 }
 
@@ -152,15 +151,11 @@ function ValidIdHeading({
 // ── Add Co-Maker Dialog ──
 
 interface AddCoMakerDialogProps {
-  loans: Loan[];
-  existingCoMakers: CoMaker[];
   onAdd: AddCoMakerHandler;
   onAddId: AddCoMakerIdHandler;
 }
 
 export function AddCoMakerDialog({
-  loans,
-  existingCoMakers,
   onAdd,
   onAddId,
 }: AddCoMakerDialogProps) {
@@ -182,11 +177,7 @@ export function AddCoMakerDialog({
     if (idOnly) retryNotice.current?.scrollIntoView({ block: "start" });
   }, [idOnly]);
 
-  const selectedLoanHasCoMaker = form.loan_id
-    ? existingCoMakers.some((cm) => cm.loan_id === form.loan_id)
-    : false;
-
-  const update = (field: keyof CoMakerFormData, value: string | number | undefined) => {
+  const update = (field: keyof CoMakerFormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setDetailErrors((prev) => withoutKey(prev, field));
   };
@@ -260,7 +251,8 @@ export function AddCoMakerDialog({
         <DialogHeader>
           <DialogTitle>Add Co-Maker</DialogTitle>
           <DialogDescription>
-            Register a co-maker linked to a loan for this borrower.
+            Register a co-maker for this member. To put them on a loan, add them
+            in that loan&apos;s Release dialog while it awaits release.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -268,10 +260,8 @@ export function AddCoMakerDialog({
             <CoMakerFormFields
               form={form}
               update={update}
-              loans={loans}
               errors={detailErrors}
               disabled={saving || idOnly}
-              loanWarning={selectedLoanHasCoMaker ? "This loan already has a co-maker assigned." : undefined}
             />
             <section className="space-y-3 border-t pt-4">
               {idOnly && (
@@ -322,7 +312,6 @@ export function AddCoMakerDialog({
 
 interface EditCoMakerDialogProps {
   coMaker: CoMaker;
-  loans: Loan[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: EditCoMakerHandler;
@@ -330,7 +319,6 @@ interface EditCoMakerDialogProps {
 
 export function EditCoMakerDialog({
   coMaker,
-  loans,
   open,
   onOpenChange,
   onSave,
@@ -378,7 +366,7 @@ export function EditCoMakerDialog({
     };
   }, [open, coMaker.id]);
 
-  const update = (field: keyof CoMakerFormData, value: string | number | undefined) => {
+  const update = (field: keyof CoMakerFormData, value: string) => {
     touched.current.add(field);
     setForm((prev) => ({ ...prev, [field]: value }));
     setDetailErrors((prev) => withoutKey(prev, field));
@@ -461,7 +449,6 @@ export function EditCoMakerDialog({
             <CoMakerFormFields
               form={form}
               update={update}
-              loans={loans}
               errors={detailErrors}
               disabled={saving}
             />

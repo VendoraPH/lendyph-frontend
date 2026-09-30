@@ -4,11 +4,6 @@ import type { CoMaker, CoMakerRelationship } from "@/types";
 /**
  * The co-maker dialog's fields, as the form holds them.
  *
- * `loan_id` is here because the form renders the Linked Loan picker, not
- * because it is saved: `co_makers` has no such column, and co-makers are linked
- * to loans from the loan side. No payload carries it — see
- * `coMakerUpdatePayload`.
- *
  * The valid ID is not part of this form at all. It has its own endpoint and
  * its own draft — see `@/lib/co-maker-valid-id`.
  */
@@ -23,7 +18,6 @@ export interface CoMakerFormData {
   occupation: string;
   employer: string;
   monthly_income: string;
-  loan_id: number | "";
 }
 
 /**
@@ -60,7 +54,6 @@ export function coMakerToForm(cm: CoMaker): CoMakerFormData {
     occupation: cm.occupation ?? "",
     employer: cm.employer ?? "",
     monthly_income: cm.monthly_income?.toString() ?? "",
-    loan_id: cm.loan_id ?? "",
   };
 }
 
