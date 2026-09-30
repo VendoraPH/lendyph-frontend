@@ -9,43 +9,10 @@ import type {
   InsurancePaymentType,
   InsurancePremiumValue,
 } from "./insurance-premium.types";
+import { computeInsurancePremium } from "../_lib/release-figures";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
-}
-
-export function computeInsurancePremium(
-  principalAmount: number,
-  value: InsurancePremiumValue,
-): {
-  totalPremium: number;
-  upfrontDeduction: number;
-  remainingBalance: number;
-  partialOverflow: boolean;
-} {
-  const principal = Math.max(0, Number(principalAmount) || 0);
-  const pct = Math.max(0, Math.min(100, Number(value.percentage) || 0));
-  const totalPremium = round2(principal * (pct / 100));
-
-  if (value.paymentType === "full") {
-    return {
-      totalPremium,
-      upfrontDeduction: totalPremium,
-      remainingBalance: 0,
-      partialOverflow: false,
-    };
-  }
-
-  const rawPartial = Math.max(0, Number(value.partialAmount) || 0);
-  const partialOverflow = rawPartial > totalPremium;
-  const partial = Math.min(rawPartial, totalPremium);
-
-  return {
-    totalPremium,
-    upfrontDeduction: partial,
-    remainingBalance: round2(totalPremium - partial),
-    partialOverflow,
-  };
 }
 
 type Props = {
