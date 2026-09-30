@@ -157,6 +157,7 @@ export const API_ENDPOINTS = {
   },
   COLLATERALS: {
     LIST: "/collaterals",
+    REGISTER: "/collaterals/register",
     CREATE: "/collaterals",
     DETAIL: (id: number) => `/collaterals/${id}`,
     UPDATE: (id: number) => `/collaterals/${id}`,
