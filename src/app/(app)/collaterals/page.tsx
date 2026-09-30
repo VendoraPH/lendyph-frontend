@@ -72,6 +72,7 @@ import {
   lockLabel,
 } from "@/lib/collateral-lock";
 import { formatCurrency } from "@/utils/format";
+import { completeRows } from "@/lib/paginate";
 import type { Borrower, CollateralType } from "@/types";
 
 export default function CollateralListingPage() {
@@ -117,7 +118,7 @@ export default function CollateralListingPage() {
       // `1 + ceil(N/100) + N` requests to derive an index that never worked.
       const [collateralRows, typeRows, memberDrain] = await Promise.all([
         collateralService.list(),
-        collateralTypeService.list(),
+        collateralTypeService.listAll().then(completeRows),
         // members_only: collateral belongs to members, not to applicants.
         // Drained across pages: this used to ask for `per_page: 9999`, which
         // BorrowerController clamps to 100 without saying so, and every member

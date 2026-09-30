@@ -40,6 +40,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { branchService, type ApiBranch } from "@/services/branch.service";
+import { completeRows } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
@@ -182,16 +183,18 @@ export default function EditBorrowerPage() {
       try {
         const [b, branchRes] = await Promise.all([
           borrowerService.detail(borrowerId),
-          branchService.list().catch(() => [] as ApiBranch[]),
+          // An incomplete branch list fails soft like any other failure: the
+          // picker then offers only the member's current branch.
+          branchService
+            .listAll()
+            .then(completeRows)
+            .catch(() => [] as ApiBranch[]),
         ]);
         if (cancelled) return;
         setBorrower(b);
         setForm(borrowerToFormData(b));
         if (b.photo_url) setPhotoPreview(b.photo_url);
-        const list = Array.isArray(branchRes)
-          ? branchRes
-          : ((branchRes as unknown as { data?: ApiBranch[] }).data ?? []);
-        setBranches(list.filter((br) => br.is_active));
+        setBranches(branchRes.filter((br) => br.is_active));
       } catch {
         if (!cancelled) toast.error("We couldn't load the member details. Please try again.");
       } finally {

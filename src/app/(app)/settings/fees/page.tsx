@@ -27,6 +27,7 @@ import { formatCurrencyExact } from "@/lib/format";
 import { buildFeePayload } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
+import { completeRows } from "@/lib/paginate";
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -390,7 +391,8 @@ function FeesContent() {
     // Both APIs return complete resource collections. A product permission
     // failure must not hide successfully loaded fees.
     const [feesResult, productsResult] = await Promise.allSettled([
-      feeService.list({}), loanProductService.list({}),
+      feeService.listAll().then(completeRows),
+      loanProductService.listAll().then(completeRows),
     ]);
     if (feesResult.status === "fulfilled") {
       setFees(feesResult.value);
@@ -534,9 +536,9 @@ function FeesContent() {
                     // false statement about what borrowers are charged.
                     //
                     // Not a rare edge case: productNameById is built from a
-                    // single loanProductService.list() whose shape guard falls
-                    // back to [] silently, so one unexpected envelope relabels
-                    // every product-scoped fee at once, with no error shown.
+                    // separate products load that can fail on its own, and
+                    // when it does every product-scoped fee is unresolved at
+                    // once.
                     const productNames =
                       (fee.applicable_product_ids ?? [])
                         .map((id) => productNameById.get(id) ?? `Product #${id}`);

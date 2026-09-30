@@ -68,6 +68,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { completeRows } from "@/lib/paginate";
 
 import {
   borrowerService,
@@ -301,6 +302,9 @@ function RestructureLoanInner() {
 
   // ── Load seed data on mount ──
   useEffect(() => {
+    // Set by the cleanup, so Strict Mode's discarded first mount (or a real
+    // unmount) neither writes state nor toasts.
+    let cancelled = false;
     async function fetchData() {
       const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
         // members_only: a rejected applicant must never be restructurable.
@@ -308,13 +312,14 @@ function RestructureLoanInner() {
         // BorrowerController without a word, so member 101 onwards could not be
         // picked and their loans could not be restructured from this screen.
         borrowerService.listAll({ members_only: 1 }),
-        loanProductService.list(),
+        loanProductService.listAll().then(completeRows),
         // Drained, and filtered to active on the server. This was
         // `userService.list()` with no arguments — the endpoint's default page
         // of 15, newest first — so from the 16th user on, the longest-serving
         // officers were the ones missing from the Account Officer picker.
         userService.listAll({ status: "active" }),
       ]);
+      if (cancelled) return;
 
       if (borrowersRes.status === "fulfilled") {
         const memberDrain = borrowersRes.value;
@@ -326,8 +331,9 @@ function RestructureLoanInner() {
         );
       }
       if (productsRes.status === "fulfilled") {
-        const raw = productsRes.value;
-        setProducts(Array.isArray(raw) ? raw : (raw as { data: LoanProduct[] }).data ?? []);
+        setProducts(productsRes.value);
+      } else {
+        toast.error("We couldn't load loan products. Please try again.");
       }
       if (usersRes.status === "fulfilled") {
         const officers = toUserList(usersRes.value);
@@ -340,6 +346,9 @@ function RestructureLoanInner() {
       setLoadingData(false);
     }
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Load borrower's eligible loans when borrower changes ──
@@ -448,7 +457,23 @@ function RestructureLoanInner() {
 
   // ── Collateral types: load once ──
   useEffect(() => {
-    collateralTypeService.list().then(setCollateralTypes).catch(() => {});
+    let cancelled = false;
+    collateralTypeService
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
+        if (!cancelled) setCollateralTypes(rows);
+      })
+      .catch(() => {
+        // Without types a share-capital collateral is valued at its recorded
+        // amount instead of the member's balance, so this is not optional.
+        if (!cancelled) {
+          toast.error("We couldn't load the collateral types, so collateral values may be wrong. Please reload before attaching collateral.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Available collaterals: rebuild when borrower changes ──
@@ -460,11 +485,13 @@ function RestructureLoanInner() {
     let cancelled = false;
     (async () => {
       try {
-        // One request. `active_loans` on each row answers the lock question
-        // across the whole active book — no loan list, no per-loan fan-out.
-        const collRows = await collateralService.list({
-          borrower_id: borrowerId,
-        });
+        // One request today. `active_loans` on each row answers the lock
+        // question across the whole active book — no loan list, no per-loan
+        // fan-out. Drained so a paginated `/collaterals` cannot hand the picker
+        // page 1 as the member's whole set.
+        const collRows = completeRows(
+          await collateralService.listAll({ borrower_id: borrowerId }),
+        );
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsSc = collRows.some(
           (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
@@ -486,7 +513,10 @@ function RestructureLoanInner() {
         });
         if (!cancelled) setAvailableCollaterals(enriched);
       } catch {
-        if (!cancelled) setAvailableCollaterals([]);
+        if (!cancelled) {
+          setAvailableCollaterals([]);
+          toast.error("We couldn't load this member's collaterals. Please try again.");
+        }
       }
     })();
     return () => { cancelled = true; };

@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -305,8 +306,8 @@ export default function ApprovalWorkflowPage() {
       try {
         const [normalResult, peResult, rolesResult] = await Promise.allSettled([
           approvalWorkflowService.listNormal(),
-          approvalWorkflowService.list(),
-          roleService.list(),
+          approvalWorkflowService.listPolicyException(),
+          roleService.listAll().then(completeRows),
         ]);
         if (cancelled) return;
 
@@ -319,11 +320,9 @@ export default function ApprovalWorkflowPage() {
           setSavedPeSteps(peResult.value);
         }
         if (rolesResult.status === "fulfilled") {
-          const raw = rolesResult.value;
-          const list = Array.isArray(raw)
-            ? raw
-            : (raw as { data: ApiRole[] })?.data ?? [];
-          setRoles(list);
+          setRoles(rolesResult.value);
+        } else {
+          toast.error("We couldn't load the roles, so the step role picker is empty. Please try again.");
         }
 
         if (normalResult.status === "rejected" || peResult.status === "rejected") {
@@ -419,7 +418,7 @@ export default function ApprovalWorkflowPage() {
         setSavedNormalSteps(fresh);
       } else {
         await approvalWorkflowService.save(steps);
-        const fresh = await approvalWorkflowService.list();
+        const fresh = await approvalWorkflowService.listPolicyException();
         setPeSteps(fresh);
         setSavedPeSteps(fresh);
       }

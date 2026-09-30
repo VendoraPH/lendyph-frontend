@@ -26,6 +26,8 @@ import {
   userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
+import { httpStatusOf } from "@/lib/api-error";
+import { completeRows } from "@/lib/paginate";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -243,6 +245,17 @@ function computeAmortization(
   return rows;
 }
 
+/**
+ * A 403 from a list this form only reads for reference. The edit mode below is
+ * open to `loans:update`, which `loan_processor` holds without `fees:view` or
+ * `collaterals:view` — so for that role these reads are refused on every load.
+ * Expected, and nothing a retry fixes, so it is not announced; any other
+ * failure is.
+ */
+function isRoleWithoutAccess(err: unknown): boolean {
+  return httpStatusOf(err) === 403;
+}
+
 // ── Main Page Component ──
 //
 // This page handles both **create** and **edit** for a loan application.
@@ -341,6 +354,9 @@ function NewLoanApplicationInner() {
 
   // ── Fetch borrowers, products, users — and the loan when editing ──
   useEffect(() => {
+    // Set by the cleanup, so Strict Mode's discarded first mount (or a real
+    // unmount) neither writes state nor toasts.
+    let cancelled = false;
     async function fetchData() {
       setLoadingData(true);
 
@@ -353,21 +369,23 @@ function NewLoanApplicationInner() {
           // BorrowerController without a word, so member 101 onwards could not
           // be picked and could not be lent to from this screen at all.
           borrowerService.listAll({ members_only: 1 }),
-          loanProductService.list(),
+          loanProductService.listAll().then(completeRows),
           // Drained, and filtered to active on the server. This was
           // `userService.list()` with no arguments — the endpoint's default
           // page of 15, newest first — so from the 16th user on, the
           // longest-serving officers were the ones missing from the picker.
           userService.listAll({ status: "active" }),
-          feeService.list(),
+          feeService.listAll().then(completeRows),
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
+      if (cancelled) return;
 
       if (feesResult.status === "fulfilled") {
-        const feeData = Array.isArray(feesResult.value)
-          ? feesResult.value
-          : (feesResult.value as unknown as { data: Fee[] }).data ?? [];
-        setFees(feeData);
+        setFees(feesResult.value);
+      } else if (!isRoleWithoutAccess(feesResult.reason)) {
+        // A preview only — the server applies configured fees itself — but a
+        // preview that silently drops them understates every deduction.
+        toast.error("We couldn't load the configured fees, so the deductions shown leave them out. Please try again.");
       }
 
       if (borrowersResult.status === "fulfilled") {
@@ -382,12 +400,8 @@ function NewLoanApplicationInner() {
         toast.error("We couldn't load members. Please try again.");
       }
 
-      let productsList: LoanProduct[] = [];
       if (productsResult.status === "fulfilled") {
-        productsList = Array.isArray(productsResult.value)
-          ? productsResult.value
-          : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
-        setProducts(productsList);
+        setProducts(productsResult.value);
       } else {
         toast.error("We couldn't load loan products. Please try again.");
       }
@@ -441,6 +455,9 @@ function NewLoanApplicationInner() {
       setLoadingData(false);
     }
     fetchData();
+    return () => {
+      cancelled = true;
+    };
     // Re-fetch if user switches between create and edit in the same tab
   }, [editLoanId, router]);
 
@@ -448,12 +465,18 @@ function NewLoanApplicationInner() {
   useEffect(() => {
     let cancelled = false;
     collateralTypeService
-      .list()
+      .listAll()
+      .then(completeRows)
       .then((rows) => {
         if (!cancelled) setCollateralTypes(rows);
       })
-      .catch(() => {
-        // Non-blocking — picker will just lack type metadata.
+      .catch((err) => {
+        // Non-blocking, but not silent: without types a share-capital
+        // collateral is valued at its recorded amount instead of the member's
+        // balance.
+        if (!cancelled && !isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load the collateral types, so collateral values may be wrong. Please reload before attaching collateral.");
+        }
       });
     return () => {
       cancelled = true;
@@ -471,12 +494,14 @@ function NewLoanApplicationInner() {
     let cancelled = false;
     (async () => {
       try {
-        // One request. `active_loans` on each row is the server's answer to
-        // "is this already pledged", across the whole active loan book — no
+        // One request today. `active_loans` on each row is the server's answer
+        // to "is this already pledged", across the whole active loan book — no
         // loan list to page and no per-loan attachment fan-out to bound.
-        const collateralRows = await collateralService.list({
-          borrower_id: borrowerId,
-        });
+        // Drained so a paginated `/collaterals` cannot hand the picker page 1
+        // as the member's whole set.
+        const collateralRows = completeRows(
+          await collateralService.listAll({ borrower_id: borrowerId }),
+        );
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsScBalance = collateralRows.some(
           (c) =>
@@ -502,8 +527,12 @@ function NewLoanApplicationInner() {
           };
         });
         if (!cancelled) setAvailableCollaterals(enriched);
-      } catch {
-        if (!cancelled) setAvailableCollaterals([]);
+      } catch (err) {
+        if (cancelled) return;
+        setAvailableCollaterals([]);
+        if (!isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load this member's collaterals. Please try again.");
+        }
       }
     })();
     return () => {

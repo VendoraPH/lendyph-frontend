@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
+import { notifyError } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -33,11 +35,24 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
   const [toOpen, setToOpen] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     loanProductService
-      .list()
-      .then((res) => setProducts(res as LoanProduct[]))
-      .catch(() => {})
-      .finally(() => setProductsLoading(false));
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
+        if (!cancelled) setProducts(rows);
+      })
+      .catch((err) => {
+        // "All Products" still works without the list, so the step stays
+        // usable — but picking specific products does not, and it says so.
+        if (!cancelled) notifyError(err, "We couldn't load the loan products. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function toggleProduct(id: number) {

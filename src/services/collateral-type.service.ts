@@ -1,6 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
-import type { CollateralType, PaginatedResponse } from "@/types";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
+import type { CollateralType } from "@/types";
 
 export interface CreateCollateralTypeData {
   name: string;
@@ -13,21 +14,26 @@ export interface CreateCollateralTypeData {
 
 export type UpdateCollateralTypeData = Partial<CreateCollateralTypeData>;
 
-function unwrapList<T>(res: unknown): T[] {
-  if (Array.isArray(res)) return res as T[];
-  if (res && typeof res === "object" && Array.isArray((res as { data?: T[] }).data)) {
-    return (res as { data: T[] }).data;
-  }
-  return [];
-}
-
 export const collateralTypeService = {
-  list: async (): Promise<CollateralType[]> => {
-    const res = await api.get<PaginatedResponse<CollateralType> | CollateralType[]>(
-      API_ENDPOINTS.COLLATERAL_TYPES.LIST,
+  /**
+   * Every collateral type, in `display_order`.
+   *
+   * `CollateralTypeController::index()` answers the whole set with `->get()`,
+   * not a paginator — one request today. Drained regardless, so a paginator
+   * added later cannot silently drop types from the pickers and value lookups.
+   * Sorted here, after the drain, so the order holds across pages too.
+   * `DrainResult` for the reason on `borrowerService.listAll`.
+   */
+  listAll: async (): Promise<DrainResult<CollateralType>> => {
+    const drain = await fetchAllPages<CollateralType>(({ page, per_page }) =>
+      api.getRaw<{ data: CollateralType[] }>(API_ENDPOINTS.COLLATERAL_TYPES.LIST, {
+        params: { page, per_page },
+      }),
     );
-    const rows = unwrapList<CollateralType>(res);
-    return [...rows].sort((a, b) => a.display_order - b.display_order);
+    return {
+      ...drain,
+      rows: [...drain.rows].sort((a, b) => a.display_order - b.display_order),
+    };
   },
 
   detail: (id: number): Promise<CollateralType> =>
