@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,13 +12,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { RELATIONSHIP_OPTIONS } from "@/constants";
-import { formatCurrency } from "@/lib/format";
 import type {
   CoMakerDetailsErrors,
   CoMakerDetailsField,
   CoMakerFormData,
 } from "@/lib/co-maker-edit";
-import type { Loan } from "@/types";
 
 /**
  * The API's `max:` for each text column (Store/UpdateCoMakerRequest), so an
@@ -44,21 +41,17 @@ function relationshipLabel(value: string | null): string {
 
 interface CoMakerFormFieldsProps {
   form: CoMakerFormData;
-  update: (field: keyof CoMakerFormData, value: string | number | undefined) => void;
-  loans: Loan[];
+  update: (field: keyof CoMakerFormData, value: string) => void;
   errors?: CoMakerDetailsErrors;
   disabled?: boolean;
-  loanWarning?: string;
 }
 
 /** The co-maker's own details, shared by the add and edit dialogs. */
 export function CoMakerFormFields({
   form,
   update,
-  loans,
   errors = {},
   disabled,
-  loanWarning,
 }: CoMakerFormFieldsProps) {
   const invalid = (field: CoMakerDetailsField) => (errors[field] ? true : undefined);
   const describedBy = (field: CoMakerDetailsField) =>
@@ -66,37 +59,6 @@ export function CoMakerFormFields({
 
   return (
     <div className="space-y-4">
-      {/* Loan Selection */}
-      <div className="space-y-2">
-        <Label>Linked Loan *</Label>
-        <Select
-          // `null`, not `undefined`: `loan_id` starts as `""`, so `undefined` made
-          // the first render uncontrolled and picking a loan flipped it to
-          // controlled. `null` is Base UI's controlled empty value, matching the
-          // other two Selects in this dialog.
-          value={form.loan_id ? String(form.loan_id) : null}
-          onValueChange={(v) => update("loan_id", Number(v))}
-          disabled={disabled}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a loan" />
-          </SelectTrigger>
-          <SelectContent>
-            {loans.map((loan) => (
-              <SelectItem key={loan.id} value={String(loan.id)}>
-                {loan.purpose ?? `Loan #${loan.id}`} — {formatCurrency(loan.principal_amount)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {loanWarning && (
-          <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" />
-            {loanWarning}
-          </p>
-        )}
-      </div>
-
       {/* Personal Info */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="space-y-2 col-span-2 sm:col-span-1">

@@ -7,15 +7,17 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lucide-react";
-import type { CoMaker, Loan, LoanSchedule } from "@/types";
+import type { Loan, LoanSchedule } from "@/types";
 import {
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import { loanService } from "@/services";
+import { coMakerName } from "@/lib/co-maker-name";
 import { formatCurrency } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
+import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -30,7 +32,6 @@ const scheduleStatusColor: Record<string, string> = {
 
 interface LoansTabProps {
   loans: Loan[];
-  coMakers: CoMaker[];
 }
 
 function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
@@ -66,7 +67,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
   );
 }
 
-export function LoansTab({ loans, coMakers }: LoansTabProps) {
+export function LoansTab({ loans }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [schedules, setSchedules] = useState<Record<number, LoanSchedule[]>>({});
   const [loadingSchedule, setLoadingSchedule] = useState<number | null>(null);
@@ -123,9 +124,9 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                 const hasSchedule = schedule.length > 0 || (expandedLoan === loan.id && loadingSchedule === loan.id);
                 const isExpanded = expandedLoan === loan.id;
 
-                const loanCoMakers = coMakers.filter((cm) => cm.loan_id === loan.id);
+                const loanCoMakers = loan.co_makers ?? [];
                 const hasCoMaker = loanCoMakers.length > 0;
-                const needsCoMaker = !hasCoMaker && loan.principal_amount >= 50000 && loan.status !== "completed";
+                const needsCoMaker = loanNeedsCoMaker(loan);
                 const isExpandable = hasSchedule || loanCoMakers.length > 0 || needsCoMaker;
 
                 return (
@@ -196,9 +197,9 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                                   <div key={cm.id} className="flex items-center gap-3 rounded-md border bg-card p-2">
                                     <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
                                     <div className="min-w-0">
-                                      <p className="text-sm font-medium truncate">{cm.full_name}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {cm.relationship} · {cm.phone}
+                                      <p className="text-sm font-medium truncate">{coMakerName(cm) || "—"}</p>
+                                      <p className="text-xs text-muted-foreground capitalize">
+                                        {[cm.relationship_to_borrower, cm.contact_number].filter(Boolean).join(" · ") || "—"}
                                       </p>
                                     </div>
                                   </div>

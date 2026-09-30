@@ -257,7 +257,7 @@ export default function BorrowerDetailPage() {
         </TabsContent>
 
         <TabsContent value="loans" className="pt-4">
-          <LoansTab loans={loans} coMakers={coMakers} />
+          <LoansTab loans={loans} />
         </TabsContent>
 
         <TabsContent value="payments" className="pt-4">
@@ -267,7 +267,6 @@ export default function BorrowerDetailPage() {
         <TabsContent value="co-makers" className="pt-4">
           <CoMakersTab
             coMakers={coMakers}
-            loans={loans}
             onAdd={handleAddCoMaker}
             onAddId={handleAddCoMakerId}
             onEdit={handleEditCoMaker}

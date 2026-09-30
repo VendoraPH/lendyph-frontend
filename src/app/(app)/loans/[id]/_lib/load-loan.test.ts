@@ -2,9 +2,13 @@
  * The loan page's one "load + enrich" path, pinned at the wire.
  *
  * Every read of the loan on that page goes through `loadLoan`: the first load
- * and the re-read after each action. Before, only the first load filled in the
- * co-makers, and the re-read after a payment skipped the product-name lookup
- * too, so both could vanish from the page after an action.
+ * and the re-read after each action. Before, the re-read after a payment
+ * skipped the product-name lookup, so the product could vanish from the page
+ * after an action.
+ *
+ * The co-makers are the loan's own, as `GET /loans/{id}` lists them. An empty
+ * list used to be filled with the borrower's registered co-makers, so a
+ * co-maker never linked to the loan was shown as one of its co-makers.
  *
  * WHAT THIS PROVES: which requests the loader makes for each shape of
  * `GET /loans/{id}` payload, and what it hands back.
@@ -77,48 +81,15 @@ describe("loadLoan", () => {
     assert.equal(loan.loan_product?.name, "Salary Loan");
   });
 
-  test("no linked co-makers: falls back to the borrower's registered ones", async () => {
+  test("no linked co-makers shows none, even when the borrower has registered ones", async () => {
     routes["GET /loans/7"] = ok(detail({ co_makers: [] }));
     routes["GET /borrowers/3/co-makers"] = ok([
-      { id: 21, first_name: "Carla", last_name: "Diaz", relationship_to_borrower: "sibling", address: "Cebu" },
+      { id: 21, first_name: "Carla", last_name: "Diaz", relationship_to_borrower: "sibling" },
     ]);
-
-    const loan = await loadLoan(7, null);
-
-    assert.deepEqual(seen, ["GET /loans/7", "GET /borrowers/3/co-makers"]);
-    assert.deepEqual(loan.co_makers, [
-      { id: 21, full_name: "Carla Diaz", address: "Cebu", relationship: "sibling" },
-    ]);
-  });
-
-  test("explicit co-maker ids are fetched one by one, and a missing one is skipped", async () => {
-    routes["GET /loans/7"] = ok(detail({ co_makers: [], co_maker_ids: [31, 32] }));
-    routes["GET /co-makers/31"] = ok({ id: 31, full_name: "Dino Reyes", relationship: "friend" });
-
-    const loan = await loadLoan(7, null);
-
-    assert.deepEqual([...seen].sort(), ["GET /co-makers/31", "GET /co-makers/32", "GET /loans/7"]);
-    assert.deepEqual(loan.co_makers, [
-      { id: 31, full_name: "Dino Reyes", address: undefined, relationship: "friend" },
-    ]);
-  });
-
-  test("a legacy flat co-maker name is used without asking the borrower's list", async () => {
-    routes["GET /loans/7"] = ok(detail({ co_makers: [], co_maker_name: "Elena Lim" }));
 
     const loan = await loadLoan(7, null);
 
     assert.deepEqual(seen, ["GET /loans/7"]);
-    assert.deepEqual(loan.co_makers, [{ id: 0, full_name: "Elena Lim" }]);
-  });
-
-  test("a failed co-maker lookup still returns the loan", async () => {
-    routes["GET /loans/7"] = ok(detail({ co_makers: [] }));
-    routes["GET /borrowers/3/co-makers"] = [500, { message: "Server Error" }];
-
-    const loan = await loadLoan(7, null);
-
-    assert.equal(loan.id, 7);
     assert.deepEqual(loan.co_makers, []);
   });
 
