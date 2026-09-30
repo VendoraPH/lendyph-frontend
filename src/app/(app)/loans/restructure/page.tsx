@@ -1154,8 +1154,11 @@ function RestructureLoanInner() {
                       </SelectTrigger>
                       <SelectContent>
                         {products.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
+                          <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
                             {p.name}
+                            {!p.is_active && (
+                              <span className="text-muted-foreground"> (Inactive)</span>
+                            )}
                           </SelectItem>
                         ))}
                       </SelectContent>
