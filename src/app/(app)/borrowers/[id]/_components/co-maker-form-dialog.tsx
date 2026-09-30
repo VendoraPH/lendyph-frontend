@@ -342,7 +342,10 @@ export function EditCoMakerDialog({
   const [fresh, setFresh] = useState<CoMaker>(coMaker);
   const [form, setForm] = useState<CoMakerFormData>(() => coMakerToForm(coMaker));
   const [detailErrors, setDetailErrors] = useState<CoMakerDetailsErrors>({});
-  const [refreshing, setRefreshing] = useState(false);
+  // The co-maker whose fresh copy has come back, or failed to. Until it is
+  // this one, the title shows that the latest data is still on its way.
+  const [detailSettledFor, setDetailSettledFor] = useState<number | null>(null);
+  const refreshing = open && detailSettledFor !== coMaker.id;
   const [saving, setSaving] = useState(false);
   // Fields the person has typed in. The fresh copy never overwrites them.
   const touched = useRef(new Set<keyof CoMakerFormData>());
@@ -355,7 +358,6 @@ export function EditCoMakerDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setRefreshing(true);
     coMakerService
       .detail(coMaker.id)
       .then((data) => {
@@ -369,7 +371,7 @@ export function EditCoMakerDialog({
         // populated from it, so the user can still edit.
       })
       .finally(() => {
-        if (!cancelled) setRefreshing(false);
+        if (!cancelled) setDetailSettledFor(coMaker.id);
       });
     return () => {
       cancelled = true;

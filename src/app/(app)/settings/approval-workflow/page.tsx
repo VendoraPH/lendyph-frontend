@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { RouteGuard } from "@/components/common";
+import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,14 +135,12 @@ function StepFormDialog({
   const [kind, setKind] = useState<ChainStepKind>("approve");
   const [status, setStatus] = useState<string>("");
 
-  useEffect(() => {
-    if (open) {
-      setName(step?.name ?? "");
-      setRole(step?.role ?? "");
-      setKind(step?.kind ?? "approve");
-      setStatus(step?.status ?? "");
-    }
-  }, [open, step]);
+  if (useDialogOpening(open, step)) {
+    setName(step?.name ?? "");
+    setRole(step?.role ?? "");
+    setKind(step?.kind ?? "approve");
+    setStatus(step?.status ?? "");
+  }
 
   function handleSave() {
     if (!name.trim()) {

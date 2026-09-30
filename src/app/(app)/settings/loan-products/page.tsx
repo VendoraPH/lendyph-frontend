@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useDialogOpening } from "@/hooks";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
@@ -380,12 +381,10 @@ function ProductFormDialog({
   const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
   const [expandedFee, setExpandedFee] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setForm(initialData ?? EMPTY_FORM);
-      setExpandedFee(null);
-    }
-  }, [open, initialData]);
+  if (useDialogOpening(open, initialData)) {
+    setForm(initialData ?? EMPTY_FORM);
+    setExpandedFee(null);
+  }
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -1268,6 +1267,10 @@ function ProductActionsCell({
   onDelete: () => void;
 }) {
   const [openDialog, setOpenDialog] = useState<string | null>(null);
+  // Built once per product record, not per render: the edit dialog refills its
+  // form whenever this changes while it is open, which would drop what the
+  // user has typed on any unrelated re-render.
+  const initialData = useMemo(() => productToForm(product), [product]);
 
   return (
     <>
@@ -1303,7 +1306,7 @@ function ProductActionsCell({
         open={openDialog === "edit"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
         onSubmit={onEdit}
-        initialData={productToForm(product)}
+        initialData={initialData}
         title="Edit Loan Product"
         description={`Update the configuration for ${product.name}.`}
       />

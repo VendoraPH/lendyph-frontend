@@ -145,12 +145,6 @@ export const loanService = {
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.LOANS.DELETE(id)),
 
-  approve: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVE(id), data),
-
-  reject: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.REJECT(id), data),
-
   release: (id: number, payload?: ReleaseLoanPayload) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id), payload),
 

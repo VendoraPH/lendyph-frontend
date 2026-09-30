@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { useIsClient } from "@/hooks";
 import {
   AreaChart,
   Area,
@@ -194,7 +195,7 @@ function formatCompactCurrency(amount: number): string {
 }
 
 export default function DashboardPage() {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
@@ -205,8 +206,6 @@ export default function DashboardPage() {
   const [duesStatus, setDuesStatus] = useState<LoadState>("loading");
 
   useEffect(() => {
-    setMounted(true);
-
     // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
     // the whole ledger. It used to ask for `per_page: 9999`, which the API
     // silently clamps to 100: the headline figure on the front page of the app
