@@ -87,6 +87,25 @@ export function hasShareCapitalBalance(
 }
 
 /**
+ * An entry's `debit` and `credit`, each coerced to a finite number.
+ *
+ * Defensive coercion — a bad or missing column counts as 0 rather than
+ * poisoning a running total with NaN (which would propagate to "-₱NaN" in the
+ * UI). Shared by every screen that sums a ledger, so the rule lives in one
+ * place.
+ */
+export function ledgerAmounts(
+  entry: Pick<ShareCapitalLedgerEntry, "debit" | "credit">
+): { debit: number; credit: number } {
+  const debit = Number(entry.debit);
+  const credit = Number(entry.credit);
+  return {
+    debit: Number.isFinite(debit) ? debit : 0,
+    credit: Number.isFinite(credit) ? credit : 0,
+  };
+}
+
+/**
  * Credits minus debits over a drained ledger.
  *
  * Split out from the request so it can be tested without a network, and so the
@@ -104,12 +123,9 @@ export function toShareCapitalBalance(
   let credits = 0;
   let debits = 0;
   for (const entry of drain.rows) {
-    // Defensive coercion — bad/missing amounts shouldn't poison the running
-    // total with NaN (which would propagate to "-₱NaN" in the UI).
-    const amount = Number(entry.amount);
-    if (!Number.isFinite(amount)) continue;
-    if (entry.type === "credit") credits += amount;
-    else debits += amount;
+    const { debit, credit } = ledgerAmounts(entry);
+    credits += credit;
+    debits += debit;
   }
 
   const balance = credits - debits;
