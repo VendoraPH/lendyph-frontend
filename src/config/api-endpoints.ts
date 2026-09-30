@@ -210,6 +210,9 @@ export const API_ENDPOINTS = {
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
   },
+  STAFF: {
+    LIST: "/staff",
+  },
   AUDIT_LOGS: {
     LIST: "/audit-logs",
     DETAIL: (id: number) => `/audit-logs/${id}`,

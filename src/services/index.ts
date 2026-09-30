@@ -3,6 +3,7 @@ export { loanService } from "./loan.service";
 export { borrowerService } from "./borrower.service";
 export { reportService } from "./report.service";
 export { userService } from "./user.service";
+export { staffService } from "./staff.service";
 export { roleService } from "./role.service";
 export { branchService } from "./branch.service";
 export { brandingService } from "./branding.service";
