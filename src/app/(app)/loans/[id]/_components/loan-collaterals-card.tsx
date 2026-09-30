@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { ShieldCheck } from "lucide-react";
 import { collateralService } from "@/services";
+import { usePermission } from "@/hooks";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
 import type { CollateralType, LoanCollateral } from "@/types";
 import { formatCurrency } from "@/utils/format";
@@ -32,11 +33,14 @@ export function LoanCollateralsCard({
   loanId,
   loanPrincipal,
 }: LoanCollateralsCardProps) {
+  // The attachments need `collaterals:view`, which viewing a loan does not
+  // imply. Without it they are not asked for and the card lists none.
+  const canListCollaterals = usePermission().can("collaterals:view");
   const [rows, setRows] = useState<AttachedRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canListCollaterals);
 
   useEffect(() => {
-    if (!loanId) return;
+    if (!loanId || !canListCollaterals) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -64,7 +68,7 @@ export function LoanCollateralsCard({
     return () => {
       cancelled = true;
     };
-  }, [loanId]);
+  }, [loanId, canListCollaterals]);
 
   const totalValue = useMemo(
     () => rows.reduce((sum, r) => sum + r.snapshotValue, 0),

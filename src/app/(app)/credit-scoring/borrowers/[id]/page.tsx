@@ -22,7 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
 import type { CreditScore, PolicyFlag } from "@/types/credit-scoring";
 
-export default function BorrowerCreditProfilePage({
+function BorrowerCreditProfileContent({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -44,80 +44,90 @@ export default function BorrowerCreditProfilePage({
   const flagsResource = useApiResource<PolicyFlag[]>(flagsFetcher);
 
   return (
+    <div className="space-y-6">
+      <DataState
+        resource={profileResource}
+        summary="This borrower's full credit score, breakdown, and factors will appear here once the backend is connected."
+        endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
+      >
+        {(profile) => (
+          <>
+            <CreditScoringPageHeader
+              title={profile.borrower_name}
+              description={`Lendy Credit Score · ${profile.score_type === "application" ? "Application Score" : "Behavioral Score"}`}
+              actions={
+                <PermissionGate permission="credit_scoring:override">
+                  <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
+                </PermissionGate>
+              }
+            />
+
+            <Card>
+              <CardContent className="flex flex-wrap items-center gap-4 pt-6">
+                <div>
+                  <p className="text-3xl font-semibold">{profile.score}</p>
+                  <p className="text-xs text-muted-foreground">out of 100</p>
+                </div>
+                <RiskLevelBadge level={profile.risk_level} />
+                <ConfidenceBadge level={profile.confidence} />
+                <span className="text-xs text-muted-foreground">
+                  Model {profile.model_version} · {formatDateTime(profile.calculated_at)}
+                </span>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm font-medium">System Recommendation</p>
+                <p className="mt-1 text-sm text-muted-foreground">{profile.recommendation}</p>
+              </CardContent>
+            </Card>
+
+            {flagsResource.unavailable || flagsResource.error ? (
+              <Card>
+                <CardContent className="pt-6 text-sm text-muted-foreground">
+                  Policy flags unavailable — this borrower&apos;s hard-flag status
+                  could not be loaded. Treat this borrower as unscreened for hard
+                  flags until this is resolved.
+                </CardContent>
+              </Card>
+            ) : (
+              flagsResource.data &&
+              flagsResource.data.length > 0 && (
+                <PolicyFlagAlert flags={flagsResource.data} />
+              )
+            )}
+
+            <ScoreBreakdownCard breakdown={profile.category_breakdown} />
+            <ScoreFactorList factors={profile.factors} />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LindaChatPlaceholder />
+              <CicPlaceholder />
+            </div>
+
+            <ManualOverrideDialog
+              open={overrideOpen}
+              onOpenChange={setOverrideOpen}
+              borrowerId={borrowerId}
+              creditScoreId={profile.id}
+              onDecisionRecorded={() => profileResource.refetch()}
+            />
+          </>
+        )}
+      </DataState>
+    </div>
+  );
+}
+
+export default function BorrowerCreditProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
     <RouteGuard permission="credit_scoring:view" pageName="Borrower Credit Profile">
-      <div className="space-y-6">
-        <DataState
-          resource={profileResource}
-          summary="This borrower's full credit score, breakdown, and factors will appear here once the backend is connected."
-          endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
-        >
-          {(profile) => (
-            <>
-              <CreditScoringPageHeader
-                title={profile.borrower_name}
-                description={`Lendy Credit Score · ${profile.score_type === "application" ? "Application Score" : "Behavioral Score"}`}
-                actions={
-                  <PermissionGate permission="credit_scoring:override">
-                    <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
-                  </PermissionGate>
-                }
-              />
-
-              <Card>
-                <CardContent className="flex flex-wrap items-center gap-4 pt-6">
-                  <div>
-                    <p className="text-3xl font-semibold">{profile.score}</p>
-                    <p className="text-xs text-muted-foreground">out of 100</p>
-                  </div>
-                  <RiskLevelBadge level={profile.risk_level} />
-                  <ConfidenceBadge level={profile.confidence} />
-                  <span className="text-xs text-muted-foreground">
-                    Model {profile.model_version} · {formatDateTime(profile.calculated_at)}
-                  </span>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm font-medium">System Recommendation</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{profile.recommendation}</p>
-                </CardContent>
-              </Card>
-
-              {flagsResource.unavailable || flagsResource.error ? (
-                <Card>
-                  <CardContent className="pt-6 text-sm text-muted-foreground">
-                    Policy flags unavailable — this borrower&apos;s hard-flag status
-                    could not be loaded. Treat this borrower as unscreened for hard
-                    flags until this is resolved.
-                  </CardContent>
-                </Card>
-              ) : (
-                flagsResource.data &&
-                flagsResource.data.length > 0 && (
-                  <PolicyFlagAlert flags={flagsResource.data} />
-                )
-              )}
-
-              <ScoreBreakdownCard breakdown={profile.category_breakdown} />
-              <ScoreFactorList factors={profile.factors} />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <LindaChatPlaceholder />
-                <CicPlaceholder />
-              </div>
-
-              <ManualOverrideDialog
-                open={overrideOpen}
-                onOpenChange={setOverrideOpen}
-                borrowerId={borrowerId}
-                creditScoreId={profile.id}
-                onDecisionRecorded={() => profileResource.refetch()}
-              />
-            </>
-          )}
-        </DataState>
-      </div>
+      <BorrowerCreditProfileContent params={params} />
     </RouteGuard>
   );
 }

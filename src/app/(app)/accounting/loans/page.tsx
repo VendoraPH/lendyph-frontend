@@ -78,7 +78,7 @@ const POSTING_RULES = [
   },
 ];
 
-export default function LoanAccountingPage() {
+function LoanAccountingContent() {
   const [asOf, setAsOf] = useState(todayISO());
   const [branch, setBranch] = useState(ALL_BRANCHES);
 
@@ -89,59 +89,65 @@ export default function LoanAccountingPage() {
   const resource = useAccountingResource<Aging>(fetcher);
 
   return (
-    <RouteGuard permission="accounting:view" pageName="Loan Accounting">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Loan Accounting"
-          description="How the loan portfolio looks from the ledger's side."
-        />
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Loan Accounting"
+        description="How the loan portfolio looks from the ledger's side."
+      />
 
-        <FilterBar>
-          <DateFilter label="As of" value={asOf} onChange={setAsOf} />
-          <BranchFilter value={branch} onChange={setBranch} />
-        </FilterBar>
+      <FilterBar>
+        <DateFilter label="As of" value={asOf} onChange={setAsOf} />
+        <BranchFilter value={branch} onChange={setBranch} />
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="Outstanding receivables split by how far past due they are — the input every provisioning policy needs."
-          endpoints={["GET /accounting/loans/aging"]}
-          isEmpty={(aging) => aging.rows.length === 0}
-          emptyMessage="No outstanding receivable on this date."
-        >
-          {(aging) => <AgingTable aging={aging} />}
-        </DataState>
+      <DataState
+        resource={resource}
+        summary="Outstanding receivables split by how far past due they are — the input every provisioning policy needs."
+        endpoints={["GET /accounting/loans/aging"]}
+        isEmpty={(aging) => aging.rows.length === 0}
+        emptyMessage="No outstanding receivable on this date."
+      >
+        {(aging) => <AgingTable aging={aging} />}
+      </DataState>
 
-        <Card>
-          <CardContent className="pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              What Lendy posts for you
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              You record the lending transaction. These entries are written
-              automatically, in the same step, so the books cannot fall behind
-              the loan records.
-            </p>
+      <Card>
+        <CardContent className="pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            What Lendy posts for you
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You record the lending transaction. These entries are written
+            automatically, in the same step, so the books cannot fall behind
+            the loan records.
+          </p>
 
-            <div className="mt-4 space-y-3">
-              {POSTING_RULES.map((rule) => (
-                <div key={rule.event} className="rounded-lg border p-3">
-                  <p className="text-sm font-medium">{rule.event}</p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-700">
-                      Dr {rule.debit}
-                    </span>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                    <span className="rounded bg-blue-500/10 px-2 py-0.5 text-blue-700">
-                      Cr {rule.credit}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{rule.note}</p>
+          <div className="mt-4 space-y-3">
+            {POSTING_RULES.map((rule) => (
+              <div key={rule.event} className="rounded-lg border p-3">
+                <p className="text-sm font-medium">{rule.event}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-700">
+                    Dr {rule.debit}
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <span className="rounded bg-blue-500/10 px-2 py-0.5 text-blue-700">
+                    Cr {rule.credit}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <p className="mt-2 text-xs text-muted-foreground">{rule.note}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function LoanAccountingPage() {
+  return (
+    <RouteGuard permission="accounting:view" pageName="Loan Accounting">
+      <LoanAccountingContent />
     </RouteGuard>
   );
 }

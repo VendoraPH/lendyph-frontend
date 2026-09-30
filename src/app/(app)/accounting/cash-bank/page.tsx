@@ -24,7 +24,7 @@ const KIND_ICON: Record<CashAccountKind, typeof Wallet> = {
   wallet: Wallet,
 };
 
-export default function CashAndBankPage() {
+function CashAndBankContent() {
   const [transferring, setTransferring] = useState(false);
 
   // Drained. The card at the bottom sums these into "Total across all money
@@ -52,97 +52,103 @@ export default function CashAndBankPage() {
   };
 
   return (
-    <RouteGuard permission="cash_accounts:view" pageName="Cash & Bank">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Cash & Bank"
-          description="Cash on hand, bank accounts, GCash and Maya."
-          actions={
-            <PermissionGate permission="cash_accounts:transfer">
-              <Button onClick={() => setTransferring(true)}>
-                <ArrowLeftRight className="mr-2 h-4 w-4" />
-                Transfer
-              </Button>
-            </PermissionGate>
-          }
-        />
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Cash & Bank"
+        description="Cash on hand, bank accounts, GCash and Maya."
+        actions={
+          <PermissionGate permission="cash_accounts:transfer">
+            <Button onClick={() => setTransferring(true)}>
+              <ArrowLeftRight className="mr-2 h-4 w-4" />
+              Transfer
+            </Button>
+          </PermissionGate>
+        }
+      />
 
-        {/*
-          Stated up front because it is the single most common accounting
-          mistake a lending operation makes: moving your own money between your
-          own accounts is not income, and recording it as such inflates the
-          income statement by the full amount moved.
-        */}
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Moving money between your own accounts is a transfer, never income.
-          Only a charge on the transfer is an expense.
-        </div>
-
-        <DataState
-          resource={resource}
-          summary="Balances per money account and movement between them."
-          endpoints={[
-            "GET /accounting/cash-accounts",
-            "POST /accounting/cash-accounts/transfer",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No cash or bank account has been set up."
-        >
-          {({ rows: accounts, truncated, total }) => (
-            <div className="space-y-4">
-              {truncated && (
-                <IncompleteListNotice
-                  shown={accounts.length}
-                  total={total}
-                  noun="money accounts"
-                  consequence="The total below covers only the accounts shown, and an account missing here cannot be picked as a transfer destination."
-                />
-              )}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {accounts.map((account) => {
-                  const Icon = account.cash_kind
-                    ? KIND_ICON[account.cash_kind]
-                    : Wallet;
-                  return (
-                    <Card key={account.id}>
-                      <CardContent className="space-y-2 pt-6">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Icon className="h-4 w-4" />
-                          <span className="text-sm">{account.name}</span>
-                        </div>
-                        <p className="font-mono text-2xl font-semibold">
-                          {formatCentavos(account.balance ?? 0)}
-                        </p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {account.code}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              <Card>
-                <CardContent className="flex items-center justify-between py-4">
-                  <span className="text-sm text-muted-foreground">
-                    Total across all money accounts
-                  </span>
-                  <span className="font-mono text-xl font-semibold">
-                    {formatCentavos(sumCentavos(accounts.map((a) => a.balance)))}
-                  </span>
-                </CardContent>
-              </Card>
-
-              <TransferDialog
-                open={transferring}
-                accounts={accounts}
-                onOpenChange={setTransferring}
-                onSubmit={transfer}
-              />
-            </div>
-          )}
-        </DataState>
+      {/*
+        Stated up front because it is the single most common accounting
+        mistake a lending operation makes: moving your own money between your
+        own accounts is not income, and recording it as such inflates the
+        income statement by the full amount moved.
+      */}
+      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+        Moving money between your own accounts is a transfer, never income.
+        Only a charge on the transfer is an expense.
       </div>
+
+      <DataState
+        resource={resource}
+        summary="Balances per money account and movement between them."
+        endpoints={[
+          "GET /accounting/cash-accounts",
+          "POST /accounting/cash-accounts/transfer",
+        ]}
+        isEmpty={(drain) => drain.rows.length === 0}
+        emptyMessage="No cash or bank account has been set up."
+      >
+        {({ rows: accounts, truncated, total }) => (
+          <div className="space-y-4">
+            {truncated && (
+              <IncompleteListNotice
+                shown={accounts.length}
+                total={total}
+                noun="money accounts"
+                consequence="The total below covers only the accounts shown, and an account missing here cannot be picked as a transfer destination."
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {accounts.map((account) => {
+                const Icon = account.cash_kind
+                  ? KIND_ICON[account.cash_kind]
+                  : Wallet;
+                return (
+                  <Card key={account.id}>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Icon className="h-4 w-4" />
+                        <span className="text-sm">{account.name}</span>
+                      </div>
+                      <p className="font-mono text-2xl font-semibold">
+                        {formatCentavos(account.balance ?? 0)}
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {account.code}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            <Card>
+              <CardContent className="flex items-center justify-between py-4">
+                <span className="text-sm text-muted-foreground">
+                  Total across all money accounts
+                </span>
+                <span className="font-mono text-xl font-semibold">
+                  {formatCentavos(sumCentavos(accounts.map((a) => a.balance)))}
+                </span>
+              </CardContent>
+            </Card>
+
+            <TransferDialog
+              open={transferring}
+              accounts={accounts}
+              onOpenChange={setTransferring}
+              onSubmit={transfer}
+            />
+          </div>
+        )}
+      </DataState>
+    </div>
+  );
+}
+
+export default function CashAndBankPage() {
+  return (
+    <RouteGuard permission="cash_accounts:view" pageName="Cash & Bank">
+      <CashAndBankContent />
     </RouteGuard>
   );
 }

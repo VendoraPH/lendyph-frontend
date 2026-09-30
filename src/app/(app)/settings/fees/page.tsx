@@ -28,6 +28,7 @@ import { decimalInputValue } from "@/lib/percent";
 import { buildFeePayload } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
+import { usePermission } from "@/hooks";
 import { completeRows } from "@/lib/paginate";
 
 // ---------------------------------------------------------------------------
@@ -385,6 +386,10 @@ function FeesContent() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Fee | null>(null);
   const [reloadCount, setReloadCount] = useState(0);
+  // Fees are scoped to loan products, and listing those needs `loans:view`.
+  // Without it the list is not asked for, and fee editing stays off exactly as
+  // it does when the list cannot be loaded.
+  const canListProducts = usePermission().can("loans:view");
 
   // Runs on mount and on every `reload`, which first puts the page back to the
   // state it starts in (loading, no errors) — so this only records how the
@@ -394,21 +399,23 @@ function FeesContent() {
     // failure must not hide successfully loaded fees.
     Promise.allSettled([
       feeService.listAll().then(completeRows),
-      loanProductService.listAll().then(completeRows),
+      canListProducts ? loanProductService.listAll().then(completeRows) : null,
     ]).then(([feesResult, productsResult]) => {
       if (feesResult.status === "fulfilled") {
         setFees(feesResult.value);
       } else {
         setLoadError(getErrorMessage(feesResult.reason));
       }
-      if (productsResult.status === "fulfilled") {
-        setProducts(productsResult.value);
-      } else {
+      if (productsResult.status === "rejected") {
         setProductsError(getErrorMessage(productsResult.reason));
+      } else if (productsResult.value === null) {
+        setProductsError("You don't have permission to view them.");
+      } else {
+        setProducts(productsResult.value);
       }
       setLoading(false);
     });
-  }, [reloadCount]);
+  }, [reloadCount, canListProducts]);
 
   // Retry, and the refresh after a save or delete.
   function reload() {

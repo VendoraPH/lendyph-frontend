@@ -81,7 +81,7 @@ function StatCard({
 
 type MainTab = "members" | "pending" | "rejected";
 
-export default function BorrowersPage() {
+function BorrowersContent() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [total, setTotal] = useState(0);
   // null, not zeroes: "we do not know yet" is a different thing from "none".
@@ -341,7 +341,6 @@ export default function BorrowersPage() {
   ];
 
   return (
-    <RouteGuard permission="borrowers:view" pageName="Members">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -546,6 +545,13 @@ export default function BorrowersPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function BorrowersPage() {
+  return (
+    <RouteGuard permission="borrowers:view" pageName="Members">
+      <BorrowersContent />
     </RouteGuard>
   );
 }

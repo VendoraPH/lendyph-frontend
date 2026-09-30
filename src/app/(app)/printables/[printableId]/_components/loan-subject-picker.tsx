@@ -9,6 +9,7 @@ import { SubjectPicker } from "@/components/common/subject-picker";
 import { isActiveLoanStatus } from "@/constants";
 import { formatCurrency } from "@/lib/format";
 import { loanService } from "@/services";
+import { usePermission } from "@/hooks";
 import type { Loan } from "@/types";
 import { Loader2 } from "lucide-react";
 import { BorrowerLoansTable, loanNumber } from "./borrower-loans-table";
@@ -59,6 +60,9 @@ export function LoanSubjectPicker({
     total: number | null;
   } | null>(null);
   const [filter, setFilter] = useState<LoanFilter>("active");
+  // A member's loans need `loans:view`, which the documents screen does not.
+  // Without it they are not asked for, and the member simply shows none.
+  const canListLoans = usePermission().can("loans:view");
 
   useEffect(() => {
     // A loan id belongs to the member it was picked under; carrying it across
@@ -67,7 +71,7 @@ export function LoanSubjectPicker({
     setShortfall(null);
     setError(null);
 
-    if (!borrowerId) {
+    if (!borrowerId || !canListLoans) {
       setLoans([]);
       setLoading(false);
       return;
@@ -97,7 +101,7 @@ export function LoanSubjectPicker({
     // onChange is a stable setter from the page; re-running on identity changes
     // would clear the user's selection on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [borrowerId]);
+  }, [borrowerId, canListLoans]);
 
   const counts = useMemo(() => {
     const active = loans.filter((loan) => isActiveLoanStatus(loan.status)).length;

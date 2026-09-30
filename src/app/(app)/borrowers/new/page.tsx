@@ -127,7 +127,7 @@ function emptyForm(): BorrowerFormData {
   };
 }
 
-export default function NewBorrowerPage() {
+function NewBorrowerContent() {
   const router = useRouter();
   const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
@@ -689,7 +689,6 @@ export default function NewBorrowerPage() {
   }
 
   return (
-    <RouteGuard permission="borrowers:create" pageName="Add Member">
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
@@ -1490,6 +1489,13 @@ export default function NewBorrowerPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function NewBorrowerPage() {
+  return (
+    <RouteGuard permission="borrowers:create" pageName="Add Member">
+      <NewBorrowerContent />
     </RouteGuard>
   );
 }

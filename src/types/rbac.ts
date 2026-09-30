@@ -35,6 +35,9 @@ export type Module =
   | "dashboard"
   | "borrowers"
   | "loans"
+  // Extensions and other post-release changes to a loan. The API gates their
+  // history behind `loan_adjustments:view`, which `loans:view` does not imply.
+  | "loan_adjustments"
   | "payments"
   | "collections"
   | "reports"

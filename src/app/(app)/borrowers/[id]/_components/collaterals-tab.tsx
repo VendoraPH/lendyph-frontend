@@ -19,6 +19,7 @@ import { PermissionGate } from "@/components/common";
 import { ShareCapitalUnavailableNotice } from "@/components/common/share-capital-unavailable-notice";
 import { collateralService, collateralTypeService } from "@/services";
 import { completeRows } from "@/lib/paginate";
+import { usePermission } from "@/hooks";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -44,8 +45,15 @@ interface CollateralsTabProps {
 }
 
 export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
+  // Collaterals need `collaterals:view` and a share-capital balance
+  // `share_capital:view`, neither of which a member's page implies. Without
+  // the first nothing is asked for and the tab lists none; without the second
+  // the balance is unavailable, as it is when the read is refused.
+  const { can } = usePermission();
+  const canListCollaterals = can("collaterals:view");
+  const canReadShareCapital = can("share_capital:view");
   const [rows, setRows] = useState<CollateralValueRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canListCollaterals);
   // Null when this member has no share-capital collateral, so no balance was
   // ever needed and there is nothing to warn about.
   const [scBalance, setScBalance] = useState<ShareCapitalBalance | null>(null);
@@ -54,6 +62,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
   // write state nor toast, which is also what keeps Strict Mode's double mount
   // down to one message.
   const load = useCallback(async (isCancelled: () => boolean) => {
+    if (!canListCollaterals) return;
     setLoading(true);
     try {
       // The borrower's loan list is no longer fetched: it was only ever there to
@@ -75,7 +84,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       // Only asked for when a share-capital row is actually present — this is
       // a whole-ledger drain, not a single request.
       const balance = needsBalance
-        ? await getShareCapitalBalance(borrowerId)
+        ? await getShareCapitalBalance(borrowerId, canReadShareCapital)
         : null;
       if (isCancelled()) return;
       setScBalance(balance);
@@ -102,7 +111,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, [borrowerId]);
+  }, [borrowerId, canListCollaterals, canReadShareCapital]);
 
   useEffect(() => {
     let cancelled = false;

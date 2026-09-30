@@ -46,7 +46,7 @@ const SHORTCUTS = [
   { href: "/accounting/trial-balance", label: "Trial Balance", icon: Scale },
 ];
 
-export default function AccountingDashboardPage() {
+function AccountingDashboardContent() {
   const [asOf, setAsOf] = useState(todayISO());
   const [branch, setBranch] = useState(ALL_BRANCHES);
 
@@ -57,42 +57,48 @@ export default function AccountingDashboardPage() {
   const resource = useAccountingResource<AccountingDashboard>(fetcher);
 
   return (
-    <RouteGuard permission="accounting:view" pageName="Accounting">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Accounting"
-          description="Where the lending operation stands, in accounting terms."
-        />
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Accounting"
+        description="Where the lending operation stands, in accounting terms."
+      />
 
-        <FilterBar>
-          <DateFilter label="As of" value={asOf} onChange={setAsOf} />
-          <BranchFilter value={branch} onChange={setBranch} />
-        </FilterBar>
+      <FilterBar>
+        <DateFilter label="As of" value={asOf} onChange={setAsOf} />
+        <BranchFilter value={branch} onChange={setBranch} />
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="A one-screen position: money on hand, what is owed to and by the business, and the month's result."
-          endpoints={["GET /accounting/dashboard"]}
-        >
-          {(data) => <DashboardBody data={data} />}
-        </DataState>
+      <DataState
+        resource={resource}
+        summary="A one-screen position: money on hand, what is owed to and by the business, and the month's result."
+        endpoints={["GET /accounting/dashboard"]}
+      >
+        {(data) => <DashboardBody data={data} />}
+      </DataState>
 
-        <div>
-          <p className="mb-3 text-sm font-medium text-muted-foreground">Go to</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SHORTCUTS.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex items-center gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
-              >
-                <Icon className="h-4 w-4 text-muted-foreground" />
-                {label}
-              </Link>
-            ))}
-          </div>
+      <div>
+        <p className="mb-3 text-sm font-medium text-muted-foreground">Go to</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SHORTCUTS.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="flex items-center gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
+            >
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              {label}
+            </Link>
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function AccountingDashboardPage() {
+  return (
+    <RouteGuard permission="accounting:view" pageName="Accounting">
+      <AccountingDashboardContent />
     </RouteGuard>
   );
 }

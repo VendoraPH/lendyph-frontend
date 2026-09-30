@@ -47,7 +47,7 @@ const MATCH_META: Record<
   },
 };
 
-export default function ReconciliationPage() {
+function ReconciliationContent() {
   const { postable, loading: chartLoading } = useChartOfAccounts();
   const [accountId, setAccountId] = useState<number | null>(null);
 
@@ -66,88 +66,94 @@ export default function ReconciliationPage() {
   const resource = useAccountingResource<DrainResult<Reconciliation>>(fetcher);
 
   return (
-    <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Reconciliation"
-          description="Prove each money account against its statement."
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Reconciliation"
+        description="Prove each money account against its statement."
+      />
+
+      {/*
+        Said plainly because the point of reconciling is easy to lose: it is
+        not about making a number look tidy. A difference here means either
+        the ledger is missing something real or the statement is — and the
+        only way to know which is to look line by line.
+      */}
+      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+        A difference between your books and the statement is a real
+        discrepancy, not a rounding artefact. Find the missing line rather
+        than adjusting the balance.
+      </div>
+
+      <FilterBar>
+        <AccountSelect
+          label="Account"
+          accounts={moneyAccounts}
+          value={accountId}
+          onChange={setAccountId}
+          placeholder={chartLoading ? "Loading…" : "All money accounts"}
         />
+      </FilterBar>
 
-        {/*
-          Said plainly because the point of reconciling is easy to lose: it is
-          not about making a number look tidy. A difference here means either
-          the ledger is missing something real or the statement is — and the
-          only way to know which is to look line by line.
-        */}
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          A difference between your books and the statement is a real
-          discrepancy, not a rounding artefact. Find the missing line rather
-          than adjusting the balance.
-        </div>
+      <DataState
+        resource={resource}
+        summary="Book balance against the bank, GCash or Maya statement, with each line marked matched, unmatched or a possible match."
+        endpoints={[
+          "GET /accounting/reconciliations",
+          "POST /accounting/reconciliations",
+          "POST /accounting/reconciliations/{id}/match",
+        ]}
+        isEmpty={(drain) => drain.rows.length === 0}
+        emptyMessage="No reconciliation has been started."
+      >
+        {({ rows: items, truncated, total }) => {
+          const shown =
+            accountId === null
+              ? items
+              : items.filter((item) => item.account_id === accountId);
 
-        <FilterBar>
-          <AccountSelect
-            label="Account"
-            accounts={moneyAccounts}
-            value={accountId}
-            onChange={setAccountId}
-            placeholder={chartLoading ? "Loading…" : "All money accounts"}
-          />
-        </FilterBar>
+          const notice = truncated ? (
+            <IncompleteListNotice
+              shown={items.length}
+              total={total}
+              noun="reconciliations"
+              consequence="A reconciliation missing here will not appear under its account either."
+            />
+          ) : null;
 
-        <DataState
-          resource={resource}
-          summary="Book balance against the bank, GCash or Maya statement, with each line marked matched, unmatched or a possible match."
-          endpoints={[
-            "GET /accounting/reconciliations",
-            "POST /accounting/reconciliations",
-            "POST /accounting/reconciliations/{id}/match",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No reconciliation has been started."
-        >
-          {({ rows: items, truncated, total }) => {
-            const shown =
-              accountId === null
-                ? items
-                : items.filter((item) => item.account_id === accountId);
-
-            const notice = truncated ? (
-              <IncompleteListNotice
-                shown={items.length}
-                total={total}
-                noun="reconciliations"
-                consequence="A reconciliation missing here will not appear under its account either."
-              />
-            ) : null;
-
-            if (shown.length === 0) {
-              return (
-                <div className="space-y-4">
-                  {notice}
-                  <Card>
-                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                      No reconciliation for this account.
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            }
-
+          if (shown.length === 0) {
             return (
               <div className="space-y-4">
                 {notice}
-                {shown.map((item) => (
-                  <ReconciliationCard
-                    key={`${item.account_id}-${item.period}`}
-                    reconciliation={item}
-                  />
-                ))}
+                <Card>
+                  <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                    No reconciliation for this account.
+                  </CardContent>
+                </Card>
               </div>
             );
-          }}
-        </DataState>
-      </div>
+          }
+
+          return (
+            <div className="space-y-4">
+              {notice}
+              {shown.map((item) => (
+                <ReconciliationCard
+                  key={`${item.account_id}-${item.period}`}
+                  reconciliation={item}
+                />
+              ))}
+            </div>
+          );
+        }}
+      </DataState>
+    </div>
+  );
+}
+
+export default function ReconciliationPage() {
+  return (
+    <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
+      <ReconciliationContent />
     </RouteGuard>
   );
 }

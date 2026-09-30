@@ -149,10 +149,16 @@ export function toShareCapitalBalance(
  * decide what a member may borrow, so "refuse to decide" is the only correct
  * behaviour when the ledger is short or missing: an eligibility check computed
  * against a partial ledger is not a conservative answer, it is a wrong one.
+ *
+ * `canRead` is the caller's `share_capital:view`. The ledger answers 403
+ * without it, so the request is not made and the result is `unavailable`,
+ * exactly what a refused one produces.
  */
 export async function getShareCapitalBalance(
-  borrowerId: number
+  borrowerId: number,
+  canRead = true
 ): Promise<ShareCapitalBalance> {
+  if (!canRead) return { status: "unavailable" };
   try {
     return toShareCapitalBalance(
       await shareCapitalService.ledgerListAll({ borrower_id: borrowerId })

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
+import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
@@ -423,7 +424,7 @@ function PaymentCard({
 
 // ── Main Page ──
 
-export default function PaymentHistoryPage() {
+function PaymentHistoryContent() {
   const [payments, setPayments] = useState<MockPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -871,5 +872,13 @@ export default function PaymentHistoryPage() {
         onVoid={handleVoid}
       />
     </div>
+  );
+}
+
+export default function PaymentHistoryPage() {
+  return (
+    <RouteGuard permission="payments:view" pageName="Payment History">
+      <PaymentHistoryContent />
+    </RouteGuard>
   );
 }

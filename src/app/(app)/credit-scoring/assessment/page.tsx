@@ -15,9 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { borrowerService } from "@/services";
+import { usePermission } from "@/hooks";
 import type { Borrower } from "@/types";
 
-export default function CreditAssessmentPage() {
+function CreditAssessmentContent() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [borrowerId, setBorrowerId] = useState<string>("");
   // Set only when the borrower drain gave up with pages outstanding, i.e. the
@@ -26,8 +27,12 @@ export default function CreditAssessmentPage() {
     shown: number;
     total: number | null;
   } | null>(null);
+  // The member list needs `borrowers:view`; without it the picker stays empty
+  // rather than asking and being refused.
+  const canListBorrowers = usePermission().can("borrowers:view");
 
   useEffect(() => {
+    if (!canListBorrowers) return;
     let cancelled = false;
     borrowerService
       .listAll()
@@ -44,49 +49,55 @@ export default function CreditAssessmentPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListBorrowers]);
 
   const handleSelect = useCallback((v: string | null) => setBorrowerId(v ?? ""), []);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Credit Assessment">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Credit Assessment"
-          description="Run a fresh credit assessment for any borrower."
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Credit Assessment"
+        description="Run a fresh credit assessment for any borrower."
+      />
+
+      {borrowerShortfall && (
+        <IncompleteListNotice
+          shown={borrowerShortfall.shown}
+          total={borrowerShortfall.total}
+          noun="borrowers"
+          consequence="Some borrowers are missing from the picker below and cannot be selected."
         />
+      )}
 
-        {borrowerShortfall && (
-          <IncompleteListNotice
-            shown={borrowerShortfall.shown}
-            total={borrowerShortfall.total}
-            noun="borrowers"
-            consequence="Some borrowers are missing from the picker below and cannot be selected."
-          />
-        )}
-
-        <div className="max-w-sm space-y-1.5">
-          <Label>Borrower</Label>
-          <Select
-            value={borrowerId}
-            onValueChange={handleSelect}
-            items={borrowers.map((b) => ({ value: String(b.id), label: b.full_name }))}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a borrower" />
-            </SelectTrigger>
-            <SelectContent>
-              {borrowers.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {borrowerId && <CreditAssessmentPanel borrowerId={Number(borrowerId)} />}
+      <div className="max-w-sm space-y-1.5">
+        <Label>Borrower</Label>
+        <Select
+          value={borrowerId}
+          onValueChange={handleSelect}
+          items={borrowers.map((b) => ({ value: String(b.id), label: b.full_name }))}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a borrower" />
+          </SelectTrigger>
+          <SelectContent>
+            {borrowers.map((b) => (
+              <SelectItem key={b.id} value={String(b.id)}>
+                {b.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {borrowerId && <CreditAssessmentPanel borrowerId={Number(borrowerId)} />}
+    </div>
+  );
+}
+
+export default function CreditAssessmentPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Credit Assessment">
+      <CreditAssessmentContent />
     </RouteGuard>
   );
 }

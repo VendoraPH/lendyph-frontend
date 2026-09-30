@@ -56,7 +56,7 @@ function startOfMonthISO(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-export default function JournalEntriesPage() {
+function JournalEntriesContent() {
   const [from, setFrom] = useState(startOfMonthISO());
   const [to, setTo] = useState(todayISO());
   const [branch, setBranch] = useState(ALL_BRANCHES);
@@ -100,117 +100,123 @@ export default function JournalEntriesPage() {
   };
 
   return (
-    <RouteGuard permission="journals:view" pageName="Journal Entries">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Journal Entries"
-          description="Every entry in the books, automatic and manual."
-          actions={
-            <PermissionGate permission="journals:create">
-              <Button nativeButton={false} render={<Link href="/accounting/journals/new" />}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Entry
-              </Button>
-            </PermissionGate>
-          }
-        />
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Journal Entries"
+        description="Every entry in the books, automatic and manual."
+        actions={
+          <PermissionGate permission="journals:create">
+            <Button nativeButton={false} render={<Link href="/accounting/journals/new" />}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Entry
+            </Button>
+          </PermissionGate>
+        }
+      />
 
-        <FilterBar>
-          <DateFilter label="From" value={from} onChange={setFrom} />
-          <DateFilter label="To" value={to} onChange={setTo} />
-          <BranchFilter value={branch} onChange={setBranch} />
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY_STATUS}>Any status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="posted">Posted</SelectItem>
-                <SelectItem value="reversed">Reversed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </FilterBar>
+      <FilterBar>
+        <DateFilter label="From" value={from} onChange={setFrom} />
+        <DateFilter label="To" value={to} onChange={setTo} />
+        <BranchFilter value={branch} onChange={setBranch} />
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ANY_STATUS}>Any status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="posted">Posted</SelectItem>
+              <SelectItem value="reversed">Reversed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="The journal register: entries raised automatically by lending events alongside manual ones, with drafting, posting and reversal."
-          endpoints={[
-            "GET /accounting/journals",
-            "POST /accounting/journals",
-            "POST /accounting/journals/{id}/post",
-            "POST /accounting/journals/{id}/reverse",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No journal entry in the chosen range."
-        >
-          {({ rows, truncated, total }) => (
-            <Card>
-              <CardContent className="space-y-4 pt-6">
-                {truncated && (
-                  <IncompleteListNotice
-                    shown={rows.length}
-                    total={total}
-                    noun="journal entries"
-                    consequence="Entries missing from this register cannot be opened, posted or reversed from here."
-                  />
-                )}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-28">Date</TableHead>
-                      <TableHead className="w-36">Reference</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="w-32">Source</TableHead>
-                      <TableHead className="w-24">Status</TableHead>
-                      <TableHead className="w-36 text-right">Amount</TableHead>
+      <DataState
+        resource={resource}
+        summary="The journal register: entries raised automatically by lending events alongside manual ones, with drafting, posting and reversal."
+        endpoints={[
+          "GET /accounting/journals",
+          "POST /accounting/journals",
+          "POST /accounting/journals/{id}/post",
+          "POST /accounting/journals/{id}/reverse",
+        ]}
+        isEmpty={(drain) => drain.rows.length === 0}
+        emptyMessage="No journal entry in the chosen range."
+      >
+        {({ rows, truncated, total }) => (
+          <Card>
+            <CardContent className="space-y-4 pt-6">
+              {truncated && (
+                <IncompleteListNotice
+                  shown={rows.length}
+                  total={total}
+                  noun="journal entries"
+                  consequence="Entries missing from this register cannot be opened, posted or reversed from here."
+                />
+              )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-28">Date</TableHead>
+                    <TableHead className="w-36">Reference</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-32">Source</TableHead>
+                    <TableHead className="w-24">Status</TableHead>
+                    <TableHead className="w-36 text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((entry) => (
+                    <TableRow
+                      key={entry.id}
+                      className="cursor-pointer"
+                      onClick={() => setSelected(entry)}
+                    >
+                      <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <JournalReferenceCell entry={entry} />
+                      </TableCell>
+                      <TableCell className="text-sm">{entry.description}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px]">
+                          {entry.source.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={STATUS_STYLES[entry.status]}>
+                          {entry.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {/* Debits equal credits, so either side is "the amount". */}
+                        {formatCentavos(entry.total_debit)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((entry) => (
-                      <TableRow
-                        key={entry.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(entry)}
-                      >
-                        <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <JournalReferenceCell entry={entry} />
-                        </TableCell>
-                        <TableCell className="text-sm">{entry.description}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {entry.source.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={STATUS_STYLES[entry.status]}>
-                            {entry.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          {/* Debits equal credits, so either side is "the amount". */}
-                          {formatCentavos(entry.total_debit)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </DataState>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </DataState>
 
-        <JournalEntryDialog
-          entry={selected}
-          onOpenChange={(open) => !open && setSelected(null)}
-          onPost={post}
-          onReverse={reverse}
-        />
-      </div>
+      <JournalEntryDialog
+        entry={selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+        onPost={post}
+        onReverse={reverse}
+      />
+    </div>
+  );
+}
+
+export default function JournalEntriesPage() {
+  return (
+    <RouteGuard permission="journals:view" pageName="Journal Entries">
+      <JournalEntriesContent />
     </RouteGuard>
   );
 }

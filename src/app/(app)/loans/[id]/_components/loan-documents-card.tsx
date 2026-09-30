@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { usePermission } from "@/hooks";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,13 +53,17 @@ export function LoanDocumentsCard({
   canUpload = true,
   canDelete = true,
 }: LoanDocumentsCardProps) {
+  // Loan documents are read under `borrowers:view`, which viewing a loan does
+  // not imply. Without it they are not asked for and the card lists none.
+  const canListDocuments = usePermission().can("borrowers:view");
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canListDocuments);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = useCallback(async () => {
+    if (!canListDocuments) return;
     setLoading(true);
     try {
       const data = await documentService.loanList(loanId);
@@ -70,7 +75,7 @@ export function LoanDocumentsCard({
     } finally {
       setLoading(false);
     }
-  }, [loanId]);
+  }, [loanId, canListDocuments]);
 
   useEffect(() => {
     fetchDocuments();

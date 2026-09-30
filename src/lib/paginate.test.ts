@@ -5,6 +5,7 @@ import {
   IncompleteListError,
   MAX_PER_PAGE,
   completeRows,
+  emptyDrain,
   fetchAllPages,
   type DrainResult,
   type PageFetcher,
@@ -424,4 +425,17 @@ test("completeRows end to end: a runaway paginator fails loudly", async () => {
     fetchAllPages<Row>(api, { maxPages: 3 }).then(completeRows),
     IncompleteListError,
   );
+});
+
+test("emptyDrain is a complete, empty list that made no request", () => {
+  const drain = emptyDrain<Row>();
+  assert.deepEqual(drain, { rows: [], total: 0, truncated: false, pagesFetched: 0 });
+  // Not truncated, so the screens that demand a whole list take it as one.
+  assert.deepEqual(completeRows(drain), []);
+});
+
+test("each emptyDrain is its own object", () => {
+  const a = emptyDrain<Row>();
+  a.rows.push({ id: 1 } as Row);
+  assert.deepEqual(emptyDrain<Row>().rows, []);
 });

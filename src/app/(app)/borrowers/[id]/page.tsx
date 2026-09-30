@@ -4,13 +4,15 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
-import { PrintableMenu } from "@/components/common";
+import { PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { toast } from "sonner";
-import type { Borrower, CoMaker, Loan, Payment } from "@/types";
+import type { Borrower, CoMaker, Loan, Payment, Repayment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
 import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
 import { notifyError } from "@/lib/notify";
+import { emptyDrain } from "@/lib/paginate";
+import { usePermission } from "@/hooks";
 import { toBorrowerPayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import {
   coMakerSaveNotice,
@@ -29,7 +31,7 @@ import { LedgerTab } from "./_components/ledger-tab";
 import { ShareCapitalTab } from "./_components/share-capital-tab";
 import { CollateralsTab } from "./_components/collaterals-tab";
 
-export default function BorrowerDetailPage() {
+function BorrowerDetailContent() {
   const params = useParams();
   const borrowerId = Number(params.id);
   // Anything can follow `/borrowers/` in a hand-edited URL. Only plain digits
@@ -54,6 +56,12 @@ export default function BorrowerDetailPage() {
   // starts over with it. Only `reload` sets it back to true.
   const [loading, setLoading] = useState(isBorrowerId);
   const [reloadCount, setReloadCount] = useState(0);
+  // A member's loans need `loans:view` and their payments `payments:view`,
+  // neither of which this page implies. Without one, that list is not asked
+  // for and its tab shows none.
+  const { can } = usePermission();
+  const canListLoans = can("loans:view");
+  const canListPayments = can("payments:view");
 
   const fetchCoMakers = useCallback(async () => {
     try {
@@ -75,7 +83,7 @@ export default function BorrowerDetailPage() {
       // rest missing from the Loans tab, the Overview and every balance built
       // on them, and missing from the Payments tab too, which was read loan by
       // loan off that same list.
-      loanService.listAll({ borrower_id: borrowerId }),
+      canListLoans ? loanService.listAll({ borrower_id: borrowerId }) : emptyDrain<Loan>(),
       // One drain over everything the member paid, across all their loans. This
       // was one `repaymentService.list(loanId)` per loan, each the endpoint's
       // default page of 15 and the OLDEST 15, so the tab lost every loan's
@@ -83,7 +91,9 @@ export default function BorrowerDetailPage() {
       // the count but cost a request per loan against a shared 60-a-minute
       // budget, and a member who renews a one-month loan every month holds
       // dozens of them.
-      repaymentService.listAll({ borrower_id: borrowerId }),
+      canListPayments
+        ? repaymentService.listAll({ borrower_id: borrowerId })
+        : emptyDrain<Repayment>(),
     ]).then(async ([borrowerResult, loansResult, paymentsResult]) => {
       if (borrowerResult.status === "fulfilled") {
         setBorrower(borrowerResult.value);
@@ -118,7 +128,7 @@ export default function BorrowerDetailPage() {
 
       setLoading(false);
     });
-  }, [borrowerId, isBorrowerId, fetchCoMakers, reloadCount]);
+  }, [borrowerId, isBorrowerId, fetchCoMakers, reloadCount, canListLoans, canListPayments]);
 
   // After a photo change: the whole page goes back to its spinner and reloads.
   const reload = () => {
@@ -291,5 +301,13 @@ export default function BorrowerDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function BorrowerDetailPage() {
+  return (
+    <RouteGuard permission="borrowers:view" pageName="Member Details">
+      <BorrowerDetailContent />
+    </RouteGuard>
   );
 }
