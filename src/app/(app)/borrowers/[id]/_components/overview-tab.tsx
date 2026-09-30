@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import type { Borrower, Loan, CoMaker } from "@/types";
+import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 // Constants removed — valid_id_type not in API response
 
 function formatDate(dateStr: string): string {
@@ -37,9 +38,7 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
   const totalPrincipal = loans.reduce((sum, l) => sum + l.principal_amount, 0);
 
   const totalCoMakers = coMakers.length;
-  const loansNeedingCoMaker = loans.filter(
-    (l) => l.principal_amount >= 50000 && l.status !== "completed" && !coMakers.some((cm) => cm.loan_id === l.id)
-  ).length;
+  const loansNeedingCoMaker = loans.filter(loanNeedsCoMaker).length;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
