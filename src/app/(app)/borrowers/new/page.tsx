@@ -716,6 +716,7 @@ export default function NewBorrowerPage() {
                 {photoPreview ? (
                   <div className="relative h-24 w-24">
                     <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- local data: preview, outside the /storage/** next/image allowlist; CLAUDE.md "Images" rule requires plain <img> */}
                       <img
                         src={photoPreview}
                         alt="Profile preview"

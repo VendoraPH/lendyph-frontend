@@ -1088,6 +1088,7 @@ function NewLoanApplicationInner() {
                   render={
                     <button
                       type="button"
+                      // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                       role="combobox"
                       aria-expanded={borrowerOpen}
                       className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
@@ -1169,6 +1170,7 @@ function NewLoanApplicationInner() {
                           render={
                             <button
                               type="button"
+                              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                               role="combobox"
                               aria-expanded={isOpen}
                               disabled={options.length === 0}
@@ -1241,6 +1243,7 @@ function NewLoanApplicationInner() {
                 render={
                   <button
                     type="button"
+                    // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                     role="combobox"
                     aria-expanded={aoOpen}
                     className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"

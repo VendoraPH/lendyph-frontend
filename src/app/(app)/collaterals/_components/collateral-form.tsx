@@ -330,6 +330,7 @@ export function CollateralForm({ initial, mode }: Props) {
                 <button
                   id="collateral-member"
                   type="button"
+                  // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
                   role="combobox"
                   aria-expanded={borrowerOpen}
                   className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"

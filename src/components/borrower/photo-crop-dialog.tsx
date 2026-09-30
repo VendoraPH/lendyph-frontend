@@ -163,6 +163,7 @@ export function PhotoCropDialog({
                 circularCrop
                 keepSelection
               >
+                {/* eslint-disable-next-line @next/next/no-img-element -- react-image-crop needs a real <img> ref for the data: URL; CLAUDE.md "Images" rule requires plain <img> */}
                 <img
                   ref={imgRef}
                   src={imgSrc}
