@@ -104,19 +104,18 @@ export const env = {
   },
   auth: {
     tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendy_access_token"),
-    refreshTokenKey: getEnvVar(
-      "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
-      "lendy_refresh_token",
-    ),
     // Minutes of genuine inactivity before the idle warning appears.
     //
     // This was briefly 60, on the reasonable complaint that thirty was short
     // enough that reading a long loan page counted as idling. It is back to 30
     // by decision: these are shared cooperative workstations, and this number
     // is how long a member's name, birthdate, contact number and loan balances
-    // stay readable on an unattended screen. The server-side token expiry is a
-    // separate 30-minute sliding window in `CheckTokenExpiry` and is unaffected
-    // either way — this value only governs when the browser clears.
+    // stay readable on an unattended screen. It only governs when the browser
+    // clears. The server's token is separate: it expires a fixed 30 minutes
+    // after it was issued, NOT 30 minutes after its last use, and can only be
+    // renewed while still valid, so SessionProvider renews it ahead of expiry
+    // while the user is active (see lib/session-token.ts). This window is also
+    // the fallback token lifetime for an API that does not send `expires_in`.
     //
     // If "reading a long page counts as idling" comes back, widen what counts
     // as activity rather than widening this window.

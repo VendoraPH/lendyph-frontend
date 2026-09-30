@@ -94,14 +94,19 @@ test("disclosure: a full payload produces the six statutory sections", () => {
   );
 });
 
-test("disclosure: the annual rate is annualised by the loan's own frequency", () => {
-  // The statutory point of the document. `interest_rate` is charged once per
-  // PERIOD and `term` is counted in PERIODS (`LoanService::buildStraight()`,
-  // `buildDiminishing()`, `computeMaturityDate()`), so a fixed "per month" and
-  // a fixed × 12 disclosed a 1%-per-day loan — 365% nominal — as 12.00% p.a.
+test("disclosure: the annual rate is annualised by the period the rate is quoted per", () => {
+  // The statutory point of the document. A fixed "per month" and a fixed × 12
+  // disclosed a 1%-per-day rate — 365% nominal — as 12.00% p.a.
   const daily = buildDisclosureDoc({
     ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: 1, term: 30, frequency: "daily" },
+    loan_terms: {
+      ...PAYLOAD.loan_terms,
+      interest_rate: 1,
+      interest_rate_frequency: "daily",
+      term: 30,
+      term_unit: "days",
+      frequency: "daily",
+    },
   });
 
   assert.equal(fieldValue(daily, "Contractual Interest Rate"), "1% per day");
@@ -111,37 +116,52 @@ test("disclosure: the annual rate is annualised by the loan's own frequency", ()
   assert.equal(fieldValue(daily, "Mode of Payment"), "Daily");
 });
 
-test("disclosure: every frequency the loans enum allows is disclosed correctly", () => {
+test("disclosure: every rate frequency is disclosed correctly", () => {
   const expected = [
-    ["daily", "2% per day", "730.00% per annum", "6 day(s)"],
-    ["weekly", "2% per week", "104.00% per annum", "6 week(s)"],
-    ["bi_weekly", "2% per bi-weekly period", "52.00% per annum", "6 bi-weekly period(s)"],
-    ["semi_monthly", "2% per semi-monthly period", "48.00% per annum", "6 semi-monthly period(s)"],
-    ["monthly", "2% per month", "24.00% per annum", "6 month(s)"],
-    ["upon_maturity", "2% per month", "24.00% per annum", "6 month(s)"],
+    ["daily", "2% per day", "730.00% per annum"],
+    ["weekly", "2% per week", "104.00% per annum"],
+    ["bi_weekly", "2% per bi-weekly period", "52.00% per annum"],
+    ["semi_monthly", "2% per semi-monthly period", "48.00% per annum"],
+    ["monthly", "2% per month", "24.00% per annum"],
   ] as const;
 
-  for (const [frequency, rate, annual, term] of expected) {
+  for (const [rateFrequency, rate, annual] of expected) {
     const doc = buildDisclosureDoc({
       ...PAYLOAD,
-      loan_terms: { ...PAYLOAD.loan_terms, frequency },
+      // Paid monthly throughout: the rate follows the period it is quoted
+      // per, not the payment frequency.
+      loan_terms: { ...PAYLOAD.loan_terms, interest_rate_frequency: rateFrequency },
     });
-    assert.equal(fieldValue(doc, "Contractual Interest Rate"), rate, frequency);
-    assert.equal(fieldValue(doc, "Nominal Annual Rate"), annual, frequency);
-    assert.equal(fieldValue(doc, "Term of Loan"), term, frequency);
+    assert.equal(fieldValue(doc, "Contractual Interest Rate"), rate, rateFrequency);
+    assert.equal(fieldValue(doc, "Nominal Annual Rate"), annual, rateFrequency);
+    // `term` is labelled by its `term_unit`: 6 months on every row.
+    assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)", rateFrequency);
   }
 });
 
-test("disclosure: an unknown frequency leaves the annual rate to be filled in", () => {
+test("disclosure: a payload without a rate frequency is quoted per month", () => {
+  // The backend's default, and what every rate before the field meant — even
+  // on a daily loan.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    loan_terms: { ...PAYLOAD.loan_terms, frequency: "daily" },
+  });
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "24.00% per annum");
+});
+
+test("disclosure: an unknown rate frequency leaves the annual rate to be filled in", () => {
   // A rule the officer completes beats a confidently wrong statutory figure.
   const doc = buildDisclosureDoc({
     ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, frequency: "quarterly" },
+    loan_terms: { ...PAYLOAD.loan_terms, interest_rate_frequency: "quarterly" },
   });
 
   assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per period");
   assert.ok(isBlankField(doc, "Nominal Annual Rate"));
-  assert.equal(fieldValue(doc, "Term of Loan"), "6 period(s)");
+  // The term is labelled by its own unit, which an unknown frequency cannot
+  // change.
+  assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)");
 });
 
 test("disclosure: finance charges add up to their own total", () => {

@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ACTIVE_LOAN_STATUSES,
+  EVER_RELEASED_LOAN_STATUSES,
   isActiveLoanStatus,
+  isEverReleasedLoanStatus,
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
@@ -138,4 +140,39 @@ test("an unknown or absent status reads as inactive rather than throwing", () =>
   assert.equal(isActiveLoanStatus(null), false);
   assert.equal(isActiveLoanStatus(""), false);
   assert.equal(isActiveLoanStatus("some_future_status"), false);
+});
+
+// ── the ever-released set ──────────────────────────────────────────────────
+//
+// The loan detail page reads the persisted schedule, repayments and ledger for
+// exactly these, and the restructure link picks the child loan in one of them.
+
+test("the ever-released set is the backend's Loan::EVER_RELEASED_STATUSES", () => {
+  assert.deepEqual(
+    [...EVER_RELEASED_LOAN_STATUSES],
+    ["released", "ongoing", "completed", "defaulted", "restructured"]
+  );
+});
+
+test("statuses the loans.status enum cannot hold are not ever-released", () => {
+  // Kept in the union for old payloads only; listing them made every copy of
+  // this set on the loan page longer than the enum it described.
+  for (const status of [LOAN_STATUS.CURRENT, LOAN_STATUS.PAST_DUE, LOAN_STATUS.CLOSED]) {
+    assert.equal(isEverReleasedLoanStatus(status), false, `${status} is not in the enum`);
+  }
+});
+
+test("a loan that never released is not ever-released", () => {
+  for (const status of [
+    LOAN_STATUS.DRAFT,
+    LOAN_STATUS.FOR_REVIEW,
+    LOAN_STATUS.APPROVED,
+    LOAN_STATUS.REJECTED,
+    LOAN_STATUS.VOID,
+  ]) {
+    assert.equal(isEverReleasedLoanStatus(status), false, `${status} never released`);
+  }
+  assert.equal(isEverReleasedLoanStatus(undefined), false);
+  assert.equal(isEverReleasedLoanStatus(null), false);
+  assert.equal(isEverReleasedLoanStatus(""), false);
 });

@@ -82,12 +82,12 @@ export const userService = {
   /**
    * Every user matching `params`, across as many pages as it takes.
    *
-   * For the screens that hold the whole set rather than a page of it: the
-   * users screen, which searches and counts in the browser, and the Account
-   * Officer pickers on the loan forms. `UserController::index()` paginates with
-   * `min(max(per_page, 1), 100)` and defaults to 15, silently, and orders
-   * newest first — so a short list drops the longest-serving staff first, and
-   * a missing officer reads as "not a user" rather than as a bug.
+   * For a screen that holds the whole set rather than a page of it: the users
+   * screen, which searches and counts in the browser. (The Account Officer
+   * pickers search `staffService.list` instead.) `UserController::index()`
+   * paginates with `min(max(per_page, 1), 100)` and defaults to 15, silently,
+   * and orders newest first — so a short list drops the longest-serving staff
+   * first, and a missing user reads as "not a user" rather than as a bug.
    *
    * Returns a `DrainResult`, NOT a row array, for the reason spelled out on
    * `borrowerService.listAll`: `truncated` is part of the answer and the caller

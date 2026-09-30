@@ -228,8 +228,11 @@ async function deleteChain(type: ChainType): Promise<ApprovalChainStep[]> {
 export const approvalWorkflowService = {
   // ── Policy Exception chain ──
 
-  /** Fetch the current policy-exception chain from the backend. */
-  async list(): Promise<ApprovalChainStep[]> {
+  /**
+   * The saved policy-exception chain template — one chain, its steps in order.
+   * Not a paginated list and never was; the sibling of `listNormal`.
+   */
+  async listPolicyException(): Promise<ApprovalChainStep[]> {
     return fetchChain("policy_exception");
   },
 

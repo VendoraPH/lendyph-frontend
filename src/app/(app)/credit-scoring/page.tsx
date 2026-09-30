@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
-import { useApiResource } from "@/hooks";
+import { useApiResource, useIsClient } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "./_components/page-header";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
@@ -43,8 +43,7 @@ function Figure({ label, value }: { label: string; value: string }) {
 }
 
 function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
 
   return (
     <div className="space-y-6">

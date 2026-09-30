@@ -18,31 +18,32 @@ import {
 } from "./shared";
 
 /**
- * Every frequency `loans.frequency` can hold, against the arithmetic
- * `LoanService` actually performs on it.
- *
- * `interest_rate` is applied ONCE PER PERIOD and `term` is counted IN PERIODS —
- * `computeMaturityDate()` advances by days / weeks / 14 days / 15 days / months
- * per frequency, and every schedule builder multiplies by the rate per
- * iteration. The templates used to hardcode "per month" and "× 12".
+ * Every frequency `loans.frequency` can hold, and the rate phrase and
+ * annualisation it gets. The templates used to hardcode "per month" and "× 12".
  */
 const FREQUENCIES = [
-  { frequency: "daily", periods: 365, term: "30 day(s)", rate: "1% per day", annual: "365.00% per annum" },
-  { frequency: "weekly", periods: 52, term: "30 week(s)", rate: "1% per week", annual: "52.00% per annum" },
-  { frequency: "bi_weekly", periods: 26, term: "30 bi-weekly period(s)", rate: "1% per bi-weekly period", annual: "26.00% per annum" },
-  { frequency: "semi_monthly", periods: 24, term: "30 semi-monthly period(s)", rate: "1% per semi-monthly period", annual: "24.00% per annum" },
-  { frequency: "monthly", periods: 12, term: "30 month(s)", rate: "1% per month", annual: "12.00% per annum" },
-  { frequency: "upon_maturity", periods: 12, term: "30 month(s)", rate: "1% per month", annual: "12.00% per annum" },
+  { frequency: "daily", periods: 365, rate: "1% per day", annual: "365.00% per annum" },
+  { frequency: "weekly", periods: 52, rate: "1% per week", annual: "52.00% per annum" },
+  { frequency: "bi_weekly", periods: 26, rate: "1% per bi-weekly period", annual: "26.00% per annum" },
+  { frequency: "semi_monthly", periods: 24, rate: "1% per semi-monthly period", annual: "24.00% per annum" },
+  { frequency: "monthly", periods: 12, rate: "1% per month", annual: "12.00% per annum" },
+  { frequency: "upon_maturity", periods: 12, rate: "1% per month", annual: "12.00% per annum" },
 ] as const;
 
 for (const spec of FREQUENCIES) {
-  test(`frequency: ${spec.frequency} labels its own term and annual rate`, () => {
+  test(`frequency: ${spec.frequency} labels its own rate and annual rate`, () => {
     assert.equal(periodsPerYear(spec.frequency), spec.periods);
-    assert.equal(termLabel(30, spec.frequency), spec.term);
     assert.equal(rateLabel(1, spec.frequency), spec.rate);
     assert.equal(annualRateLabel(1, spec.frequency), spec.annual);
   });
 }
+
+test("term: labelled by its own unit, never by the payment frequency", () => {
+  // `term` is a length in `term_unit` — a 30-day loan paid weekly is still
+  // "30 day(s)", not "30 week(s)".
+  assert.equal(termLabel(30, "days"), "30 day(s)");
+  assert.equal(termLabel(6, "months"), "6 month(s)");
+});
 
 test("frequency: a 1%-per-day loan discloses 365%, not 12%", () => {
   // The headline case. `${(rate * 12).toFixed(2)}% per annum` disclosed a
@@ -66,29 +67,32 @@ test("frequency: an unknown frequency annualises to nothing at all", () => {
     underline: true,
   });
 
-  // The periodic figures stay printable, in neutral units.
+  // The periodic figure stays printable, in neutral units.
   assert.equal(rateLabel(3, "quarterly"), "3% per period");
-  assert.equal(termLabel(4, "quarterly"), "4 period(s)");
+  // An unknown term unit is months, the backend's default.
+  assert.equal(termLabel(4, "quarterly"), "4 month(s)");
 });
 
 test("frequency: casing and absent values are tolerated", () => {
-  assert.equal(termLabel(6, "MONTHLY"), "6 month(s)");
+  assert.equal(termLabel(6, "MONTHS"), "6 month(s)");
+  assert.equal(termLabel(45, " Days "), "45 day(s)");
+  assert.equal(termLabel(6, undefined), "6 month(s)");
   assert.equal(rateLabel(2, " Daily "), "2% per day");
-  assert.equal(termLabel(null, "daily"), null);
+  assert.equal(termLabel(null, "days"), null);
   assert.equal(rateLabel(null, "daily"), null);
 });
 
-test("frequency: term_months names its own unit, term does not", () => {
-  // `term` is a count of the loan's periods, so it takes the frequency's unit.
-  assert.equal(termLabelFrom({ term: 12, frequency: "daily" }, "daily"), "12 day(s)");
+test("frequency: term takes its payload's term_unit; term_months names its own", () => {
+  assert.equal(termLabelFrom({ term: 12, term_unit: "days", frequency: "weekly" }), "12 day(s)");
+  // No unit on the payload: months, the backend's default.
+  assert.equal(termLabelFrom({ term: 12, frequency: "daily" }), "12 month(s)");
   // `term_months` only ever appears in the legacy flat payload shapes, where it
-  // says months in its name — reading both through one `pick` list relabelled
-  // one as the other.
-  assert.equal(termLabelFrom({ term_months: 12 }, "bi_weekly"), "12 month(s)");
+  // says months in its name.
+  assert.equal(termLabelFrom({ term_months: 12 }), "12 month(s)");
   // And `term` wins when a payload somehow carries both.
-  assert.equal(termLabelFrom({ term: 30, term_months: 12 }, "daily"), "30 day(s)");
-  assert.equal(termLabelFrom({}, "daily"), null);
-  assert.equal(termLabelFrom(null, "daily"), null);
+  assert.equal(termLabelFrom({ term: 30, term_unit: "days", term_months: 12 }), "30 day(s)");
+  assert.equal(termLabelFrom({}), null);
+  assert.equal(termLabelFrom(null), null);
 });
 
 // ---------------------------------------------------------------------------

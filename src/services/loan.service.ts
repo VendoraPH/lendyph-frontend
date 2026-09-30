@@ -1,8 +1,9 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { Loan, LoanCoMaker, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
+import type { CreateCoMakerData } from "./co-maker.service";
 
 export type ReleaseLoanPayload = {
   insurance_premium_percentage?: number;
@@ -10,7 +11,20 @@ export type ReleaseLoanPayload = {
   insurance_payment_type?: "full" | "partial";
   insurance_partial_amount?: number;
   insurance_remaining_balance?: number;
+  /**
+   * The `fee_fingerprint` of the release preview the figures on screen came
+   * from. The release is refused with a 409, and nothing written, if the fee
+   * configuration has changed since.
+   */
+  fee_fingerprint?: string;
 };
+
+/**
+ * `POST /loans/{id}/co-makers`: link one of the borrower's registered
+ * co-makers by its co-maker record id, or send a new co-maker's details to
+ * create it on the borrower and link it in the same request.
+ */
+export type AddLoanCoMakerPayload = { co_maker_id: number } | CreateCoMakerData;
 
 /**
  * The statuses that count as "this borrower already owes us something", as one
@@ -145,14 +159,16 @@ export const loanService = {
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.LOANS.DELETE(id)),
 
-  approve: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVE(id), data),
-
-  reject: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.REJECT(id), data),
-
   release: (id: number, payload?: ReleaseLoanPayload) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id), payload),
+
+  /**
+   * What releasing the loan would withhold and pay out, before insurance. Needs
+   * `loans:release`, and 422s unless the loan is `approved`, or when the fees
+   * would exceed the principal (with a message naming the figures).
+   */
+  releasePreview: (id: number) =>
+    api.get<LoanReleasePreview>(API_ENDPOINTS.LOANS.RELEASE_PREVIEW(id)),
 
   submit: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.SUBMIT(id)),
@@ -193,4 +209,17 @@ export const loanService = {
 
   toggleAutoPay: (id: number, data: AutoPayToggleData) =>
     api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),
+
+  /** Works at any status, unlike `update`, which refuses a loan past for_review. */
+  assignAccountOfficer: (id: number, accountOfficerId: number) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.ACCOUNT_OFFICER(id), { account_officer_id: accountOfficerId }),
+
+  /**
+   * Link a co-maker to the loan, answering with the linked co-maker. Needs
+   * `loans:release`, and only while the loan is `approved`: past release the
+   * API refuses with a 422 whose message says so, which the caller should show.
+   * `POST /borrowers/{id}/co-makers` is not a substitute, it links to no loan.
+   */
+  addCoMaker: (id: number, payload: AddLoanCoMakerPayload) =>
+    api.post<LoanCoMaker>(API_ENDPOINTS.LOANS.CO_MAKERS(id), payload),
 };

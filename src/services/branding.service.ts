@@ -34,7 +34,7 @@ export interface BrandingLogoMutationResponse {
 
 export const brandingService = {
   // Unauthenticated read for the public register/login pages and the app
-  // shell logo. Mirrors branchService.publicList — slim, no auth required.
+  // shell logo. Mirrors branchService.publicListAll — slim, no auth required.
   //
   // The organization name rides along here rather than on the authenticated
   // read so report and printable letterheads resolve it without a session.

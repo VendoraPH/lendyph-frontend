@@ -1,9 +1,9 @@
 /**
  * Accounting API client.
  *
- * NONE of these endpoints exist yet — see the note on `API_ENDPOINTS.ACCOUNTING`.
- * They are typed and wired now so that the day the backend lands, the only
- * thing that changes is the paths file, not thirteen call sites.
+ * Every call here goes to a route the backend serves under `/accounting`. The
+ * backend's `routes/api.php` is the source of truth for paths and payloads;
+ * see the note on `API_ENDPOINTS.ACCOUNTING`.
  *
  * Deliberately NO fixtures. Every other module here can show sample rows and
  * the worst case is a confusing demo; a ledger that shows invented figures is
@@ -127,15 +127,6 @@ export const accountingService = {
       accountingService.accountsList({ page, per_page }),
     ),
 
-  createAccount: (data: Partial<Account>): Promise<Account> =>
-    api.post<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_CREATE, data),
-
-  updateAccount: (id: number, data: Partial<Account>): Promise<Account> =>
-    api.put<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_UPDATE(id), data),
-
-  deleteAccount: (id: number): Promise<void> =>
-    api.delete(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_DELETE(id)),
-
   /** Seed a fresh organisation with the default chart. One-time, admin-only. */
   seedAccounts: (): Promise<Account[]> =>
     api.post<Account[]>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_SEED, {}),
@@ -155,9 +146,6 @@ export const accountingService = {
     fetchAllPages<JournalEntry>(({ page, per_page }) =>
       accountingService.journalsList({ ...query, page, per_page }),
     ),
-
-  getJournal: (id: number): Promise<JournalEntry> =>
-    api.get<JournalEntry>(API_ENDPOINTS.ACCOUNTING.JOURNALS_DETAIL(id)),
 
   /**
    * Creates a manual entry from the form's draft.
@@ -269,9 +257,6 @@ export const accountingService = {
 
   createExpense: (data: Partial<Expense>): Promise<Expense> =>
     api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_CREATE, data),
-
-  payExpense: (id: number, data: { date: string; amount: number; account_id: number }) =>
-    api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_PAY(id), data),
 
   // ── Cash and bank ──
   cashAccountsList: (params: PageParams = {}): Promise<ListPage<Account>> =>

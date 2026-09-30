@@ -1,7 +1,8 @@
 export type { User, UserStatus, UserBranch } from "./user";
-export type { Loan, LoanStatus, InterestType, LoanSchedule, LoanProduct, LoanLedgerEntry } from "./loan";
+export type { StaffMember } from "./staff";
+export type { Loan, LoanCoMaker, LoanReleasePreview, LoanStatus, InterestType, LoanSchedule, LoanProduct, LoanLedgerEntry } from "./loan";
 export type { Borrower, BorrowerLedgerEntry, CivilStatus, Gender, BorrowerStatus, ValidIdType, EmploymentType } from "./borrower";
-export type { CoMaker, CoMakerRelationship } from "./co-maker";
+export type { CoMaker, CoMakerLoan, CoMakerRelationship } from "./co-maker";
 export type { Payment } from "./payment";
 export type { Collection } from "./collection";
 export type { DashboardOverview, PortfolioSummary } from "./dashboard";
@@ -23,7 +24,7 @@ export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAC
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { ShareCapitalLedgerEntry, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
-export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus } from "./collateral";
+export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus, RegisterCollateral, CollateralRegisterGroup, CollateralRegisterSort, CollateralRegisterDirection, CollateralRegisterParams, CollateralRegisterTotals, CollateralRegisterResponse } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";
 export type { AutoPayFilter, AutoPayPartialRow, AutoPaySummary, AutoPayPreview, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";
 export type {
