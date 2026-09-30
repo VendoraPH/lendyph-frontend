@@ -24,11 +24,12 @@ export interface NavSubItem {
   href: string;
   /**
    * Optional, and optional on purpose: a child with no permission of its own is
-   * covered by its parent's, which is true of every child that shipped before
-   * this field existed — "New Member" needs nothing beyond `borrowers:view`
-   * to be a fair offer.
+   * covered by its parent's, which is right for a page that guards on the same
+   * permission as its parent ("All Members", "Payment History").
    *
-   * Set it when the child's route guards on something STRICTER than the parent.
+   * Set it when the child's route guards on something STRICTER than the parent,
+   * matching that page's RouteGuard: "New Member" needs `borrowers:create`, not
+   * just the `borrowers:view` that shows Members.
    * `/settings/data-import` is the first: Settings opens on `settings:view`,
    * which a manager has, while the import itself needs `imports:process`,
    * which only an admin has. Without this the sidebar would show the link to
@@ -59,7 +60,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "borrowers:view",
     children: [
       { title: "All Members", href: "/borrowers" },
-      { title: "New Member", href: "/borrowers/new" },
+      { title: "New Member", href: "/borrowers/new", permission: "borrowers:create" },
     ],
   },
   {
@@ -69,14 +70,14 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "loans:view",
     children: [
       { title: "All Loans", href: "/loans" },
-      { title: "New Application", href: "/loans/new" },
+      { title: "New Application", href: "/loans/new", permission: "loans:create" },
       { title: "Amortization Calculator", href: "/loans/amortization" },
       // binhs-coop only — gated on NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION at
       // build time. The route itself also 404s when the flag is off.
       ...(env.features.binhsAmortization
         ? [{ title: "Amortization BINHS", href: "/loans/amortization-binhs" }]
         : []),
-      { title: "Restructure", href: "/loans/restructure" },
+      { title: "Restructure", href: "/loans/restructure", permission: "loans:restructure" },
     ],
   },
   {
@@ -87,7 +88,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "New Payment", href: "/payments" },
       { title: "Payment History", href: "/payments/history" },
-      { title: "Auto-Pay", href: "/payments/auto-pay" },
+      { title: "Auto-Pay", href: "/payments/auto-pay", permission: "auto_pay:view" },
     ],
   },
   {
@@ -98,7 +99,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
       { title: "Pledge Entry", href: "/share-capital/pledges" },
-      { title: "Auto-Credit", href: "/share-capital/auto-credit" },
+      { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
     ],
   },
   {
@@ -108,7 +109,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "collaterals:view",
     children: [
       { title: "Collateral Listing", href: "/collaterals" },
-      { title: "Collateral Entry", href: "/collaterals/new" },
+      { title: "Collateral Entry", href: "/collaterals/new", permission: "collaterals:create" },
     ],
   },
   {
