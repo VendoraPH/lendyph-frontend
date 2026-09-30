@@ -32,11 +32,14 @@ function isoDate(utcMillis: number): string {
  * One period after `date` (`YYYY-MM-DD`), as
  * `LoanAdjustmentService::stepNextPeriod()` steps it.
  *
- * A month is the month after `date`'s month, on the loan's anchor day (its
- * start date's day of the month), or on that month's last day when it is too
- * short: a Jan 31 loan due Feb 28 steps to Mar 31, then Apr 30. `date`'s own
- * day does not matter, so a date already capped by a short month does not
- * pull later dates back. The day-stepped frequencies add their fixed days.
+ * A month lands on the loan's anchor day (its start date's day of the month),
+ * or on a month's last day when it is too short, in the month after `date`:
+ * a Jan 31 loan due Feb 28 steps to Mar 31, then Apr 30, so a date capped by a
+ * short month does not pull later dates back. A row an overflowing month step
+ * pushed into the first days of the next month (Mar 3 for a Jan 31 anchor,
+ * stored before the anchor rule) continues at that month's anchored date,
+ * Mar 31, rather than skipping a month; only anchors 29–31 overflow, and only
+ * onto days 1–3. The day-stepped frequencies add their fixed days.
  * Working in UTC on the calendar date keeps the browser's time zone out of it.
  * Null for a date it cannot read or a frequency the server has no step for.
  */
@@ -45,8 +48,10 @@ export function stepNextPeriod(date: string, frequency: string, anchorDay: numbe
   if (!parts) return null;
   const { year, month, day } = parts;
   if (frequency === "monthly" || frequency === "upon_maturity") {
-    const lastDay = new Date(Date.UTC(year, month + 2, 0)).getUTCDate();
-    return isoDate(Date.UTC(year, month + 1, Math.min(anchorDay, lastDay)));
+    const anchoredIn = (m: number) =>
+      Math.min(anchorDay, new Date(Date.UTC(year, m + 1, 0)).getUTCDate());
+    if (anchorDay > 28 && day <= 3) return isoDate(Date.UTC(year, month, anchoredIn(month)));
+    return isoDate(Date.UTC(year, month + 1, anchoredIn(month + 1)));
   }
   const days = STEP_DAYS[frequency];
   return days === undefined ? null : isoDate(Date.UTC(year, month, day + days));

@@ -51,6 +51,20 @@ describe("stepNextPeriod", () => {
     assert.equal(stepNextPeriod("2026-12-31", "monthly", 31), "2027-01-31");
   });
 
+  test("a row stored before the anchor rule steps to the next anchored date, skipping no month", () => {
+    // Overflowed rows: Jan 31 + 1 month used to be Mar 3, Aug 29 + 6 months Mar 1.
+    assert.equal(stepNextPeriod("2027-03-03", "monthly", 31), "2027-03-31");
+    assert.equal(stepNextPeriod("2027-03-01", "monthly", 29), "2027-03-29");
+    assert.equal(stepNextPeriod("2027-03-03", "upon_maturity", 31), "2027-03-31");
+  });
+
+  test("any other row off its anchor steps into the following month", () => {
+    // An imported 30-day row just before the anchor must not become a 1-day cycle.
+    assert.equal(stepNextPeriod("2027-02-14", "monthly", 15), "2027-03-15");
+    assert.equal(stepNextPeriod("2027-03-29", "monthly", 30), "2027-04-30");
+    assert.equal(stepNextPeriod("2026-09-27", "monthly", 4), "2026-10-04");
+  });
+
   test("the day-stepped frequencies add their fixed days, whatever the anchor", () => {
     for (const anchorDay of [20, 31]) {
       assert.equal(stepNextPeriod("2026-02-20", "daily", anchorDay), "2026-02-21");
