@@ -25,6 +25,7 @@ import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-l
 import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { readScheduleRows, toDisplaySchedule, type AmortizationRow } from "./_lib/server-schedule";
+import { ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -201,9 +202,9 @@ interface LedgerDisplayRow {
   status?: Repayment["status"];
   repaymentId?: number;
   principalBal: number;
-  /** Null while the interest still owed is unknown (the schedule is not loaded). */
+  /** Null while the balance's opening is unknown (no schedule rows on screen). */
   interestBal: number | null;
-  scbBal: number;
+  scbBal: number | null;
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -1241,9 +1242,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // a loan extension accrues or collects), sorted by date so the table reads
   // as one chronological history with running Principal/Interest/SCB balances.
   const ledgerRows = useMemo(() => {
-    const principalStart = loan?.principal_amount ?? 0;
-    const scbStart = storedScheduleTotals.shareCapitalBuildUp;
-
     // The API's category can widen to "principal" / "penalty" later even
     // though only "interest" entries exist today (see LoanLedgerEntry) — this
     // table only has an Interest debit/credit pair to put them in, so entries
@@ -1310,7 +1308,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // as a ledger entry, so this can't start at 0 either. Instead, solve for
     // the opening balance that makes the LAST row land exactly on
     // currentInterestDue — this file's own "single source of truth" for what's
-    // actually still owed (see its definition above). storedScheduleTotals.interest
+    // actually still owed (see its definition above). With no schedule rows
+    // there is nothing to solve from, and ledgerOpening leaves it unknown. storedScheduleTotals.interest
     // is deliberately NOT the anchor here even though it seeds the Interest
     // column of the static "Loan released" row above: it's a gross, never-paid-down
     // total (Σ interest_due across every period the schedule has ever had), so
@@ -1324,26 +1323,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // closing figure at the end of the walk — verified against worked examples
     // covering a bare "pay" extension and a "defer" extension stacked after one,
     // both landing exactly on currentInterestDue.
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const debitTotal = interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0);
-    const creditTotal = interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0);
-    const paidTotal = keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0);
-
-    let principalBal = principalStart;
-    // Unknown until the schedule is read, so the Interest balance column shows
-    // a dash rather than a walk from a guessed opening figure.
-    let interestBal =
-      currentInterestDue === null ? null : round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
-    let scbBal = scbStart;
-
-    return sorted.map((row) => {
-      principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
-      scbBal = Math.max(0, scbBal - (row.scbPaid ?? 0));
-      interestBal =
-        interestBal === null ? null : round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
-      return { ...row, principalBal, interestBal, scbBal };
+    const opening = ledgerOpening({
+      principalAmount: loan?.principal_amount ?? 0,
+      scheduleRowCount: storedSchedule.length,
+      currentInterestDue,
+      scheduleScbTotal: storedScheduleTotals.shareCapitalBuildUp,
+      interestDebits: interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0),
+      interestCredits: interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0),
+      interestPaid: keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0),
     });
-  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
+    return walkLedgerBalances(sorted, opening);
+  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedSchedule.length, storedScheduleTotals.shareCapitalBuildUp]);
 
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
