@@ -87,7 +87,8 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { usePermission } from "@/hooks/use-permission";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
 import {
   INTEREST_TYPE_OPTIONS,
@@ -232,6 +233,10 @@ const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 function RestructureLoanInner() {
   const router = useRouter();
+  // Forwarding the new application for review is `PATCH /loans/{id}/submit`,
+  // which needs `loans:update`. A role that can restructure without it gets
+  // the draft and a note saying so, not a request bound to be refused.
+  const canSubmitForReview = usePermission().can("loans:update");
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -400,7 +405,10 @@ function RestructureLoanInner() {
       // Principal = outstanding balance
       const outstanding = summary?.outstanding_balance ?? loan.outstanding_balance ?? loan.principal_amount;
       setSourceOutstanding(outstanding != null ? Number(outstanding) : null);
-      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding))) : "");
+      // To the centavo: rounding to whole pesos left a few centavos of
+      // "shortfall" to explain and write off, or overshot the balance the API
+      // caps the principal at.
+      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding) * 100) / 100) : "");
 
       // Terms. Interest type is not prefilled — it is snapshotted from the loan
       // product by the API, so the form derives it from the product instead.
@@ -809,16 +817,22 @@ function RestructureLoanInner() {
         }
       }
 
-      // Auto-forward for review
-      try {
-        await loanService.submit(newLoan.id);
-      } catch {
-        toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
+      // Auto-forward for review. Exactly one outcome is reported: this used to
+      // announce "submitted" even after the submit had failed.
+      if (!canSubmitForReview) {
+        toast.info("Restructure application saved as a draft", {
+          description: "Submitting it for review needs permission to edit loans.",
+        });
+      } else {
+        const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
+        if (forwarded) {
+          toast.success("Restructure application submitted", {
+            description: "Forwarded for review.",
+          });
+        } else {
+          toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
+        }
       }
-
-      toast.success("Restructure application submitted", {
-        description: "Forwarded to Manager for approval.",
-      });
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
       notifyError(err, "We couldn't restructure this loan. Please try again.");
@@ -1165,8 +1179,8 @@ function RestructureLoanInner() {
                         )}
                       >
                         {remarksRequired
-                          ? `${formatCurrency(shortfall)} below the outstanding balance of ${formatCurrency(sourceOutstanding)} — remarks required.`
-                          : `Outstanding balance: ${formatCurrency(sourceOutstanding)}`}
+                          ? `${formatCurrencyExact(shortfall)} below the outstanding balance of ${formatCurrencyExact(sourceOutstanding)} — remarks required.`
+                          : `Outstanding balance: ${formatCurrencyExact(sourceOutstanding)}`}
                       </p>
                     )}
                   </div>
@@ -1581,9 +1595,9 @@ function RestructureLoanInner() {
                   <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p>
-                      The new principal is {formatCurrency(shortfall)}{" "}
+                      The new principal is {formatCurrencyExact(shortfall)}{" "}
                       below this loan&rsquo;s outstanding balance of{" "}
-                      {formatCurrency(sourceOutstanding ?? 0)}. The difference is written
+                      {formatCurrencyExact(sourceOutstanding ?? 0)}. The difference is written
                       off, so a reason is required.
                     </p>
                   </div>
