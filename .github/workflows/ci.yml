@@ -22,10 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     # The repository's default token is read-only, so the conflict comment
     # below (POST /issues/{number}/comments) was refused with a 403. This job
-    # only needs to read the code and write that comment.
+    # only needs to read the code and write that comment. The comment is on a
+    # pull request, and GITHUB_TOKEN needs `pull-requests: write` for that:
+    # `issues: write` alone was still refused (verified on #413).
     permissions:
       contents: read
-      issues: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
