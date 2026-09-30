@@ -9,6 +9,7 @@ import { Loader2, Landmark, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
+import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 function formatCurrency(amount: number): string {
@@ -70,23 +71,25 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     let credits = 0;
     let debits = 0;
     for (const e of entries) {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      if (e.type === "credit") credits += amt;
-      else debits += amt;
+      const { debit, credit } = ledgerAmounts(e);
+      credits += credit;
+      debits += debit;
     }
     return { totalCredits: credits, totalDebits: debits, balance: credits - debits };
   }, [entries]);
 
-  // Compute running balance
+  // Running balance in posting order: by date, then by id within a day. The
+  // API lists newest first, so without the id tiebreak a day's entries summed
+  // in reverse and showed balances the member never had.
   const entriesWithBalance = useMemo(() => {
     const sorted = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id - b.id
     );
     let running = 0;
     return sorted.map((e) => {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      running += e.type === "credit" ? amt : -amt;
-      return { ...e, runningBalance: running };
+      const { debit, credit } = ledgerAmounts(e);
+      running += credit - debit;
+      return { ...e, debit, credit, runningBalance: running };
     });
   }, [entries]);
 
@@ -195,10 +198,10 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
                     </TableCell>
                     <TableCell className="text-sm">{entry.description}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-red-600">
-                      {entry.type === "debit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
+                      {entry.debit > 0 ? formatCurrency(entry.debit) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {entry.type === "credit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
+                      {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums font-semibold">
                       {formatCurrency(entry.runningBalance)}

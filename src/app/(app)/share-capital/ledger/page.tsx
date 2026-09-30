@@ -45,6 +45,7 @@ import { format, startOfMonth, endOfMonth, subMonths, startOfYear, isWithinInter
 import type { DateRange } from "react-day-picker";
 import { shareCapitalService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 import { toast } from "sonner";
 
@@ -53,9 +54,9 @@ import { toast } from "sonner";
 interface LedgerEntry {
   id: number;
   // Stable grouping/filtering key — always present on every entry, unlike
-  // member_id which is only populated when the nested `borrower` relation
-  // is loaded. Grouping by member_id caused a single borrower's entries to
-  // split across two different keys whenever it was missing on some rows,
+  // the display code, which falls back to the id whenever `borrower_code` is
+  // missing. Grouping by the display code split a single borrower's entries
+  // across two different keys whenever it was missing on some rows,
   // understating their Total Share on the ledger.
   borrowerId: string;
   memberCode: string;
@@ -67,33 +68,17 @@ interface LedgerEntry {
   credit: number;
 }
 
-/** Transform API response into the debit/credit shape the UI expects */
+/** Transform an API row into the shape the UI expects */
 function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
-  const entry = raw as unknown as Record<string, unknown>;
-  const amount = parseFloat(String(entry.amount ?? 0));
-
-  // Support both "type + amount" and "debit + credit" response formats
-  let debit = 0;
-  let credit = 0;
-  if (entry.debit != null || entry.credit != null) {
-    debit = parseFloat(String(entry.debit ?? 0));
-    credit = parseFloat(String(entry.credit ?? 0));
-  } else {
-    const type = String(entry.type ?? "").toLowerCase();
-    debit = type === "debit" ? amount : 0;
-    credit = type === "credit" ? amount : 0;
-  }
-
   return {
     id: raw.id,
     borrowerId: String(raw.borrower_id),
-    memberCode: raw.borrower?.member_id ?? String(raw.borrower_id),
-    member: raw.borrower?.full_name ?? raw.borrower?.name ?? raw.borrower_name ?? `Borrower #${raw.borrower_id}`,
+    memberCode: raw.borrower_code ?? String(raw.borrower_id),
+    member: raw.borrower_name ?? `Borrower #${raw.borrower_id}`,
     date: raw.date,
-    description: raw.description ?? (entry.description as string) ?? "",
-    reference: raw.reference ?? (entry.reference as string) ?? "",
-    debit,
-    credit,
+    description: raw.description,
+    reference: raw.reference,
+    ...ledgerAmounts(raw),
   };
 }
 
