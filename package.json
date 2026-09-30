@@ -115,6 +115,9 @@
     "typescript": "^5"
   },
   "overrides": {
-    "js-yaml": "^4.3.2"
+    "js-yaml": "^4.3.2",
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }
