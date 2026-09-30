@@ -1335,10 +1335,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // steps by calendar month; otherwise they are the loan's own payment periods.
   const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
   // Extend-dialog preview: the maturity date the extension will store, stepped
-  // from the server's own schedule the way the extend endpoint steps it. This
-  // is display-only — it does not drive the actual extend() call.
+  // from the server's own schedule the way the extend endpoint steps it, on
+  // the start date's day of the month. This is display-only — it does not
+  // drive the actual extend() call.
   const extendPreviewMaturityDate = rawSchedule
-    ? extensionDueDate(rawSchedule, loanFrequency)
+    ? extensionDueDate(rawSchedule, loanFrequency, loan?.start_date)
     : null;
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
