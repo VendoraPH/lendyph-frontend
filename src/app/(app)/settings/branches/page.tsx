@@ -175,7 +175,7 @@ function BranchFormDialog({ open, onOpenChange, branch, onSave }: BranchFormDial
 // Page
 // ---------------------------------------------------------------------------
 
-export default function BranchesPage() {
+function BranchesContent() {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -238,7 +238,6 @@ export default function BranchesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Branch Settings">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -407,6 +406,13 @@ export default function BranchesPage() {
         onSave={fetchBranches}
       />
     </div>
+  );
+}
+
+export default function BranchesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Branch Settings">
+      <BranchesContent />
     </RouteGuard>
   );
 }

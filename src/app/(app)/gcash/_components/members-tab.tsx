@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/common";
+import { usePermission } from "@/hooks";
 import { borrowerService } from "@/services/borrower.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { borrowerParty } from "@/lib/gcash-party";
@@ -34,7 +35,10 @@ export function MembersTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
-  const [loading, setLoading] = useState(true);
+  // The member list needs `borrowers:view`, which GCash does not. Without it
+  // the tab is left empty instead of asking and being refused.
+  const canListMembers = usePermission().can("borrowers:view");
+  const [loading, setLoading] = useState(canListMembers);
   const [dialog, setDialog] = useState<DialogState>(null);
 
   useEffect(() => {
@@ -46,6 +50,7 @@ export function MembersTab() {
   useEffect(() => setPage(1), [debounced, perPage]);
 
   useEffect(() => {
+    if (!canListMembers) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -75,7 +80,7 @@ export function MembersTab() {
     return () => {
       cancelled = true;
     };
-  }, [debounced, page, perPage]);
+  }, [debounced, page, perPage, canListMembers]);
 
   return (
     <div className="space-y-4">

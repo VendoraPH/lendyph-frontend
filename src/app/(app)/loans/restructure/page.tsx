@@ -69,7 +69,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { completeRows } from "@/lib/paginate";
+import { completeRows, emptyDrain } from "@/lib/paginate";
 
 import {
   borrowerService,
@@ -249,6 +249,12 @@ function RestructureLoanInner() {
   // both of these. A role that can only restructure still gets the source
   // loan's collaterals (the server carries them over) but cannot add others.
   const canAddCollateral = can("loans:update") && can("collaterals:update");
+  // Lists this form reads under other modules' permissions, which
+  // `loans:restructure` does not imply. Without one, that list is not asked
+  // for and stays empty, as it would with nothing in it.
+  const canListMembers = can("borrowers:view");
+  const canListCollaterals = can("collaterals:view");
+  const canReadShareCapital = can("share_capital:view");
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -320,7 +326,7 @@ function RestructureLoanInner() {
         // Drained across pages. `per_page: 200` was clamped to 100 by
         // BorrowerController without a word, so member 101 onwards could not be
         // picked and their loans could not be restructured from this screen.
-        borrowerService.listAll({ members_only: 1 }),
+        canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
         loanProductService.listAll().then(completeRows),
       ]);
       if (cancelled) return;
@@ -346,7 +352,7 @@ function RestructureLoanInner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListMembers]);
 
   // ── Load borrower's eligible loans when borrower changes ──
   useEffect(() => {
@@ -456,6 +462,7 @@ function RestructureLoanInner() {
 
   // ── Collateral types: load once ──
   useEffect(() => {
+    if (!canListCollaterals) return;
     let cancelled = false;
     collateralTypeService
       .listAll()
@@ -473,11 +480,11 @@ function RestructureLoanInner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListCollaterals]);
 
   // ── Available collaterals: rebuild when borrower changes ──
   useEffect(() => {
-    if (!borrowerId) {
+    if (!borrowerId || !canListCollaterals) {
       setAvailableCollaterals([]);
       return;
     }
@@ -495,7 +502,7 @@ function RestructureLoanInner() {
         const needsSc = collRows.some(
           (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
         );
-        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId) : null;
+        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId, canReadShareCapital) : null;
         const enriched: CollateralValueRow[] = collRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
           return {
@@ -519,7 +526,7 @@ function RestructureLoanInner() {
       }
     })();
     return () => { cancelled = true; };
-  }, [borrowerId, collateralTypes, sourceLoanId]);
+  }, [borrowerId, collateralTypes, sourceLoanId, canListCollaterals, canReadShareCapital]);
 
   // ── Pre-fill collaterals from source loan ──
   useEffect(() => {
@@ -862,7 +869,7 @@ function RestructureLoanInner() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
+    <>
       <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
 
         {/* Header */}
@@ -1763,7 +1770,7 @@ function RestructureLoanInner() {
           </>
         )}
       </div>
-    </RouteGuard>
+    </>
   );
 }
 
@@ -1776,7 +1783,12 @@ export default function RestructureLoanPage() {
         </div>
       }
     >
-      <RestructureLoanInner />
+      <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
+        {/* The loan being restructured is read under `loans:view`. */}
+        <RouteGuard permission="loans:view" pageName="Restructure Loan">
+          <RestructureLoanInner />
+        </RouteGuard>
+      </RouteGuard>
     </Suspense>
   );
 }

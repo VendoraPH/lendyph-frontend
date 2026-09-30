@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePermission } from "@/hooks";
+import { emptyDrain } from "@/lib/paginate";
 import { borrowerService } from "@/services/borrower.service";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { borrowerParty, nonMemberParty } from "@/lib/gcash-party";
-import type { GCashParty } from "@/types";
+import type { Borrower, GCashParty } from "@/types";
 
 /** What a picker needs about one selectable party, already flattened. */
 export interface GCashPartyOption {
@@ -56,6 +58,9 @@ const EMPTY: GCashPartyListState = { options: [], shortfall: null };
  * more than it saves.
  */
 export function useGCashParties(): UseGCashPartiesResult {
+  // Members need `borrowers:view`, which GCash does not. Without it only the
+  // walk-ins are offered, rather than a refused member list taking them down too.
+  const canListMembers = usePermission().can("borrowers:view");
   const [members, setMembers] = useState<GCashPartyListState>(EMPTY);
   const [nonMembers, setNonMembers] = useState<GCashPartyListState>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -76,7 +81,9 @@ export function useGCashParties(): UseGCashPartiesResult {
     Promise.all([
       // members_only: every option here can be transacted for, so pending and
       // rejected applicants must not be selectable at all.
-      borrowerService.listAll({ members_only: 1 }),
+      canListMembers
+        ? borrowerService.listAll({ members_only: 1 })
+        : emptyDrain<Borrower>(),
       gcashService.listAllNonMembers(),
     ])
       .then(([memberDrain, nonMemberDrain]) => {
@@ -120,7 +127,7 @@ export function useGCashParties(): UseGCashPartiesResult {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [reloadToken, canListMembers]);
 
   return { members, nonMembers, loading, error, refreshNonMembers };
 }

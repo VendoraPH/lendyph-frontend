@@ -5,6 +5,7 @@ import { CalendarIcon } from "lucide-react";
 import { loanProductService } from "@/services/loan-product.service";
 import { completeRows } from "@/lib/paginate";
 import { notifyError } from "@/lib/notify";
+import { usePermission } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -25,8 +26,11 @@ interface FiltersStepProps {
 }
 
 export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
+  // `GET /loan-products` needs `loans:view`, which auto-pay does not. Without
+  // it the list is not asked for, and "All Products" is the only choice.
+  const canListProducts = usePermission().can("loans:view");
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(canListProducts);
   const [allProducts, setAllProducts] = useState(true);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -35,6 +39,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
   const [toOpen, setToOpen] = useState(false);
 
   useEffect(() => {
+    if (!canListProducts) return;
     let cancelled = false;
     loanProductService
       .listAll()
@@ -53,7 +58,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListProducts]);
 
   function toggleProduct(id: number) {
     setAllProducts(false);

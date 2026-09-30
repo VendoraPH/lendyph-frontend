@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePermission } from "@/hooks";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -57,11 +58,14 @@ export function ShareCapitalCard({ borrowerId, version = 0, defaultOpen = true }
     result: ShareCapitalBalance | null;
   } | null>(null);
   const [open, setOpen] = useState(defaultOpen);
+  // Without `share_capital:view` the ledger is not asked for, and the card
+  // shows the balance as unavailable, as it does when the read is refused.
+  const canReadShareCapital = usePermission().can("share_capital:view");
 
   useEffect(() => {
     if (!borrowerId) return;
     let cancelled = false;
-    getShareCapitalBalance(borrowerId)
+    getShareCapitalBalance(borrowerId, canReadShareCapital)
       .catch(() => null)
       .then((next) => {
         if (!cancelled) setFetched({ borrowerId, version, result: next });
@@ -69,7 +73,7 @@ export function ShareCapitalCard({ borrowerId, version = 0, defaultOpen = true }
     return () => {
       cancelled = true;
     };
-  }, [borrowerId, version]);
+  }, [borrowerId, version, canReadShareCapital]);
 
   const current =
     fetched !== null && fetched.borrowerId === borrowerId && fetched.version === version

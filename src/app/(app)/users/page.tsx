@@ -1035,7 +1035,7 @@ function RoleSummaryCard({
 
 // ── Main Page ──
 
-export default function UsersPage() {
+function UsersContent() {
   const [users, setUsers] = useState<User[]>([]);
   // Set only when the drain gave up with pages outstanding, i.e. this screen is
   // knowingly missing users. Null means complete.
@@ -1089,7 +1089,6 @@ export default function UsersPage() {
   }
 
   return (
-    <RouteGuard permission="users:view" pageName="User Management">
     <div className="space-y-6">
       <Card>
         <CardContent className="py-5">
@@ -1228,6 +1227,13 @@ export default function UsersPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <RouteGuard permission="users:view" pageName="User Management">
+      <UsersContent />
     </RouteGuard>
   );
 }

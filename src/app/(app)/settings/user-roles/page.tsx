@@ -605,7 +605,7 @@ function RoleFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
-export default function UserRolesPage() {
+function UserRolesContent() {
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -739,286 +739,295 @@ export default function UserRolesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Role and Permissions">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage roles and their access rights across every system module
-            </p>
-          </div>
-          <PermissionGate permission="settings:update">
-            <Button
-              onClick={openCreate}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Role
-            </Button>
-          </PermissionGate>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage roles and their access rights across every system module
+          </p>
         </div>
+        <PermissionGate permission="settings:update">
+          <Button
+            onClick={openCreate}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Role
+          </Button>
+        </PermissionGate>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{roles.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Defined in the backend
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
-              <SettingsIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{totalModules}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
-              <UserCog className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{customCount}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Created on top of the built-in roles
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search roles..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Roles Table */}
+      {/* Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{roles.length}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Defined in the backend
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
+            <SettingsIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{totalModules}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{customCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Created on top of the built-in roles
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search roles..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/* Roles Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Modules</TableHead>
+                  <TableHead>Permissions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && (
                   <TableRow>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Modules</TableHead>
-                    <TableHead>Permissions</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <div className="flex items-center justify-center">
+                        <Spinner className="size-5 text-muted-foreground" />
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center">
-                        <div className="flex items-center justify-center">
-                          <Spinner className="size-5 text-muted-foreground" />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {!loading &&
-                    filtered.map((r) => {
-                      const grouped = groupByModule(r.permissions);
-                      const moduleCount = Object.keys(grouped).length;
-                      return (
-                        <TableRow
-                          key={r.key}
-                          className={cn(
-                            "cursor-pointer hover:bg-muted/50",
-                            !r.isActive && "opacity-60"
-                          )}
-                          onClick={() => openView(r)}
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "font-medium",
-                                  ROLE_BADGE[r.key] ??
-                                    "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                                )}
-                              >
-                                {r.label}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-muted-foreground">
-                              {r.description || "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm">
-                              {moduleCount}{" "}
-                              <span className="text-muted-foreground">of {totalModules}</span>
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {r.permissions.length}
+                )}
+                {!loading &&
+                  filtered.map((r) => {
+                    const grouped = groupByModule(r.permissions);
+                    const moduleCount = Object.keys(grouped).length;
+                    return (
+                      <TableRow
+                        key={r.key}
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/50",
+                          !r.isActive && "opacity-60"
+                        )}
+                        onClick={() => openView(r)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "font-medium",
+                                ROLE_BADGE[r.key] ??
+                                  "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                              )}
+                            >
+                              {r.label}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <PermissionGate permission="settings:update">
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {r.description || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {moduleCount}{" "}
+                            <span className="text-muted-foreground">of {totalModules}</span>
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {r.permissions.length}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <PermissionGate permission="settings:update">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEdit(r);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Edit
+                              </Button>
+                            </PermissionGate>
+                            <PermissionGate permission="settings:update">
+                              <>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openEdit(r);
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                  Edit
-                                </Button>
-                              </PermissionGate>
-                              <PermissionGate permission="settings:update">
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
-                                    disabled={actionLoading}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleActive(r);
-                                    }}
-                                  >
-                                    {r.isActive ? (
-                                      <PowerOff className="h-3 w-3" />
-                                    ) : (
-                                      <Power className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </>
-                              </PermissionGate>
-                              <PermissionGate permission="settings:delete">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                                  title="Delete role"
+                                  className="h-7 w-7 p-0"
+                                  title={r.isActive ? "Deactivate role" : "Reactivate role"}
                                   disabled={actionLoading}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteTarget(r);
+                                    handleToggleActive(r);
                                   }}
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  {r.isActive ? (
+                                    <PowerOff className="h-3 w-3" />
+                                  ) : (
+                                    <Power className="h-3 w-3" />
+                                  )}
                                 </Button>
-                              </PermissionGate>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  {!loading && filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                        No roles match your search.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                              </>
+                            </PermissionGate>
+                            <PermissionGate permission="settings:delete">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                title="Delete role"
+                                disabled={actionLoading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget(r);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </PermissionGate>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                {!loading && filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      No roles match your search.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Module reference */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Every feature area protected by access control
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
-                const meta = MODULE_META[mod];
-                const Icon = meta.icon;
-                return (
-                  <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
-                    <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold">{meta.label}</p>
-                      <p className="text-xs text-muted-foreground">{meta.description}</p>
-                    </div>
+      {/* Module reference */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Every feature area protected by access control
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
+              const meta = MODULE_META[mod];
+              const Icon = meta.icon;
+              return (
+                <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
+                  <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
+                    <Icon className="h-4 w-4" />
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{meta.label}</p>
+                    <p className="text-xs text-muted-foreground">{meta.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-        <RoleFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          role={formRole}
-          existingKeys={roles.map((r) => r.key)}
-          onSave={handleSaveRole}
-          readOnly={formMode === "view"}
-          onEdit={() => setFormMode("edit")}
-          saving={actionLoading}
-        />
+      <RoleFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        role={formRole}
+        existingKeys={roles.map((r) => r.key)}
+        onSave={handleSaveRole}
+        readOnly={formMode === "view"}
+        onEdit={() => setFormMode("edit")}
+        saving={actionLoading}
+      />
 
-        <Dialog
-          open={!!deleteTarget}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete role?</DialogTitle>
-              <DialogDescription>
-                This permanently deletes {deleteTarget?.label}. Users currently
-                assigned to this role will lose its permissions. This action
-                cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-                disabled={actionLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteRole}
-                disabled={actionLoading}
-              >
-                {actionLoading ? "Deleting..." : "Delete Role"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete role?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes {deleteTarget?.label}. Users currently
+              assigned to this role will lose its permissions. This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRole}
+              disabled={actionLoading}
+            >
+              {actionLoading ? "Deleting..." : "Delete Role"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// The roles themselves come from `GET /roles`, which needs `users:view`.
+export default function UserRolesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Role and Permissions">
+      <RouteGuard permission="users:view" pageName="Role and Permissions">
+        <UserRolesContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

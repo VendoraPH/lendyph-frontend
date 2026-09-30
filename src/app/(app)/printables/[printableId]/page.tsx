@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+import { usePermission } from "@/hooks";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
@@ -248,8 +249,11 @@ function RepaymentPicker({
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
+  // Payments need `payments:view`, which the documents screen does not. Without
+  // it they are not asked for, and the picker has nothing to offer.
+  const canListPayments = usePermission().can("payments:view");
   const [options, setOptions] = useState<RepaymentOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canListPayments);
   const [error, setError] = useState<string | null>(null);
   // Set only when the drain gave up with pages outstanding, so this picker is
   // knowingly missing payments. Null means complete.
@@ -259,6 +263,7 @@ function RepaymentPicker({
   } | null>(null);
 
   useEffect(() => {
+    if (!canListPayments) return;
     let cancelled = false;
     repaymentService
       // Drained across pages, filtered in the browser — the same trade-off
@@ -306,7 +311,7 @@ function RepaymentPicker({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListPayments]);
 
   const selected = useMemo(
     () => options.find((o) => o.id === value) ?? null,

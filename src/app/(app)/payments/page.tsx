@@ -280,7 +280,7 @@ function SummaryCard({
 // Page
 // ---------------------------------------------------------------------------
 
-export default function PaymentsPage() {
+function PaymentsContent() {
   const router = useRouter();
   const { user } = useAuth();
   const defaultCollector = user?.full_name || user?.username || "";
@@ -607,7 +607,7 @@ export default function PaymentsPage() {
   const statsKnown = !(error && apiLoans.length === 0);
 
   return (
-    <RouteGuard permission="payments:view" pageName="Payments">
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -1295,6 +1295,17 @@ export default function PaymentsPage() {
         )}
       </DialogContent>
     </Dialog>
+    </>
+  );
+}
+
+// The page is the list of active loans, and `GET /loans` needs `loans:view`.
+export default function PaymentsPage() {
+  return (
+    <RouteGuard permission="payments:view" pageName="Payments">
+      <RouteGuard permission="loans:view" pageName="Payments">
+        <PaymentsContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

@@ -35,7 +35,7 @@ function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
   return <Minus className="h-4 w-4 text-muted-foreground" />;
 }
 
-export default function BorrowerScoresPage() {
+function BorrowerScoresContent() {
   const router = useRouter();
   const [branch, setBranch] = useState(ALL_BRANCHES);
   const [riskLevel, setRiskLevel] = useState(ALL_RISK_LEVELS);
@@ -51,61 +51,67 @@ export default function BorrowerScoresPage() {
   const resource = useApiResource<BorrowerScoreRow[]>(fetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Borrower Scores">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Borrower Scores"
-          description="Every borrower's current Lendy Credit Score and risk level."
-        />
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Borrower Scores"
+        description="Every borrower's current Lendy Credit Score and risk level."
+      />
 
-        <FilterBar>
-          <BranchFilter value={branch} onChange={setBranch} />
-          <RiskLevelFilter value={riskLevel} onChange={setRiskLevel} />
-        </FilterBar>
+      <FilterBar>
+        <BranchFilter value={branch} onChange={setBranch} />
+        <RiskLevelFilter value={riskLevel} onChange={setRiskLevel} />
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="The borrower scores table will list every scored borrower with their current score, risk level, and trend once the backend is connected."
-          endpoints={["GET /credit-scoring/borrowers"]}
-          isEmpty={(rows) => rows.length === 0}
-          emptyMessage="No borrowers match this filter."
-        >
-          {(rows) => (
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Borrower</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Risk Level</TableHead>
-                    <TableHead>Trend</TableHead>
-                    <TableHead>Active Loan</TableHead>
-                    <TableHead>Calculated</TableHead>
+      <DataState
+        resource={resource}
+        summary="The borrower scores table will list every scored borrower with their current score, risk level, and trend once the backend is connected."
+        endpoints={["GET /credit-scoring/borrowers"]}
+        isEmpty={(rows) => rows.length === 0}
+        emptyMessage="No borrowers match this filter."
+      >
+        {(rows) => (
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Borrower</TableHead>
+                  <TableHead>Branch</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Risk Level</TableHead>
+                  <TableHead>Trend</TableHead>
+                  <TableHead>Active Loan</TableHead>
+                  <TableHead>Calculated</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow
+                    key={row.borrower_id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
+                  >
+                    <TableCell className="font-medium">{row.borrower_name}</TableCell>
+                    <TableCell>{row.branch_name}</TableCell>
+                    <TableCell>{row.score}</TableCell>
+                    <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
+                    <TableCell><TrendIcon trend={row.score_trend} /></TableCell>
+                    <TableCell>{row.has_active_loan ? "Yes" : "No"}</TableCell>
+                    <TableCell>{formatDate(row.calculated_at)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow
-                      key={row.borrower_id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
-                    >
-                      <TableCell className="font-medium">{row.borrower_name}</TableCell>
-                      <TableCell>{row.branch_name}</TableCell>
-                      <TableCell>{row.score}</TableCell>
-                      <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
-                      <TableCell><TrendIcon trend={row.score_trend} /></TableCell>
-                      <TableCell>{row.has_active_loan ? "Yes" : "No"}</TableCell>
-                      <TableCell>{formatDate(row.calculated_at)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </DataState>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </DataState>
+    </div>
+  );
+}
+
+export default function BorrowerScoresPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Borrower Scores">
+      <BorrowerScoresContent />
     </RouteGuard>
   );
 }

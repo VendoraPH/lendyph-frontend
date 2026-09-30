@@ -168,7 +168,7 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
   }
 }
 
-export default function ReportDetailPage() {
+function ReportDetailContent() {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
@@ -218,23 +218,21 @@ export default function ReportDetailPage() {
 
   if (!report) {
     return (
-      <RouteGuard permission="reports:view" pageName="Reports">
-        <div className="max-w-xl mx-auto py-16 text-center space-y-3">
-          <h1 className="text-xl font-semibold">Report not found</h1>
-          <p className="text-sm text-muted-foreground">
-            The report you&apos;re looking for doesn&apos;t exist or has been
-            moved.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => router.push("/reports")}
-            className="mt-2"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Reports
-          </Button>
-        </div>
-      </RouteGuard>
+      <div className="max-w-xl mx-auto py-16 text-center space-y-3">
+        <h1 className="text-xl font-semibold">Report not found</h1>
+        <p className="text-sm text-muted-foreground">
+          The report you&apos;re looking for doesn&apos;t exist or has been
+          moved.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/reports")}
+          className="mt-2"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Reports
+        </Button>
+      </div>
     );
   }
 
@@ -369,217 +367,223 @@ export default function ReportDetailPage() {
   const Icon = report.icon;
 
   return (
-    <RouteGuard permission="reports:view" pageName="Reports">
-      <div className="space-y-6">
-        {/* Breadcrumb + back */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link
-            href="/reports"
-            className="hover:text-foreground transition-colors"
-          >
-            Reports
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground">{report.title}</span>
-        </div>
-
-        {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-4 min-w-0">
-            <div
-              className={cn(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ring-1",
-                report.accent.bg,
-                report.accent.ring
-              )}
-            >
-              <Icon className={cn("h-6 w-6", report.accent.text)} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {categoryLabel}
-              </p>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-0.5">
-                {report.title}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                {report.description}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={() => router.push("/reports")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              All Reports
-            </Button>
-            <ExportMenu
-              doc={doc}
-              exportingFormat={exportingFormat}
-              onExport={handleExport}
-            />
-          </div>
-        </div>
-
-        {/* Controls card */}
-        <Card>
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-2 min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Date Range
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => applyPreset(p.id)}
-                      className={cn(
-                        "h-8 px-3 text-xs rounded-md border transition-colors",
-                        preset === p.id
-                          ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
-                          : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-end gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="from-date" className="text-xs">
-                    From
-                  </Label>
-                  <Input
-                    id="from-date"
-                    type="date"
-                    value={activeRange.from}
-                    onChange={(e) => {
-                      setPreset("custom");
-                      setRange({ ...activeRange, from: e.target.value });
-                      setDoc(null);
-                    }}
-                    className="h-9 w-40"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="to-date" className="text-xs">
-                    To
-                  </Label>
-                  <Input
-                    id="to-date"
-                    type="date"
-                    value={activeRange.to}
-                    onChange={(e) => {
-                      setPreset("custom");
-                      setRange({ ...activeRange, to: e.target.value });
-                      setDoc(null);
-                    }}
-                    className="h-9 w-40"
-                  />
-                </div>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={generating || missingSubject || spanTooWide}
-                  className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                >
-                  {generating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating…
-                    </>
-                  ) : doc ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Regenerate
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Generate Preview
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Scope row — only the reports whose endpoints accept these
-                filters get to show them, so the controls never imply a
-                narrowing the API would silently ignore. */}
-            {(report.supportsBranch || report.subject) && (
-              <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
-                {report.supportsBranch && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Branch</Label>
-                    <Select
-                      value={branchId === null ? ALL_BRANCHES : String(branchId)}
-                      onValueChange={(v: string | null) => {
-                        setBranchId(
-                          !v || v === ALL_BRANCHES ? null : Number(v)
-                        );
-                        setDoc(null);
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-56">
-                        <SelectValue>{() => branchLabel}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_BRANCHES}>
-                          All Branches
-                        </SelectItem>
-                        {branches.map((b) => (
-                          <SelectItem key={b.id} value={String(b.id)}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {report.subject && (
-                  <SubjectPicker
-                    subject={report.subject}
-                    value={subjectId}
-                    onChange={(id) => {
-                      setSubjectId(id);
-                      setDoc(null);
-                    }}
-                  />
-                )}
-
-                {missingSubject && (
-                  <p className="text-xs text-muted-foreground pb-2">
-                    Select a {report.subject} to generate this report.
-                  </p>
-                )}
-
-                {spanTooWide && (
-                  <p className="text-xs text-destructive pb-2">
-                    The reporting period may not exceed {MAX_REPORT_SPAN_YEARS}{" "}
-                    years. Narrow the date range to generate this report.
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Preview area */}
-        {!doc && !generating && <EmptyPreview reportTitle={report.title} />}
-        {generating && (
-          <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className="text-sm">Fetching data &amp; building preview…</p>
-            </div>
-          </div>
-        )}
-        {doc && !generating && <ReportPreview doc={doc} />}
+    <div className="space-y-6">
+      {/* Breadcrumb + back */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Link
+          href="/reports"
+          className="hover:text-foreground transition-colors"
+        >
+          Reports
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5" />
+        <span className="text-foreground">{report.title}</span>
       </div>
+
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-4 min-w-0">
+          <div
+            className={cn(
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ring-1",
+              report.accent.bg,
+              report.accent.ring
+            )}
+          >
+            <Icon className={cn("h-6 w-6", report.accent.text)} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {categoryLabel}
+            </p>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-0.5">
+              {report.title}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+              {report.description}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={() => router.push("/reports")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            All Reports
+          </Button>
+          <ExportMenu
+            doc={doc}
+            exportingFormat={exportingFormat}
+            onExport={handleExport}
+          />
+        </div>
+      </div>
+
+      {/* Controls card */}
+      <Card>
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2 min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Date Range
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyPreset(p.id)}
+                    className={cn(
+                      "h-8 px-3 text-xs rounded-md border transition-colors",
+                      preset === p.id
+                        ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
+                        : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="from-date" className="text-xs">
+                  From
+                </Label>
+                <Input
+                  id="from-date"
+                  type="date"
+                  value={activeRange.from}
+                  onChange={(e) => {
+                    setPreset("custom");
+                    setRange({ ...activeRange, from: e.target.value });
+                    setDoc(null);
+                  }}
+                  className="h-9 w-40"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="to-date" className="text-xs">
+                  To
+                </Label>
+                <Input
+                  id="to-date"
+                  type="date"
+                  value={activeRange.to}
+                  onChange={(e) => {
+                    setPreset("custom");
+                    setRange({ ...activeRange, to: e.target.value });
+                    setDoc(null);
+                  }}
+                  className="h-9 w-40"
+                />
+              </div>
+              <Button
+                onClick={handleGenerate}
+                disabled={generating || missingSubject || spanTooWide}
+                className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : doc ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Generate Preview
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Scope row — only the reports whose endpoints accept these
+              filters get to show them, so the controls never imply a
+              narrowing the API would silently ignore. */}
+          {(report.supportsBranch || report.subject) && (
+            <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
+              {report.supportsBranch && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Branch</Label>
+                  <Select
+                    value={branchId === null ? ALL_BRANCHES : String(branchId)}
+                    onValueChange={(v: string | null) => {
+                      setBranchId(
+                        !v || v === ALL_BRANCHES ? null : Number(v)
+                      );
+                      setDoc(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-56">
+                      <SelectValue>{() => branchLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_BRANCHES}>
+                        All Branches
+                      </SelectItem>
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {report.subject && (
+                <SubjectPicker
+                  subject={report.subject}
+                  value={subjectId}
+                  onChange={(id) => {
+                    setSubjectId(id);
+                    setDoc(null);
+                  }}
+                />
+              )}
+
+              {missingSubject && (
+                <p className="text-xs text-muted-foreground pb-2">
+                  Select a {report.subject} to generate this report.
+                </p>
+              )}
+
+              {spanTooWide && (
+                <p className="text-xs text-destructive pb-2">
+                  The reporting period may not exceed {MAX_REPORT_SPAN_YEARS}{" "}
+                  years. Narrow the date range to generate this report.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Preview area */}
+      {!doc && !generating && <EmptyPreview reportTitle={report.title} />}
+      {generating && (
+        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Fetching data &amp; building preview…</p>
+          </div>
+        </div>
+      )}
+      {doc && !generating && <ReportPreview doc={doc} />}
+    </div>
+  );
+}
+
+export default function ReportDetailPage() {
+  return (
+    <RouteGuard permission="reports:view" pageName="Reports">
+      <ReportDetailContent />
     </RouteGuard>
   );
 }

@@ -151,7 +151,7 @@ function StatCard({
   );
 }
 
-export default function LoansPage() {
+function LoansContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -431,202 +431,208 @@ export default function LoansPage() {
   );
 
   return (
-    <RouteGuard permission="loans:view" pageName="Loans">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage loan applications and track approval workflow
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/loans/past-due">
-              <Button variant="outline">
-                <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
-                Past Due Loans
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage loan applications and track approval workflow
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/loans/past-due">
+            <Button variant="outline">
+              <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
+              Past Due Loans
+            </Button>
+          </Link>
+          <PermissionGate permission="loans:create">
+            <Link href="/loans/new">
+              <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
+                <Plus className="mr-2 h-4 w-4" />
+                New Application
               </Button>
             </Link>
-            <PermissionGate permission="loans:create">
-              <Link href="/loans/new">
-                <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Application
-                </Button>
-              </Link>
-            </PermissionGate>
-          </div>
+          </PermissionGate>
         </div>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Total Applications"
-            value={countsKnown ? allCount : null}
-            valueClassName=""
-            icon={<FileText className="h-5 w-5 text-brand-blue" />}
-            iconBg="bg-brand-blue/10"
-            active={tab === "all"}
-            onClick={() => handleTabChange("all")}
-          />
-          <StatCard
-            label="Pending Approval"
-            value={countsKnown ? (stats.for_review ?? 0) : null}
-            valueClassName="text-amber-600"
-            icon={<Clock className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-500/10"
-            active={tab === "for_review"}
-            onClick={() => handleTabChange("for_review")}
-          />
-          <StatCard
-            label="Active Loans"
-            value={countsKnown ? activeCount : null}
-            valueClassName="text-green-600"
-            icon={<Banknote className="h-5 w-5 text-green-600" />}
-            iconBg="bg-green-500/10"
-            active={tab === "active"}
-            onClick={() => handleTabChange("active")}
-          />
-          <StatCard
-            label="Rejected"
-            value={countsKnown ? (stats.rejected ?? 0) : null}
-            valueClassName="text-red-600"
-            icon={<XCircle className="h-5 w-5 text-red-600" />}
-            iconBg="bg-red-500/10"
-            active={tab === "rejected"}
-            onClick={() => handleTabChange("rejected")}
-          />
-        </div>
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Total Applications"
+          value={countsKnown ? allCount : null}
+          valueClassName=""
+          icon={<FileText className="h-5 w-5 text-brand-blue" />}
+          iconBg="bg-brand-blue/10"
+          active={tab === "all"}
+          onClick={() => handleTabChange("all")}
+        />
+        <StatCard
+          label="Pending Approval"
+          value={countsKnown ? (stats.for_review ?? 0) : null}
+          valueClassName="text-amber-600"
+          icon={<Clock className="h-5 w-5 text-amber-600" />}
+          iconBg="bg-amber-500/10"
+          active={tab === "for_review"}
+          onClick={() => handleTabChange("for_review")}
+        />
+        <StatCard
+          label="Active Loans"
+          value={countsKnown ? activeCount : null}
+          valueClassName="text-green-600"
+          icon={<Banknote className="h-5 w-5 text-green-600" />}
+          iconBg="bg-green-500/10"
+          active={tab === "active"}
+          onClick={() => handleTabChange("active")}
+        />
+        <StatCard
+          label="Rejected"
+          value={countsKnown ? (stats.rejected ?? 0) : null}
+          valueClassName="text-red-600"
+          icon={<XCircle className="h-5 w-5 text-red-600" />}
+          iconBg="bg-red-500/10"
+          active={tab === "rejected"}
+          onClick={() => handleTabChange("rejected")}
+        />
+      </div>
 
-        {/* Status Filter Tabs */}
-        <div className="flex flex-wrap gap-2">
-          {FILTER_TABS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => handleTabChange(t.value)}
+      {/* Status Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
+        {FILTER_TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => handleTabChange(t.value)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              tab === t.value
+                ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
+                : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
+            )}
+          >
+            {t.label}
+            <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+                "ml-1 rounded-full px-1.5 py-0.5 text-xs",
                 tab === t.value
-                  ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
-                  : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
+                  ? "bg-brand-orange text-brand-orange-foreground"
+                  : "bg-muted text-muted-foreground",
               )}
             >
-              {t.label}
-              <span
-                className={cn(
-                  "ml-1 rounded-full px-1.5 py-0.5 text-xs",
-                  tab === t.value
-                    ? "bg-brand-orange text-brand-orange-foreground"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {!countsKnown
-                  ? "—"
-                  : t.value === "all"
-                    ? allCount
-                    : (stats[t.value] ?? 0)}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Data Table */}
-        <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-medium">
-              Loan Applications{countsKnown ? ` (${total})` : ""}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <LoanFilters
-                search={searchDraft}
-                onSearchChange={setSearchDraft}
-                productId={productId}
-                onProductChange={handleProductChange}
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                onDateRangeChange={handleDateRangeChange}
-                productOptions={productOptions}
-                productsLoading={productsLoading}
-              />
-            </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="size-6 text-brand-orange" />
-              </div>
-            ) : error ? (
-              <div
-                role="alert"
-                className="flex flex-col items-center justify-center py-12 text-center"
-              >
-                <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
-                <p className="text-sm text-muted-foreground">{error}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={fetchLoans}
-                  className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                <LoanTable
-                  loans={loans}
-                  sort={{ key: sortKey, dir: sortDir }}
-                  onSortChange={handleSortChange}
-                  onRowClick={(id) => router.push(`/loans/${id}`)}
-                  onAutoPayClick={(loan) =>
-                    setAutoPayTarget({
-                      loanId: loan.id,
-                      loanAccountNumber: loan.loan_account_number,
-                      enabled: loan.auto_pay_enabled ?? false,
-                      cbsReference: loan.auto_pay_cbs_reference,
-                    })
-                  }
-                />
-                <TablePagination
-                  page={page}
-                  perPage={perPage}
-                  total={total}
-                  onPageChange={goToPage}
-                  onPerPageChange={handlePerPageChange}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-        {autoPayTarget && (
-          <AutoPayToggleDialog
-            loanId={autoPayTarget.loanId}
-            loanAccountNumber={autoPayTarget.loanAccountNumber}
-            currentEnabled={autoPayTarget.enabled}
-            currentCbsReference={autoPayTarget.cbsReference}
-            open={!!autoPayTarget}
-            onOpenChange={(open) => {
-              if (!open) setAutoPayTarget(null);
-            }}
-            onSuccess={(settings) => {
-              const targetId = autoPayTarget.loanId;
-              setLoans((prev) =>
-                prev.map((l) =>
-                  l.id === targetId
-                    ? {
-                        ...l,
-                        auto_pay_enabled: settings.auto_pay_enabled,
-                        auto_pay_cbs_reference: settings.cbs_reference,
-                      }
-                    : l,
-                ),
-              );
-            }}
-          />
-        )}
+              {!countsKnown
+                ? "—"
+                : t.value === "all"
+                  ? allCount
+                  : (stats[t.value] ?? 0)}
+            </span>
+          </button>
+        ))}
       </div>
+
+      {/* Data Table */}
+      <Card>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-sm font-medium">
+            Loan Applications{countsKnown ? ` (${total})` : ""}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4">
+            <LoanFilters
+              search={searchDraft}
+              onSearchChange={setSearchDraft}
+              productId={productId}
+              onProductChange={handleProductChange}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateRangeChange={handleDateRangeChange}
+              productOptions={productOptions}
+              productsLoading={productsLoading}
+            />
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-brand-orange" />
+            </div>
+          ) : error ? (
+            <div
+              role="alert"
+              className="flex flex-col items-center justify-center py-12 text-center"
+            >
+              <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLoans}
+                className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
+              >
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <LoanTable
+                loans={loans}
+                sort={{ key: sortKey, dir: sortDir }}
+                onSortChange={handleSortChange}
+                onRowClick={(id) => router.push(`/loans/${id}`)}
+                onAutoPayClick={(loan) =>
+                  setAutoPayTarget({
+                    loanId: loan.id,
+                    loanAccountNumber: loan.loan_account_number,
+                    enabled: loan.auto_pay_enabled ?? false,
+                    cbsReference: loan.auto_pay_cbs_reference,
+                  })
+                }
+              />
+              <TablePagination
+                page={page}
+                perPage={perPage}
+                total={total}
+                onPageChange={goToPage}
+                onPerPageChange={handlePerPageChange}
+              />
+            </>
+          )}
+        </CardContent>
+      </Card>
+      {autoPayTarget && (
+        <AutoPayToggleDialog
+          loanId={autoPayTarget.loanId}
+          loanAccountNumber={autoPayTarget.loanAccountNumber}
+          currentEnabled={autoPayTarget.enabled}
+          currentCbsReference={autoPayTarget.cbsReference}
+          open={!!autoPayTarget}
+          onOpenChange={(open) => {
+            if (!open) setAutoPayTarget(null);
+          }}
+          onSuccess={(settings) => {
+            const targetId = autoPayTarget.loanId;
+            setLoans((prev) =>
+              prev.map((l) =>
+                l.id === targetId
+                  ? {
+                      ...l,
+                      auto_pay_enabled: settings.auto_pay_enabled,
+                      auto_pay_cbs_reference: settings.cbs_reference,
+                    }
+                  : l,
+              ),
+            );
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function LoansPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Loans">
+      <LoansContent />
     </RouteGuard>
   );
 }

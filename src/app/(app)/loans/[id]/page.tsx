@@ -18,7 +18,7 @@ import {
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import { PrintableMenu } from "@/components/common";
+import { PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
@@ -627,7 +627,11 @@ export default function LoanDetailPage({
   if (!(typeof id === "string" && /^\d+$/.test(id) && Number(id) > 0)) {
     return <LoanNotFound />;
   }
-  return <LoanDetail loanId={Number(id)} />;
+  return (
+    <RouteGuard permission="loans:view" pageName="Loan Details">
+      <LoanDetail loanId={Number(id)} />
+    </RouteGuard>
+  );
 }
 
 function LoanDetail({ loanId }: { loanId: number }) {
@@ -892,6 +896,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
     setScheduleReloadCount((n) => n + 1);
   };
 
+  // Payments need `payments:view` and adjustments `loan_adjustments:view`,
+  // neither of which viewing a loan implies (the approval-chain roles hold only
+  // `loans:view`). Without one, that history is not asked for and stays empty.
+  const canViewPayments = usePermission().can("payments:view");
+  const canViewAdjustments = usePermission().can("loan_adjustments:view");
+
   // Fetch repayments for released+ loans. Each list row is the full
   // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
   // the ledger's breakdown fields (principal_paid, interest_paid, penalty_paid)
@@ -899,6 +909,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // every row's detail on the belief that the list omitted the breakdown; it
   // never did, and each of those requests returned the row it started from.
   const fetchRepayments = useCallback(async (id: number) => {
+    if (!canViewPayments) return;
     try {
       setRepaymentsLoading(true);
       // Drained across pages. This was `repaymentService.list(id)` — the
@@ -916,7 +927,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
     } finally {
       setRepaymentsLoading(false);
     }
-  }, []);
+  }, [canViewPayments]);
 
   // Fetch debit/credit ledger entries for released+ loans — merged into
   // `ledgerRows` alongside repayments.
@@ -935,6 +946,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Fetch adjustments for released+ loans
   const fetchAdjustments = useCallback(async (id: number) => {
+    if (!canViewAdjustments) return;
     try {
       setAdjustmentsLoading(true);
       const res = await loanAdjustmentService.list(id);
@@ -948,7 +960,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
     } finally {
       setAdjustmentsLoading(false);
     }
-  }, []);
+  }, [canViewAdjustments]);
 
   useEffect(() => {
     if (loadedLoanId !== undefined && hasServerLoanData) {
@@ -1382,7 +1394,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // settle before posting. Must sit ABOVE the early returns below to keep
   // hook order stable across renders.
   useEffect(() => {
-    if (!recordPaymentOpen || !loan) {
+    if (!recordPaymentOpen || !loan || !canViewPayments) {
       setPaymentPreview(null);
       return;
     }
@@ -1410,7 +1422,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [recordPaymentOpen, loan, paymentAmount, paymentDate]);
+  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments]);
 
   if (loading) {
     return (

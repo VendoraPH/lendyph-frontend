@@ -41,7 +41,8 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { collateralLock, holdersSentence, isLocked } from "@/lib/collateral-lock";
 import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { completeRows } from "@/lib/paginate";
+import { completeRows, emptyDrain } from "@/lib/paginate";
+import { usePermission } from "@/hooks";
 import { borrowerService } from "@/services/borrower.service";
 import {
   collateralService,
@@ -66,6 +67,14 @@ export function CollateralForm({ initial, mode }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const presetBorrowerId = searchParams.get("borrower_id");
+  // Members, types and the share-capital ledger each need a permission that
+  // `collaterals:create` / `collaterals:update` do not imply. Without one, that
+  // read is skipped and the form shows what it shows when the read comes back
+  // empty or refused.
+  const { can } = usePermission();
+  const canListMembers = can("borrowers:view");
+  const canListTypes = can("collaterals:view");
+  const canReadShareCapital = can("share_capital:view");
 
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [types, setTypes] = useState<CollateralType[]>([]);
@@ -103,8 +112,10 @@ export function CollateralForm({ initial, mode }: Props) {
     // than 100 members the picker simply had no entry for the rest — which
     // reads as "that member is not registered", not as a bug.
     Promise.all([
-      borrowerService.listAll({ members_only: 1 }),
-      collateralTypeService.listAll().then(completeRows),
+      canListMembers
+        ? borrowerService.listAll({ members_only: 1 })
+        : emptyDrain<Borrower>(),
+      canListTypes ? collateralTypeService.listAll().then(completeRows) : [],
     ])
       .then(([memberDrain, tRes]) => {
         if (cancelled) return;
@@ -125,7 +136,7 @@ export function CollateralForm({ initial, mode }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListMembers, canListTypes]);
 
   /**
    * Lock state of the record being edited, straight off `GET /collaterals/{id}`.
@@ -176,7 +187,7 @@ export function CollateralForm({ initial, mode }: Props) {
     }
     let cancelled = false;
     setScBalanceLoading(true);
-    getShareCapitalBalance(borrowerId).then((result) => {
+    getShareCapitalBalance(borrowerId, canReadShareCapital).then((result) => {
       if (cancelled) return;
       setScBalance(result);
       // The amount field is only filled from a balance we trust. Left empty
@@ -188,7 +199,7 @@ export function CollateralForm({ initial, mode }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isShareCapital, borrowerId]);
+  }, [isShareCapital, borrowerId, canReadShareCapital]);
 
   const numericAmount = Number(amount);
   const canSubmit =

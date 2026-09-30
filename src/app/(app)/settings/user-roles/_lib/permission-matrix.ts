@@ -12,8 +12,10 @@ import type { Action, Module } from "@/types";
  * - `credit_scoring` is UI-only until its backend ships. The backend seeds none
  *   of its permissions on purpose (`CreditScoringNotSeededTest`), and ticking
  *   one here is what made `PUT /roles/{id}` answer 422 on staging.
+ * - `loan_adjustments` is named in the type so pages can check it; the matrix
+ *   has never offered it, and a role keeps whatever it holds on save.
  */
-export type UIModule = Exclude<Module, "collections" | "credit_scoring">;
+export type UIModule = Exclude<Module, "collections" | "credit_scoring" | "loan_adjustments">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {

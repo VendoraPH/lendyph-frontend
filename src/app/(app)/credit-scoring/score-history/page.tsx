@@ -23,7 +23,7 @@ import { formatDateTime } from "@/lib/format";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import type { CreditScoreHistoryEntry, ScoreHistoryFilters } from "@/types/credit-scoring";
 
-export default function ScoreHistoryPage() {
+function ScoreHistoryContent() {
   const router = useRouter();
   const [branch, setBranch] = useState(ALL_BRANCHES);
   const [from, setFrom] = useState("");
@@ -41,68 +41,74 @@ export default function ScoreHistoryPage() {
   const resource = useApiResource<CreditScoreHistoryEntry[]>(fetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Score History">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Score History"
-          description="Every recorded score change, across all borrowers."
-        />
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Score History"
+        description="Every recorded score change, across all borrowers."
+      />
 
-        <FilterBar>
-          <BranchFilter value={branch} onChange={setBranch} />
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[170px]" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[170px]" />
-          </div>
-        </FilterBar>
+      <FilterBar>
+        <BranchFilter value={branch} onChange={setBranch} />
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">From</Label>
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[170px]" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">To</Label>
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[170px]" />
+        </div>
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="Score change history across the portfolio will appear here once the backend is connected."
-          endpoints={["GET /credit-scoring/score-history"]}
-          isEmpty={(rows) => rows.length === 0}
-          emptyMessage="No score changes in this range."
-        >
-          {(rows) => (
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Borrower</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Risk Level</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Calculated</TableHead>
+      <DataState
+        resource={resource}
+        summary="Score change history across the portfolio will appear here once the backend is connected."
+        endpoints={["GET /credit-scoring/score-history"]}
+        isEmpty={(rows) => rows.length === 0}
+        emptyMessage="No score changes in this range."
+      >
+        {(rows) => (
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Borrower</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Risk Level</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Calculated</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
+                  >
+                    <TableCell className="font-medium">{borrowerLabel(row)}</TableCell>
+                    <TableCell>{row.score}</TableCell>
+                    <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
+                    <TableCell className="capitalize">{row.score_type}</TableCell>
+                    <TableCell>{row.reason}</TableCell>
+                    <TableCell>{row.model_version}</TableCell>
+                    <TableCell>{formatDateTime(row.calculated_at)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
-                    >
-                      <TableCell className="font-medium">{borrowerLabel(row)}</TableCell>
-                      <TableCell>{row.score}</TableCell>
-                      <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
-                      <TableCell className="capitalize">{row.score_type}</TableCell>
-                      <TableCell>{row.reason}</TableCell>
-                      <TableCell>{row.model_version}</TableCell>
-                      <TableCell>{formatDateTime(row.calculated_at)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </DataState>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </DataState>
+    </div>
+  );
+}
+
+export default function ScoreHistoryPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Score History">
+      <ScoreHistoryContent />
     </RouteGuard>
   );
 }

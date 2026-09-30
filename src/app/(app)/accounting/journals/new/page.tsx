@@ -26,7 +26,7 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { AccountingPageHeader } from "../../_components/page-header";
 import { JournalLineRows } from "../../_components/journal-line-rows";
 
-export default function NewJournalEntryPage() {
+function NewJournalEntryContent() {
   const router = useRouter();
   const { postable, isTemplate, truncated, total } = useChartOfAccounts();
   const [saving, setSaving] = useState(false);
@@ -99,171 +99,177 @@ export default function NewJournalEntryPage() {
   };
 
   return (
-    <RouteGuard permission="journals:create" pageName="New Journal Entry">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="New Journal Entry"
-          description="Saves as a draft. Nothing moves in the books until it is posted."
-          actions={
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="New Journal Entry"
+        description="Saves as a draft. Nothing moves in the books until it is posted."
+        actions={
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/accounting/journals" />}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+        }
+      />
+
+      {/*
+        A picker missing rows reads as "that account does not exist", not as
+        a bug, and this is the form where that matters most: an account the
+        chart drain never reached cannot be posted to at all.
+      */}
+      {truncated && (
+        <IncompleteListNotice
+          shown={postable.length}
+          total={total}
+          noun="accounts"
+          consequence="An account missing from the chart cannot be selected on a line below."
+        />
+      )}
+
+      {isTemplate && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          <span className="font-medium">Preview only.</span>{" "}
+          <span className="text-muted-foreground">
+            The accounts listed here are the default template, not your saved
+            chart, so this entry cannot be submitted yet. Everything else on
+            this form works — including the balance check.
+          </span>
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="date">Date</Label>
+            <Input
+              id="date"
+              type="date"
+              value={draft.date}
+              onChange={(e) => patch({ date: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="reference">Reference</Label>
+            <Input
+              id="reference"
+              value={draft.reference}
+              onChange={(e) => patch({ reference: e.target.value })}
+              placeholder="JV-2026-0001"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={draft.description}
+              onChange={(e) => patch({ description: e.target.value })}
+              placeholder="What is this entry for?"
+              rows={2}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <JournalLineRows
+            lines={draft.lines}
+            accounts={postable}
+            errorRows={showErrors ? errorRows : new Set()}
+            onChange={patchLine}
+            onRemove={removeLine}
+          />
+
+          <Button variant="outline" size="sm" onClick={addLine}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add line
+          </Button>
+
+          {/*
+            The balance check, live on every keystroke. This is the whole
+            point of double entry, and it is the one thing a user should
+            never have to work out for themselves.
+          */}
+          <div
+            className={cn(
+              "flex flex-wrap items-center justify-between gap-4 rounded-lg border-2 p-4",
+              summary.is_balanced
+                ? "border-emerald-500/30 bg-emerald-500/5"
+                : "border-amber-500/30 bg-amber-500/5",
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <Scale
+                className={cn(
+                  "h-5 w-5",
+                  summary.is_balanced ? "text-emerald-600" : "text-amber-600",
+                )}
+              />
+              <div>
+                <p className="font-medium">
+                  {summary.is_balanced ? "Balanced" : "Not balanced"}
+                </p>
+                {!summary.is_balanced && (
+                  <p className="text-sm text-muted-foreground">
+                    Out by {formatCentavos(Math.abs(summary.difference))}.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-8 font-mono text-sm">
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Debit</p>
+                <p className="font-medium">{formatCentavos(summary.total_debit)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Credit</p>
+                <p className="font-medium">{formatCentavos(summary.total_credit)}</p>
+              </div>
+            </div>
+          </div>
+
+          {showErrors && validation.errors.length > 0 && (
+            <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              {entryErrors.map((error, i) => (
+                <li key={i} className="text-sm text-destructive">
+                  {error.message}
+                </li>
+              ))}
+              {validation.errors
+                .filter((e) => e.index !== null)
+                .map((error, i) => (
+                  <li key={`line-${i}`} className="text-sm text-destructive">
+                    Line {(error.index as number) + 1}: {error.message}
+                  </li>
+                ))}
+            </ul>
+          )}
+
+          <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               nativeButton={false}
               render={<Link href="/accounting/journals" />}
             >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
+              Cancel
             </Button>
-          }
-        />
-
-        {/*
-          A picker missing rows reads as "that account does not exist", not as
-          a bug, and this is the form where that matters most: an account the
-          chart drain never reached cannot be posted to at all.
-        */}
-        {truncated && (
-          <IncompleteListNotice
-            shown={postable.length}
-            total={total}
-            noun="accounts"
-            consequence="An account missing from the chart cannot be selected on a line below."
-          />
-        )}
-
-        {isTemplate && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <span className="font-medium">Preview only.</span>{" "}
-            <span className="text-muted-foreground">
-              The accounts listed here are the default template, not your saved
-              chart, so this entry cannot be submitted yet. Everything else on
-              this form works — including the balance check.
-            </span>
+            <Button onClick={save} disabled={saving || isTemplate}>
+              {saving ? "Saving…" : "Save draft"}
+            </Button>
           </div>
-        )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-        <Card>
-          <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="date">Date</Label>
-              <Input
-                id="date"
-                type="date"
-                value={draft.date}
-                onChange={(e) => patch({ date: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="reference">Reference</Label>
-              <Input
-                id="reference"
-                value={draft.reference}
-                onChange={(e) => patch({ reference: e.target.value })}
-                placeholder="JV-2026-0001"
-              />
-            </div>
-            <div className="space-y-1.5 sm:col-span-3">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={draft.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                placeholder="What is this entry for?"
-                rows={2}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="space-y-4 pt-6">
-            <JournalLineRows
-              lines={draft.lines}
-              accounts={postable}
-              errorRows={showErrors ? errorRows : new Set()}
-              onChange={patchLine}
-              onRemove={removeLine}
-            />
-
-            <Button variant="outline" size="sm" onClick={addLine}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add line
-            </Button>
-
-            {/*
-              The balance check, live on every keystroke. This is the whole
-              point of double entry, and it is the one thing a user should
-              never have to work out for themselves.
-            */}
-            <div
-              className={cn(
-                "flex flex-wrap items-center justify-between gap-4 rounded-lg border-2 p-4",
-                summary.is_balanced
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-amber-500/30 bg-amber-500/5",
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Scale
-                  className={cn(
-                    "h-5 w-5",
-                    summary.is_balanced ? "text-emerald-600" : "text-amber-600",
-                  )}
-                />
-                <div>
-                  <p className="font-medium">
-                    {summary.is_balanced ? "Balanced" : "Not balanced"}
-                  </p>
-                  {!summary.is_balanced && (
-                    <p className="text-sm text-muted-foreground">
-                      Out by {formatCentavos(Math.abs(summary.difference))}.
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-8 font-mono text-sm">
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Debit</p>
-                  <p className="font-medium">{formatCentavos(summary.total_debit)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Credit</p>
-                  <p className="font-medium">{formatCentavos(summary.total_credit)}</p>
-                </div>
-              </div>
-            </div>
-
-            {showErrors && validation.errors.length > 0 && (
-              <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                {entryErrors.map((error, i) => (
-                  <li key={i} className="text-sm text-destructive">
-                    {error.message}
-                  </li>
-                ))}
-                {validation.errors
-                  .filter((e) => e.index !== null)
-                  .map((error, i) => (
-                    <li key={`line-${i}`} className="text-sm text-destructive">
-                      Line {(error.index as number) + 1}: {error.message}
-                    </li>
-                  ))}
-              </ul>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                nativeButton={false}
-                render={<Link href="/accounting/journals" />}
-              >
-                Cancel
-              </Button>
-              <Button onClick={save} disabled={saving || isTemplate}>
-                {saving ? "Saving…" : "Save draft"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+export default function NewJournalEntryPage() {
+  return (
+    <RouteGuard permission="journals:create" pageName="New Journal Entry">
+      <NewJournalEntryContent />
     </RouteGuard>
   );
 }

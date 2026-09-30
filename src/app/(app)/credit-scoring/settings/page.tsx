@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringSettings } from "@/types/credit-scoring";
 
-export default function CreditScoringSettingsPage() {
+function CreditScoringSettingsContent() {
   const fetcher = useCallback(() => creditScoringService.getSettings(), []);
   const resource = useApiResource<CreditScoringSettings>(fetcher);
   const [draft, setDraft] = useState<CreditScoringSettings | null>(null);
@@ -46,91 +46,97 @@ export default function CreditScoringSettingsPage() {
   }
 
   return (
-    <RouteGuard permission="credit_scoring:settings" pageName="Credit Scoring Settings">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Settings"
-          description="Privacy notice, score model version, and definitions shown to staff."
-        />
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Settings"
+        description="Privacy notice, score model version, and definitions shown to staff."
+      />
 
-        <DataState
-          resource={resource}
-          summary="Module settings — the privacy notice, the current model version, and confidence/flag definitions — will appear here once the backend is connected."
-          endpoints={["GET /credit-scoring/settings", "PUT /credit-scoring/settings"]}
-        >
-          {(settings) => {
-            const current = draft ?? settings;
-            return (
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Privacy Notice</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Textarea
-                      value={current.privacy_notice}
-                      onChange={(e) => setDraft({ ...current, privacy_notice: e.target.value })}
-                      className="min-h-32"
-                    />
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Shown to borrowers per NPC (Philippine Data Privacy Act) disclosure
-                      requirements before their data is used for scoring.
+      <DataState
+        resource={resource}
+        summary="Module settings — the privacy notice, the current model version, and confidence/flag definitions — will appear here once the backend is connected."
+        endpoints={["GET /credit-scoring/settings", "PUT /credit-scoring/settings"]}
+      >
+        {(settings) => {
+          const current = draft ?? settings;
+          return (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Privacy Notice</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    value={current.privacy_notice}
+                    onChange={(e) => setDraft({ ...current, privacy_notice: e.target.value })}
+                    className="min-h-32"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Shown to borrowers per NPC (Philippine Data Privacy Act) disclosure
+                    requirements before their data is used for scoring.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Score Model Version</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm">
+                    <span className="font-medium">{current.score_model_version}</span>
+                    <p className="text-muted-foreground">
+                      Read-only. The version is stamped on each score when it is
+                      calculated and is immutable per history row, so it is set by
+                      the scoring backend rather than edited here.
                     </p>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Score Model Version</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm">
-                      <span className="font-medium">{current.score_model_version}</span>
-                      <p className="text-muted-foreground">
-                        Read-only. The version is stamped on each score when it is
-                        calculated and is immutable per history row, so it is set by
-                        the scoring backend rather than edited here.
-                      </p>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Confidence Definitions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {current.confidence_definitions.map((def) => (
+                    <div key={def.level} className="text-sm">
+                      <span className="font-medium">{def.label}</span>
+                      <p className="text-muted-foreground">{def.description}</p>
                     </div>
-                  </CardContent>
-                </Card>
+                  ))}
+                </CardContent>
+              </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Confidence Definitions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {current.confidence_definitions.map((def) => (
-                      <div key={def.level} className="text-sm">
-                        <span className="font-medium">{def.label}</span>
-                        <p className="text-muted-foreground">{def.description}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Hard Flag Definitions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {current.hard_flag_definitions.map((def) => (
+                    <div key={def.type} className="text-sm">
+                      <span className="font-medium">{def.label}</span>
+                      <p className="text-muted-foreground">{def.description}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Hard Flag Definitions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {current.hard_flag_definitions.map((def) => (
-                      <div key={def.type} className="text-sm">
-                        <span className="font-medium">{def.label}</span>
-                        <p className="text-muted-foreground">{def.description}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+              <Button onClick={() => handleSave(current)} disabled={saving}>
+                {saving ? "Saving…" : "Save Settings"}
+              </Button>
+            </div>
+          );
+        }}
+      </DataState>
+    </div>
+  );
+}
 
-                <Button onClick={() => handleSave(current)} disabled={saving}>
-                  {saving ? "Saving…" : "Save Settings"}
-                </Button>
-              </div>
-            );
-          }}
-        </DataState>
-      </div>
+export default function CreditScoringSettingsPage() {
+  return (
+    <RouteGuard permission="credit_scoring:settings" pageName="Credit Scoring Settings">
+      <CreditScoringSettingsContent />
     </RouteGuard>
   );
 }

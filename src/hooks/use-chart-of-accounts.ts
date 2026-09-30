@@ -4,6 +4,7 @@ import { templateAccounts } from "@/constants/chart-of-accounts";
 import type { DrainResult } from "@/lib/paginate";
 import type { Account } from "@/types";
 import { useAccountingResource } from "./use-accounting-resource";
+import { usePermission } from "./use-permission";
 
 export interface ChartOfAccounts {
   accounts: Account[];
@@ -47,15 +48,20 @@ export interface ChartOfAccounts {
  * Falls back to the default template when the endpoint is not there yet, so
  * the forms are usable and reviewable rather than a page of empty dropdowns —
  * but says so via `isTemplate`, and the forms disable submission on it.
+ *
+ * `GET /accounting/accounts` needs `chart_of_accounts:view`, which most pages
+ * with these pickers do not require. Without it the request is not made and
+ * the template shows, as it would for a refused one.
  */
 export function useChartOfAccounts(): ChartOfAccounts {
+  const canView = usePermission().can("chart_of_accounts:view");
   // Drained, not a single page. This used to be a bare `listAccounts()`, which
   // returned the endpoint's default 15 rows: the seeded template alone runs to
   // 60-odd accounts, so the expense and equity sections were absent from every
   // picker in the module and a journal against them could not be raised at all.
   const fetcher = useCallback(() => accountingService.accountsListAll(), []);
   const { data, loading, unavailable, error, refetch } =
-    useAccountingResource<DrainResult<Account>>(fetcher);
+    useAccountingResource<DrainResult<Account>>(fetcher, canView);
 
   const isTemplate =
     unavailable || error !== null || (data?.rows.length ?? 0) === 0;
@@ -70,7 +76,7 @@ export function useChartOfAccounts(): ChartOfAccounts {
     truncated: !isTemplate && (data?.truncated ?? false),
     total: isTemplate ? null : (data?.total ?? null),
     isTemplate,
-    notBuiltYet: unavailable || (!error && (data?.rows.length ?? 0) === 0),
+    notBuiltYet: unavailable || (canView && !error && (data?.rows.length ?? 0) === 0),
     refetch,
   };
 }

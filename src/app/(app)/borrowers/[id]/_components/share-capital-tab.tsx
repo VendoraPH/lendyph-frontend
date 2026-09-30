@@ -9,6 +9,7 @@ import { Loader2, Landmark, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
+import { usePermission } from "@/hooks";
 import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
@@ -25,8 +26,12 @@ interface ShareCapitalTabProps {
 }
 
 export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
+  // The ledger needs `share_capital:view`, which a member's page does not
+  // imply. Without it the ledger is not asked for, and the tab says it could
+  // not be read rather than showing an empty ledger (see `failed` below).
+  const canReadLedger = usePermission().can("share_capital:view");
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canReadLedger);
   // Set only when the drain gave up with pages outstanding. This tab prints a
   // running balance per row, so a short ledger is not merely a short table:
   // every balance in the Balance column is accumulated from the first entry
@@ -40,9 +45,10 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   // point: a failed request used to land in the same state as a member who has
   // never contributed, so the screen said "No share capital entries found" and
   // showed a ₱0.00 balance for somebody holding six figures.
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(!canReadLedger);
 
   const fetchEntries = useCallback(async () => {
+    if (!canReadLedger) return;
     setLoading(true);
     try {
       // Drained across pages. `per_page: 9999` was clamped to 100, so a member
@@ -61,7 +67,7 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [borrowerId]);
+  }, [borrowerId, canReadLedger]);
 
   useEffect(() => {
     fetchEntries();

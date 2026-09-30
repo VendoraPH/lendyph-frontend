@@ -51,8 +51,9 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
   const [form, setForm] = useState<NewCoMakerForm>(EMPTY_NEW_CO_MAKER);
   const [adding, setAdding] = useState(false);
   // The borrower's registered co-makers, read as the form opens. Left empty
-  // when they can't be read (a role without `borrowers:view` gets a 403), which
-  // leaves the form create-only.
+  // when they can't be read, and not asked for at all without `borrowers:view`
+  // (the API would refuse it), which leaves the form create-only.
+  const canListRegistered = usePermission().can("borrowers:view");
   const [registered, setRegistered] = useState<CoMaker[]>([]);
   const [picked, setPicked] = useState(NEW_CO_MAKER);
   const coMakers = loan.co_makers ?? [];
@@ -73,7 +74,7 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
   const openForm = () => {
     setFormOpen(true);
     const borrowerId = loan.borrower?.id ?? loan.borrower_id;
-    if (!borrowerId) return;
+    if (!borrowerId || !canListRegistered) return;
     coMakerService.list(borrowerId).then(
       (list) => setRegistered(Array.isArray(list) ? list : []),
       () => setRegistered([]),

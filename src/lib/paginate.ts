@@ -76,6 +76,15 @@ export interface DrainResult<T> {
   pagesFetched: number;
 }
 
+/**
+ * A list the caller may not read, in the shape of one it did: no rows, none
+ * missing, no request made. Lets a screen skip a list its user lacks the
+ * permission for and fall through the same path as a genuinely empty one.
+ */
+export function emptyDrain<T>(): DrainResult<T> {
+  return { rows: [], total: 0, truncated: false, pagesFetched: 0 };
+}
+
 /** Rows out of a paginator body, tolerating a bare array or a missing `data`. */
 function pageRows<T>(response: unknown): T[] {
   if (Array.isArray(response)) return response as T[];

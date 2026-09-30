@@ -27,7 +27,8 @@ import {
 } from "@/services";
 import { api } from "@/lib/api-client";
 import { httpStatusOf } from "@/lib/api-error";
-import { completeRows } from "@/lib/paginate";
+import { completeRows, emptyDrain } from "@/lib/paginate";
+import { usePermission } from "@/hooks";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -116,6 +117,7 @@ import {
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { parseEditLoanId } from "./_lib/edit-loan-id";
 
 // ── Currency Formatter ──
 
@@ -248,9 +250,9 @@ function computeAmortization(
 /**
  * A 403 from a list this form only reads for reference. The edit mode below is
  * open to `loans:update`, which `loan_processor` holds without `fees:view` or
- * `collaterals:view` — so for that role these reads are refused on every load.
- * Expected, and nothing a retry fixes, so it is not announced; any other
- * failure is.
+ * `collaterals:view`. Those reads are skipped for a user without the
+ * permission, so a 403 here means it was withdrawn since sign-in. Expected,
+ * and nothing a retry fixes, so it is not announced; any other failure is.
  */
 function isRoleWithoutAccess(err: unknown): boolean {
   return httpStatusOf(err) === 403;
@@ -268,13 +270,17 @@ function isRoleWithoutAccess(err: unknown): boolean {
 function NewLoanApplicationInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editLoanId = (() => {
-    const raw = searchParams.get("edit");
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  })();
+  const editLoanId = parseEditLoanId(searchParams.get("edit"));
   const isEditMode = editLoanId !== null;
+  // Lists this form reads under other modules' permissions, which neither
+  // `loans:create` nor `loans:update` implies. Without one, that list is not
+  // asked for and stays empty, as it would with nothing in it.
+  const { can } = usePermission();
+  const canListMembers = can("borrowers:view");
+  const canListProducts = can("loans:view");
+  const canListFees = can("fees:view");
+  const canListCollaterals = can("collaterals:view");
+  const canReadShareCapital = can("share_capital:view");
 
   // ── API Data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -361,9 +367,9 @@ function NewLoanApplicationInner() {
           // Drained across pages. `per_page: 200` was clamped to 100 by
           // BorrowerController without a word, so member 101 onwards could not
           // be picked and could not be lent to from this screen at all.
-          borrowerService.listAll({ members_only: 1 }),
-          loanProductService.listAll().then(completeRows),
-          feeService.listAll().then(completeRows),
+          canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
+          canListProducts ? loanProductService.listAll().then(completeRows) : [],
+          canListFees ? feeService.listAll().then(completeRows) : [],
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
       if (cancelled) return;
@@ -437,10 +443,11 @@ function NewLoanApplicationInner() {
       cancelled = true;
     };
     // Re-fetch if user switches between create and edit in the same tab
-  }, [editLoanId, router]);
+  }, [editLoanId, router, canListMembers, canListProducts, canListFees]);
 
   // ── Collateral types: load once on mount ──
   useEffect(() => {
+    if (!canListCollaterals) return;
     let cancelled = false;
     collateralTypeService
       .listAll()
@@ -459,13 +466,13 @@ function NewLoanApplicationInner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListCollaterals]);
 
   // ── Available collaterals: rebuild whenever the borrower changes ──
   // Filters out collaterals already locked to a different active loan
   // (in edit mode the loan being edited is excluded from the lock).
   useEffect(() => {
-    if (borrowerId == null) {
+    if (borrowerId == null || !canListCollaterals) {
       setAvailableCollaterals([]);
       return;
     }
@@ -486,7 +493,7 @@ function NewLoanApplicationInner() {
             typeById.get(c.collateral_type_id)?.source === "share_capital",
         );
         const scBalance = needsScBalance
-          ? await getShareCapitalBalance(borrowerId)
+          ? await getShareCapitalBalance(borrowerId, canReadShareCapital)
           : null;
         const enriched: CollateralValueRow[] = collateralRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
@@ -516,7 +523,7 @@ function NewLoanApplicationInner() {
     return () => {
       cancelled = true;
     };
-  }, [borrowerId, collateralTypes, editLoanId]);
+  }, [borrowerId, collateralTypes, editLoanId, canListCollaterals, canReadShareCapital]);
 
   // ── Edit mode: prefill selected collaterals from the loan ──
   useEffect(() => {
@@ -1037,10 +1044,6 @@ function NewLoanApplicationInner() {
   }
 
   return (
-    <RouteGuard
-      permission={isEditMode ? "loans:update" : "loans:create"}
-      pageName={isEditMode ? "Edit Loan Application" : "New Loan Application"}
-    >
     <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2118,6 +2121,20 @@ function NewLoanApplicationInner() {
       </Dialog>
 
     </div>
+  );
+}
+
+// Inside the Suspense boundary because edit mode comes from the search params.
+// Edit mode opens by reading the loan, so it needs `loans:view` as well. For a
+// new application the inner guard just repeats the outer one.
+function NewLoanApplicationGuard() {
+  const isEditMode = parseEditLoanId(useSearchParams().get("edit")) !== null;
+  const pageName = isEditMode ? "Edit Loan Application" : "New Loan Application";
+  return (
+    <RouteGuard permission={isEditMode ? "loans:update" : "loans:create"} pageName={pageName}>
+      <RouteGuard permission={isEditMode ? "loans:view" : "loans:create"} pageName={pageName}>
+        <NewLoanApplicationInner />
+      </RouteGuard>
     </RouteGuard>
   );
 }
@@ -2131,7 +2148,7 @@ export default function NewLoanApplicationPage() {
         </div>
       }
     >
-      <NewLoanApplicationInner />
+      <NewLoanApplicationGuard />
     </Suspense>
   );
 }

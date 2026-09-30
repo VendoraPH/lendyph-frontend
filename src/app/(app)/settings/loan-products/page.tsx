@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
 import { completeRows } from "@/lib/paginate";
+import { RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1328,7 +1329,7 @@ function ProductActionsCell({
 
 // ── Main Page ──
 
-export default function LoanProductsPage() {
+function LoanProductsContent() {
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -1653,5 +1654,13 @@ export default function LoanProductsPage() {
         description="Create a new loan product that staff can select during loan applications."
       />
     </div>
+  );
+}
+
+export default function LoanProductsPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Loan Products">
+      <LoanProductsContent />
+    </RouteGuard>
   );
 }
