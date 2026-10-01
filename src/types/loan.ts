@@ -245,6 +245,53 @@ export interface LoanSchedule {
   status: "pending" | "paid" | "partial" | "overdue";
 }
 
+/** One component of a period: what was due, what the payments covered, what is left. */
+export interface AmortizationComponentBalance {
+  due: number;
+  paid: number;
+  balance: number;
+}
+
+/** Penalty is charged rather than scheduled, hence `charged` for `due`. */
+export interface AmortizationPenaltyBalance {
+  charged: number;
+  paid: number;
+  balance: number;
+}
+
+/** One period of `GET /loans/{id}/amortization-balances`. */
+export interface AmortizationBalancePeriod {
+  id: number;
+  period_number: number;
+  due_date: string;
+  status: "pending" | "paid" | "partial" | "overdue";
+  /** Unpaid past its grace period: the same test as the summary's `overdue_amount`. */
+  is_late: boolean;
+  principal: AmortizationComponentBalance;
+  interest: AmortizationComponentBalance;
+  penalty: AmortizationPenaltyBalance;
+  /** Principal + interest + penalty still owed on this period. */
+  balance: number;
+}
+
+/**
+ * `GET /loans/{id}/amortization-balances`: what is still owed on each period,
+ * per component. Every figure is the server's. `totals.balance`, `paid` and
+ * `overdue` are the summary's `outstanding_balance`, `total_paid` and
+ * `overdue_amount`.
+ */
+export interface LoanAmortizationBalances {
+  periods: AmortizationBalancePeriod[];
+  totals: {
+    principal: AmortizationComponentBalance;
+    interest: AmortizationComponentBalance;
+    penalty: AmortizationPenaltyBalance;
+    paid: number;
+    balance: number;
+    overdue: number;
+  };
+}
+
 /**
  * A single debit/credit posting against the loan — currently only ever
  * raised by Extend Loan (a debit for the interest the extension accrues,

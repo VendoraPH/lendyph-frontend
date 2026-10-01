@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanCoMaker, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { Loan, LoanAmortizationBalances, LoanCoMaker, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -191,6 +191,10 @@ export const loanService = {
 
   amortizationSchedule: (id: number) =>
     api.get<ApiAmortizationSchedule>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
+
+  /** What is still owed on each period, per component, as the server works it out. */
+  amortizationBalances: (id: number) =>
+    api.get<LoanAmortizationBalances>(API_ENDPOINTS.LOANS.AMORTIZATION_BALANCES(id)),
 
   /** Loan balance summary (replaces the old /schedule endpoint) */
   summary: (id: number) =>
