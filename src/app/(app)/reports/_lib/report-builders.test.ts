@@ -2540,3 +2540,33 @@ test("every new report leads with a KPI grid and carries at least one table", ()
     );
   }
 });
+
+test("borrower report lists each borrower with their loans released in the period", () => {
+  const doc = buildBorrowerDoc(
+    { total_active_borrowers: 2, new_borrowers: 1 },
+    RANGE,
+    {
+      data: [
+        { borrower_id: 1, borrower_name: "Ana Cruz", loan_account_number: "LN-1", principal_amount: 1000, release_date: "2026-08-01", status: "ongoing" },
+        { borrower_id: 1, borrower_name: "Ana Cruz", loan_account_number: "LN-2", principal_amount: 500, release_date: "2026-08-10", status: "released" },
+        { borrower: { id: 2, full_name: "Ben Reyes" }, loan_account_number: "LN-3", principal_amount: 2000, release_date: "2026-08-05", status: "ongoing" },
+      ],
+      meta: { total: 3 },
+    }
+  );
+
+  const table = doc.sections.find((s) => s.kind === "table");
+  assert.ok(table && table.kind === "table");
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[0].borrower_name, "Ana Cruz");
+  assert.equal(table.rows[0].loan_count, 2);
+  assert.equal(table.rows[0].loan_numbers, "LN-1, LN-2");
+  assert.equal(table.rows[0].total_principal, 1500);
+  assert.equal(table.rows[0].status, "released");
+  assert.equal(table.totals?.find((t) => t.column === "total_principal")?.value, "₱3,500.00");
+});
+
+test("borrower report omits the borrower list when releases could not be read", () => {
+  const doc = buildBorrowerDoc({ new_borrowers: 1 }, RANGE, null);
+  assert.equal(doc.sections.some((s) => s.kind === "table"), false);
+});

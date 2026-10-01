@@ -250,7 +250,15 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
-    build: reportBuilder(reportService.borrowers, buildBorrowerDoc),
+    build: async (ctx) => {
+      const params = { date_from: ctx.range.from, date_to: ctx.range.to };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, releases] = await Promise.all([
+        reportService.borrowers(params).catch(() => null),
+        reportService.releases({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildBorrowerDoc(summary, ctx.range, releases);
+    },
   },
   {
     id: "disbursement_report",

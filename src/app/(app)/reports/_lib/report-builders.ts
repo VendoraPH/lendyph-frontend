@@ -671,7 +671,68 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   };
 }
 
-export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument {
+const BORROWER_LIST_COLUMNS: ReportColumn[] = [
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "loan_count", header: "Loans", format: "number", align: "right", width: 80 },
+  { key: "loan_numbers", header: "Loan #", format: "text", width: 200 },
+  { key: "total_principal", header: "Total Principal", format: "currency", align: "right", width: 150 },
+  { key: "last_release_date", header: "Last Released", format: "date", width: 120 },
+  { key: "status", header: "Status", format: "text", width: 110 },
+];
+
+/**
+ * One row per borrower who was released a loan in the period, built from the
+ * releases list: how many loans, which accounts, and how much principal. Rows
+ * are keyed by borrower id (name when the row has none).
+ */
+function borrowersFromReleases(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const byBorrower = new Map<string, Record<string, unknown>>();
+  for (const raw of rawRows) {
+    const row = normalizeReleaseRow(raw);
+    const id = pick(raw, ["borrower_id"]) ?? pick(asRecord(raw.borrower), ["id"]);
+    const key = String(id ?? row.borrower_name ?? "—");
+    const entry =
+      byBorrower.get(key) ??
+      {
+        borrower_name: row.borrower_name,
+        loan_count: 0,
+        loan_numbers: "",
+        total_principal: 0,
+        last_release_date: null,
+        status: row.status,
+      };
+    entry.loan_count = (entry.loan_count as number) + 1;
+    entry.total_principal = (entry.total_principal as number) + (toNumber(row.principal) ?? 0);
+    if (row.loan_account_number != null) {
+      entry.loan_numbers = [entry.loan_numbers, String(row.loan_account_number)]
+        .filter(Boolean)
+        .join(", ");
+    }
+    const date = row.release_date == null ? null : String(row.release_date);
+    const last = entry.last_release_date == null ? null : String(entry.last_release_date);
+    // ISO dates compare correctly as strings; the newest release sets the status.
+    if (date && (!last || date >= last)) {
+      entry.last_release_date = date;
+      entry.status = row.status;
+    }
+    byBorrower.set(key, entry);
+  }
+  return [...byBorrower.values()].sort((x, y) =>
+    String(x.borrower_name ?? "").localeCompare(String(y.borrower_name ?? ""))
+  );
+}
+
+/**
+ * The summary figures, plus the borrowers behind them when the period's
+ * releases are supplied. `/reports/borrowers` returns totals only, so the list
+ * is the borrowers released a loan in the period; it is left out (not shown
+ * empty) when that read failed.
+ */
+export function buildBorrowerDoc(
+  raw: unknown,
+  range: DateRange,
+  releasesRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
@@ -686,10 +747,33 @@ export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument
     kpi("Repeat Borrowers", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (releasesRaw != null) {
+    const { rows: rawRows, totalRows } = readListEnvelope(releasesRaw);
+    const rows = borrowersFromReleases(rawRows);
+    const note = truncationNote(rawRows.length, totalRows, false);
+    if (note) sections.push(note);
+    sections.push({
+      kind: "table",
+      title: "Borrowers with Loans Released",
+      columns: BORROWER_LIST_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              { column: "loan_count", label: "Total", value: formatCount(sum(rows, "loan_count")) },
+              { column: "total_principal", value: formatCurrency(sum(rows, "total_principal")) },
+            ]
+          : undefined,
+      emptyText: "No loans were released to any borrower in the selected period.",
+    });
+  }
+
   return {
     reportId: "borrower_report",
     meta: meta("Borrower Report", range, "Active, new, and repeat borrower activity"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
