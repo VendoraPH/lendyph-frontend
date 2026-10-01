@@ -62,6 +62,7 @@ import {
   ListTree,
   Receipt,
   Wallet,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -279,6 +280,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     features: [
       "View cash, bank, GCash and Maya balances",
       "Move money between own accounts — a transfer, never income",
+    ],
+  },
+  credit_scoring: {
+    label: "Credit Scoring",
+    description: "Borrower credit scores, risk monitoring, and human credit decisions.",
+    icon: Gauge,
+    features: [
+      "View the dashboard, borrower scores, assessments, risk monitoring and score history",
+      "Record a credit decision (approve, decline, refer, hold) against a score",
+      "Configure the scorecard and credit scoring settings",
     ],
   },
 };

@@ -40,6 +40,22 @@ The same 404/501 test is duplicated in three write paths, which toast "Not conne
 
 **The third verb is `settings`, not `configure`.** The design spec originally said `credit_scoring:configure`; the shipped code checks `credit_scoring:settings`, mirroring `accounting:settings` (`src/types/rbac.ts`, `src/constants/navigation.ts:131,134`, `src/constants/rbac.ts`). The spec has since been corrected, but a backend seeded from an older copy would create a permission nothing reads — and both admin screens would stay dark for everyone, including admins.
 
+## Roles & Permissions screen (added 2026-10-01)
+
+The **Settings → User Roles** matrix offers a **Credit Scoring** module again (`src/app/(app)/settings/user-roles/_lib/permission-matrix.ts`), with exactly three ticks: `view`, `override`, `settings`. It had been hidden since PR #386 because the backend seeds nothing for it.
+
+**What the backend must do, in the same release as the routes:**
+
+1. **Seed the three permissions** exactly as spelled above, with the same guard and naming convention as the other `module:action` rows (e.g. `accounting:settings`). No `credit_scoring:configure`, no extras.
+2. **Delete or invert `CreditScoringNotSeededTest`.** It exists to fail the build if these permissions are seeded; it will block this change otherwise.
+3. **Give the default roles their grants** (matches `src/constants/rbac.ts`): `admin` all three; `loan_officer` and `manager` `view` + `override`; the read-only role(s) `view` only. Super admin gets all three.
+4. **Make `PUT /roles/{id}` accept them.** Until step 1 ships, ticking Credit Scoring and saving a role answers **422** (`permissions.N is invalid`) and refuses the *whole* save, not just that tick. The frontend now toasts the API message, so the cause is visible. This is expected on any environment that has this frontend but not the seeded permissions.
+5. Run the seeder / migration on every deployment (staging, production, portfolio demo). Each is a separate single-tenant database.
+
+**Order of release:** routes + permissions + seed together → then deploy/promote this frontend. Deploying the frontend first is safe only as long as nobody ticks the Credit Scoring row.
+
+Once seeded, the sidebar's seven Credit Scoring items appear for any role holding `credit_scoring:view` with no further frontend change — see the degradation rule above.
+
 ## Response envelope
 
 `src/lib/api-client.ts` returns `response.data.data` for every `get`/`post`/`put`. **Every endpoint below must answer with the standard `{ success, data, message? }` envelope**, payload inside `data`.
