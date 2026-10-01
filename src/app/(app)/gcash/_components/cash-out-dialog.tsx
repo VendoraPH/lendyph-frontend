@@ -70,6 +70,8 @@ export function CashOutDialog({
     amount: amountNum,
     charge,
   });
+  // The one reason Record is disabled that the tier notice doesn't cover.
+  const chargeExceedsAmount = charge !== null && total !== null && total < 0;
   const canSubmit =
     !submitting &&
     amountNum > 0 &&
@@ -130,6 +132,12 @@ export function CashOutDialog({
             amount={amountNum}
             onRetry={() => void retryTiers()}
           />
+
+          {chargeExceedsAmount && (
+            <p role="alert" className="text-sm text-destructive">
+              Amount must be at least the {formatCurrency(charge)} charge.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
