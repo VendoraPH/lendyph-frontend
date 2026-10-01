@@ -470,7 +470,7 @@ function LoansContent() {
           onClick={() => handleTabChange("all")}
         />
         <StatCard
-          label="Pending Approval"
+          label="For Approval"
           value={countsKnown ? (stats.for_review ?? 0) : null}
           valueClassName="text-amber-600"
           icon={<Clock className="h-5 w-5 text-amber-600" />}
