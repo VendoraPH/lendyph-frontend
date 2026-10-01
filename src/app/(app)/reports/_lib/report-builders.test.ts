@@ -2540,3 +2540,29 @@ test("every new report leads with a KPI grid and carries at least one table", ()
     );
   }
 });
+
+test("disbursement report lists the loan accounts behind the total disbursed", () => {
+  const doc = buildDisbursementDoc(
+    { loans_released: 2, total_disbursed: 3000 },
+    RANGE,
+    {
+      data: [
+        { loan_account_number: "LN-1", borrower_name: "Ana Cruz", principal_amount: 1000, net_proceeds: 950, release_date: "2026-08-01", status: "ongoing" },
+        { loan_account_number: "LN-2", borrower: { full_name: "Ben Reyes" }, principal_amount: 2000, net_proceeds: 1900, release_date: "2026-08-02", status: "ongoing" },
+      ],
+      meta: { total: 2 },
+    }
+  );
+
+  const table = doc.sections.find((s) => s.kind === "table");
+  assert.ok(table && table.kind === "table");
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[1].borrower_name, "Ben Reyes");
+  assert.equal(table.totals?.find((t) => t.column === "principal")?.value, "₱3,000.00");
+  assert.equal(table.totals?.find((t) => t.column === "net_proceeds")?.value, "₱2,850.00");
+});
+
+test("disbursement report omits the loan list when releases could not be read", () => {
+  const doc = buildDisbursementDoc({ total_disbursed: 1 }, RANGE, null);
+  assert.equal(doc.sections.some((s) => s.kind === "table"), false);
+});

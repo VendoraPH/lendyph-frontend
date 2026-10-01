@@ -693,7 +693,26 @@ export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument
   };
 }
 
-export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocument {
+const DISBURSEMENT_COLUMNS: ReportColumn[] = [
+  { key: "release_date", header: "Release Date", format: "date", width: 120 },
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
+  { key: "net_proceeds", header: "Net Proceeds", format: "currency", align: "right", width: 150 },
+  { key: "status", header: "Status", format: "text", width: 110 },
+];
+
+/**
+ * The summary figures, plus the loan accounts behind the total disbursed when
+ * the period's releases are supplied. `/reports/disbursements` returns totals
+ * only, so the list is read from `/reports/releases` over the same window; it
+ * is left out (not shown empty) when that read failed.
+ */
+export function buildDisbursementDoc(
+  raw: unknown,
+  range: DateRange,
+  releasesRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
@@ -707,10 +726,55 @@ export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocu
     kpi("Pending Release", countOrDash(pick(obj, ["pending_release", "pending"]))),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (releasesRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasesRaw);
+    const rows = rawRows.map((raw) => ({
+      ...normalizeReleaseRow(raw),
+      net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
+    }));
+    const principal = resolveTotal(
+      totals,
+      ["total_principal", "principal", "total_amount"],
+      rows,
+      "principal"
+    );
+    const netProceeds = pick(totals, ["total_net_proceeds"]);
+    const hasNetProceeds = rows.some((r) => r.net_proceeds != null);
+
+    const note = truncationNote(rows.length, totalRows, principal.fromServer);
+    if (note) sections.push(note);
+    sections.push({
+      kind: "table",
+      title: "Disbursed Loan Accounts",
+      columns: DISBURSEMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              { column: "principal", label: "Total", value: formatCurrency(principal.value) },
+              ...(hasNetProceeds || netProceeds !== null
+                ? [
+                    {
+                      column: "net_proceeds",
+                      value:
+                        netProceeds !== null
+                          ? currencyOrDash(netProceeds)
+                          : formatCurrency(sum(rows, "net_proceeds")),
+                    },
+                  ]
+                : []),
+            ]
+          : undefined,
+      emptyText: "No loans were released in the selected period.",
+    });
+  }
+
   return {
     reportId: "disbursement_report",
     meta: meta("Disbursement Report", range, "Loan releases during the selected period"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
