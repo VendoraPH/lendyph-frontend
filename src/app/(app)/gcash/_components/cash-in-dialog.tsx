@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -17,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
 import { useGCashTiers } from "@/hooks/use-gcash-tiers";
+import { usePermission } from "@/hooks";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
@@ -35,7 +38,13 @@ export function CashInDialog({
   party,
   onCreated,
 }: Props) {
-  const { resolveCharge, loading: tiersLoading } = useGCashTiers();
+  const {
+    tiers,
+    resolveCharge,
+    loading: tiersLoading,
+    error: tiersError,
+  } = useGCashTiers();
+  const canEditTiers = usePermission().can("gcash:settings");
   const [amount, setAmount] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -58,6 +67,9 @@ export function CashInDialog({
     [amountNum, resolveCharge],
   );
   const total = charge === null ? null : amountNum + charge;
+  // With no tier at all, no amount can resolve a charge, so the button stays
+  // disabled whatever is typed. Say why instead of leaving a silent "—".
+  const noTiers = !tiersLoading && !tiersError && tiers.length === 0;
   const canSubmit =
     !submitting && amountNum > 0 && charge !== null && !tiersLoading;
 
@@ -94,6 +106,26 @@ export function CashInDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {noTiers && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                No GCash fee tiers are set up, so the charge can&rsquo;t be
+                worked out and a Cash In can&rsquo;t be recorded yet.{" "}
+                {canEditTiers ? (
+                  <Link
+                    href="/settings/gcash"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Add a fee tier in GCash Settings
+                  </Link>
+                ) : (
+                  "Ask an admin to add one in GCash Settings."
+                )}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="cashin-amount">Amount (₱)</Label>
             <Input
