@@ -320,9 +320,17 @@ function truncationNote(
 // KPI-only reports
 // ---------------------------------------------------------------------------
 
+/**
+ * The summary KPIs, plus the accounts behind them when the repayments for the
+ * same window are supplied. `/reports/daily-collection` only returns totals, so
+ * the account list comes from `/reports/repayments` over the same dates; it is
+ * left out (not shown empty) when that read failed, so a failed read is never
+ * mistaken for "nothing was collected".
+ */
 export function buildDailyCollectionDoc(
   raw: unknown,
-  range: DateRange
+  range: DateRange,
+  repaymentsRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
@@ -339,10 +347,51 @@ export function buildDailyCollectionDoc(
     }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (repaymentsRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
+    const rows = rawRows.map(normalizeRepaymentRow);
+    const amount = resolveTotal(
+      totals,
+      ["total_amount_paid", "amount", "total_amount", "amount_paid"],
+      rows,
+      "amount"
+    );
+    const penalty = resolveTotal(
+      totals,
+      ["total_penalty_applied", "penalty_amount", "total_penalty", "penalty_applied"],
+      rows,
+      "penalty_amount"
+    );
+
+    const note = truncationNote(rows.length, totalRows, amount.fromServer && penalty.fromServer);
+    if (note) sections.push(note);
+
+    sections.push({
+      kind: "table",
+      title: "Collections by Account",
+      columns: REPAYMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              { column: "amount", label: "Total", value: formatCurrency(amount.value) },
+              { column: "penalty_amount", value: formatCurrency(penalty.value) },
+            ]
+          : undefined,
+      emptyText: "No collections were recorded in the selected period.",
+    });
+  }
+
   return {
     reportId: "daily_collection",
-    meta: meta("Daily Collection Report", range, "Summary of amounts due vs collected"),
-    sections: [{ kind: "kpi_grid", items }],
+    meta: meta(
+      "Daily Collection Report",
+      range,
+      "Amounts due vs collected, and the accounts collected from"
+    ),
+    sections,
   };
 }
 

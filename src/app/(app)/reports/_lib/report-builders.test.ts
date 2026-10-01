@@ -332,6 +332,32 @@ test("daily collection renders whole-percent rates verbatim", () => {
   assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
 });
 
+test("daily collection lists the accounts collected from beneath the summary", () => {
+  const doc = buildDailyCollectionDoc(
+    { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
+    RANGE,
+    {
+      data: [
+        { paid_at: "2026-08-06", loan_account_number: "LN-1", borrower_name: "Ana Cruz", amount: 400, penalty_amount: 0, method: "cash", status: "paid" },
+        { paid_at: "2026-08-06", loan: { loan_account_number: "LN-2" }, borrower: { full_name: "Ben Reyes" }, amount: 300, penalty_amount: 0, method: "gcash", status: "paid" },
+      ],
+      meta: { total: 2 },
+    }
+  );
+
+  const table = doc.sections.find((s) => s.kind === "table");
+  assert.ok(table && table.kind === "table");
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[1].borrower_name, "Ben Reyes");
+  assert.equal(table.rows[1].loan_account_number, "LN-2");
+  assert.equal(table.totals?.[0].value, "₱700.00");
+});
+
+test("daily collection omits the account list when repayments could not be read", () => {
+  const doc = buildDailyCollectionDoc({ total_due: 1 }, RANGE, null);
+  assert.equal(doc.sections.some((s) => s.kind === "table"), false);
+});
+
 test("a sub-1% rate is not inflated to 80%", () => {
   const doc = buildDailyCollectionDoc(
     { total_due: 100000, total_collected: 800, collection_rate: 0.8, uncollected: 99200 },
