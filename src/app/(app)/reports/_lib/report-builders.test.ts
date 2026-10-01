@@ -2540,3 +2540,32 @@ test("every new report leads with a KPI grid and carries at least one table", ()
     );
   }
 });
+
+test("income report traces interest and penalty to each loan account", () => {
+  const doc = buildIncomeDoc(
+    { interest_income: 300, processing_fees: 50, penalty_income: 20, total_income: 370 },
+    RANGE,
+    {
+      data: [
+        { loan_account_number: "LN-1", borrower_name: "Ana Cruz", interest_applied: 100, penalty_applied: 10 },
+        { loan_account_number: "LN-1", borrower_name: "Ana Cruz", interest_applied: 100, penalty_applied: 0 },
+        { loan: { loan_account_number: "LN-2" }, borrower: { full_name: "Ben Reyes" }, interest_applied: 100, penalty_applied: 10 },
+      ],
+      meta: { total: 3 },
+    }
+  );
+
+  const table = doc.sections.find((s) => s.kind === "table");
+  assert.ok(table && table.kind === "table");
+  assert.equal(table.rows.length, 2);
+  const ln1 = table.rows.find((r) => r.loan_account_number === "LN-1");
+  assert.equal(ln1?.payments, 2);
+  assert.equal(ln1?.interest, 200);
+  assert.equal(ln1?.total, 210);
+  assert.equal(table.totals?.find((t) => t.column === "total")?.value, "₱320.00");
+});
+
+test("income report omits the account list when repayments could not be read", () => {
+  const doc = buildIncomeDoc({ total_income: 1 }, RANGE, null);
+  assert.equal(doc.sections.some((s) => s.kind === "table"), false);
+});

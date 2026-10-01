@@ -509,7 +509,52 @@ export function buildPortfolioSummaryDoc(
   };
 }
 
-export function buildIncomeDoc(raw: unknown, range: DateRange): ReportDocument {
+const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
+  { key: "interest", header: "Interest", format: "currency", align: "right", width: 130 },
+  { key: "penalty", header: "Penalty", format: "currency", align: "right", width: 120 },
+  { key: "total", header: "Total Income", format: "currency", align: "right", width: 140 },
+];
+
+/**
+ * One row per loan account: the interest and penalty its repayments carried in
+ * the period. Rows are grouped by loan number (borrower name when a repayment
+ * has none), so every income figure traces to the account it came from.
+ */
+function incomeByLoan(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const byLoan = new Map<string, Record<string, unknown>>();
+  for (const raw of rawRows) {
+    const borrower = asRecord(raw.borrower);
+    const loan = asRecord(raw.loan);
+    const loanNumber =
+      pick(raw, ["loan_account_number", "account_number"]) ??
+      pick(loan, ["loan_account_number", "account_number", "application_number"]);
+    const borrowerName =
+      pick(raw, ["borrower_name", "borrower_full_name"]) ??
+      pick(borrower, ["full_name", "name"]);
+    const key = String(loanNumber ?? borrowerName ?? "—");
+    const interest = toNumber(pick(raw, ["interest_applied", "interest_paid", "interest"])) ?? 0;
+    const penalty = toNumber(pick(raw, ["penalty_applied", "penalty_amount", "penalty"])) ?? 0;
+
+    const row =
+      byLoan.get(key) ??
+      { loan_account_number: loanNumber, borrower_name: borrowerName, payments: 0, interest: 0, penalty: 0, total: 0 };
+    row.payments = (row.payments as number) + 1;
+    row.interest = (row.interest as number) + interest;
+    row.penalty = (row.penalty as number) + penalty;
+    row.total = (row.interest as number) + (row.penalty as number);
+    byLoan.set(key, row);
+  }
+  return [...byLoan.values()].sort((x, y) => (y.total as number) - (x.total as number));
+}
+
+export function buildIncomeDoc(
+  raw: unknown,
+  range: DateRange,
+  repaymentsRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const interest = toNumber(pick(obj, ["interest_income", "interest"]));
@@ -528,10 +573,40 @@ export function buildIncomeDoc(raw: unknown, range: DateRange): ReportDocument {
     kpi("Total Income", currencyOrDash(total), { tone: "positive" }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (repaymentsRaw != null) {
+    const { rows: rawRows, totalRows } = readListEnvelope(repaymentsRaw);
+    const rows = incomeByLoan(rawRows);
+    const note = truncationNote(rawRows.length, totalRows, false);
+    if (note) sections.push(note);
+    sections.push({
+      kind: "table",
+      title: "Income by Loan Account",
+      columns: INCOME_BY_LOAN_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              { column: "payments", label: "Total", value: formatCount(sum(rows, "payments")) },
+              { column: "interest", value: formatCurrency(sum(rows, "interest")) },
+              { column: "penalty", value: formatCurrency(sum(rows, "penalty")) },
+              { column: "total", value: formatCurrency(sum(rows, "total")) },
+            ]
+          : undefined,
+      emptyText: "No income was collected on any loan account in the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Interest and penalty are taken from the repayments recorded in the period, per loan account. Processing fees are charged at release and are not part of this list.",
+    });
+  }
+
   return {
     reportId: "income_report",
     meta: meta("Income Report", range, "Interest, fees, and penalty income"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 

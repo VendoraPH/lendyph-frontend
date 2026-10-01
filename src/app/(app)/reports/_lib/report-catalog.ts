@@ -211,7 +211,15 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "portfolio",
     icon: TrendingUp,
     accent: ACCENT.green,
-    build: reportBuilder(reportService.income, buildIncomeDoc),
+    build: async (ctx) => {
+      const params = { date_from: ctx.range.from, date_to: ctx.range.to };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, repayments] = await Promise.all([
+        reportService.income(params).catch(() => null),
+        reportService.repayments({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildIncomeDoc(summary, ctx.range, repayments);
+    },
   },
   {
     id: "aging_report",
