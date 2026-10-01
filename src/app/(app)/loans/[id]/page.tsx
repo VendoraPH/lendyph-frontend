@@ -148,6 +148,7 @@ import {
 import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
+import { overdueWithPenalty } from "@/lib/loan-dues";
 
 // ── Currency & Date Formatters ──
 
@@ -3261,11 +3262,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Overdue + Penalty</p>
+                  <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
                   <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(
-                      (loanSummary.overdue_amount ?? 0) + (loanSummary.penalty_amount ?? 0)
-                    )}
+                    {formatCurrency(overdueWithPenalty(loanSummary))}
                   </p>
                 </div>
               </div>

@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRate, todayISO } from "@/lib/format";
+import { currentDues } from "@/lib/loan-dues";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
 
 // ---------------------------------------------------------------------------
@@ -415,10 +416,7 @@ function PaymentsContent() {
       setDuesBreakdown(null);
       return;
     }
-    const fullDue =
-      (selectedLoan.current_due ?? 0) +
-      (selectedLoan.overdue_amount ?? 0) +
-      (selectedLoan.penalty_amount ?? 0);
+    const fullDue = currentDues(selectedLoan);
     if (fullDue <= 0) {
       setDuesBreakdown({
         principal: 0,
@@ -763,11 +761,11 @@ function PaymentsContent() {
                         <TableCell className="text-right">
                           <div>
                             <p className="text-sm font-semibold tabular-nums">
-                              {formatCurrency(loan.current_due + loan.overdue_amount)}
+                              {formatCurrency(currentDues(loan))}
                             </p>
                             {loan.penalty_amount > 0 && (
                               <p className="text-[10px] text-destructive">
-                                +{formatCurrency(loan.penalty_amount)} penalty
+                                incl. {formatCurrency(loan.penalty_amount)} penalty
                               </p>
                             )}
                           </div>
@@ -856,10 +854,7 @@ function PaymentsContent() {
                   <p className="text-[10px] text-muted-foreground uppercase">Total Due</p>
                   <p className="text-sm font-bold tabular-nums">
                     {formatCurrency(
-                      (duesBreakdown?.total ??
-                        (selectedLoan.current_due +
-                          selectedLoan.overdue_amount +
-                          selectedLoan.penalty_amount))
+                      duesBreakdown?.total ?? currentDues(selectedLoan)
                     )}
                   </p>
                 </div>
@@ -1185,21 +1180,13 @@ function PaymentsContent() {
                     </div>
 
                     {typeof amountPaid === "number" &&
-                      amountPaid <
-                        selectedLoan.current_due +
-                          selectedLoan.overdue_amount +
-                          selectedLoan.penalty_amount && (
+                      amountPaid < currentDues(selectedLoan) && (
                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
                             Remaining Due
                           </p>
                           <p className="text-lg font-bold text-destructive tabular-nums">
-                            {formatCurrency(
-                              selectedLoan.current_due +
-                                selectedLoan.overdue_amount +
-                                selectedLoan.penalty_amount -
-                                amountPaid
-                            )}
+                            {formatCurrency(currentDues(selectedLoan) - amountPaid)}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             short of full current dues
