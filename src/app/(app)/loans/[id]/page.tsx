@@ -32,6 +32,7 @@ import {
   ScheduleNotice,
   type ScheduleLoad,
 } from "./_components/schedule-notice";
+import { AmortizationBalanceTable } from "./_components/amortization-balance-table";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
@@ -3410,78 +3411,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       </div>
                     )}
                     <RestructuredBalanceFigures loan={loan} />
-                  {scheduleNotice ?? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => {
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          const isPaid = row.status === "paid";
-                          const isPartial = row.status === "partial";
-                          const isOverdue = row.status === "overdue" || (
-                            !isPaid && !isPartial && row.dueDate < today
-                          );
-
-                          type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
-                          const displayStatus: DisplayStatus =
-                            isPaid ? "paid"
-                            : isPartial ? "partial"
-                            : isOverdue ? "overdue"
-                            : "upcoming";
-
-                          const statusStyles: Record<DisplayStatus, string> = {
-                            paid: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
-                            partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                            overdue: "border-destructive/40 bg-destructive/10 text-destructive",
-                            upcoming: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-                          };
-
-                          return (
-                            <TableRow
-                              key={row.period}
-                              className={cn(isPaid && "text-muted-foreground/50")}
-                            >
-                              <TableCell className="text-center">{row.period}</TableCell>
-                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.principal)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.interest)}</TableCell>
-                              {hasScb && (
-                                <TableCell className="text-right tabular-nums">
-                                  {isPaid ? formatCurrency(0) : formatCurrency(row.shareCapitalBuildUp)}
-                                </TableCell>
-                              )}
-                              <TableCell className="text-right font-medium tabular-nums">
-                                {isPaid ? formatCurrency(0) : formatCurrency(row.totalPayment)}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(row.balance)}</TableCell>
-                              <TableCell className="text-center">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] px-1.5 py-0 capitalize", statusStyles[displayStatus])}
-                                >
-                                  {displayStatus}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  )}
+                    <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
                   </div>
                 );
 
@@ -3491,7 +3421,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <Tabs defaultValue="schedule" className="gap-3">
                     <TabsList>
                       <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                      <TabsTrigger value="balances">Balances</TabsTrigger>
+                      <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
                     </TabsList>
                     <TabsContent value="schedule">{scheduleTable}</TabsContent>
                     <TabsContent value="balances">{balancesTable}</TabsContent>
