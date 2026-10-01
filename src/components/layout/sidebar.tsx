@@ -7,6 +7,7 @@ import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
+import { usePendingLoanApprovals } from "@/hooks/use-pending-loan-approvals";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -48,6 +49,20 @@ const iconColors: Record<string, string> = {
   "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
 };
 
+function CountPill({ count, className }: { count?: number; className?: string }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center rounded-full bg-brand-orange px-1.5 py-0.5 text-[10px] font-bold text-white leading-none",
+        className
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 // ── Nav Link ──
 
 function NavLink({
@@ -56,12 +71,15 @@ function NavLink({
   collapsed,
   onNavigate,
   badge,
+  childBadges,
 }: {
   item: NavItem;
   pathname: string;
   collapsed?: boolean;
   onNavigate?: () => void;
   badge?: number;
+  /** Count shown on a child link, keyed by its href. */
+  childBadges?: Record<string, number>;
 }) {
   const { can } = usePermission();
   // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
@@ -117,8 +135,11 @@ function NavLink({
             />
           }
         >
-          <span className={cn("flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
+          <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
+            {badge && badge > 0 ? (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background" />
+            ) : null}
           </span>
         </TooltipTrigger>
         <TooltipContent side="right" className={hasChildren ? "flex flex-col gap-1 p-2.5 min-w-[140px]" : undefined}>
@@ -191,6 +212,8 @@ function NavLink({
           <item.icon className="h-3.5 w-3.5" />
         </span>
         <span className="flex-1 text-left truncate">{item.title}</span>
+        {/* Visible while the menu is closed; the child link carries it once open. */}
+        {!expanded && <CountPill count={badge} />}
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
       {/*
@@ -219,7 +242,10 @@ function NavLink({
                     : "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
                 )}
               >
-                {child.title}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate">{child.title}</span>
+                  <CountPill count={childBadges?.[child.href]} />
+                </span>
               </Link>
             );
           })}
@@ -255,6 +281,8 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
+  // Loans waiting on an approver. Only asked for by someone who can approve.
+  const pendingLoanApprovals = usePendingLoanApprovals(can("loans:approve"));
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -340,7 +368,16 @@ function SidebarContent({
               pathname={pathname}
               collapsed={collapsed}
               onNavigate={onNavigate}
-              badge={item.href === "/borrowers" ? pendingRegistrationsCount : undefined}
+              badge={
+                item.href === "/borrowers"
+                  ? pendingRegistrationsCount
+                  : item.href === "/loans"
+                    ? pendingLoanApprovals
+                    : undefined
+              }
+              childBadges={
+                item.href === "/loans" ? { "/loans": pendingLoanApprovals } : undefined
+              }
             />
           ))}
         </nav>
