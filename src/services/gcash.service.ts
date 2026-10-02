@@ -68,6 +68,7 @@ export const gcashService = {
   updateNonMember: (id: number, data: GCashNonMemberInput) =>
     api.put<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_UPDATE(id), data),
 
+  /** Soft delete: past transactions keep their walk-in. */
   deleteNonMember: (id: number) =>
     api.delete<void>(API_ENDPOINTS.GCASH.NON_MEMBERS_DELETE(id)),
 

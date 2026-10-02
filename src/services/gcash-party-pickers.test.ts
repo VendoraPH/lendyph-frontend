@@ -10,7 +10,8 @@
  * the same type — so the assertion has to be made on the wire.
  *
  * WHAT THIS PROVES: the client asks for every page, never asks past the
- * server's ceiling, and carries the filter on each request.
+ * server's ceiling, and carries the filter on each request — including the
+ * search the picker now sends as the teller types.
  * WHAT IT DOES NOT PROVE: that the real controllers behave as written. There is
  * no database and no policy layer here; the stub is only as honest as the
  * source it was read from.
@@ -77,33 +78,84 @@ function seedMembers(): Row[] {
   return rows;
 }
 
+/** A walk-in whose ID was typed with dashes; tellers search it without. */
+const DASHED_ID_WALK_IN = 100;
+
 function seedNonMembers(): Row[] {
-  return Array.from({ length: NON_MEMBER_COUNT }, (_, i) => ({
+  const rows: Row[] = Array.from({ length: NON_MEMBER_COUNT }, (_, i) => ({
     id: i + 1,
     full_name: `Walk-in ${i + 1}`,
     mobile_number: `0998${String(i).padStart(7, "0")}`,
     id_type: "UMID",
     id_number: `UM-${i + 1}`,
   }));
+  rows[DASHED_ID_WALK_IN - 1].id_number = "1234-5678";
+  return rows;
+}
+
+/** UniqueWalkInIdNumber::normalise() — spaces and dashes out, upper case. */
+const normaliseIdNumber = (raw: string) => raw.replace(/[ -]/g, "").toUpperCase();
+
+/**
+ * GCashNonMemberController::index()'s search: name, mobile or ID number as
+ * typed, or the ID number normalised — skipped when nothing is left of the
+ * search once normalised.
+ */
+function matchesWalkInSearch(row: Row, search: string): boolean {
+  const needle = search.toLowerCase();
+  const asTyped = [row.full_name, row.mobile_number, row.id_number].some((v) =>
+    String(v).toLowerCase().includes(needle),
+  );
+  const normalised = normaliseIdNumber(search);
+  return (
+    asTyped ||
+    (normalised !== "" &&
+      normaliseIdNumber(String(row.id_number)).includes(normalised))
+  );
 }
 
 // ── Harness ────────────────────────────────────────────────────────────────
 
 let server: Server;
-let requests: Array<{ path: string; query: Record<string, string> }> = [];
+let requests: Array<{
+  method: string;
+  path: string;
+  query: Record<string, string>;
+  body: unknown;
+}> = [];
 
 let borrowerService: typeof import("./borrower.service").borrowerService;
 let gcashService: typeof import("./gcash.service").gcashService;
+let loadGCashPartyLists: typeof import("../app/(app)/gcash/_lib/load-party-lists").loadGCashPartyLists;
 let MAX_PER_PAGE: number;
 
 before(async () => {
-  server = createServer((req, res) => {
+  server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const path = url.pathname.replace(/^\/api/, "");
     const query = Object.fromEntries(url.searchParams.entries());
-    requests.push({ path, query });
+    const method = req.method ?? "GET";
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const body: unknown = raw ? JSON.parse(raw) : null;
+    requests.push({ method, path, query, body });
     res.setHeader("Content-Type", "application/json");
     const page = Number.parseInt(query.page ?? "1", 10) || 1;
+
+    // PUT / DELETE /gcash/non-members/{id} — update echoes the row under
+    // `data`; delete is a soft delete that answers with a message only.
+    const walkIn = path.match(/^\/gcash\/non-members\/(\d+)$/);
+    if (walkIn && method === "PUT") {
+      return res.end(
+        JSON.stringify({
+          message: "Walk-in customer updated.",
+          data: { id: Number(walkIn[1]), ...(body as object) },
+        }),
+      );
+    }
+    if (walkIn && method === "DELETE") {
+      return res.end(JSON.stringify({ message: "Walk-in customer removed." }));
+    }
 
     if (path === "/borrowers") {
       let rows = seedMembers();
@@ -123,10 +175,7 @@ before(async () => {
     if (path === "/gcash/non-members") {
       let rows = seedNonMembers();
       if (query.search) {
-        const needle = String(query.search).toLowerCase();
-        rows = rows.filter((r) =>
-          String(r.full_name).toLowerCase().includes(needle),
-        );
+        rows = rows.filter((r) => matchesWalkInSearch(r, String(query.search)));
       }
       return res.end(
         JSON.stringify(paginator(rows, page, clampNonMember(query.per_page ?? null))),
@@ -144,6 +193,9 @@ before(async () => {
 
   borrowerService = (await import("./borrower.service")).borrowerService;
   gcashService = (await import("./gcash.service")).gcashService;
+  loadGCashPartyLists = (
+    await import("../app/(app)/gcash/_lib/load-party-lists")
+  ).loadGCashPartyLists;
   MAX_PER_PAGE = (await import("../lib/paginate")).MAX_PER_PAGE;
 });
 
@@ -255,5 +307,122 @@ describe("GCash New Transaction — walk-in picker", () => {
     requests = [];
     await gcashService.listNonMembers({ search: "Walk-in 7", per_page: 100 });
     assert.equal(requests.filter((r) => r.path === "/gcash/non-members").length, 1);
+  });
+});
+
+// ── The combined picker, searched on the server ────────────────────────────
+
+describe("GCash New Transaction — server search as the teller types", () => {
+  const walkInRequests = () =>
+    requests.filter((r) => r.path === "/gcash/non-members");
+  const memberRequests = () => requests.filter((r) => r.path === "/borrowers");
+
+  test("REGRESSION: 12345678 finds the walk-in whose ID is 1234-5678", async () => {
+    // The picker used to filter pre-loaded walk-ins in the browser, which
+    // knows nothing of the server's normalised ID match: typing the ID without
+    // its dashes found no one.
+    requests = [];
+    const { nonMembers } = await loadGCashPartyLists({
+      search: "12345678",
+      canListMembers: true,
+    });
+    assert.deepEqual(
+      nonMembers.options.map((o) => o.party.id),
+      [DASHED_ID_WALK_IN],
+    );
+    assert.ok(walkInRequests().length > 0);
+    for (const r of walkInRequests()) assert.equal(r.query.search, "12345678");
+  });
+
+  test("members are searched on the server too, on every page, still members only", async () => {
+    requests = [];
+    const { members } = await loadGCashPartyLists({
+      search: "Maria",
+      canListMembers: true,
+    });
+    assert.deepEqual(
+      members.options.map((o) => o.party.full_name),
+      [NEEDLE],
+    );
+    assert.ok(memberRequests().length > 0);
+    for (const r of memberRequests()) {
+      assert.equal(r.query.search, "Maria");
+      assert.equal(r.query.members_only, "1");
+    }
+  });
+
+  test("an empty search sends no search and drains both lists whole", async () => {
+    requests = [];
+    const { members, nonMembers } = await loadGCashPartyLists({
+      search: "",
+      canListMembers: true,
+    });
+    assert.equal(nonMembers.options.length, NON_MEMBER_COUNT);
+    assert.equal(
+      members.options.length,
+      seedMembers().filter((r) => r.status === "active").length,
+    );
+    assert.equal(members.shortfall, null);
+    assert.equal(nonMembers.shortfall, null);
+    for (const r of [...walkInRequests(), ...memberRequests()]) {
+      assert.equal("search" in r.query, false);
+    }
+  });
+
+  test("without borrowers:view only the walk-ins are asked for", async () => {
+    requests = [];
+    const { members, nonMembers } = await loadGCashPartyLists({
+      search: "Walk-in 1",
+      canListMembers: false,
+    });
+    assert.equal(memberRequests().length, 0);
+    assert.equal(members.options.length, 0);
+    assert.ok(nonMembers.options.length > 0);
+  });
+
+  test("each row's value is unique across both lists", async () => {
+    const { members, nonMembers } = await loadGCashPartyLists({
+      search: "",
+      canListMembers: true,
+    });
+    const { partyOptionValue } = await import(
+      "../app/(app)/gcash/_lib/party-options"
+    );
+    const values = [...members.options, ...nonMembers.options].map(
+      partyOptionValue,
+    );
+    assert.equal(new Set(values).size, values.length);
+  });
+});
+
+// ── Editing and deleting a walk-in ─────────────────────────────────────────
+
+describe("GCash walk-in edit and delete", () => {
+  test("updateNonMember PUTs the walk-in and returns the saved row", async () => {
+    requests = [];
+    const input = {
+      full_name: "Juan Dela Cruz",
+      mobile_number: "09171234567",
+      id_type: "UMID",
+      id_number: "1234-5678",
+      remarks: null,
+    };
+    const saved = await gcashService.updateNonMember(7, input);
+    assert.deepEqual(
+      requests.map((r) => [r.method, r.path]),
+      [["PUT", "/gcash/non-members/7"]],
+    );
+    assert.deepEqual(requests[0].body, input);
+    assert.equal(saved.id, 7);
+    assert.equal(saved.full_name, "Juan Dela Cruz");
+  });
+
+  test("deleteNonMember DELETEs the walk-in", async () => {
+    requests = [];
+    await gcashService.deleteNonMember(7);
+    assert.deepEqual(
+      requests.map((r) => [r.method, r.path]),
+      [["DELETE", "/gcash/non-members/7"]],
+    );
   });
 });
