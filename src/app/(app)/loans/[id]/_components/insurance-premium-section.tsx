@@ -5,47 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatCurrency } from "@/lib/format";
+import { INSURANCE_PCT_DECIMALS, sanitizeDecimalInput } from "@/lib/percent";
 import type {
   InsurancePaymentType,
   InsurancePremiumValue,
 } from "./insurance-premium.types";
+import { computeInsurancePremium } from "../_lib/release-figures";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
-}
-
-export function computeInsurancePremium(
-  principalAmount: number,
-  value: InsurancePremiumValue,
-): {
-  totalPremium: number;
-  upfrontDeduction: number;
-  remainingBalance: number;
-  partialOverflow: boolean;
-} {
-  const principal = Math.max(0, Number(principalAmount) || 0);
-  const pct = Math.max(0, Math.min(100, Number(value.percentage) || 0));
-  const totalPremium = round2(principal * (pct / 100));
-
-  if (value.paymentType === "full") {
-    return {
-      totalPremium,
-      upfrontDeduction: totalPremium,
-      remainingBalance: 0,
-      partialOverflow: false,
-    };
-  }
-
-  const rawPartial = Math.max(0, Number(value.partialAmount) || 0);
-  const partialOverflow = rawPartial > totalPremium;
-  const partial = Math.min(rawPartial, totalPremium);
-
-  return {
-    totalPremium,
-    upfrontDeduction: partial,
-    remainingBalance: round2(totalPremium - partial),
-    partialOverflow,
-  };
 }
 
 type Props = {
@@ -77,8 +45,10 @@ export function InsurancePremiumSection({
       setField("percentage", "");
       return;
     }
+    // Already at most two places — the field refuses a third — so this only
+    // caps it at 100%; it never rounds what was typed.
     const clamped = Math.max(0, Math.min(100, n));
-    setField("percentage", String(round2(clamped)));
+    setField("percentage", String(clamped));
   };
 
   const handlePartialBlur = () => {
@@ -104,14 +74,12 @@ export function InsurancePremiumSection({
             <div className="relative">
               <Input
                 id="insurance-pct"
-                type="number"
                 inputMode="decimal"
-                min={0}
-                max={100}
-                step="0.01"
                 placeholder="0.00"
                 value={value.percentage}
-                onChange={(e) => setField("percentage", e.target.value)}
+                onChange={(e) =>
+                  setField("percentage", sanitizeDecimalInput(e.target.value, INSURANCE_PCT_DECIMALS))
+                }
                 onBlur={handlePercentageBlur}
                 disabled={disabled}
                 className="h-9 pr-8"

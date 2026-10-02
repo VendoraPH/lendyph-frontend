@@ -33,8 +33,11 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 
+// Passed to <Select items>: Base UI resolves the trigger label from `items`,
+// not from the mounted <SelectItem> children — without it the trigger shows
+// the raw value ("all").
 const TYPE_OPTIONS: { value: GCashTransactionType | "all"; label: string }[] = [
-  { value: "all", label: "All Types" },
+  { value: "all", label: "All" },
   { value: "cash_in", label: "Cash In" },
   { value: "cash_out", label: "Cash Out" },
 ];
@@ -42,7 +45,7 @@ const STATUS_OPTIONS: {
   value: GCashTransactionStatus | "all";
   label: string;
 }[] = [
-  { value: "all", label: "All Status" },
+  { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
   { value: "paid", label: "Paid" },
   { value: "completed", label: "Completed" },
@@ -113,6 +116,7 @@ export function TransactionsTab() {
                 type: v as GCashTransactionType | "all",
               }))
             }
+            items={TYPE_OPTIONS}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -137,6 +141,7 @@ export function TransactionsTab() {
                 status: v as GCashTransactionStatus | "all",
               }))
             }
+            items={STATUS_OPTIONS}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue />

@@ -277,7 +277,7 @@ function AuditDetailDrawer({
 const PER_PAGE_OPTIONS = [25, 50, MAX_PER_PAGE] as const;
 const DEFAULT_PER_PAGE = 25;
 
-export default function AuditTrailPage() {
+function AuditTrailContent() {
   // `searchDraft` is what the box shows; `search` is what has been sent. Keeping
   // them apart is what makes the debounce one request per settled query instead
   // of one per keystroke.
@@ -455,7 +455,6 @@ export default function AuditTrailPage() {
   };
 
   return (
-    <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -737,6 +736,13 @@ export default function AuditTrailPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function AuditTrailPage() {
+  return (
+    <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
+      <AuditTrailContent />
     </RouteGuard>
   );
 }

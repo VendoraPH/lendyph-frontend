@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import {
   ShieldCheck,
   Plus,
@@ -74,7 +75,7 @@ const EMPTY_FORM: FormState = {
   is_visible: true,
 };
 
-export default function CollateralTypesSettingsPage() {
+function CollateralTypesSettingsContent() {
   const [types, setTypes] = useState<CollateralType[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -86,8 +87,7 @@ export default function CollateralTypesSettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await collateralTypeService.list();
-      setTypes(rows);
+      setTypes(completeRows(await collateralTypeService.listAll()));
     } catch {
       toast.error("We couldn't load the collateral types. Please try again.");
     } finally {
@@ -180,283 +180,292 @@ export default function CollateralTypesSettingsPage() {
   };
 
   return (
-    <RouteGuard permission="settings:view" pageName="Collateral Types">
-      <div className="space-y-6">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Collateral Types
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage the collateral kinds available across the system.
-            </p>
-          </div>
-          <Button onClick={openAdd}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Type
-          </Button>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Collateral Types
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage the collateral kinds available across the system.
+          </p>
         </div>
+        <Button onClick={openAdd}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Type
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Configured Types
-            </CardTitle>
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="size-6 text-muted-foreground" />
-              </div>
-            ) : types.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                No collateral types yet.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-20">Order</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Detail Label</TableHead>
-                    <TableHead>Amount Label</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Visible</TableHead>
-                    <TableHead className="w-1"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {types.map((t, i) => (
-                    <TableRow key={t.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            disabled={i === 0}
-                            onClick={() => handleMove(i, -1)}
-                            aria-label="Move up"
-                          >
-                            <ArrowUp className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            disabled={i === types.length - 1}
-                            onClick={() => handleMove(i, 1)}
-                            aria-label="Move down"
-                          >
-                            <ArrowDown className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {t.name}
-                          {t.is_seed && (
-                            <Badge variant="outline" className="text-xs">
-                              Default
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {t.detail_field_label}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {t.amount_field_label}
-                      </TableCell>
-                      <TableCell>
-                        {t.source === "share_capital" ? (
-                          <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/10">
-                            Share Capital
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">
+            Configured Types
+          </CardTitle>
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-muted-foreground" />
+            </div>
+          ) : types.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No collateral types yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">Order</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Detail Label</TableHead>
+                  <TableHead>Amount Label</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Visible</TableHead>
+                  <TableHead className="w-1"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {types.map((t, i) => (
+                  <TableRow key={t.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={i === 0}
+                          onClick={() => handleMove(i, -1)}
+                          aria-label="Move up"
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={i === types.length - 1}
+                          onClick={() => handleMove(i, 1)}
+                          aria-label="Move down"
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {t.name}
+                        {t.is_seed && (
+                          <Badge variant="outline" className="text-xs">
+                            Default
                           </Badge>
-                        ) : (
-                          <Badge variant="secondary">Manual</Badge>
                         )}
-                      </TableCell>
-                      <TableCell>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {t.detail_field_label}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {t.amount_field_label}
+                    </TableCell>
+                    <TableCell>
+                      {t.source === "share_capital" ? (
+                        <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/10">
+                          Share Capital
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Manual</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleToggleVisible(t)}
+                        aria-label={t.is_visible ? "Hide" : "Show"}
+                      >
+                        {t.is_visible ? (
+                          <Eye className="h-4 w-4" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => handleToggleVisible(t)}
-                          aria-label={t.is_visible ? "Hide" : "Show"}
+                          onClick={() => openEdit(t)}
+                          aria-label="Edit"
                         >
-                          {t.is_visible ? (
-                            <Eye className="h-4 w-4" />
-                          ) : (
-                            <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          )}
+                          <PencilLine className="h-4 w-4" />
                         </Button>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEdit(t)}
-                            aria-label="Edit"
-                          >
-                            <PencilLine className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            disabled={t.is_seed}
-                            title={
-                              t.is_seed
-                                ? "Default types can't be deleted — hide them instead"
-                                : "Delete"
-                            }
-                            onClick={() => setDeleting(t)}
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={t.is_seed}
+                          title={
+                            t.is_seed
+                              ? "Default types can't be deleted — hide them instead"
+                              : "Delete"
+                          }
+                          onClick={() => setDeleting(t)}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Add / Edit Dialog */}
-        <Dialog open={formOpen} onOpenChange={setFormOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editing ? "Edit Collateral Type" : "New Collateral Type"}
-              </DialogTitle>
-              <DialogDescription>
-                Define the labels that members and loan officers will see when
-                registering or attaching a collateral of this kind.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
+      {/* Add / Edit Dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Edit Collateral Type" : "New Collateral Type"}
+            </DialogTitle>
+            <DialogDescription>
+              Define the labels that members and loan officers will see when
+              registering or attaching a collateral of this kind.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="e.g. Vehicle OR/CR"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Name</Label>
+                <Label>Detail field label</Label>
                 <Input
-                  value={form.name}
+                  value={form.detail_field_label}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
+                    setForm((f) => ({
+                      ...f,
+                      detail_field_label: e.target.value,
+                    }))
                   }
-                  placeholder="e.g. Vehicle OR/CR"
+                  placeholder="e.g. OR Number"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Detail field label</Label>
-                  <Input
-                    value={form.detail_field_label}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        detail_field_label: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. OR Number"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Amount field label</Label>
-                  <Input
-                    value={form.amount_field_label}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        amount_field_label: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. Estimated Value"
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
-                <Label>Source</Label>
-                <Select
-                  value={form.source}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, source: v as CollateralSource }))
+                <Label>Amount field label</Label>
+                <Input
+                  value={form.amount_field_label}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      amount_field_label: e.target.value,
+                    }))
                   }
-                  disabled={editing?.is_seed}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual entry</SelectItem>
-                    <SelectItem value="share_capital">
-                      Share Capital (auto-derived)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {form.source === "share_capital"
-                    ? "Amount is pulled live from the member's share capital balance."
-                    : "Amount is entered by the user during collateral registration."}
-                </p>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm font-medium">Visible</p>
-                  <p className="text-xs text-muted-foreground">
-                    Hidden types won&apos;t appear in the collateral picker.
-                  </p>
-                </div>
-                <Switch
-                  checked={form.is_visible}
-                  onCheckedChange={(v) =>
-                    setForm((f) => ({ ...f, is_visible: v }))
-                  }
+                  placeholder="e.g. Estimated Value"
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setFormOpen(false)}
-                disabled={submitting}
+            <div className="space-y-2">
+              <Label>Source</Label>
+              <Select
+                value={form.source}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, source: v as CollateralSource }))
+                }
+                disabled={editing?.is_seed}
               >
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={submitting}>
-                {submitting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {editing ? "Save Changes" : "Create Type"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual entry</SelectItem>
+                  <SelectItem value="share_capital">
+                    Share Capital (auto-derived)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.source === "share_capital"
+                  ? "Amount is pulled live from the member's share capital balance."
+                  : "Amount is entered by the user during collateral registration."}
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Visible</p>
+                <p className="text-xs text-muted-foreground">
+                  Hidden types won&apos;t appear in the collateral picker.
+                </p>
+              </div>
+              <Switch
+                checked={form.is_visible}
+                onCheckedChange={(v) =>
+                  setForm((f) => ({ ...f, is_visible: v }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFormOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={submitting}>
+              {submitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {editing ? "Save Changes" : "Create Type"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <AlertDialog
-          open={Boolean(deleting)}
-          onOpenChange={(o) => !o && setDeleting(null)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this collateral type?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Existing collaterals of this type will keep their data, but the
-                type will no longer appear in the picker. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={handleDelete}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+      <AlertDialog
+        open={Boolean(deleting)}
+        onOpenChange={(o) => !o && setDeleting(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this collateral type?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existing collaterals of this type will keep their data, but the
+              type will no longer appear in the picker. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleDelete}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// The types themselves come from `GET /collateral-types`, which needs `collaterals:view`.
+export default function CollateralTypesSettingsPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Collateral Types">
+      <RouteGuard permission="collaterals:view" pageName="Collateral Types">
+        <CollateralTypesSettingsContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

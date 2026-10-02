@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { branchService } from "@/services";
 import type { ApiBranch, CreateBranchData, UpdateBranchData } from "@/services/branch.service";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -174,7 +175,7 @@ function BranchFormDialog({ open, onOpenChange, branch, onSave }: BranchFormDial
 // Page
 // ---------------------------------------------------------------------------
 
-export default function BranchesPage() {
+function BranchesContent() {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -184,8 +185,7 @@ export default function BranchesPage() {
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await branchService.list();
-      setBranches(Array.isArray(data) ? data : []);
+      setBranches(completeRows(await branchService.listAll()));
     } catch {
       toast.error("We couldn't load the branches. Please try again.");
     } finally {
@@ -238,7 +238,6 @@ export default function BranchesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Branch Settings">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -407,6 +406,13 @@ export default function BranchesPage() {
         onSave={fetchBranches}
       />
     </div>
+  );
+}
+
+export default function BranchesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Branch Settings">
+      <BranchesContent />
     </RouteGuard>
   );
 }

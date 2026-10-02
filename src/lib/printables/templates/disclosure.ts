@@ -51,6 +51,7 @@ import {
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
   sum,
   termLabelFrom,
@@ -207,7 +208,7 @@ export function buildDisclosureDoc(
           pick(terms, ["start_date", "release_date", "released_at"])
         ),
         field("Type of Loan", pick(terms, ["loan_product_name"]) ?? interestMethod),
-        field("Term of Loan", termLabelFrom(terms, rawFrequency)),
+        field("Term of Loan", termLabelFrom(terms)),
         field("Mode of Payment", frequency),
       ]),
     },
@@ -264,13 +265,13 @@ export function buildDisclosureDoc(
       title: "V. Rate Information",
       columns: 2,
       items: presentFields([
-        field("Contractual Interest Rate", rateLabel(rate, rawFrequency)),
+        field("Contractual Interest Rate", rateLabel(rate, rateFrequencyFrom(terms))),
         // BSP 730 asks for the rate restated per annum. Annualised by the
-        // loan's OWN frequency: `interest_rate` is charged once per period, so
-        // a 1%-per-day loan is 365% nominal, not the 12% a fixed ×12 printed.
-        // Null — a rule to be completed — when the frequency is unknown, since
-        // there is no honest multiplier to reach for.
-        field("Nominal Annual Rate", annualRateLabel(rate, rawFrequency)),
+        // period the rate is quoted per, so a 1%-per-day rate is 365%
+        // nominal, not the 12% a fixed ×12 printed. Null — a rule to be
+        // completed — when that period is unknown, since there is no honest
+        // multiplier to reach for.
+        field("Nominal Annual Rate", annualRateLabel(rate, rateFrequencyFrom(terms))),
         field(
           "Interest Computation",
           `${interestMethod ?? "Diminishing"} Balance`

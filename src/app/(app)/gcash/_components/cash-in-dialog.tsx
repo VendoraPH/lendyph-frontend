@@ -21,6 +21,8 @@ import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
+import { gcashTierIssue } from "../_lib/tier-issue";
+import { GCashTierNotice } from "./gcash-tier-notice";
 
 interface Props {
   open: boolean;
@@ -35,7 +37,13 @@ export function CashInDialog({
   party,
   onCreated,
 }: Props) {
-  const { resolveCharge, loading: tiersLoading } = useGCashTiers();
+  const {
+    tiers,
+    resolveCharge,
+    loading: tiersLoading,
+    error: tiersError,
+    refresh: retryTiers,
+  } = useGCashTiers();
   const [amount, setAmount] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -58,6 +66,13 @@ export function CashInDialog({
     [amountNum, resolveCharge],
   );
   const total = charge === null ? null : amountNum + charge;
+  const tierIssue = gcashTierIssue({
+    loading: tiersLoading,
+    error: tiersError,
+    tierCount: tiers.length,
+    amount: amountNum,
+    charge,
+  });
   const canSubmit =
     !submitting && amountNum > 0 && charge !== null && !tiersLoading;
 
@@ -108,11 +123,22 @@ export function CashInDialog({
             />
           </div>
 
+          <GCashTierNotice
+            issue={tierIssue}
+            action="Cash In"
+            amount={amountNum}
+            onRetry={() => void retryTiers()}
+          />
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-muted-foreground">Charge</Label>
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                {charge !== null ? formatCurrency(charge) : "—"}
+                {charge !== null
+                  ? formatCurrency(charge)
+                  : tierIssue === "out_of_range"
+                    ? "No tier"
+                    : "—"}
               </div>
             </div>
             <div>

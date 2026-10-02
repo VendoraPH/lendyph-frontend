@@ -17,6 +17,10 @@
  * So this module holds no opinion about how many rows exist. It asks for the
  * documented maximum page, follows the server's own `meta.last_page`, and when
  * it cannot finish it says so instead of returning a short list that looks whole.
+ *
+ * Several endpoints do not paginate at all — they answer every row with
+ * `->get()`. Those go through a drain too, so the day one of them starts
+ * paginating costs nothing on this side: the drain recognises either answer.
  */
 
 /**
@@ -72,6 +76,15 @@ export interface DrainResult<T> {
   pagesFetched: number;
 }
 
+/**
+ * A list the caller may not read, in the shape of one it did: no rows, none
+ * missing, no request made. Lets a screen skip a list its user lacks the
+ * permission for and fall through the same path as a genuinely empty one.
+ */
+export function emptyDrain<T>(): DrainResult<T> {
+  return { rows: [], total: 0, truncated: false, pagesFetched: 0 };
+}
+
 /** Rows out of a paginator body, tolerating a bare array or a missing `data`. */
 function pageRows<T>(response: unknown): T[] {
   if (Array.isArray(response)) return response as T[];
@@ -86,12 +99,50 @@ interface PageMeta {
   total?: number;
 }
 
+/**
+ * Keys that only a Laravel paginator puts on a body. `meta` and `links` are
+ * what a resource collection over a paginator sends; the rest are what a
+ * paginator serialised on its own (`response()->json($paginator)`) puts at the
+ * top level instead.
+ */
+const PAGINATOR_KEYS = [
+  "meta",
+  "links",
+  "current_page",
+  "last_page",
+  "per_page",
+  "total",
+  "next_page_url",
+] as const;
+
 function pageMeta(response: unknown): PageMeta | null {
   if (!response || typeof response !== "object" || Array.isArray(response)) {
     return null;
   }
   const meta = (response as { meta?: unknown }).meta;
-  return meta && typeof meta === "object" ? (meta as PageMeta) : null;
+  if (meta && typeof meta === "object") return meta as PageMeta;
+  // A bare paginator carries the same fields beside `data` rather than under
+  // `meta`. Reading them there is what lets it drain by `last_page` instead of
+  // by guesswork.
+  return "current_page" in response ? (response as PageMeta) : null;
+}
+
+/**
+ * A `{ data: [...] }` body with no paginator on it anywhere: what
+ * `Resource::collection($query->get())` answers. That is the whole collection,
+ * not page 1 of it, and such an endpoint ignores `page` — asking it for page 2
+ * hands back page 1 again, so reading on would duplicate every row.
+ *
+ * A bare array is deliberately NOT treated this way. `api.get` strips `meta`
+ * off a real paginator and leaves exactly that, so an array proves nothing
+ * about whether more pages exist.
+ */
+function isUnpaginated(response: unknown): boolean {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return false;
+  }
+  if (!Array.isArray((response as { data?: unknown }).data)) return false;
+  return !PAGINATOR_KEYS.some((key) => key in response);
 }
 
 /** A positive, finite integer, or null. Rejects 0, NaN and Infinity alike. */
@@ -105,8 +156,10 @@ function positiveInt(value: unknown): number | null {
  * Every row of a paginated endpoint, across as many pages as it takes.
  *
  * The loop follows `meta.last_page` when the server sends one and falls back to
- * "stop on the first short page" when it does not. `maxPages` only bounds a
- * runaway, and reaching it is reported in `truncated` rather than hidden.
+ * "stop on the first short page" when it does not. A body that is not a
+ * paginator at all is the complete collection, so it ends the loop at once,
+ * whatever its size. `maxPages` only bounds a runaway, and reaching it is
+ * reported in `truncated` rather than hidden.
  *
  * Pages are fetched in sequence, not in parallel: the stop condition depends on
  * the response, and firing N speculative requests to save latency on a list that
@@ -131,6 +184,13 @@ export async function fetchAllPages<T>(
 
     const batch = pageRows<T>(response);
     rows.push(...batch);
+
+    // The whole collection in one body. There is no page 2 to ask for, and
+    // the short-page test below would ask anyway once it held 100 rows or more.
+    if (isUnpaginated(response)) {
+      total = rows.length;
+      break;
+    }
 
     const meta = pageMeta(response);
     const metaTotal = positiveInt(meta?.total);
@@ -164,4 +224,47 @@ export async function fetchAllPages<T>(
   }
 
   return { rows, total, truncated, pagesFetched };
+}
+
+/**
+ * Thrown by `completeRows` when a drain stopped with pages outstanding.
+ *
+ * The message is copy for the user, not for a log: call sites route this
+ * through the same toast or error line as any failed load, and
+ * `getErrorMessage` hands it through as written.
+ */
+export class IncompleteListError extends Error {
+  /** How many rows did arrive. */
+  readonly shown: number;
+  /** `DrainResult.total` — how many exist, when the server said. */
+  readonly total: number | null;
+
+  constructor(shown: number, total: number | null) {
+    super(
+      total !== null && total > shown
+        ? `Only ${shown} of ${total} entries in a list on this screen could be loaded. Please report this so the screen can be paged properly.`
+        : `Only ${shown} entries in a list on this screen could be loaded, and more exist. Please report this so the screen can be paged properly.`,
+    );
+    this.name = "IncompleteListError";
+    this.shown = shown;
+    this.total = total;
+  }
+}
+
+/**
+ * The rows of a drain that must be whole, or a thrown `IncompleteListError`.
+ *
+ * For the small configuration lists — roles, branches, fees, loan products,
+ * collateral types — where a short list has no safe rendering: a missing role
+ * cannot be assigned, a missing fee is simply not charged, and neither looks
+ * like anything is missing. Throwing sends the shortfall down each screen's
+ * existing error path instead of rendering it as complete. A screen that CAN
+ * render a partial list honestly should read `truncated` itself and show
+ * `IncompleteListNotice` instead.
+ */
+export function completeRows<T>(drain: DrainResult<T>): T[] {
+  if (drain.truncated) {
+    throw new IncompleteListError(drain.rows.length, drain.total);
+  }
+  return drain.rows;
 }

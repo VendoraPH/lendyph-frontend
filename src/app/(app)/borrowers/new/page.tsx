@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -128,7 +127,7 @@ function emptyForm(): BorrowerFormData {
   };
 }
 
-export default function NewBorrowerPage() {
+function NewBorrowerContent() {
   const router = useRouter();
   const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
@@ -690,7 +689,6 @@ export default function NewBorrowerPage() {
   }
 
   return (
-    <RouteGuard permission="borrowers:create" pageName="Add Member">
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
@@ -717,6 +715,7 @@ export default function NewBorrowerPage() {
                 {photoPreview ? (
                   <div className="relative h-24 w-24">
                     <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- local data: preview, outside the /storage/** next/image allowlist; CLAUDE.md "Images" rule requires plain <img> */}
                       <img
                         src={photoPreview}
                         alt="Profile preview"
@@ -1490,6 +1489,13 @@ export default function NewBorrowerPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function NewBorrowerPage() {
+  return (
+    <RouteGuard permission="borrowers:create" pageName="Add Member">
+      <NewBorrowerContent />
     </RouteGuard>
   );
 }

@@ -218,7 +218,7 @@ This response is unpaginated and unfiltered. If `affected_borrowers` can run to 
 ### 7. `GET /credit-scoring/alerts`
 **Permission:** `credit_scoring:view`
 
-Declared at `src/config/api-endpoints.ts` as `ALERTS_LIST` but **has no service method and no caller** — alerts reach the UI embedded in endpoint 6's response. It is a leftover from the spec's `listAlerts()`. **Do not build it** unless a standalone alerts screen is scheduled; it is listed here only so nobody finds the constant later and assumes it is a gap.
+**Not needed.** Alerts reach the UI embedded in endpoint 6's response, and the frontend has no alerts endpoint, service method or caller (the unused `ALERTS_LIST` constant, a leftover from the spec's `listAlerts()`, was removed on 2026-09-30). **Do not build it** unless a standalone alerts screen is scheduled; it is listed here only so nobody reads the spec and assumes it is a gap.
 
 ### 8. `GET` + `PUT /credit-scoring/scorecard-config`
 **Permission:** `credit_scoring:settings` for **both** · **Screen:** `/credit-scoring/scorecard-configuration`

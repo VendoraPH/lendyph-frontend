@@ -40,6 +40,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { branchService, type ApiBranch } from "@/services/branch.service";
+import { completeRows } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
@@ -137,7 +138,7 @@ function borrowerToFormData(b: Borrower): BorrowerFormData {
   };
 }
 
-export default function EditBorrowerPage() {
+function EditBorrowerContent() {
   const router = useRouter();
   const params = useParams();
   const borrowerId = Number(params.id);
@@ -182,16 +183,18 @@ export default function EditBorrowerPage() {
       try {
         const [b, branchRes] = await Promise.all([
           borrowerService.detail(borrowerId),
-          branchService.list().catch(() => [] as ApiBranch[]),
+          // An incomplete branch list fails soft like any other failure: the
+          // picker then offers only the member's current branch.
+          branchService
+            .listAll()
+            .then(completeRows)
+            .catch(() => [] as ApiBranch[]),
         ]);
         if (cancelled) return;
         setBorrower(b);
         setForm(borrowerToFormData(b));
         if (b.photo_url) setPhotoPreview(b.photo_url);
-        const list = Array.isArray(branchRes)
-          ? branchRes
-          : ((branchRes as unknown as { data?: ApiBranch[] }).data ?? []);
-        setBranches(list.filter((br) => br.is_active));
+        setBranches(branchRes.filter((br) => br.is_active));
       } catch {
         if (!cancelled) toast.error("We couldn't load the member details. Please try again.");
       } finally {
@@ -479,746 +482,756 @@ export default function EditBorrowerPage() {
   }
 
   return (
-    <RouteGuard permission="borrowers:update" pageName="Edit Member">
-      <div className="space-y-6 max-w-3xl mx-auto">
-        {/* Header */}
-        <div>
-          <Link
-            href={`/borrowers/${borrowerId}`}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Member
-          </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Edit Member</h1>
-          <p className="text-sm text-muted-foreground">
-            Update profile for {borrower.full_name} —{" "}
-            <span className="font-mono text-brand-orange">{borrower.borrower_code}</span>
-          </p>
-        </div>
+    <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Header */}
+      <div>
+        <Link
+          href={`/borrowers/${borrowerId}`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Member
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight">Edit Member</h1>
+        <p className="text-sm text-muted-foreground">
+          Update profile for {borrower.full_name} —{" "}
+          <span className="font-mono text-brand-orange">{borrower.borrower_code}</span>
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Profile Photo */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Profile Photo</h2>
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  {photoPreview ? (
-                    <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
-                      <img
-                        src={photoPreview}
-                        alt="Profile preview"
-                        className="h-full w-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={removePhoto}
-                        className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                      <Camera className="h-6 w-6 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Upload a profile photo of the member.
-                  </p>
-                  <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Profile Photo */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Profile Photo</h2>
+            <div className="flex items-center gap-6">
+              <div className="relative">
+                {photoPreview ? (
+                  <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
+                    <img
+                      src={photoPreview}
+                      alt="Profile preview"
+                      className="h-full w-full object-cover"
+                    />
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={openCamera}
+                      onClick={removePhoto}
+                      className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
                     >
-                      <Camera className="h-3.5 w-3.5" />
-                      Camera
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <ImageIcon className="h-3.5 w-3.5" />
-                      Gallery
-                    </Button>
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                    <Camera className="h-6 w-6 text-muted-foreground/50" />
+                  </div>
+                )}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Camera Capture Dialog */}
-          <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Take Photo</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="flex items-center justify-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    onClick={toggleFacingMode}
-                    title="Switch camera"
-                  >
-                    <SwitchCamera className="h-4 w-4" />
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
-                    title="Capture"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-brand-orange" />
-                  </button>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Upload a profile photo of the member.
+                </p>
+                <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                <div className="flex items-center gap-2 pt-1">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCameraDialogChange(false)}
+                    className="gap-1.5"
+                    onClick={openCamera}
                   >
-                    Cancel
+                    <Camera className="h-3.5 w-3.5" />
+                    Camera
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    Gallery
                   </Button>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Branch Assignment */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Branch Assignment</h2>
-              <p className="text-sm text-muted-foreground">
-                Currently assigned to:{" "}
-                <span className="font-medium text-foreground">
-                  {borrower.branch?.name ?? "Not assigned"}
-                  {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
-                </span>
-              </p>
-              <div className="space-y-2">
-                <Label>
-                  Assigned Branch <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={form.branch_id || null}
-                  onValueChange={(v) => update("branch_id", v ?? "")}
+        {/* Camera Capture Dialog */}
+        <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Take Photo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 rounded-full"
+                  onClick={toggleFacingMode}
+                  title="Switch camera"
                 >
-                  <SelectTrigger className="w-full sm:w-2/3">
-                    <SelectValue placeholder="Select branch">
-                      {(value: string | null) => {
-                        if (!value) return "Select branch";
-                        const match = branches.find((b) => String(b.id) === value);
-                        if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
-                        return borrower?.branch?.name ?? value;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.length === 0 && borrower?.branch ? (
-                      <SelectItem value={String(borrower.branch.id)}>
-                        {borrower.branch.name}
+                  <SwitchCamera className="h-4 w-4" />
+                </Button>
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
+                  title="Capture"
+                >
+                  <div className="h-10 w-10 rounded-full bg-brand-orange" />
+                </button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCameraDialogChange(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Branch Assignment */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Branch Assignment</h2>
+            <p className="text-sm text-muted-foreground">
+              Currently assigned to:{" "}
+              <span className="font-medium text-foreground">
+                {borrower.branch?.name ?? "Not assigned"}
+                {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
+              </span>
+            </p>
+            <div className="space-y-2">
+              <Label>
+                Assigned Branch <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={form.branch_id || null}
+                onValueChange={(v) => update("branch_id", v ?? "")}
+              >
+                <SelectTrigger className="w-full sm:w-2/3">
+                  <SelectValue placeholder="Select branch">
+                    {(value: string | null) => {
+                      if (!value) return "Select branch";
+                      const match = branches.find((b) => String(b.id) === value);
+                      if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
+                      return borrower?.branch?.name ?? value;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.length === 0 && borrower?.branch ? (
+                    <SelectItem value={String(borrower.branch.id)}>
+                      {borrower.branch.name}
+                    </SelectItem>
+                  ) : (
+                    branches.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.name}
+                        {b.code ? ` (${b.code})` : ""}
                       </SelectItem>
-                    ) : (
-                      branches.map((b) => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.name}
-                          {b.code ? ` (${b.code})` : ""}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Change the branch this member is assigned to.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Change the branch this member is assigned to.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Personal Information */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Personal Information</h2>
+        {/* Personal Information */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Personal Information</h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name">
-                    First Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="first_name"
-                    placeholder="Juan"
-                    value={form.first_name}
-                    onChange={(e) => update("first_name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">
-                    Last Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="last_name"
-                    placeholder="Santos"
-                    value={form.last_name}
-                    onChange={(e) => update("last_name", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="middle_name">Middle Name</Label>
-                  <Input
-                    id="middle_name"
-                    placeholder="Dela Cruz"
-                    value={form.middle_name}
-                    onChange={(e) => update("middle_name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Suffix</Label>
-                  <Select
-                    value={form.suffix || null}
-                    onValueChange={(v) => update("suffix", v ?? "")}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="None">
-                        {(value: string | null) =>
-                          value
-                            ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
-                            : "None"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUFFIX_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="birthdate">
-                    Birthdate <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="birthdate"
-                    type="date"
-                    value={form.birthdate}
-                    onChange={(e) => update("birthdate", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Gender <span className="text-destructive">*</span>
-                  </Label>
-                  <RadioGroup
-                    className="flex gap-4 pt-2"
-                    value={form.gender || null}
-                    onValueChange={(v) => update("gender", v ?? "")}
-                  >
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="male" />
-                      <span className="text-sm">Male</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="female" />
-                      <span className="text-sm">Female</span>
-                    </label>
-                  </RadioGroup>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>
-                  Civil Status <span className="text-destructive">*</span>
+                <Label htmlFor="first_name">
+                  First Name <span className="text-destructive">*</span>
                 </Label>
+                <Input
+                  id="first_name"
+                  placeholder="Juan"
+                  value={form.first_name}
+                  onChange={(e) => update("first_name", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last_name">
+                  Last Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="last_name"
+                  placeholder="Santos"
+                  value={form.last_name}
+                  onChange={(e) => update("last_name", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="middle_name">Middle Name</Label>
+                <Input
+                  id="middle_name"
+                  placeholder="Dela Cruz"
+                  value={form.middle_name}
+                  onChange={(e) => update("middle_name", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Suffix</Label>
                 <Select
-                  value={form.civil_status || null}
-                  onValueChange={(v) => update("civil_status", v ?? "")}
+                  value={form.suffix || null}
+                  onValueChange={(v) => update("suffix", v ?? "")}
                 >
-                  <SelectTrigger className="w-full sm:w-1/2">
-                    <SelectValue placeholder="Select civil status">
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="None">
                       {(value: string | null) =>
                         value
-                          ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select civil status"
+                          ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                          : "None"
                       }
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {CIVIL_STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
+                    {SUFFIX_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
                         {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Spouse Information (visible only when married) */}
-          {form.civil_status === "married" && (
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <h2 className="text-base font-semibold">Spouse Information</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="birthdate">
+                  Birthdate <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="birthdate"
+                  type="date"
+                  value={form.birthdate}
+                  onChange={(e) => update("birthdate", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Gender <span className="text-destructive">*</span>
+                </Label>
+                <RadioGroup
+                  className="flex gap-4 pt-2"
+                  value={form.gender || null}
+                  onValueChange={(v) => update("gender", v ?? "")}
+                >
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <RadioGroupItem value="male" />
+                    <span className="text-sm">Male</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <RadioGroupItem value="female" />
+                    <span className="text-sm">Female</span>
+                  </label>
+                </RadioGroup>
+              </div>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_first_name">First Name</Label>
-                    <Input
-                      id="spouse_first_name"
-                      placeholder="First name"
-                      value={form.spouse_first_name ?? ""}
-                      onChange={(e) => update("spouse_first_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_middle_name">Middle Name</Label>
-                    <Input
-                      id="spouse_middle_name"
-                      placeholder="Middle name"
-                      value={form.spouse_middle_name ?? ""}
-                      onChange={(e) => update("spouse_middle_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_last_name">Last Name</Label>
-                    <Input
-                      id="spouse_last_name"
-                      placeholder="Last name"
-                      value={form.spouse_last_name ?? ""}
-                      onChange={(e) => update("spouse_last_name", e.target.value)}
-                    />
-                  </div>
-                </div>
+            <div className="space-y-2">
+              <Label>
+                Civil Status <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={form.civil_status || null}
+                onValueChange={(v) => update("civil_status", v ?? "")}
+              >
+                <SelectTrigger className="w-full sm:w-1/2">
+                  <SelectValue placeholder="Select civil status">
+                    {(value: string | null) =>
+                      value
+                        ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                        : "Select civil status"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {CIVIL_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_contact_number">Contact Number</Label>
-                    <Input
-                      id="spouse_contact_number"
-                      type="tel"
-                      placeholder="09XXXXXXXXX"
-                      value={form.spouse_contact_number ?? ""}
-                      onChange={(e) => update("spouse_contact_number", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_occupation">Occupation</Label>
-                    <Input
-                      id="spouse_occupation"
-                      placeholder="Occupation or employer"
-                      value={form.spouse_occupation ?? ""}
-                      onChange={(e) => update("spouse_occupation", e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Contact Information */}
+        {/* Spouse Information (visible only when married) */}
+        {form.civil_status === "married" && (
           <Card>
             <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Contact Information</h2>
+              <h2 className="text-base font-semibold">Spouse Information</h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_first_name">First Name</Label>
+                  <Input
+                    id="spouse_first_name"
+                    placeholder="First name"
+                    value={form.spouse_first_name ?? ""}
+                    onChange={(e) => update("spouse_first_name", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_middle_name">Middle Name</Label>
+                  <Input
+                    id="spouse_middle_name"
+                    placeholder="Middle name"
+                    value={form.spouse_middle_name ?? ""}
+                    onChange={(e) => update("spouse_middle_name", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="spouse_last_name">Last Name</Label>
+                  <Input
+                    id="spouse_last_name"
+                    placeholder="Last name"
+                    value={form.spouse_last_name ?? ""}
+                    onChange={(e) => update("spouse_last_name", e.target.value)}
+                  />
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="contact_number">
-                    Contact Number <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="spouse_contact_number">Contact Number</Label>
                   <Input
-                    id="contact_number"
+                    id="spouse_contact_number"
                     type="tel"
                     placeholder="09XXXXXXXXX"
-                    value={form.contact_number}
-                    onChange={(e) => update("contact_number", e.target.value)}
+                    value={form.spouse_contact_number ?? ""}
+                    onChange={(e) => update("spouse_contact_number", e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="spouse_occupation">Occupation</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
+                    id="spouse_occupation"
+                    placeholder="Occupation or employer"
+                    value={form.spouse_occupation ?? ""}
+                    onChange={(e) => update("spouse_occupation", e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">
-                  Street Address <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="address"
-                  placeholder="House/Lot/Block number, Street name"
-                  value={form.address}
-                  onChange={(e) => update("address", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="barangay">Barangay</Label>
-                  <Input
-                    id="barangay"
-                    placeholder="Barangay"
-                    value={form.barangay}
-                    onChange={(e) => update("barangay", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">
-                    City / Municipality <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="city"
-                    placeholder="City name"
-                    value={form.city}
-                    onChange={(e) => update("city", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="province">
-                  Province <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="province"
-                  placeholder="Province"
-                  value={form.province}
-                  onChange={(e) => update("province", e.target.value)}
-                />
               </div>
             </CardContent>
           </Card>
+        )}
 
-          {/* Valid IDs */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Add Valid IDs</h2>
-                <Button type="button" variant="outline" size="sm" onClick={addValidId}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add ID
-                </Button>
+        {/* Contact Information */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Contact Information</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact_number">
+                  Contact Number <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="contact_number"
+                  type="tel"
+                  placeholder="09XXXXXXXXX"
+                  value={form.contact_number}
+                  onChange={(e) => update("contact_number", e.target.value)}
+                />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                />
+              </div>
+            </div>
 
-              {validIds.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Attach additional valid IDs. Existing IDs are managed from the member detail
-                  page.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {validIds.map((entry, index) => (
-                    <div
-                      key={index}
-                      className="relative space-y-3 p-4 rounded-lg border bg-muted/30"
+            <div className="space-y-2">
+              <Label htmlFor="address">
+                Street Address <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="address"
+                placeholder="House/Lot/Block number, Street name"
+                value={form.address}
+                onChange={(e) => update("address", e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="barangay">Barangay</Label>
+                <Input
+                  id="barangay"
+                  placeholder="Barangay"
+                  value={form.barangay}
+                  onChange={(e) => update("barangay", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">
+                  City / Municipality <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="city"
+                  placeholder="City name"
+                  value={form.city}
+                  onChange={(e) => update("city", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="province">
+                Province <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="province"
+                placeholder="Province"
+                value={form.province}
+                onChange={(e) => update("province", e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Valid IDs */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Add Valid IDs</h2>
+              <Button type="button" variant="outline" size="sm" onClick={addValidId}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add ID
+              </Button>
+            </div>
+
+            {validIds.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Attach additional valid IDs. Existing IDs are managed from the member detail
+                page.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {validIds.map((entry, index) => (
+                  <div
+                    key={index}
+                    className="relative space-y-3 p-4 rounded-lg border bg-muted/30"
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeValidId(index)}
+                      className="absolute top-2 right-2 text-destructive hover:text-destructive"
                     >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => removeValidId(index)}
-                        className="absolute top-2 right-2 text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <X className="h-4 w-4" />
+                    </Button>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
-                        <div className="space-y-2">
-                          <Label>ID Type</Label>
-                          <Select
-                            value={entry.type || null}
-                            onValueChange={(v) => updateValidId(index, "type", v ?? "")}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select ID type">
-                                {(value: string | null) =>
-                                  value
-                                    ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                                    : "Select ID type"
-                                }
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {VALID_ID_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>ID Number</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
+                      <div className="space-y-2">
+                        <Label>ID Type</Label>
+                        <Select
+                          value={entry.type || null}
+                          onValueChange={(v) => updateValidId(index, "type", v ?? "")}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select ID type">
+                              {(value: string | null) =>
+                                value
+                                  ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                  : "Select ID type"
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {VALID_ID_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>ID Number</Label>
+                        <Input
+                          placeholder="ID number"
+                          value={entry.id_number}
+                          onChange={(e) => updateValidId(index, "id_number", e.target.value)}
+                        />
+                      </div>
+                      {entry.type === "others" && (
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label>
+                            ID Name <span className="text-destructive">*</span>
+                          </Label>
                           <Input
-                            placeholder="ID number"
-                            value={entry.id_number}
-                            onChange={(e) => updateValidId(index, "id_number", e.target.value)}
+                            placeholder="e.g. Senior Citizen ID, Company ID"
+                            value={entry.custom_type_name}
+                            onChange={(e) =>
+                              updateValidId(index, "custom_type_name", e.target.value)
+                            }
                           />
                         </div>
-                        {entry.type === "others" && (
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label>
-                              ID Name <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                              placeholder="e.g. Senior Citizen ID, Company ID"
-                              value={entry.custom_type_name}
-                              onChange={(e) =>
-                                updateValidId(index, "custom_type_name", e.target.value)
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Front of ID</Label>
+                        {entry.front_preview ? (
+                          <div className="space-y-2">
+                            <div className="relative h-44 rounded-lg overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={entry.front_preview}
+                                alt="Front ID preview"
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateValidId(index, "front_file", null);
+                                  updateValidId(index, "front_preview", null);
+                                }}
+                                className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-8 text-xs gap-1"
+                              onClick={() =>
+                                setCropTarget({
+                                  index,
+                                  side: "front",
+                                  src: entry.front_preview!,
+                                })
                               }
-                            />
+                            >
+                              <CropIcon className="h-3.5 w-3.5" />
+                              Crop
+                            </Button>
                           </div>
+                        ) : (
+                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Upload Front</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(e) => handleValidIdFile(index, "front", e)}
+                              className="hidden"
+                            />
+                          </label>
                         )}
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label>Front of ID</Label>
-                          {entry.front_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.front_preview}
-                                  alt="Front ID preview"
-                                  className="h-full w-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateValidId(index, "front_file", null);
-                                    updateValidId(index, "front_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                onClick={() =>
-                                  setCropTarget({
-                                    index,
-                                    side: "front",
-                                    src: entry.front_preview!,
-                                  })
-                                }
-                              >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
-                            </div>
-                          ) : (
-                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Upload Front</span>
-                              <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => handleValidIdFile(index, "front", e)}
-                                className="hidden"
+                      <div className="space-y-2">
+                        <Label>Back of ID</Label>
+                        {entry.back_preview ? (
+                          <div className="space-y-2">
+                            <div className="relative h-44 rounded-lg overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={entry.back_preview}
+                                alt="Back ID preview"
+                                className="h-full w-full object-cover"
                               />
-                            </label>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Back of ID</Label>
-                          {entry.back_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.back_preview}
-                                  alt="Back ID preview"
-                                  className="h-full w-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateValidId(index, "back_file", null);
-                                    updateValidId(index, "back_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <Button
+                              <button
                                 type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                onClick={() =>
-                                  setCropTarget({
-                                    index,
-                                    side: "back",
-                                    src: entry.back_preview!,
-                                  })
-                                }
+                                onClick={() => {
+                                  updateValidId(index, "back_file", null);
+                                  updateValidId(index, "back_preview", null);
+                                }}
+                                className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
                               >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
+                                <X className="h-3 w-3" />
+                              </button>
                             </div>
-                          ) : (
-                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Upload Back</span>
-                              <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => handleValidIdFile(index, "back", e)}
-                                className="hidden"
-                              />
-                            </label>
-                          )}
-                        </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-8 text-xs gap-1"
+                              onClick={() =>
+                                setCropTarget({
+                                  index,
+                                  side: "back",
+                                  src: entry.back_preview!,
+                                })
+                              }
+                            >
+                              <CropIcon className="h-3.5 w-3.5" />
+                              Crop
+                            </Button>
+                          </div>
+                        ) : (
+                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Upload Back</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(e) => handleValidIdFile(index, "back", e)}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Employment & Income */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Employment & Income</h2>
-
-              <div className="space-y-2">
-                <Label htmlFor="employer_or_business">Employer / Business Name</Label>
-                <Input
-                  id="employer_or_business"
-                  placeholder="Company or business name"
-                  value={form.employer_or_business}
-                  onChange={(e) => update("employer_or_business", e.target.value)}
-                />
+                  </div>
+                ))}
               </div>
+            )}
+          </CardContent>
+        </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
-                <Input
-                  id="monthly_income"
-                  type="number"
-                  min={0}
-                  step={100}
-                  placeholder="0"
-                  value={form.monthly_income}
-                  onChange={(e) => update("monthly_income", e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Employment & Income */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <h2 className="text-base font-semibold">Employment & Income</h2>
 
-          {/* Submit */}
-          <div className="flex justify-end gap-3 pb-8">
-            <Link
-              href={`/borrowers/${borrowerId}`}
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              Cancel
-            </Link>
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {submitting ? (
-                <>
-                  <Spinner className="size-4 mr-2" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
-          </div>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="employer_or_business">Employer / Business Name</Label>
+              <Input
+                id="employer_or_business"
+                placeholder="Company or business name"
+                value={form.employer_or_business}
+                onChange={(e) => update("employer_or_business", e.target.value)}
+              />
+            </div>
 
-        {/* Profile Photo Crop Dialog */}
-        <PhotoCropDialog
-          open={photoCropOpen}
-          onOpenChange={(open) => {
-            setPhotoCropOpen(open);
-            if (!open) setPendingPhotoFile(null);
-          }}
-          imageFile={pendingPhotoFile}
-          onCropComplete={handlePhotoCropComplete}
-        />
+            <div className="space-y-2">
+              <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+              <Input
+                id="monthly_income"
+                type="number"
+                min={0}
+                step={100}
+                placeholder="0"
+                value={form.monthly_income}
+                onChange={(e) => update("monthly_income", e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* ID Crop Dialog */}
-        <IdCropDialog
-          open={!!cropTarget}
-          onOpenChange={(open) => {
-            if (!open) setCropTarget(null);
-          }}
-          imageSrc={cropTarget?.src ?? null}
-          onCropComplete={(blob, dataUrl) => {
-            if (!cropTarget) return;
-            const { index, side } = cropTarget;
-            const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
-              type: "image/jpeg",
-            });
-            setValidIds((prev) =>
-              prev.map((entry, i) => {
-                if (i !== index) return entry;
-                return side === "front"
-                  ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
-                  : { ...entry, back_file: croppedFile, back_preview: dataUrl };
-              })
-            );
-            setCropTarget(null);
-            toast.success("ID cropped");
-          }}
-        />
-      </div>
+        {/* Submit */}
+        <div className="flex justify-end gap-3 pb-8">
+          <Link
+            href={`/borrowers/${borrowerId}`}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            Cancel
+          </Link>
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          >
+            {submitting ? (
+              <>
+                <Spinner className="size-4 mr-2" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+        </div>
+      </form>
+
+      {/* Profile Photo Crop Dialog */}
+      <PhotoCropDialog
+        open={photoCropOpen}
+        onOpenChange={(open) => {
+          setPhotoCropOpen(open);
+          if (!open) setPendingPhotoFile(null);
+        }}
+        imageFile={pendingPhotoFile}
+        onCropComplete={handlePhotoCropComplete}
+      />
+
+      {/* ID Crop Dialog */}
+      <IdCropDialog
+        open={!!cropTarget}
+        onOpenChange={(open) => {
+          if (!open) setCropTarget(null);
+        }}
+        imageSrc={cropTarget?.src ?? null}
+        onCropComplete={(blob, dataUrl) => {
+          if (!cropTarget) return;
+          const { index, side } = cropTarget;
+          const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
+            type: "image/jpeg",
+          });
+          setValidIds((prev) =>
+            prev.map((entry, i) => {
+              if (i !== index) return entry;
+              return side === "front"
+                ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
+                : { ...entry, back_file: croppedFile, back_preview: dataUrl };
+            })
+          );
+          setCropTarget(null);
+          toast.success("ID cropped");
+        }}
+      />
+    </div>
+  );
+}
+
+// Editing starts by reading the member, which needs `borrowers:view`.
+export default function EditBorrowerPage() {
+  return (
+    <RouteGuard permission="borrowers:update" pageName="Edit Member">
+      <RouteGuard permission="borrowers:view" pageName="Edit Member">
+        <EditBorrowerContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

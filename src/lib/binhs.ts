@@ -1,4 +1,5 @@
 import { formatDateISO } from "./format";
+import { addMonthsAnchored } from "./loan-terms";
 
 export const BINHS_PENALTY_RATE = 0.2;
 
@@ -42,13 +43,13 @@ function parseLocalDate(value: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * `months` months after the start, on its day of the month or the last day of
+ * a shorter month, by the same anchored rule as the loan schedule.
+ */
 function addMonthsISO(startDate: string, months: number): string {
   const d = parseLocalDate(startDate);
-  if (!d) return startDate;
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + months);
-  if (d.getDate() < day) d.setDate(0);
-  return formatDateISO(d);
+  return d ? formatDateISO(addMonthsAnchored(d, months)) : startDate;
 }
 
 export function isValidBinhsInput(input: BinhsInput): boolean {

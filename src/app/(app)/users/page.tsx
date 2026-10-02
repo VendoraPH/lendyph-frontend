@@ -62,6 +62,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
 import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
 import {
@@ -211,6 +212,7 @@ function BranchMultiSelect({
           render={
             <button
               type="button"
+              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
               role="combobox"
               aria-expanded={open}
               className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
@@ -411,6 +413,7 @@ function AddUserDialog({
                 <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
                 <Input
                   id="add-username"
+                  autoComplete="off"
                   placeholder="juan.dc"
                   value={form.username}
                   onChange={(e) => update("username", e.target.value)}
@@ -436,6 +439,7 @@ function AddUserDialog({
                 <Input
                   id="add-password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Min 8 characters"
                   value={form.password}
                   onChange={(e) => update("password", e.target.value)}
@@ -448,6 +452,7 @@ function AddUserDialog({
                 <Input
                   id="add-confirm"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Re-enter password"
                   value={form.password_confirmation}
                   onChange={(e) =>
@@ -748,6 +753,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-password"
               type="password"
+              autoComplete="new-password"
               placeholder="Minimum 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -760,6 +766,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-confirm"
               type="password"
+              autoComplete="new-password"
               placeholder="Re-enter password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
@@ -1028,7 +1035,7 @@ function RoleSummaryCard({
 
 // ── Main Page ──
 
-export default function UsersPage() {
+function UsersContent() {
   const [users, setUsers] = useState<User[]>([]);
   // Set only when the drain gave up with pages outstanding, i.e. this screen is
   // knowingly missing users. Null means complete.
@@ -1048,16 +1055,18 @@ export default function UsersPage() {
         // counts. From the 16th user on all four were short, and the oldest
         // accounts could not be found, edited or deactivated from here at all.
         userService.listAll(),
-        // Not drained, and not truncated: RoleController and BranchController
-        // answer every row (`->get()`), not a paginator.
-        roleService.list(),
-        branchService.list(),
+        // RoleController and BranchController answer every row (`->get()`)
+        // today, so these are one request each. The pickers below need every
+        // role and branch or none, so a shortfall fails the load instead of
+        // rendering short.
+        roleService.listAll().then(completeRows),
+        branchService.listAll().then(completeRows),
       ]);
       const list = toUserList(userDrain);
       setUsers(list.users);
       setShortfall(list.shortfall);
-      setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
-      setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
+      setRoles(r);
+      setBranches(b);
     } catch (err) {
       notifyError(err, "We couldn't load the data. Please try again.");
     } finally {
@@ -1080,7 +1089,6 @@ export default function UsersPage() {
   }
 
   return (
-    <RouteGuard permission="users:view" pageName="User Management">
     <div className="space-y-6">
       <Card>
         <CardContent className="py-5">
@@ -1219,6 +1227,13 @@ export default function UsersPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <RouteGuard permission="users:view" pageName="User Management">
+      <UsersContent />
     </RouteGuard>
   );
 }

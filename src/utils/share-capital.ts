@@ -72,9 +72,8 @@ export function shareCapitalUnavailableReason(
         : `Only ${result.shown} share capital entries could be read, so the balance would be wrong in either direction.`;
     case "unavailable":
       // Deliberately member-NEUTRAL ("the balance", not "this member's"): the
-      // same sentence is rendered under a singular heading on a member's own
-      // record and under a plural one on the collateral listing, where several
-      // ledgers may have failed at once.
+      // same sentence sits under a banner heading on one screen and beside a
+      // form control on another, and each of those names the member itself.
       return "The share capital ledger could not be loaded, so the balance is unknown — which is not the same as zero.";
   }
 }
@@ -84,6 +83,25 @@ export function hasShareCapitalBalance(
   result: ShareCapitalBalance
 ): result is Extract<ShareCapitalBalance, { status: "ok" }> {
   return result.status === "ok";
+}
+
+/**
+ * An entry's `debit` and `credit`, each coerced to a finite number.
+ *
+ * Defensive coercion — a bad or missing column counts as 0 rather than
+ * poisoning a running total with NaN (which would propagate to "-₱NaN" in the
+ * UI). Shared by every screen that sums a ledger, so the rule lives in one
+ * place.
+ */
+export function ledgerAmounts(
+  entry: Pick<ShareCapitalLedgerEntry, "debit" | "credit">
+): { debit: number; credit: number } {
+  const debit = Number(entry.debit);
+  const credit = Number(entry.credit);
+  return {
+    debit: Number.isFinite(debit) ? debit : 0,
+    credit: Number.isFinite(credit) ? credit : 0,
+  };
 }
 
 /**
@@ -104,12 +122,9 @@ export function toShareCapitalBalance(
   let credits = 0;
   let debits = 0;
   for (const entry of drain.rows) {
-    // Defensive coercion — bad/missing amounts shouldn't poison the running
-    // total with NaN (which would propagate to "-₱NaN" in the UI).
-    const amount = Number(entry.amount);
-    if (!Number.isFinite(amount)) continue;
-    if (entry.type === "credit") credits += amount;
-    else debits += amount;
+    const { debit, credit } = ledgerAmounts(entry);
+    credits += credit;
+    debits += debit;
   }
 
   const balance = credits - debits;
@@ -134,10 +149,16 @@ export function toShareCapitalBalance(
  * decide what a member may borrow, so "refuse to decide" is the only correct
  * behaviour when the ledger is short or missing: an eligibility check computed
  * against a partial ledger is not a conservative answer, it is a wrong one.
+ *
+ * `canRead` is the caller's `share_capital:view`. The ledger answers 403
+ * without it, so the request is not made and the result is `unavailable`,
+ * exactly what a refused one produces.
  */
 export async function getShareCapitalBalance(
-  borrowerId: number
+  borrowerId: number,
+  canRead = true
 ): Promise<ShareCapitalBalance> {
+  if (!canRead) return { status: "unavailable" };
   try {
     return toShareCapitalBalance(
       await shareCapitalService.ledgerListAll({ borrower_id: borrowerId })

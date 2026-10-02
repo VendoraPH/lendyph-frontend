@@ -21,7 +21,7 @@ export const authService = {
     password: string;
     remember?: boolean;
   }) =>
-    api.rawPost<{ token: string; user: User }>(
+    api.rawPost<{ token: string; expires_in?: number; user: User }>(
       API_ENDPOINTS.AUTH.LOGIN,
       credentials
     ),
@@ -29,9 +29,6 @@ export const authService = {
   logout: () => api.post(API_ENDPOINTS.AUTH.LOGOUT),
 
   me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),
-
-  refresh: () =>
-    api.post<{ token: string }>(API_ENDPOINTS.AUTH.REFRESH),
 
   /**
    * Self-service profile update. Backend whitelists full_name, email, and

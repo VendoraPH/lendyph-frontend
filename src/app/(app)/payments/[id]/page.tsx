@@ -2,9 +2,9 @@
 
 import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Printer, Receipt, Ban, Loader2 } from "lucide-react";
 import { usePrintables } from "@/hooks";
+import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -154,13 +154,12 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function PaymentReceiptPage({
+function PaymentReceiptContent({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -527,5 +526,17 @@ export default function PaymentReceiptPage({
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function PaymentReceiptPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <RouteGuard permission="payments:view" pageName="Payment Receipt">
+      <PaymentReceiptContent params={params} />
+    </RouteGuard>
   );
 }

@@ -5,48 +5,50 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
+import { httpStatusOf } from "@/lib/api-error";
+import { getErrorMessage } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
   loanApprovalService,
-  loanProductService,
   loanAdjustmentService,
   repaymentService,
-  coMakerService,
-  userService,
   reportService,
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { PrintableMenu } from "@/components/common";
+import { PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
+import { coMakerName } from "@/lib/co-maker-name";
+import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
+import { readScheduleRows, toDisplaySchedule } from "./_lib/server-schedule";
+import { ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
+import {
+  RestructuredBalanceFigures,
+  ScheduleNotice,
+  type ScheduleLoad,
+} from "./_components/schedule-notice";
+import { AmortizationBalanceTable } from "./_components/amortization-balance-table";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
-import {
-  InsurancePremiumSection,
-  computeInsurancePremium,
-} from "./_components/insurance-premium-section";
+import { ReleaseCoMakers } from "./_components/release-co-makers";
+import { InsurancePremiumSection } from "./_components/insurance-premium-section";
+import { releaseFigures, releaseInsurancePayload } from "./_lib/release-figures";
+import { extensionDueDate } from "./_lib/extension-due-date";
+import { useReleasePreview } from "./_hooks/use-release-preview";
 import {
   INSURANCE_PREMIUM_INITIAL,
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
-import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
@@ -101,8 +103,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
-  Check,
-  X,
   Clock,
   FileText,
   UserCheck,
@@ -117,8 +117,6 @@ import {
   CalendarPlus,
   Plus,
   DollarSign,
-  Settings2,
-  ChevronsUpDown,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -128,9 +126,11 @@ import {
   Loader2,
   BookOpen,
   Zap,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  formatCurrencyExact,
   formatDate,
   formatDateISO,
   formatDateObj,
@@ -140,12 +140,16 @@ import {
 import {
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
   PAYMENT_FREQUENCY_LABELS,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
+  isEverReleasedLoanStatus,
 } from "@/constants";
-import type { Loan, LoanStatus } from "@/types/loan";
+import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
+import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
+import { overdueWithPenalty } from "@/lib/loan-dues";
 
 // ── Currency & Date Formatters ──
 
@@ -169,23 +173,6 @@ const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
   }).format(parseFloat(String(amount ?? 0)) || 0);
 
 
-// ── Amortization Schedule Helpers ──
-
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
-type InterestType = "fixed" | "diminishing" | "upon_maturity";
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-  balance: number;
-  status?: "pending" | "paid" | "partial" | "overdue";
-  amountPaid?: number;
-}
-
 // One row of the Ledger table — either a Repayment or a LoanLedgerEntry
 // (interest a loan extension accrues or collects), flattened to a common
 // shape so both render in one chronological list with running balances.
@@ -205,116 +192,9 @@ interface LedgerDisplayRow {
   status?: Repayment["status"];
   repaymentId?: number;
   principalBal: number;
-  interestBal: number;
-  scbBal: number;
-}
-
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return termMonths; // SCB accumulates monthly, paid as lump sum at maturity
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-      return Math.round(termMonths * 2.17);
-    case "monthly":
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return 30; // fallback, not used in upon_maturity path
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-      return 14;
-    case "monthly":
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function generateSchedule(
-  principal: number,
-  rate: number,
-  termMonths: number,
-  frequency: PaymentFrequency,
-  interestType: InterestType,
-  startDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  // Upon Maturity = a single consolidated payment at the maturity date.
-  // Triggered when payment_frequency OR interest_type is "upon_maturity".
-  if (frequency === "upon_maturity" || interestType === "upon_maturity") {
-    const totalInterest = principal * (rate / 100) * termMonths;
-    const totalScb = scbAmount * termMonths; // SCB accumulates monthly, paid at maturity
-    return [{
-      period: 1,
-      dueDate: addMonths(startDate, termMonths),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: totalScb,
-      totalPayment: principal + totalInterest + totalScb,
-      balance: 0,
-    }];
-  }
-
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
-  const principalPerPeriod = principal / totalPeriods;
-  const rows: AmortizationRow[] = [];
-
-  let remainingBalance = principal;
-
-  for (let i = 1; i <= totalPeriods; i++) {
-    const dueDate =
-      frequency === "monthly"
-        ? addMonths(startDate, i)
-        : addDays(startDate, i * intervalDays);
-
-    let interest: number;
-    // Constant interest on the original principal for straight/fixed loans.
-    // The API stores this method as "straight" (label "Straight (Fixed)"), so
-    // only "diminishing" should reduce interest on the falling balance —
-    // anything else (straight/fixed) keeps it flat. Matching only "fixed" here
-    // mis-treated straight loans as diminishing, understating total payable.
-    if ((interestType as string) !== "diminishing") {
-      interest = principal * (rate / 100);
-    } else {
-      interest = remainingBalance * (rate / 100);
-    }
-
-    remainingBalance -= principalPerPeriod;
-
-    rows.push({
-      period: i,
-      dueDate,
-      principal: principalPerPeriod,
-      interest,
-      shareCapitalBuildUp: scbAmount,
-      totalPayment: principalPerPeriod + interest + scbAmount,
-      balance: Math.max(0, remainingBalance),
-    });
-  }
-
-  return rows;
+  /** Null while the balance's opening is unknown (no schedule rows on screen). */
+  interestBal: number | null;
+  scbBal: number | null;
 }
 
 // ── Status Colors ──
@@ -693,47 +573,49 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   );
 }
 
-// ── Loan product resolution ──
-// Action endpoints (submit/approve/reject/release/void/extend/etc.) commonly
-// return a leaner loan payload than GET /api/loans/{id} and don't eager-load
-// the `loan_product` relation. Left unhandled, the next setLoan(...) call
-// wipes out a product name the page already had, and "Loan Product" (incl.
-// the Release modal) shows "N/A" even though nothing about the product
-// actually changed.
-
-async function enrichLoanProduct(data: Loan): Promise<Loan> {
-  const productId = data.loan_product?.id ?? data.loan_product_id;
-  if (productId && !data.loan_product?.name && !data.loan_product_name) {
-    try {
-      const product = await loanProductService.detail(productId);
-      if (product?.name) {
-        return {
-          ...data,
-          loan_product: { ...(data.loan_product ?? {}), id: productId, name: product.name },
-        };
-      }
-    } catch { /* product fetch is non-critical */ }
-  }
-  return data;
-}
-
-// Resolves the freshest loan_product info for `updated`, falling back to a
-// product-id lookup and finally to whatever `prev` already had on hand.
-async function resolveLoan(prev: Loan | null, updated: Loan): Promise<Loan> {
-  if (updated.loan_product?.name || updated.loan_product_name) return updated;
-  const enriched = await enrichLoanProduct(updated);
-  if (enriched.loan_product?.name || enriched.loan_product_name) return enriched;
-  if (prev?.loan_product?.name || prev?.loan_product_name) {
-    return {
-      ...updated,
-      loan_product: prev.loan_product,
-      loan_product_name: prev.loan_product_name,
-    };
-  }
-  return updated;
-}
-
 // ── Main Page ──
+
+function LoanNotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <AlertCircle className="h-12 w-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">Loan Not Found</h2>
+      <p className="text-muted-foreground">
+        The loan application you&apos;re looking for does not exist.
+      </p>
+      <Link href="/loans">
+        <Button variant="outline">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Loans
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * The loan read failed for a reason that says nothing about the loan — a rate
+ * limit, a server error, a dropped connection. Only a 404 is "not found".
+ */
+function LoanLoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+      <AlertCircle className="h-12 w-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">We couldn&apos;t load this loan</h2>
+      <p className="text-muted-foreground max-w-md">{message}</p>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="ghost" nativeButton={false} render={<Link href="/loans" />}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Loans
+        </Button>
+        <Button variant="outline" onClick={onRetry}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Retry
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function LoanDetailPage({
   params,
@@ -741,13 +623,39 @@ export default function LoanDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const loanId = Number(id);
+  // Anything can follow `/loans/` in a hand-edited URL. Only plain digits name
+  // a loan — `Number()` alone reads `1e3` as 1000, `0x10` as 16 and ` 12 ` as
+  // 12 — so anything else is "not found" without asking the API. Decided here,
+  // before the page's own hooks, so such a URL makes no request at all.
+  if (!(typeof id === "string" && /^\d+$/.test(id) && Number(id) > 0)) {
+    return <LoanNotFound />;
+  }
+  return (
+    <RouteGuard permission="loans:view" pageName="Loan Details">
+      <LoanDetail loanId={Number(id)} />
+    </RouteGuard>
+  );
+}
+
+function LoanDetail({ loanId }: { loanId: number }) {
   const router = useRouter();
 
   const [loan, setLoan] = useState<Loan | undefined>();
   const [loading, setLoading] = useState(true);
+  // Why the loan could not be read, when it could not: `not_found` (a 404) is
+  // the only answer that means the loan does not exist.
+  const [loadFailure, setLoadFailure] = useState<{
+    kind: ReturnType<typeof loanLoadFailure>;
+    message: string;
+  } | null>(null);
+  // Bumped by the failed-load Retry, which re-runs the load effect below.
+  const [loanReloadCount, setLoanReloadCount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  // The persisted schedule, for released loans. Null until the server has
+  // answered; `scheduleFailed` says whether it could not be asked. An empty list
+  // is an answer: the loan has no instalments.
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
+  const [scheduleFailed, setScheduleFailed] = useState(false);
   // Raw amortization rows exactly as the backend returns them. The mapped
   // `apiSchedule` above folds each row's interest_paid into amount_paid, which
   // loses the per-row interest breakdown; we keep the raw rows so the extend
@@ -770,8 +678,11 @@ export default function LoanDetailPage({
 
   // Server-computed amortization preview (for pre-release loans). Populated
   // via loanService.amortizationPreview — lets approvers see the same schedule
-  // the server will persist on release.
+  // the server will persist on release. Null and `previewFailed` as above.
   const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  // Bumped by the schedule card's Retry, which re-runs the effects that read it.
+  const [scheduleReloadCount, setScheduleReloadCount] = useState(0);
 
   // Statement of Account dialog state
   const [soaOpen, setSoaOpen] = useState(false);
@@ -792,6 +703,10 @@ export default function LoanDetailPage({
   // merged with repayments into `ledgerRows` below.
   const [ledgerEntries, setLedgerEntries] = useState<LoanLedgerEntry[]>([]);
   const [ledgerEntriesLoading, setLedgerEntriesLoading] = useState(false);
+  // Bumped after an action that posts to the share-capital ledger (a payment
+  // credits any SCB build-up, a void reverses it) so the Share Capital card
+  // re-reads its balance. No other action writes to that ledger.
+  const [shareCapitalVersion, setShareCapitalVersion] = useState(0);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -826,153 +741,80 @@ export default function LoanDetailPage({
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
   const [adjRemarks, setAdjRemarks] = useState("");
-  const [adjNewValues, setAdjNewValues] = useState("");
   // User-friendly adjustment fields
   const [adjNewBalance, setAdjNewBalance] = useState("");
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
 
 
   // Account Officer state
-  const [users, setUsers] = useState<User[]>([]);
-  // Set only when the officer drain gave up with pages outstanding, i.e. the
-  // AO picker is knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
   const [aoEditing, setAoEditing] = useState(false);
-  const [aoOpen, setAoOpen] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
 
-  // Fetch loan on mount
+  // Fetch loan on mount, and again on Retry. `loading` is already true when
+  // this runs (initially, or set by `reloadLoan`), so state is only set once
+  // the request settles.
   useEffect(() => {
     let cancelled = false;
-    async function fetchLoan() {
-      try {
-        setLoading(true);
-        const data = await loanService.detail(loanId);
-        // Resolve the loan's co-makers when the detail response doesn't embed
-        // them. Co-makers are loan-scoped (chosen at application time), so we
-        // hydrate from the loan's own id(s) / flat name first, and only fall
-        // back to the borrower's registered co-makers as a last resort.
-        if (!data.co_makers || data.co_makers.length === 0) {
-          const mapCoMaker = (cm: CoMaker) => ({
-            id: cm.id,
-            full_name: cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || undefined),
-            address: cm.address,
-            relationship: cm.relationship_to_borrower ?? cm.relationship,
-          });
-          const rawLoan = data as Loan & { co_maker_ids?: number[] };
-          const coMakerIds = Array.isArray(rawLoan.co_maker_ids)
-            ? rawLoan.co_maker_ids
-            : data.co_maker_id != null
-              ? [data.co_maker_id]
-              : [];
-          // 1) Explicit co-maker id(s) on the loan → fetch each by id.
-          if (coMakerIds.length > 0) {
-            try {
-              const fetched = await Promise.all(
-                coMakerIds.map((cid) => coMakerService.detail(cid).catch(() => null))
-              );
-              const mapped = fetched.filter((cm): cm is CoMaker => !!cm).map(mapCoMaker);
-              if (mapped.length > 0) data.co_makers = mapped;
-            } catch { /* non-critical */ }
-          }
-          // 2) Legacy flat name with no id.
-          if ((!data.co_makers || data.co_makers.length === 0) && data.co_maker_name) {
-            data.co_makers = [{ id: data.co_maker_id ?? 0, full_name: data.co_maker_name }];
-          }
-          // 3) Last resort: the borrower's registered co-makers.
-          const borrowerId = data.borrower?.id ?? data.borrower_id;
-          if ((!data.co_makers || data.co_makers.length === 0) && borrowerId) {
-            try {
-              const cms = await coMakerService.list(borrowerId);
-              const cmList = Array.isArray(cms) ? cms : (cms as unknown as { data: CoMaker[] }).data ?? [];
-              if (cmList.length > 0) data.co_makers = cmList.map(mapCoMaker);
-            } catch { /* non-critical */ }
-          }
-        }
-        // Resolve the loan product name when the loan detail doesn't embed it,
-        // so the Loan Product field (incl. the Release modal) isn't "N/A".
-        const enriched = await enrichLoanProduct(data);
-        if (!cancelled) setLoan(enriched);
-      } catch {
-        if (!cancelled) toast.error("We couldn't load the loan details. Please try again.");
-      } finally {
+    loadLoan(loanId, null)
+      .then((loaded) => {
+        if (!cancelled) setLoan(loaded);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadFailure({
+          kind: loanLoadFailure(err),
+          message: getErrorMessage(err, "Please try again in a moment."),
+        });
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    }
-    fetchLoan();
+      });
     return () => { cancelled = true; };
-  }, [loanId]);
+  }, [loanId, loanReloadCount]);
 
-  // Fetch users for AO tagging
-  useEffect(() => {
-    async function fetchUsers() {
-      try {
-        // Drained, and filtered to active on the server. This was
-        // `userService.list()` with no arguments — the endpoint's default page
-        // of 15, newest first — so from the 16th user on, the longest-serving
-        // officers could not be assigned from here.
-        const officers = toUserList(await userService.listAll({ status: "active" }));
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
-      } catch { /* non-critical */ }
-    }
-    fetchUsers();
-  }, []);
+  const reloadLoan = () => {
+    setLoading(true);
+    setLoadFailure(null);
+    setLoanReloadCount((n) => n + 1);
+  };
 
-  // Save AO assignment
+  // `loans:update` edits a loan application and assigns its account officer.
+  // The officer is saved through `PATCH /loans/{id}/account-officer`, which
+  // needs it, and the picker's `GET /staff` accepts that same permission. It
+  // used to require `users:view` as well, which only admins hold, so loan
+  // officers never saw the control.
+  const canUpdateLoan = usePermission().can("loans:update");
+
+  // Save AO assignment. This goes through its own endpoint, not `update`: PUT
+  // /loans/{id} refuses every loan past for_review. The page shows what the
+  // server saved, not what was picked.
   const handleSaveAO = useCallback(async (userId: number) => {
     if (!loan) return;
     setAoSaving(true);
     try {
-      await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
-      setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
+      const saved = await loanService.assignAccountOfficer(loan.id, userId);
+      setLoan((prev) => prev ? { ...prev, account_officer_id: saved.account_officer_id, account_officer: saved.account_officer } : prev);
       toast.success("Account officer updated");
       setAoEditing(false);
-    } catch {
-      toast.error("We couldn't update the account officer. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't update the account officer. Please try again.");
     } finally {
       setAoSaving(false);
     }
-  }, [loan, users]);
+  }, [loan]);
 
-  // Fetch schedule for released+ loans
+  // Fetch schedule for released+ loans. A failed or unreadable answer is
+  // recorded as such: nothing stands in for the server's rows.
   const fetchSchedule = useCallback(async (id: number) => {
     try {
-      const res = await loanService.schedule(id);
-      // API may return { schedule: [...], summary: {...} } or a plain array
-      const rows = Array.isArray(res) ? res : (res as unknown as { schedule: unknown[] })?.schedule;
-      if (Array.isArray(rows) && rows.length > 0) {
-        // Map ApiScheduleRow field names to LoanSchedule field names
-        const first = rows[0] as Record<string, unknown>;
-        const isApiFormat = "principal_due" in first;
-        // Keep the raw rows only when they carry the API breakdown fields
-        // (interest_due / interest_paid); otherwise fall back to null so the
-        // outstanding-interest memo uses the client-side schedule instead.
-        setRawSchedule(isApiFormat ? (rows as unknown as ApiScheduleRow[]) : null);
-        setApiSchedule(
-          isApiFormat
-            ? (rows as Record<string, unknown>[]).map((r) => ({
-                id: Number(r.id) || 0,
-                loan_id: Number(r.loan_id) || id,
-                due_date: String(r.due_date ?? ""),
-                principal: parseFloat(String(r.principal_due ?? 0)),
-                interest: parseFloat(String(r.interest_due ?? 0)),
-                amount_due: parseFloat(String(r.total_due ?? 0)),
-                amount_paid: parseFloat(String(r.principal_paid ?? 0)) + parseFloat(String(r.interest_paid ?? 0)),
-                balance: parseFloat(String(r.remaining_balance ?? 0)),
-                status: (r.status as LoanSchedule["status"]) ?? "pending",
-              }) as LoanSchedule)
-            : rows as unknown as LoanSchedule[]
-        );
-      } else {
-        setApiSchedule([]);
-        setRawSchedule(null);
-      }
+      const read = readScheduleRows(await loanService.schedule(id), id);
+      setApiSchedule(read?.schedule ?? null);
+      setRawSchedule(read?.raw ?? null);
+      setScheduleFailed(read === null);
     } catch {
-      setApiSchedule(null); // fallback to client-side generation
+      setApiSchedule(null);
       setRawSchedule(null);
+      setScheduleFailed(true);
     }
   }, []);
 
@@ -989,32 +831,79 @@ export default function LoanDetailPage({
     }
   }, []);
 
-  // Fetch server-computed amortization preview for draft/for_review loans
+  // Fetch server-computed amortization preview for draft/for_review loans.
+  // Its rows carry the same `*_due` fields as the persisted schedule.
   const fetchAmortizationPreview = useCallback(async (id: number) => {
     try {
-      const res = await loanService.amortizationPreview(id);
-      const rows = Array.isArray(res)
-        ? res
-        : ((res as unknown as { data?: LoanSchedule[] })?.data ?? []);
+      const rows = readScheduleRows(await loanService.amortizationPreview(id), id)?.schedule ?? null;
       setPreviewSchedule(rows);
+      setPreviewFailed(rows === null);
     } catch {
       setPreviewSchedule(null);
+      setPreviewFailed(true);
     }
   }, []);
 
+  // The loaded loan's id and status as plain values. The fetch effects below
+  // read only these, so they re-run when one of them changes, not every time a
+  // refetch or an action hands back a new `loan` object. `loadedLoanId` stays
+  // undefined until the loan arrives, unlike the route's `loanId`.
+  const loadedLoanId = loan?.id;
+  const loanStatus = loan?.status;
+  // Statuses for which the backend has schedule / repayment / adjustment data:
+  // every loan that was released, whatever became of it since.
+  const hasServerLoanData = isEverReleasedLoanStatus(loanStatus);
+
+  // Released-loan data is read when the loan is first known to have it: on
+  // first load, and when a release moves it into that set. These effects key
+  // on the flag, not the status, because every status change INSIDE the set
+  // (a payment settling a past_due loan, a void, an extension, an applied
+  // adjustment) comes from an action that re-reads what it changed itself;
+  // keyed on the status, each of those re-read everything a second time.
   useEffect(() => {
-    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
+    if (loadedLoanId !== undefined && hasServerLoanData) {
+      fetchSchedule(loadedLoanId);
+      fetchLoanSummary(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchSchedule, fetchLoanSummary]);
+  }, [loadedLoanId, hasServerLoanData, fetchSchedule, fetchLoanSummary, scheduleReloadCount]);
 
   // Pre-release preview (draft / for_review / approved)
   useEffect(() => {
-    if (loan && ["draft", "for_review", "approved"].includes(loan.status)) {
-      fetchAmortizationPreview(loan.id);
+    if (loadedLoanId !== undefined && loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)) {
+      fetchAmortizationPreview(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchAmortizationPreview]);
+  }, [loadedLoanId, loanStatus, fetchAmortizationPreview, scheduleReloadCount]);
+
+  // Where this loan's schedule comes from: the persisted schedule once it is
+  // released, the server's preview before that, nowhere for a rejected or void
+  // loan. `scheduleRows` is that source's answer, null until there is one.
+  const scheduleSource: "persisted" | "preview" | null = hasServerLoanData
+    ? "persisted"
+    : loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)
+      ? "preview"
+      : null;
+  const scheduleRows =
+    scheduleSource === "persisted" ? apiSchedule : scheduleSource === "preview" ? previewSchedule : null;
+  const scheduleLoad: ScheduleLoad =
+    scheduleRows !== null
+      ? "loaded"
+      : (scheduleSource === "persisted" ? scheduleFailed : previewFailed)
+        ? "failed"
+        : "loading";
+
+  // Retry from the schedule card: back to loading, then the effects above read
+  // the schedule (and the summary beside it) again.
+  const retrySchedule = () => {
+    setScheduleFailed(false);
+    setPreviewFailed(false);
+    setScheduleReloadCount((n) => n + 1);
+  };
+
+  // Payments need `payments:view` and adjustments `loan_adjustments:view`,
+  // neither of which viewing a loan implies (the approval-chain roles hold only
+  // `loans:view`). Without one, that history is not asked for and stays empty.
+  const canViewPayments = usePermission().can("payments:view");
+  const canViewAdjustments = usePermission().can("loan_adjustments:view");
 
   // Fetch repayments for released+ loans. Each list row is the full
   // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
@@ -1023,6 +912,7 @@ export default function LoanDetailPage({
   // every row's detail on the belief that the list omitted the breakdown; it
   // never did, and each of those requests returned the row it started from.
   const fetchRepayments = useCallback(async (id: number) => {
+    if (!canViewPayments) return;
     try {
       setRepaymentsLoading(true);
       // Drained across pages. This was `repaymentService.list(id)` — the
@@ -1040,7 +930,7 @@ export default function LoanDetailPage({
     } finally {
       setRepaymentsLoading(false);
     }
-  }, []);
+  }, [canViewPayments]);
 
   // Fetch debit/credit ledger entries for released+ loans — merged into
   // `ledgerRows` alongside repayments.
@@ -1059,6 +949,7 @@ export default function LoanDetailPage({
 
   // Fetch adjustments for released+ loans
   const fetchAdjustments = useCallback(async (id: number) => {
+    if (!canViewAdjustments) return;
     try {
       setAdjustmentsLoading(true);
       const res = await loanAdjustmentService.list(id);
@@ -1072,41 +963,36 @@ export default function LoanDetailPage({
     } finally {
       setAdjustmentsLoading(false);
     }
-  }, []);
+  }, [canViewAdjustments]);
 
   useEffect(() => {
-    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
-      fetchRepayments(loan.id);
-      fetchAdjustments(loan.id);
-      fetchLedgerEntries(loan.id);
+    if (loadedLoanId !== undefined && hasServerLoanData) {
+      fetchRepayments(loadedLoanId);
+      fetchAdjustments(loadedLoanId);
+      fetchLedgerEntries(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments, fetchLedgerEntries]);
+  }, [loadedLoanId, hasServerLoanData, fetchRepayments, fetchAdjustments, fetchLedgerEntries]);
 
   // Dialog state
-  const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
-  const [submitOpen, setSubmitOpen] = useState(false);
-  const [releaseDatePickerOpen, setReleaseDatePickerOpen] = useState(false);
   const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
   const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
-  const [approvalRemarks, setApprovalRemarks] = useState("");
-  const [rejectionRemarks, setRejectionRemarks] = useState("");
-  const [releaseDate, setReleaseDate] = useState<Date>(new Date());
   const [insurancePremium, setInsurancePremium] = useState<InsurancePremiumValue>(
     INSURANCE_PREMIUM_INITIAL,
   );
-
-  // Add-second-co-maker state (used inside Release Dialog)
-  const [addCoMakerOpen, setAddCoMakerOpen] = useState(false);
-  const [addingCoMaker, setAddingCoMaker] = useState(false);
-  const [newCoMaker, setNewCoMaker] = useState({
-    first_name: "",
-    last_name: "",
-    contact_number: "",
-    relationship_to_borrower: "",
-  });
+  // What the release will withhold and pay out before insurance, read from the
+  // server once while the loan awaits release. The Release dialog and, for
+  // whoever can release it, the Loan Information card show no deduction, total
+  // or net for an approved loan that does not come from here. The endpoint
+  // needs `loans:release`, so without it the card keeps the recorded figures
+  // and nothing is asked for unless the dialog is opened.
+  const canReleaseLoan = usePermission().can("loans:release");
+  const releasePreviewOnCard = loan?.status === "approved" && canReleaseLoan;
+  const { state: releasePreview, reload: reloadReleasePreview } = useReleasePreview(
+    loanId,
+    loan?.status === "approved" && (canReleaseLoan || releaseOpen),
+  );
 
   // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
   // step goes to the API and is followed by a refetch; nothing on this page is
@@ -1140,11 +1026,17 @@ export default function LoanDetailPage({
   // precisely who sits on a draft, so an ungated Void button offers that role
   // an action it can never complete — QA measured it: 403, loan unchanged, and
   // a toast saying "please try again" for a permission wall that retrying will
-  // never clear. Gated the same way Edit is.
+  // never clear. Edit and Submit are gated for the same reason.
   //
   // Called up here with the other hooks, not beside the flag it feeds: this
   // component has early returns below, and a hook after one breaks the order.
   const canVoidLoan = usePermission().can("loans:void");
+  // Submitting a restructure application needs only `loans:restructure`.
+  const canRestructureLoan = usePermission().can("loans:restructure");
+  // The documents card's own defaults offered upload and delete to anyone who
+  // can open a loan. Uploading to a loan needs `loans:update` and deleting a
+  // document `borrowers:delete` (DocumentController).
+  const canDeleteDocuments = usePermission().can("borrowers:delete");
 
   const currentUser = useAuthStore((s) => s.user);
   const currentUserDisplayName =
@@ -1153,157 +1045,42 @@ export default function LoanDetailPage({
     currentUser?.username ||
     "Unknown User";
 
-  // Amortization schedule preview for release dialog
-  const releaseSchedule = useMemo(() => {
-    if (!loan) return [];
-    const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-    return generateSchedule(
-      loan.principal_amount,
-      loan.interest_rate,
-      termVal,
-      freqVal,
-      methodVal,
-      releaseDate,
-      loan.scb_amount ?? 0,
-    );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
-
-  const scheduleTotals = useMemo(() => {
-    return releaseSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [releaseSchedule]);
-
-  // Maturity date computed from release date + term
-  const computedMaturityDate = useMemo(() => {
-    if (!loan) return null;
-    return addMonths(releaseDate, loan.term ?? loan.term_months ?? 0);
-  }, [releaseDate, loan?.term, loan?.term_months]);
-
-  // Post-release: prefer API schedule, fallback to client-side generation
+  // The schedule on screen: the server's rows, persisted or previewed, and
+  // nothing else. The browser never builds a schedule of its own for a loan it
+  // shows — no rows from the server (a restructured loan whose open periods the
+  // release deleted, a request that failed) means no rows here, and the card
+  // says which. For an approved loan these are the preview rows, which is what
+  // the Release dialog shows: the schedule the release will store.
+  //
+  // The memo lists the loan FIELDS it reads rather than `loan`, so a refetch
+  // that returns the same terms does not recompute it. That only holds while
+  // every read goes through a listed field, which is why the has-a-loan guard
+  // reads `loan?.id`, not `loan`.
   const storedSchedule = useMemo(() => {
-    if (!loan) return [];
-    const scb = loan.scb_amount ?? 0;
-    const isReleased = ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-    const isPreRelease = ["draft", "for_review", "approved"].includes(loan.status);
+    if (!loan?.id || !scheduleRows) return [];
+    const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
+    return toDisplaySchedule(scheduleRows, {
+      principalAmount: loan.principal_amount,
+      scb: loan.scb_amount ?? 0,
+      isUponMaturity:
+        freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity",
+    });
+  }, [loan?.id, loan?.principal_amount, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
 
-    if (isReleased) {
-      const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
-      if (!relDate) return [];
-      const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
-      const isUponMaturity = freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity";
-      // Use API schedule if available, map to display format
-      if (apiSchedule && apiSchedule.length > 0) {
-        if (isUponMaturity) {
-          // Backend may return one row per period; collapse everything into a single maturity payment
-          const lastRow = apiSchedule[apiSchedule.length - 1];
-          const totalPrincipal = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.principal)) || 0), 0);
-          const totalInterest = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.interest)) || 0), 0);
-          const totalAmountDue = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_due)) || 0), 0);
-          const totalAmountPaid = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_paid)) || 0), 0);
-          const totalScb = scb * apiSchedule.length;
-          return [{
-            period: 1,
-            dueDate: new Date(lastRow.due_date),
-            principal: totalPrincipal,
-            interest: totalInterest,
-            shareCapitalBuildUp: totalScb,
-            totalPayment: totalAmountDue + totalScb,
-            balance: parseFloat(String(lastRow.balance)) || 0,
-            status: lastRow.status,
-            amountPaid: totalAmountPaid,
-          }];
-        }
-        // Compute running principal balance ourselves; backend often returns 0
-        // for `remaining_balance`, which leaves the Balance column blank.
-        // Starts at the full loan principal and decreases by each row's principal portion.
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return apiSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Fallback to client-side generation
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = freq as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        freqVal,
-        methodVal,
-        new Date(relDate),
-        scb,
-      );
-    }
-
-    if (isPreRelease) {
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
-
-      // Use server preview only when it includes a principal/interest breakdown.
-      // The preview endpoint sometimes returns amount_due only (principal=0, interest=0)
-      // for newly created draft loans — in that case fall back to client-side generation.
-      const hasBreakdown = previewSchedule && previewSchedule.length > 0 &&
-        previewSchedule.some(r => (parseFloat(String(r.principal)) || 0) > 0 || (parseFloat(String(r.interest)) || 0) > 0);
-
-      if (hasBreakdown && previewSchedule) {
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return previewSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Client-side generation as primary fallback
-      if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        freqVal,
-        methodVal,
-        startDate,
-        scb,
-      );
-    }
-
-    return [];
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
+  // Column totals of the Release dialog's schedule preview.
+  const scheduleTotals = useMemo(
+    () =>
+      storedSchedule.reduce(
+        (acc, row) => ({
+          principal: acc.principal + row.principal,
+          interest: acc.interest + row.interest,
+          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
+          totalPayment: acc.totalPayment + row.totalPayment,
+        }),
+        { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
+      ),
+    [storedSchedule],
+  );
 
   // Single source of truth for the interest still OWED on the loan — used both
   // to decide whether to collect it before extending, and to render the
@@ -1320,6 +1097,9 @@ export default function LoanDetailPage({
   //
   // Rounded to centavos so the displayed figure and the posted amount match to
   // the last decimal (formatCurrencyPrecise shows the same value we charge).
+  //
+  // Null while the server's schedule is loading or could not be read: the
+  // interest owed is then unknown, which is not the same as none.
   const currentInterestDue = useMemo(() => {
     if (rawSchedule && rawSchedule.length > 0) {
       const outstanding = rawSchedule.reduce((sum, row) => {
@@ -1329,11 +1109,13 @@ export default function LoanDetailPage({
       }, 0);
       return Math.round(outstanding * 100) / 100;
     }
-    // No raw API rows (client-generated schedule): nothing has been paid yet,
-    // so the first open period's interest is the full amount owed.
+    if (scheduleLoad !== "loaded") return null;
+    // No raw API rows: the server answered with no instalments (nothing is
+    // owed), or with rows lacking the paid breakdown, where the first open
+    // period's interest is the amount owed.
     const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
     return Math.round(fallback * 100) / 100;
-  }, [rawSchedule, storedSchedule]);
+  }, [rawSchedule, storedSchedule, scheduleLoad]);
 
   /**
    * What the new period will owe in interest if the outstanding amount is
@@ -1346,7 +1128,7 @@ export default function LoanDetailPage({
    */
   const extendDeferredInterestTotal = useMemo(() => {
     const rate = parseFloat(String(loan?.interest_rate ?? 0)) || 0;
-    if (!rate || !rawSchedule || rawSchedule.length === 0) return null;
+    if (!rate || !rawSchedule || rawSchedule.length === 0 || currentInterestDue === null) return null;
 
     const outstandingPrincipal = rawSchedule.reduce((sum, row) => {
       const due = parseFloat(String(row.principal_due ?? 0)) || 0;
@@ -1370,52 +1152,10 @@ export default function LoanDetailPage({
     );
   }, [storedSchedule]);
 
-  // Remaining-due totals for the Schedule tab footer — excludes fully-paid periods.
-  const scheduleRemainingTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => {
-        if (row.status === "paid") return acc;
-        return {
-          principal: acc.principal + row.principal,
-          interest: acc.interest + row.interest,
-          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-          totalPayment: acc.totalPayment + row.totalPayment,
-        };
-      },
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
-
-  // Opening running-balance per period: how much Principal / Interest / SCB
-  // is still owed at the START of period N (before that period's payment).
-  // First row shows the full original obligation; last row shows what the
-  // final payment will settle; after the term everything reaches zero.
-  const balancesRows = useMemo(() => {
-    if (storedSchedule.length === 0) return [];
-    let remainingPrincipal = storedScheduleTotals.principal;
-    let remainingInterest = storedScheduleTotals.interest;
-    let remainingScb = storedScheduleTotals.shareCapitalBuildUp;
-    return storedSchedule.map((row) => {
-      const opening = {
-        principal: remainingPrincipal,
-        interest: remainingInterest,
-        scb: remainingScb,
-        total: remainingPrincipal + remainingInterest + remainingScb,
-      };
-      remainingPrincipal = Math.max(0, remainingPrincipal - row.principal);
-      remainingInterest = Math.max(0, remainingInterest - row.interest);
-      remainingScb = Math.max(0, remainingScb - row.shareCapitalBuildUp);
-      return { ...row, opening };
-    });
-  }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
-
   // Ledger rows: repayments merged with debit/credit ledger entries (interest
   // a loan extension accrues or collects), sorted by date so the table reads
   // as one chronological history with running Principal/Interest/SCB balances.
   const ledgerRows = useMemo(() => {
-    const principalStart = loan?.principal_amount ?? 0;
-    const scbStart = storedScheduleTotals.shareCapitalBuildUp;
-
     // The API's category can widen to "principal" / "penalty" later even
     // though only "interest" entries exist today (see LoanLedgerEntry) — this
     // table only has an Interest debit/credit pair to put them in, so entries
@@ -1482,7 +1222,8 @@ export default function LoanDetailPage({
     // as a ledger entry, so this can't start at 0 either. Instead, solve for
     // the opening balance that makes the LAST row land exactly on
     // currentInterestDue — this file's own "single source of truth" for what's
-    // actually still owed (see its definition above). storedScheduleTotals.interest
+    // actually still owed (see its definition above). With no schedule rows
+    // there is nothing to solve from, and ledgerOpening leaves it unknown. storedScheduleTotals.interest
     // is deliberately NOT the anchor here even though it seeds the Interest
     // column of the static "Loan released" row above: it's a gross, never-paid-down
     // total (Σ interest_due across every period the schedule has ever had), so
@@ -1496,22 +1237,17 @@ export default function LoanDetailPage({
     // closing figure at the end of the walk — verified against worked examples
     // covering a bare "pay" extension and a "defer" extension stacked after one,
     // both landing exactly on currentInterestDue.
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const debitTotal = interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0);
-    const creditTotal = interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0);
-    const paidTotal = keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0);
-
-    let principalBal = principalStart;
-    let interestBal = round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
-    let scbBal = scbStart;
-
-    return sorted.map((row) => {
-      principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
-      scbBal = Math.max(0, scbBal - (row.scbPaid ?? 0));
-      interestBal = round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
-      return { ...row, principalBal, interestBal, scbBal };
+    const opening = ledgerOpening({
+      principalAmount: loan?.principal_amount ?? 0,
+      scheduleRowCount: storedSchedule.length,
+      currentInterestDue,
+      scheduleScbTotal: storedScheduleTotals.shareCapitalBuildUp,
+      interestDebits: interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0),
+      interestCredits: interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0),
+      interestPaid: keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0),
     });
-  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
+    return walkLedgerBalances(sorted, opening);
+  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedSchedule.length, storedScheduleTotals.shareCapitalBuildUp]);
 
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
@@ -1521,20 +1257,23 @@ export default function LoanDetailPage({
   // ever examined the borrower's 50 newest loans: a member whose recent history
   // is a run of `completed` loans pushed every live one off that page and the
   // card rendered "No other active loans" over real, outstanding debt.
+  //
+  // Keyed on the RESOLVED borrower id, the value the request actually uses, so
+  // a loan payload that names the member only by `borrower_id` is not taken
+  // for a change of member.
+  const loanBorrowerId = loan?.borrower?.id ?? loan?.borrower_id;
   useEffect(() => {
-    if (!loan) return;
-    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
-    if (!borrowerId) return;
+    if (!loanBorrowerId) return;
     let cancelled = false;
     setBorrowerLoansLoading(true);
     setBorrowerLoansTruncated(false);
     loanService
-      .obligationsForBorrower(borrowerId)
+      .obligationsForBorrower(loanBorrowerId)
       .then(({ rows, truncated }) => {
         if (cancelled) return;
         // Every row here is already an obligation; the only thing left to drop
         // is the loan being viewed, which is display logic rather than a filter.
-        setBorrowerLoans(rows.filter((l) => l.id !== loan.id));
+        setBorrowerLoans(rows.filter((l) => l.id !== loadedLoanId));
         setBorrowerLoansTruncated(truncated);
       })
       .catch(() => {
@@ -1550,7 +1289,7 @@ export default function LoanDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [loan?.id, loan?.borrower?.id, loan?.borrower_id]);
+  }, [loanBorrowerId, loadedLoanId]);
 
   // Valid send-back targets for the current approver: every earlier step
   // whose kind is "submit" (Loan Processor) or "approve" (a prior approver).
@@ -1587,23 +1326,11 @@ export default function LoanDetailPage({
     }
   }, [sendBackTargets]);
 
-  const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
-  // Statuses for which the backend has schedule / repayment / adjustment data —
-  // the SAME set fetchSchedule/fetchRepayments/fetchAdjustments use. Unlike
-  // isLocked, this includes `current` and `past_due` (the primary active
-  // states), so the Adjustments & History card shows for loans that can be
-  // extended/adjusted, not just terminal ones.
-  const hasServerLoanData = loan
-    ? ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)
-    : false;
+  const isLocked = hasServerLoanData;
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
-  const loanCoMakerName = (() => {
-    const cm = loan?.co_makers?.[0];
-    if (!cm) return loan?.co_maker_name ?? "";
-    return cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || "");
-  })();
+  const loanCoMakers = loan?.co_makers ?? [];
   const loanProductName = loan?.loan_product?.name ?? loan?.loan_product_name ?? "";
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
@@ -1612,17 +1339,22 @@ export default function LoanDetailPage({
   // keeps a rolled-forward loan from reading as if it had a longer original
   // term than the borrower agreed to.
   const loanExtensionCount = loan?.extension_count ?? 0;
+  const loanTermUnit = readTermUnit(loan?.term_unit);
+  const loanTermUnitWord =
+    loanTermUnit === "days" ? (loanTerm === 1 ? "day" : "days") : (loanTerm === 1 ? "month" : "months");
   const loanTermLabel =
-    `${loanTerm} ${loanTerm === 1 ? "month" : "months"}` +
+    `${loanTerm} ${loanTermUnitWord}` +
     (loanExtensionCount > 0 ? ` · extended ×${loanExtensionCount}` : "");
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
-  // Extend-dialog preview: the extend endpoint always moves the due date
-  // forward by exactly one cycle (1 month for upon-maturity loans, matching
-  // the SCB build-up and computedMaturityDate math elsewhere on this page).
-  // This is display-only — it does not drive the actual extend() call.
-  const extendCurrentMaturity = loan?.maturity_date ?? loanSummary?.next_due_date ?? loan?.next_due_date;
-  const extendPreviewMaturityDate = extendCurrentMaturity
-    ? addMonths(new Date(extendCurrentMaturity), 1)
+  // A term extension adds instalments. Those are months only when the loan
+  // steps by calendar month; otherwise they are the loan's own payment periods.
+  const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
+  // Extend-dialog preview: the maturity date the extension will store, stepped
+  // from the server's own schedule the way the extend endpoint steps it, on
+  // the start date's day of the month. This is display-only — it does not
+  // drive the actual extend() call.
+  const extendPreviewMaturityDate = rawSchedule
+    ? extensionDueDate(rawSchedule, loanFrequency, loan?.start_date)
     : null;
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
@@ -1641,24 +1373,24 @@ export default function LoanDetailPage({
   const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
   const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
-  const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
-  const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
-  const loanRejectedBy = loan?.rejected_by_user?.full_name ?? loan?.rejected_by_user?.name ?? loan?.rejected_by;
   // total_payable from API is computed by summing amortization_schedules. For
   // unreleased loans (draft/for_review/approved) those rows don't exist yet,
-  // so the API returns 0. Fall back to a straight-line projection — same math
-  // the loan-creation form uses for its preview — so the value matches what
-  // the user expected when they filled out the form.
+  // so the API returns 0 and the server's preview schedule is summed instead.
+  // With no server rows at all both figures are unknown and shown as a dash,
+  // never projected from the loan's terms; `expectedInterest` is only the
+  // Interest Amount of a schedule whose rows carry no interest.
   const expectedInterest =
     Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
-  const loanTotalPayable =
+  const loanTotalPayable: number | null =
     Number(loan?.total_payable ?? 0) > 0
       ? Number(loan!.total_payable)
       : storedSchedule.length > 0
         ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
-        : Number(loan?.principal_amount ?? 0) + expectedInterest;
-  const loanInterestAmount =
-    storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
+        : null;
+  const loanInterestAmount: number | null =
+    storedSchedule.length === 0
+      ? null
+      : storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly
@@ -1666,7 +1398,7 @@ export default function LoanDetailPage({
   // settle before posting. Must sit ABOVE the early returns below to keep
   // hook order stable across renders.
   useEffect(() => {
-    if (!recordPaymentOpen || !loan) {
+    if (!recordPaymentOpen || !loan || !canViewPayments) {
       setPaymentPreview(null);
       return;
     }
@@ -1694,7 +1426,7 @@ export default function LoanDetailPage({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [recordPaymentOpen, loan, paymentAmount, paymentDate]);
+  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments]);
 
   if (loading) {
     return (
@@ -1705,111 +1437,80 @@ export default function LoanDetailPage({
   }
 
   if (!loan) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <h2 className="text-xl font-semibold">Loan Not Found</h2>
-        <p className="text-muted-foreground">
-          The loan application you&apos;re looking for does not exist.
-        </p>
-        <Link href="/loans">
-          <Button variant="outline">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Loans
-          </Button>
-        </Link>
-      </div>
+    return loadFailure?.kind === "failed" ? (
+      <LoanLoadFailed message={loadFailure.message} onRetry={reloadLoan} />
+    ) : (
+      <LoanNotFound />
     );
   }
 
-  const handleSubmitForReview = async () => {
-    try {
-      setActionLoading(true);
-      const updated = await loanService.submit(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan submitted for review");
-      setSubmitOpen(false);
-    } catch {
-      toast.error("We couldn't submit the loan for review. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleApprove = async () => {
-    try {
-      setActionLoading(true);
-      const updated = await loanService.approve(loan.id, {
-        approval_remarks: approvalRemarks || undefined,
-      });
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan approved");
-      setApprovalRemarks("");
-      setApproveOpen(false);
-    } catch (err) {
-      notifyError(err, "We couldn't approve this loan. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectionRemarks.trim()) return;
-    try {
-      setActionLoading(true);
-      const updated = await loanService.reject(loan.id, {
-        approval_remarks: rejectionRemarks,
-      });
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan rejected");
-      setRejectionRemarks("");
-      setRejectOpen(false);
-    } catch (err) {
-      notifyError(err, "We couldn't reject this loan. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // The insurance the release sends, and what the release will then store: the
+  // server's preview with that insurance applied the way the server applies
+  // it. Null until the preview is in, and Confirm Release stays off until then.
+  const releaseInsurance = releaseInsurancePayload(
+    Number(loan.principal_amount) || 0,
+    insurancePremium,
+  );
+  const releaseAmounts =
+    releasePreview.status === "loaded"
+      ? releaseFigures(releasePreview.preview, releaseInsurance)
+      : null;
+  const canConfirmRelease =
+    releaseAmounts !== null && !releaseAmounts.exceedsNetProceeds && !actionLoading;
 
   const handleRelease = async () => {
+    if (releasePreview.status !== "loaded" || !canConfirmRelease) return;
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      const { totalPremium, upfrontDeduction, remainingBalance } =
-        computeInsurancePremium(
-          Number(loan.principal_amount) || 0,
-          insurancePremium,
-        );
-      const releasePayload = {
-        insurance_premium_percentage: Number(insurancePremium.percentage) || 0,
-        insurance_premium_amount: totalPremium,
-        insurance_payment_type: insurancePremium.paymentType,
-        insurance_partial_amount:
-          insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
-        insurance_remaining_balance: remainingBalance,
-      };
-      await loanService.release(loan.id, releasePayload);
-      // Refetch the full loan detail rather than trusting the PATCH body —
-      // the GET endpoint returns the complete server state (deductions
-      // including the insurance premium added on release, total_deductions,
-      // net_proceeds, and embedded relations).
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan released");
-      setReleaseOpen(false);
-      setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
-      setAutoPayIsPostRelease(true);
-      setAutoPayDialogOpen(true);
-      // Fetch the server-generated schedule
-      fetchSchedule(loan.id);
-      // Re-read the chain rather than marking the release step approved here.
-      // Releasing is a server-side event; whether it closes the release step is
-      // the server's call to record and ours to display.
-      void refreshApproval();
+      // The fingerprint of the fees quoted on screen: if they have changed
+      // since, the server refuses the release (409) rather than pay out a
+      // different amount from the one the cashier just read.
+      await loanService.release(loan.id, {
+        ...releaseInsurance,
+        fee_fingerprint: releasePreview.preview.fee_fingerprint,
+      });
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      notifyError(err, "We couldn't release this loan. Please try again.");
-    } finally {
+      if (httpStatusOf(err) === 409) {
+        // Nothing was released: the fees changed after they were quoted. Quote
+        // them again, and the dialog stays open on the new figures.
+        notifyError(
+          err,
+          "We couldn't release this loan. Please try again.",
+          "The release figures have been read again. Check them before confirming.",
+        );
+        reloadReleasePreview();
+      } else {
+        notifyError(err, "We couldn't release this loan. Please try again.");
+      }
       setActionLoading(false);
+      return;
+    }
+    // The loan is released. A failure from here on is only the re-read, and
+    // must not read as a failed release: trying again would be refused, the
+    // loan no longer being approved.
+    //
+    // Refetch the full loan detail rather than trusting the PATCH body — the
+    // GET endpoint returns the complete server state (deductions including the
+    // insurance premium added on release, total_deductions, net_proceeds, and
+    // embedded relations). The server-generated schedule, summary, payments,
+    // adjustments and ledger are then read once by the effects above, which run
+    // when the status enters the released set.
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setActionLoading(false);
+    setReleaseOpen(false);
+    setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
+    toast.success("Loan released");
+    // Re-read the chain rather than marking the release step approved here.
+    // Releasing is a server-side event; whether it closes the release step is
+    // the server's call to record and ours to display.
+    void refreshApproval();
+    if (reloaded) {
+      setLoan(reloaded);
+      setAutoPayIsPostRelease(true);
+      setAutoPayDialogOpen(true);
+    } else {
+      notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
   };
 
@@ -1858,10 +1559,10 @@ export default function LoanDetailPage({
   const refreshAfterStepAction = async () => {
     try {
       const [updated] = await Promise.all([
-        loanService.detail(loan.id),
+        loadLoan(loan.id, loan),
         refreshApproval(),
       ]);
-      setLoan(await resolveLoan(loan, updated));
+      setLoan(updated);
     } catch {
       // Swallowed on purpose. Reaching here means the ACTION succeeded and only
       // the re-read failed; letting this reject would have the caller report a
@@ -1891,12 +1592,18 @@ export default function LoanDetailPage({
 
   // Edit Loan Application — available to the Loan Processor while the loan
   // is still a draft OR has been sent back by an approver. The button links
-  // to /loans/new?edit={id} so the full New Loan form is used for editing.
+  // to /loans/new?edit={id} so the full New Loan form is used for editing,
+  // and saving there is `PUT /loans/{id}`, which needs `loans:update`.
   const canEditLoanApplication =
+    canUpdateLoan &&
     !isLocked &&
     !isApprovalChainHidden(loan.status) &&
     (isUnseededDraft ||
       (!!currentStep && currentStep.kind === "submit" && canActOnCurrentStep));
+
+  // Who may send a draft for review: `PATCH /loans/{id}/submit` takes
+  // `loans:update`, or `loans:restructure` for a restructure application.
+  const canSubmitDraft = canUpdateLoan || (!!loan.is_restructure && canRestructureLoan);
 
   // Loan Processor's submit step.
   //
@@ -1913,10 +1620,9 @@ export default function LoanDetailPage({
     // Guarding on one made the draft Submit button a silent no-op: it
     // rendered, it was enabled, and it returned on the first line.
     //
-    // Authorisation is the server's here rather than the client's: with no
-    // step there is no role to compare against, and `submit` is gated on
-    // `loans:update`, which the page cannot evaluate. A 403 surfaces through
-    // notifyError like any other failure.
+    // With no step there is no role to compare against. The button is shown
+    // only to `canSubmitDraft`, the rule `submit` enforces, and a 403 still
+    // surfaces through notifyError like any other failure.
     if (!isUnseededDraft) {
       if (!currentStep || currentStep.kind !== "submit") return;
       if (!assertCanActOnStep("submit the draft")) return;
@@ -1944,8 +1650,8 @@ export default function LoanDetailPage({
   //
   // One call. The server marks the step approved, moves the chain to the next
   // step, and on the LAST approve step takes `loans.status` to `approved` by
-  // itself — so this must NOT also call `loanService.approve()`, which is what
-  // the localStorage version did and what would now double-post the approval.
+  // itself — so this must NOT also call `PATCH /loans/{id}/approve`, which is
+  // what the localStorage version did and what would now double-post the approval.
   const handleStepApprove = async () => {
     if (!currentStep || currentStep.kind !== "approve") return;
     if (!assertCanActOnStep("approve this step")) return;
@@ -2015,62 +1721,10 @@ export default function LoanDetailPage({
     setReleaseOpen(true);
   };
 
-  const handleAddSecondCoMaker = async () => {
-    if (!loan) return;
-    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
-    if (!borrowerId) {
-      toast.error("Borrower not found");
-      return;
-    }
-    if (!newCoMaker.first_name.trim() || !newCoMaker.last_name.trim()) {
-      toast.error("First name and last name are required");
-      return;
-    }
-    try {
-      setAddingCoMaker(true);
-      const created = await coMakerService.create(borrowerId, {
-        first_name: newCoMaker.first_name.trim(),
-        last_name: newCoMaker.last_name.trim(),
-        contact_number: newCoMaker.contact_number.trim() || undefined,
-        relationship_to_borrower:
-          newCoMaker.relationship_to_borrower.trim() || undefined,
-      });
-      // Append to loan.co_makers so the Release Dialog reflects the new co-maker
-      setLoan((prev) => {
-        if (!prev) return prev;
-        const fullName =
-          created.full_name ??
-          [created.first_name, created.middle_name, created.last_name, created.suffix]
-            .filter(Boolean)
-            .join(" ");
-        const appended = {
-          id: created.id,
-          full_name: fullName,
-          address: created.address,
-          relationship:
-            created.relationship_to_borrower ?? created.relationship,
-        };
-        return { ...prev, co_makers: [...(prev.co_makers ?? []), appended] };
-      });
-      toast.success("Co-maker added");
-      setAddCoMakerOpen(false);
-      setNewCoMaker({
-        first_name: "",
-        last_name: "",
-        contact_number: "",
-        relationship_to_borrower: "",
-      });
-    } catch {
-      toast.error("We couldn't add the co-maker. Please try again.");
-    } finally {
-      setAddingCoMaker(false);
-    }
-  };
-
   // ── Repayment Handlers ──
 
   // Whether the current loan qualifies for "Upon Maturity" extension flows.
-  // Mirrors the predicate used by storedSchedule (line ~1136).
+  // Mirrors the predicate storedSchedule passes as `isUponMaturity`.
   const isUponMaturityLoan = (() => {
     if (!loan) return false;
     const freq = loan.frequency ?? loan.payment_frequency ?? "";
@@ -2089,14 +1743,21 @@ export default function LoanDetailPage({
   // though the API still allows more.
   const isOneMonthTermLoan = loan?.is_one_month_term ?? false;
 
-  const submitRepayment = async (data: {
-    payment_date: string;
-    amount_paid: number;
-    remarks?: string;
-  }): Promise<boolean> => {
+  // Posts a payment and, unless `refresh` is false, re-reads what it changed.
+  // "Yes, extend" passes false: it extends straight afterwards and re-reads
+  // once for both.
+  const submitRepayment = async (
+    data: {
+      payment_date: string;
+      amount_paid: number;
+      remarks?: string;
+    },
+    { refresh = true }: { refresh?: boolean } = {},
+  ): Promise<boolean> => {
     setActionLoading(true);
     try {
       const repayment = await repaymentService.create(loan.id, data);
+      setShareCapitalVersion((v) => v + 1);
       toast.success(
         paymentMode === "advance" ? "Advance payment recorded" : "Payment recorded",
         { action: { label: "View Receipt", onClick: () => router.push(`/payments/${repayment.id}`) } }
@@ -2110,16 +1771,15 @@ export default function LoanDetailPage({
       setAdvancePeriods(1);
       // Refresh independently — don't let any single failure block the others
       // or pollute the catch block (payment already succeeded at this point).
-      // Awaited (not fire-and-forget) so callers that chain another mutation
-      // afterward (e.g. handlePartialExtendConfirm calling extend()) don't
-      // race this refresh with their own later one.
-      const loanId = loan.id;
-      await Promise.allSettled([
-        fetchSchedule(loanId),
-        fetchLoanSummary(loanId),
-        fetchRepayments(loanId),
-        loanService.detail(loanId).then(setLoan).catch(() => {}),
-      ]);
+      if (refresh) {
+        const loanId = loan.id;
+        await Promise.allSettled([
+          fetchSchedule(loanId),
+          fetchLoanSummary(loanId),
+          fetchRepayments(loanId),
+          loadLoan(loanId, loan).then(setLoan),
+        ]);
+      }
       return true;
     } catch {
       toast.error("We couldn't record the payment. Please try again.");
@@ -2192,8 +1852,7 @@ export default function LoanDetailPage({
       notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
       try {
-        const updated = await loanService.detail(loan.id);
-        setLoan(await resolveLoan(loan, updated));
+        setLoan(await loadLoan(loan.id, loan));
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
@@ -2202,7 +1861,7 @@ export default function LoanDetailPage({
         // than only after the next full page load.
         await fetchLedgerEntries(loan.id);
         // Refresh the extension/adjustment history too — the effect that loads
-        // adjustments only re-runs on loan.id/status change, and a same-status
+        // adjustments only runs when the loan first has server data, so an
         // extension wouldn't trigger it, leaving the history card stale.
         await fetchAdjustments(loan.id);
       } catch {
@@ -2221,7 +1880,7 @@ export default function LoanDetailPage({
     // the CURRENT period (before it rolls over), then extend. Reversing this
     // order (as the old code did) posted the payment against the already-
     // extended period instead of paying down the period it was meant to settle.
-    const paid = await submitRepayment(payload);
+    const paid = await submitRepayment(payload, { refresh: false });
     if (!paid) return;
     setActionLoading(true);
     try {
@@ -2233,15 +1892,20 @@ export default function LoanDetailPage({
         interest_option: "defer",
       });
       toast.success("Loan extended");
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
-      // Keep the extension/adjustment history in sync without a reload.
-      fetchAdjustments(loan.id);
     } catch (err) {
       notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
+      // One re-read for the payment AND the extension: what Extend Loan reads,
+      // which covers what the payment changed. Also when the extension fails,
+      // because the payment above stands either way.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchRepayments(loan.id),
+        fetchLedgerEntries(loan.id),
+        fetchAdjustments(loan.id),
+      ]);
       setActionLoading(false);
     }
   };
@@ -2283,10 +1947,17 @@ export default function LoanDetailPage({
     try {
       setActionLoading(true);
       await repaymentService.void(repaymentId, { void_reason: reason });
+      setShareCapitalVersion((v) => v + 1);
       toast.success("Payment voided");
-      fetchRepayments(loan.id);
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
+      // A void undoes a payment, so re-read what recording one re-reads.
+      // Settled rather than thrown, since the void already stands and a failed
+      // re-read must not be reported as a failed void.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchRepayments(loan.id),
+      ]);
     } catch {
       toast.error("We couldn't void the payment. Please try again.");
     } finally {
@@ -2299,8 +1970,9 @@ export default function LoanDetailPage({
       setActionLoading(true);
       await loanService.void(loan.id);
       toast.success("Loan voided");
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
+      // Settled rather than thrown: the void already stands, and a failed
+      // re-read must not be reported as a failed void.
+      await Promise.allSettled([loadLoan(loan.id, loan).then(setLoan)]);
     } catch {
       toast.error("We couldn't void the loan. Please try again.");
     } finally {
@@ -2315,7 +1987,6 @@ export default function LoanDetailPage({
     setAdjType("balance_adjustment");
     setAdjDescription("");
     setAdjRemarks("");
-    setAdjNewValues("");
     resetAdjustmentValueFields();
   };
 
@@ -2346,9 +2017,10 @@ export default function LoanDetailPage({
       // no selection at all, which waived the penalty on *every* open schedule.
       newValues.waive_all = true;
     } else if (adjType === "term_extension") {
-      if (!adjAdditionalMonths) { toast.error("Please enter the additional months"); return; }
+      const extraWhat = extendsByMonth ? "months" : "instalments";
+      if (!adjAdditionalMonths) { toast.error(`Please enter the additional ${extraWhat}`); return; }
       const extraMonths = parseInt(adjAdditionalMonths);
-      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error("Additional months must be at least 1"); return; }
+      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error(`Additional ${extraWhat} must be at least 1`); return; }
       // `additional_terms` is the number of extra periods, not the resulting
       // term — `term` is the restructure field and is ignored here.
       newValues.additional_terms = extraMonths;
@@ -2387,8 +2059,14 @@ export default function LoanDetailPage({
       } else {
         await loanAdjustmentService.apply(adjId);
         toast.success("Adjustment applied");
-        const updated = await loanService.detail(loan.id);
-        setLoan(await resolveLoan(loan, updated));
+        // Applying rewrites the loan's open schedule rows, and with them its
+        // balances; it posts no payments and no ledger entries. Settled rather
+        // than thrown: a failed re-read is not a failed apply.
+        await Promise.allSettled([
+          loadLoan(loan.id, loan).then(setLoan),
+          fetchSchedule(loan.id),
+          fetchLoanSummary(loan.id),
+        ]);
       }
       fetchAdjustments(loan.id);
     } catch {
@@ -2473,7 +2151,7 @@ export default function LoanDetailPage({
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
                 </Badge>
               </div>
             )}
@@ -2489,7 +2167,7 @@ export default function LoanDetailPage({
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
                 </Badge>
               )}
             </div>
@@ -2648,14 +2326,16 @@ export default function LoanDetailPage({
                       Edit Loan Application
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    disabled={stepActionLoading}
-                    onClick={handleStepSubmit}
-                  >
-                    {stepActionLoading ? "Submitting…" : "Submit for Review"}
-                  </Button>
+                  {canSubmitDraft && (
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      disabled={stepActionLoading}
+                      onClick={handleStepSubmit}
+                    >
+                      {stepActionLoading ? "Submitting…" : "Submit for Review"}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -2912,16 +2592,18 @@ export default function LoanDetailPage({
                     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                       {currentStep.kind === "submit" && (
                         <>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="w-full sm:w-auto"
-                            disabled={actionLoading}
-                            onClick={handleVoidLoan}
-                          >
-                            <Ban className="mr-2 h-4 w-4" />
-                            Void Loan
-                          </Button>
+                          {canVoidLoan && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={actionLoading}
+                              onClick={handleVoidLoan}
+                            >
+                              <Ban className="mr-2 h-4 w-4" />
+                              Void Loan
+                            </Button>
+                          )}
                           {canEditLoanApplication && loan && (
                             <Button
                               variant="outline"
@@ -3185,7 +2867,9 @@ export default function LoanDetailPage({
                   Interest Amount
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
-                <p className="text-sm font-semibold">{formatCurrency(loanInterestAmount)}</p>
+                <p className="text-sm font-semibold">
+                  {loanInterestAmount === null ? "—" : formatCurrency(loanInterestAmount)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -3218,7 +2902,9 @@ export default function LoanDetailPage({
                     Share Capital Build-Up
                   </p>
                   <p className="text-sm font-semibold">
-                    {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                    {storedSchedule.length > 0
+                      ? formatCurrency(storedScheduleTotals.shareCapitalBuildUp)
+                      : "—"}
                   </p>
                 </div>
               )}
@@ -3238,16 +2924,25 @@ export default function LoanDetailPage({
               <div>
                 <p className="text-xs text-muted-foreground">Total Payable</p>
                 <p className="text-sm font-semibold">
-                  {formatCurrency(loanTotalPayable)}
+                  {loanTotalPayable === null ? "—" : formatCurrency(loanTotalPayable)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Net Proceeds</p>
                 <p className="text-sm font-semibold">
-                  {loan.net_proceeds != null
-                    ? formatCurrency(loan.net_proceeds)
-                    : "N/A"}
+                  {releasePreviewOnCard
+                    ? releasePreview.status === "loaded"
+                      ? formatCurrencyExact(releasePreview.preview.net_proceeds)
+                      : "—"
+                    : loan.net_proceeds != null
+                      ? formatCurrency(loan.net_proceeds)
+                      : "N/A"}
                 </p>
+                {loan.status === "approved" && !canReleaseLoan && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Fees configured in Settings are added when the loan is released.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -3256,7 +2951,30 @@ export default function LoanDetailPage({
             {/* Deductions */}
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              {(() => {
+              {/* Awaiting release: what the release will withhold, as the
+                  server's release preview has it (the Release dialog's figures). */}
+              {releasePreviewOnCard ? (
+                releasePreview.status === "loaded" ? (
+                  releasePreview.preview.deductions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
+                  ) : releasePreview.preview.deductions.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-muted-foreground">
+                        {item.name}
+                        {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                      </span>
+                      <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
+                    </div>
+                  ))
+                ) : releasePreview.status === "loading" ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="size-4" />
+                    Getting the release figures…
+                  </div>
+                ) : (
+                  <p role="alert" className="text-sm text-destructive">{releasePreview.message}</p>
+                )
+              ) : (() => {
                 // Render every backend-computed deduction as its own line —
                 // including configured fees like "Insurance Premium" — so
                 // product-specific fees aren't silently folded into "Other".
@@ -3292,7 +3010,11 @@ export default function LoanDetailPage({
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Total Deductions</span>
                 <span className="text-sm font-semibold">
-                  {formatCurrency(totalDeductions)}
+                  {releasePreviewOnCard
+                    ? releasePreview.status === "loaded"
+                      ? formatCurrencyExact(releasePreview.preview.total_deductions)
+                      : "—"
+                    : formatCurrency(totalDeductions)}
                 </span>
               </div>
             </div>
@@ -3329,82 +3051,46 @@ export default function LoanDetailPage({
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Co-Maker</p>
-              <p className="text-sm font-medium">
-                {loanCoMakerName || "None"}
+              <p className="text-xs text-muted-foreground">
+                Co-Maker{loanCoMakers.length > 1 ? "s" : ""}
               </p>
+              {loanCoMakers.length === 0 ? (
+                <p className="text-sm font-medium">None</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {loanCoMakers.map((cm) => (
+                    <li key={cm.id} className="text-sm font-medium">
+                      {coMakerName(cm) || "—"}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <Separator />
             <div>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && (
+                {!aoEditing && canUpdateLoan && (
                   <button
                     type="button"
                     onClick={() => setAoEditing(true)}
                     className="text-xs text-brand-orange hover:underline flex items-center gap-1"
                   >
                     <Pencil className="h-3 w-3" />
-                    {(loan as unknown as Record<string, unknown>).account_officer_id ? "Change" : "Assign"}
+                    {loan.account_officer_id ? "Change" : "Assign"}
                   </button>
                 )}
               </div>
               {aoEditing ? (
                 <div className="space-y-2">
-                  {officerShortfall && (
-                    <IncompleteListNotice
-                      shown={officerShortfall.shown}
-                      total={officerShortfall.total}
-                      noun="active users"
-                      consequence="Some staff are missing from this picker and cannot be assigned as account officer."
-                    />
-                  )}
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={
-                        <button
-                          type="button"
-                          role="combobox"
-                          disabled={aoSaving}
-                          className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                        />
-                      }
-                    >
-                      <span className="text-muted-foreground text-sm">Select account officer...</span>
-                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer..." />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((user) => (
-                              <CommandItem
-                                key={user.id}
-                                value={user.full_name}
-                                onSelect={() => {
-                                  handleSaveAO(user.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 size-4",
-                                    (loan as unknown as Record<string, unknown>).account_officer_id === user.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div>
-                                  <p className="text-sm">{user.full_name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <StaffPicker
+                    aria-label="Account officer"
+                    value={loan.account_officer ?? null}
+                    onChange={(officer) => {
+                      if (officer) handleSaveAO(officer.id);
+                    }}
+                    disabled={aoSaving}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -3416,10 +3102,7 @@ export default function LoanDetailPage({
                 </div>
               ) : (
                 <p className="text-sm font-medium">
-                  {(() => {
-                    const ao = (loan as unknown as Record<string, unknown>).account_officer as { id?: number; full_name?: string; name?: string } | undefined;
-                    return ao?.full_name ?? ao?.name ?? "Not assigned";
-                  })()}
+                  {loan.account_officer?.full_name ?? "Not assigned"}
                 </p>
               )}
             </div>
@@ -3429,7 +3112,10 @@ export default function LoanDetailPage({
         </Collapsible>
 
         {/* Share Capital — current balance for the loan's member */}
-        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
+        <ShareCapitalCard
+          borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null}
+          version={shareCapitalVersion}
+        />
 
         {/* Auto-Pay Status Card */}
         {["released", "current"].includes(loan.status) && (
@@ -3577,11 +3263,9 @@ export default function LoanDetailPage({
                   <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Overdue + Penalty</p>
+                  <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
                   <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(
-                      (loanSummary.overdue_amount ?? 0) + (loanSummary.penalty_amount ?? 0)
-                    )}
+                    {formatCurrency(overdueWithPenalty(loanSummary))}
                   </p>
                 </div>
               </div>
@@ -3590,8 +3274,10 @@ export default function LoanDetailPage({
       )}
 
 
-      {/* Amortization Schedule — collapsible, collapsed by default */}
-      {storedSchedule.length > 0 && (
+      {/* Amortization Schedule — collapsible, collapsed by default. Shown for
+          every loan that has a server schedule to read, rows or not: loading,
+          failed and empty each say so in place of the rows. */}
+      {scheduleSource !== null && (
         <Card>
           <CardHeader
             className="cursor-pointer select-none"
@@ -3643,10 +3329,15 @@ export default function LoanDetailPage({
           {scheduleOpen && (
             <CardContent className="pt-0">
               {(() => {
-                const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
+                const isReleased = hasServerLoanData;
                 const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+                // In place of the rows on both tabs when there are none to draw.
+                const scheduleNotice =
+                  storedSchedule.length > 0 ? null : (
+                    <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+                  );
 
-                const scheduleTable = (
+                const scheduleTable = scheduleNotice ?? (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -3719,77 +3410,8 @@ export default function LoanDetailPage({
                         )}
                       </div>
                     )}
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => {
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          const isPaid = row.status === "paid";
-                          const isPartial = row.status === "partial";
-                          const isOverdue = row.status === "overdue" || (
-                            !isPaid && !isPartial && row.dueDate < today
-                          );
-                          const isUpcoming = !isPaid && !isPartial && !isOverdue;
-
-                          type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
-                          const displayStatus: DisplayStatus =
-                            isPaid ? "paid"
-                            : isPartial ? "partial"
-                            : isOverdue ? "overdue"
-                            : "upcoming";
-
-                          const statusStyles: Record<DisplayStatus, string> = {
-                            paid: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
-                            partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                            overdue: "border-destructive/40 bg-destructive/10 text-destructive",
-                            upcoming: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-                          };
-
-                          return (
-                            <TableRow
-                              key={row.period}
-                              className={cn(isPaid && "text-muted-foreground/50")}
-                            >
-                              <TableCell className="text-center">{row.period}</TableCell>
-                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.principal)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.interest)}</TableCell>
-                              {hasScb && (
-                                <TableCell className="text-right tabular-nums">
-                                  {isPaid ? formatCurrency(0) : formatCurrency(row.shareCapitalBuildUp)}
-                                </TableCell>
-                              )}
-                              <TableCell className="text-right font-medium tabular-nums">
-                                {isPaid ? formatCurrency(0) : formatCurrency(row.totalPayment)}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(row.balance)}</TableCell>
-                              <TableCell className="text-center">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] px-1.5 py-0 capitalize", statusStyles[displayStatus])}
-                                >
-                                  {displayStatus}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                    <RestructuredBalanceFigures loan={loan} />
+                    <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
                   </div>
                 );
 
@@ -3799,7 +3421,7 @@ export default function LoanDetailPage({
                   <Tabs defaultValue="schedule" className="gap-3">
                     <TabsList>
                       <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                      <TabsTrigger value="balances">Balances</TabsTrigger>
+                      <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
                     </TabsList>
                     <TabsContent value="schedule">{scheduleTable}</TabsContent>
                     <TabsContent value="balances">{balancesTable}</TabsContent>
@@ -3839,7 +3461,7 @@ export default function LoanDetailPage({
 
       {/* Attached documents — available for every loan, including drafts so
           the policy exception letter is reachable from the very first save. */}
-      <LoanDocumentsCard loanId={loan.id} />
+      <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
 
       {/* Ledger — shown for every status that has server-side repayment data
           (incl. current / past_due), matching the Adjustments & History card. */}
@@ -3972,7 +3594,7 @@ export default function LoanDetailPage({
                                 {/* Interest */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestDebit)}</td>
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestCredit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
+                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{r.interestBal === null ? dash : formatCurrency(r.interestBal)}</td>
                                 {/* Past Due */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">
                                   {r.penaltyPaid != null && r.penaltyPaid > 0 ? (
@@ -4190,113 +3812,6 @@ export default function LoanDetailPage({
         </DialogContent>
       </Dialog>
 
-      {/* Submit for Review Dialog */}
-      <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Submit for Review</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to submit this loan application for review?
-              Once submitted, it will be queued for approval.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={handleSubmitForReview}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Submit
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approve Dialog */}
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to approve{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="approval-remarks">Remarks (optional)</Label>
-              <Textarea
-                id="approval-remarks"
-                placeholder="Add any notes about this approval..."
-                value={approvalRemarks}
-                onChange={(e) => setApprovalRemarks(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-green-600 text-white hover:bg-green-700"
-              onClick={handleApprove}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Dialog */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to reject{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>. Please
-              provide a reason.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="rejection-remarks">
-                Reason for Rejection{" "}
-                <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="rejection-remarks"
-                placeholder="Explain why this application is being rejected..."
-                value={rejectionRemarks}
-                onChange={(e) => setRejectionRemarks(e.target.value)}
-                className="mt-1.5"
-                required
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={!rejectionRemarks.trim()}
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Reject
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Release Dialog */}
       <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
         <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
@@ -4336,7 +3851,9 @@ export default function LoanDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground">Net Proceeds</p>
                   <p className="text-sm font-semibold text-green-600">
-                    {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : "N/A"}
+                    {releaseAmounts && !releaseAmounts.exceedsNetProceeds
+                      ? formatCurrencyExact(releaseAmounts.netProceeds)
+                      : "—"}
                   </p>
                 </div>
                 <div>
@@ -4354,218 +3871,23 @@ export default function LoanDetailPage({
               </div>
             </div>
 
-            <ReleaseDeductions deductions={loan.deductions} totalDeductions={loan.total_deductions} />
+            <ReleaseDeductions preview={releasePreview} onRetry={reloadReleasePreview} />
 
-            {/* Co-Makers Section */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Co-Maker
-                  {(loan.co_makers?.length ?? 0) !== 1 ? "s" : ""}
-                  {(loan.co_makers?.length ?? 0) > 0 && (
-                    <span className="ml-1 text-xs text-muted-foreground font-normal">
-                      ({loan.co_makers!.length})
-                    </span>
-                  )}
-                </Label>
-                {!addCoMakerOpen && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 text-xs"
-                    onClick={() => setAddCoMakerOpen(true)}
-                  >
-                    <Plus className="h-3 w-3" />
-                    Add Co-Maker
-                  </Button>
-                )}
-              </div>
-              <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
-                {(loan.co_makers?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">
-                    No co-maker on file
-                  </p>
-                ) : (
-                  loan.co_makers!.map((cm, idx) => {
-                    const name =
-                      cm.full_name ??
-                      cm.name ??
-                      [cm.first_name, cm.middle_name, cm.last_name, cm.suffix]
-                        .filter(Boolean)
-                        .join(" ");
-                    return (
-                      <div
-                        key={cm.id ?? idx}
-                        className="flex items-start justify-between gap-3 text-sm"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{name || "—"}</p>
-                          {cm.relationship && (
-                            <p className="text-xs text-muted-foreground">
-                              {cm.relationship}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          Co-Maker {idx + 1}
-                        </Badge>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {addCoMakerOpen && (
-                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">Add Co-Maker</p>
-                    <button
-                      type="button"
-                      onClick={() => setAddCoMakerOpen(false)}
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label="Close"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-first" className="text-xs">
-                        First Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="new-cm-first"
-                        className="h-9"
-                        value={newCoMaker.first_name}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            first_name: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-last" className="text-xs">
-                        Last Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="new-cm-last"
-                        className="h-9"
-                        value={newCoMaker.last_name}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            last_name: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-contact" className="text-xs">
-                        Contact Number
-                      </Label>
-                      <Input
-                        id="new-cm-contact"
-                        type="tel"
-                        className="h-9"
-                        placeholder="09171234567"
-                        value={newCoMaker.contact_number}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            contact_number: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-rel" className="text-xs">
-                        Relationship to Member
-                      </Label>
-                      <Input
-                        id="new-cm-rel"
-                        className="h-9"
-                        placeholder="e.g. Sibling, Spouse"
-                        value={newCoMaker.relationship_to_borrower}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            relationship_to_borrower: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => setAddCoMakerOpen(false)}
-                      disabled={addingCoMaker}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={handleAddSecondCoMaker}
-                      disabled={
-                        addingCoMaker ||
-                        !newCoMaker.first_name.trim() ||
-                        !newCoMaker.last_name.trim()
-                      }
-                    >
-                      {addingCoMaker ? "Adding..." : "Add Co-Maker"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
 
-            {/* Release Date Picker */}
-            <div className="space-y-1.5">
-              <Label>Release Date</Label>
-              <Popover open={releaseDatePickerOpen} onOpenChange={setReleaseDatePickerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                  }
-                >
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{formatDateObj(releaseDate)}</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={releaseDate}
-                    onSelect={(date) => {
-                      if (date) setReleaseDate(date);
-                      setReleaseDatePickerOpen(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Computed dates */}
+            {/* Dates the release will store: the loan's maturity and the
+                server schedule's first instalment. */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Maturity Date</p>
                 <p className="text-sm font-medium">
-                  {computedMaturityDate ? formatDateObj(computedMaturityDate) : "N/A"}
+                  {loan.maturity_date ? formatDate(loan.maturity_date) : "N/A"}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">First Due Date</p>
                 <p className="text-sm font-medium">
-                  {releaseSchedule.length > 0 ? formatDateObj(releaseSchedule[0].dueDate) : "N/A"}
+                  {storedSchedule.length > 0 ? formatDateObj(storedSchedule[0].dueDate) : "N/A"}
                 </p>
               </div>
             </div>
@@ -4577,10 +3899,12 @@ export default function LoanDetailPage({
               disabled={actionLoading}
             />
 
-            {/* Amortization Preview */}
-            {releaseSchedule.length > 0 && (
-              <div className="space-y-2">
-                <Label>Amortization Schedule Preview</Label>
+            {/* Amortization Preview: the server's preview rows */}
+            <div className="space-y-2">
+              <Label>Amortization Schedule Preview</Label>
+              {storedSchedule.length === 0 ? (
+                <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+              ) : (
                 <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border">
                   <Table>
                     <TableHeader>
@@ -4597,7 +3921,7 @@ export default function LoanDetailPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {releaseSchedule.map((row) => (
+                      {storedSchedule.map((row) => (
                         <TableRow key={row.period}>
                           <TableCell className="text-center text-xs">{row.period}</TableCell>
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
@@ -4629,43 +3953,44 @@ export default function LoanDetailPage({
                     </TableFooter>
                   </Table>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Warning */}
-            {(() => {
-              const baseNetProceeds =
-                loan.net_proceeds != null
-                  ? Number(loan.net_proceeds)
-                  : Number(loan.principal_amount) || 0;
-              const { upfrontDeduction } = computeInsurancePremium(
-                Number(loan.principal_amount) || 0,
-                insurancePremium,
-              );
-              const adjustedNetProceeds = Math.max(
-                0,
-                baseNetProceeds - upfrontDeduction,
-              );
-              return (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <p className="text-sm text-amber-700">
-                    Releasing this loan will lock the principal, interest rate, and term.
-                    The borrower will receive{" "}
-                    <span className="font-semibold">
-                      {formatCurrency(adjustedNetProceeds)}
-                    </span>{" "}
-                    as net proceeds
-                    {upfrontDeduction > 0 && (
-                      <>
-                        {" "}(after {formatCurrency(upfrontDeduction)} insurance premium)
-                      </>
-                    )}
-                    .
-                  </p>
-                </div>
-              );
-            })()}
+            {releaseAmounts?.exceedsNetProceeds ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-sm text-destructive">
+                  Insurance collected exceeds the loan net proceeds. Lower the
+                  premium, or collect part of it now and the rest later.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-700">
+                  Releasing this loan will lock the principal, interest rate, and term.
+                  {releaseAmounts && (
+                    <>
+                      {" "}The borrower will receive{" "}
+                      <span className="font-semibold">
+                        {formatCurrencyExact(releaseAmounts.netProceeds)}
+                      </span>{" "}
+                      as net proceeds
+                      {releaseAmounts.insuranceCollected > 0 && (
+                        <>
+                          {" "}(after {formatCurrencyExact(releaseAmounts.insuranceCollected)} insurance premium)
+                        </>
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
@@ -4681,9 +4006,14 @@ export default function LoanDetailPage({
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRelease}
+              disabled={!canConfirmRelease}
             >
-              <Unlock className="mr-2 h-4 w-4" />
-              Confirm Release
+              {actionLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Unlock className="mr-2 h-4 w-4" />
+              )}
+              {actionLoading ? "Releasing..." : "Confirm Release"}
             </Button>
           </div>
         </DialogContent>
@@ -5244,10 +4574,12 @@ export default function LoanDetailPage({
                 {/* Per-schedule allocation table */}
                 {Array.isArray(paymentPreview.allocations) && paymentPreview.allocations.length > 0 && (() => {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
+                  // A dash with no schedule on screen to read the build-up from.
                   const periodScb = (period: number | undefined) => {
-                    if (typeof period !== "number") return 0;
+                    if (storedSchedule.length === 0) return "—";
+                    if (typeof period !== "number") return formatCurrency(0);
                     const row = storedSchedule.find((r) => r.period === period);
-                    return row?.shareCapitalBuildUp ?? 0;
+                    return formatCurrency(row?.shareCapitalBuildUp ?? 0);
                   };
                   return (
                   <div className="rounded-lg border overflow-hidden">
@@ -5300,7 +4632,7 @@ export default function LoanDetailPage({
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
-                                    {formatCurrency(periodScb(a.period))}
+                                    {periodScb(a.period)}
                                   </TableCell>
                                 )}
                                 <TableCell
@@ -5451,7 +4783,7 @@ export default function LoanDetailPage({
                 : "Interest Due — carried into the new period"}
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {formatCurrencyPrecise(currentInterestDue)}
+              {currentInterestDue === null ? "—" : formatCurrencyPrecise(currentInterestDue)}
             </p>
             {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
               // Spells out the stacking the team described: ₱50 already due
@@ -5522,7 +4854,7 @@ export default function LoanDetailPage({
             <div className="rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">New Maturity Date</p>
               <p className="text-sm font-medium">
-                {extendPreviewMaturityDate ? formatDateObj(extendPreviewMaturityDate) : "—"}
+                {extendPreviewMaturityDate ? formatDate(extendPreviewMaturityDate) : "—"}
               </p>
             </div>
           </div>
@@ -5679,7 +5011,9 @@ export default function LoanDetailPage({
             )}
             {adjType === "term_extension" && (
               <div className="space-y-1.5">
-                <Label htmlFor="adj-extend-term">Additional Months <span className="text-red-500">*</span></Label>
+                <Label htmlFor="adj-extend-term">
+                  {extendsByMonth ? "Additional Months" : "Additional Instalments"} <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="adj-extend-term"
                   type="number"
@@ -5689,9 +5023,11 @@ export default function LoanDetailPage({
                   onChange={(e) => setAdjAdditionalMonths(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Current term is {loanTerm ?? "—"} {loanTerm === 1 ? "month" : "months"}
+                  Current term is {loanTerm ?? "—"} {loanTermUnitWord}
                   {adjAdditionalMonths && Number(adjAdditionalMonths) > 0
-                    ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                    ? extendsByMonth
+                      ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                      : ` — this adds ${Number(adjAdditionalMonths)} instalment(s).`
                     : "."}
                 </p>
               </div>

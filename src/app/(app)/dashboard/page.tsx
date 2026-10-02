@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { useIsClient, usePermission } from "@/hooks";
 import {
   AreaChart,
   Area,
@@ -22,12 +23,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert, Landmark } from "lucide-react";
+import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
 import { formatDateFull } from "@/lib/format";
 import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
+import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -193,8 +195,9 @@ function formatCompactCurrency(amount: number): string {
   return `₱${Math.round(amount).toLocaleString()}`;
 }
 
-export default function DashboardPage() {
-  const [mounted, setMounted] = useState(false);
+function DashboardContent() {
+  const mounted = useIsClient();
+  const canViewShareCapital = usePermission().can("share_capital:view");
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
@@ -205,34 +208,33 @@ export default function DashboardPage() {
   const [duesStatus, setDuesStatus] = useState<LoadState>("loading");
 
   useEffect(() => {
-    setMounted(true);
-
-    // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
-    // the whole ledger. It used to ask for `per_page: 9999`, which the API
-    // silently clamps to 100: the headline figure on the front page of the app
-    // was the sum of the hundred most recent entries, in a response shaped
-    // exactly like a complete one. Drained page by page instead.
-    fetchAllPages<ShareCapitalLedgerEntry>((params) =>
-      shareCapitalService.ledgerList(params)
-    )
-      .then(({ rows, truncated }) => {
-        let total = 0;
-        for (const e of rows) {
-          // Defensive coercion — bad/missing amounts shouldn't poison the running
-          // total with NaN (which would propagate to "₱NaN" in the UI).
-          const amount = Number(e.amount);
-          if (!Number.isFinite(amount)) continue;
-          total += e.type === "credit" ? amount : -amount;
-        }
-        const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
-        // The drain hit its runaway guard, so this is a floor rather than the
-        // total. Say so with a "+" instead of presenting a short sum as final —
-        // quietly rounding down is the bug this whole change is about.
-        setShareCapitalTotal(truncated ? `${compact}+` : compact);
-      })
-      .catch(() => {
-        setShareCapitalTotal("—");
-      });
+    // Needs `share_capital:view`, which the dashboard does not; without it the
+    // card keeps its "—" rather than asking for a ledger it would be refused.
+    if (canViewShareCapital) {
+      // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
+      // the whole ledger. It used to ask for `per_page: 9999`, which the API
+      // silently clamps to 100: the headline figure on the front page of the app
+      // was the sum of the hundred most recent entries, in a response shaped
+      // exactly like a complete one. Drained page by page instead.
+      fetchAllPages<ShareCapitalLedgerEntry>((params) =>
+        shareCapitalService.ledgerList(params)
+      )
+        .then(({ rows, truncated }) => {
+          let total = 0;
+          for (const e of rows) {
+            const { debit, credit } = ledgerAmounts(e);
+            total += credit - debit;
+          }
+          const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
+          // The drain hit its runaway guard, so this is a floor rather than the
+          // total. Say so with a "+" instead of presenting a short sum as final —
+          // quietly rounding down is the bug this whole change is about.
+          setShareCapitalTotal(truncated ? `${compact}+` : compact);
+        })
+        .catch(() => {
+          setShareCapitalTotal("—");
+        });
+    }
 
     // Dashboard stats
     dashboardService
@@ -298,7 +300,7 @@ export default function DashboardPage() {
         setRecentTransactions([]);
         setTxStatus("error");
       });
-  }, []);
+  }, [canViewShareCapital]);
 
   // ---------------------------------------------------------------------
   // Derived values — live data only.
@@ -332,7 +334,6 @@ export default function DashboardPage() {
   ];
 
   return (
-    <RouteGuard permission="dashboard:view" pageName="Dashboard">
     <div className="space-y-6">
       {/* ----------------------------------------------------------------- */}
       {/* Row 1: KPI Cards                                                  */}
@@ -553,6 +554,13 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <RouteGuard permission="dashboard:view" pageName="Dashboard">
+      <DashboardContent />
     </RouteGuard>
   );
 }

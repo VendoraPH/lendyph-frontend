@@ -47,7 +47,7 @@ function validate(rows: Row[]): string | null {
   return null;
 }
 
-export default function GCashSettingsPage() {
+function GCashSettingsContent() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,139 +118,148 @@ export default function GCashSettingsPage() {
   };
 
   return (
-    <RouteGuard permission="gcash:settings" pageName="GCash Settings">
-      <div className="space-y-6 p-6">
-        <div>
-          <h1 className="text-2xl font-semibold">GCash Tiered Charges</h1>
-          <p className="text-sm text-muted-foreground">
-            Charges are computed at transaction time based on the amount tier.
-            Existing transactions are not affected when these change.
-          </p>
-        </div>
-
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[80px]">Order</TableHead>
-                <TableHead>Min Amount</TableHead>
-                <TableHead>Max Amount</TableHead>
-                <TableHead>Cash In Rate (₱)</TableHead>
-                <TableHead>Cash Out Rate (₱)</TableHead>
-                <TableHead className="w-[60px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <Loader2 className="inline-block h-5 w-5 animate-spin" />
-                  </TableCell>
-                </TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-muted-foreground py-8"
-                  >
-                    No tiers configured. Click + to add one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((r) => (
-                  <TableRow key={r.tempId}>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={r.display_order}
-                        min={1}
-                        onChange={(e) =>
-                          update(r.tempId, {
-                            display_order: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={r.min_amount}
-                        min={0}
-                        step="0.01"
-                        onChange={(e) =>
-                          update(r.tempId, {
-                            min_amount: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={r.max_amount}
-                        min={0}
-                        step="0.01"
-                        onChange={(e) =>
-                          update(r.tempId, {
-                            max_amount: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={r.cash_in_rate}
-                        min={0}
-                        step="0.01"
-                        onChange={(e) =>
-                          update(r.tempId, {
-                            cash_in_rate: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={r.cash_out_rate}
-                        min={0}
-                        step="0.01"
-                        onChange={(e) =>
-                          update(r.tempId, {
-                            cash_out_rate: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeRow(r.tempId)}
-                        aria-label="Remove tier"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={addRow}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Tier
-          </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
-            {saving ? "Saving…" : "Save Tiers"}
-          </Button>
-        </div>
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-2xl font-semibold">GCash Tiered Charges</h1>
+        <p className="text-sm text-muted-foreground">
+          Charges are computed at transaction time based on the amount tier.
+          Existing transactions are not affected when these change.
+        </p>
       </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[80px]">Order</TableHead>
+              <TableHead>Min Amount</TableHead>
+              <TableHead>Max Amount</TableHead>
+              <TableHead>Cash In Rate (₱)</TableHead>
+              <TableHead>Cash Out Rate (₱)</TableHead>
+              <TableHead className="w-[60px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <Loader2 className="inline-block h-5 w-5 animate-spin" />
+                </TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground py-8"
+                >
+                  No tiers configured. Click + to add one.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((r) => (
+                <TableRow key={r.tempId}>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={r.display_order}
+                      min={1}
+                      onChange={(e) =>
+                        update(r.tempId, {
+                          display_order: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={r.min_amount}
+                      min={0}
+                      step="0.01"
+                      onChange={(e) =>
+                        update(r.tempId, {
+                          min_amount: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={r.max_amount}
+                      min={0}
+                      step="0.01"
+                      onChange={(e) =>
+                        update(r.tempId, {
+                          max_amount: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={r.cash_in_rate}
+                      min={0}
+                      step="0.01"
+                      onChange={(e) =>
+                        update(r.tempId, {
+                          cash_in_rate: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={r.cash_out_rate}
+                      min={0}
+                      step="0.01"
+                      onChange={(e) =>
+                        update(r.tempId, {
+                          cash_out_rate: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeRow(r.tempId)}
+                      aria-label="Remove tier"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" onClick={addRow}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Tier
+        </Button>
+        <Button onClick={handleSave} disabled={saving || loading}>
+          {saving ? "Saving…" : "Save Tiers"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// The tiers themselves come from `GET /gcash/tiers`, which needs `gcash:view`.
+export default function GCashSettingsPage() {
+  return (
+    <RouteGuard permission="gcash:settings" pageName="GCash Settings">
+      <RouteGuard permission="gcash:view" pageName="GCash Settings">
+        <GCashSettingsContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

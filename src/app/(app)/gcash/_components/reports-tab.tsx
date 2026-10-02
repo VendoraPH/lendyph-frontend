@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency, formatDate, formatDateISO } from "@/lib/format";
@@ -42,6 +43,12 @@ export function ReportsTab() {
   const [{ start, end }, setRange] = useState(defaultRange);
   const [report, setReport] = useState<GCashIncomeReport | null>(null);
   const [pending, setPending] = useState<GCashPendingItem[]>([]);
+  // Set only when the pending drain gave up with pages outstanding, i.e. the
+  // worklist below is knowingly missing Cash Ins. Null means complete.
+  const [pendingShortfall, setPendingShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
   const [incomeLoading, setIncomeLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
@@ -71,8 +78,11 @@ export function ReportsTab() {
     (async () => {
       setPendingLoading(true);
       try {
-        const res = await gcashService.pendingList();
-        if (!cancelled) setPending(Array.isArray(res) ? res : []);
+        const { rows, total, truncated } = await gcashService.pendingListAll();
+        if (!cancelled) {
+          setPending(rows);
+          setPendingShortfall(truncated ? { shown: rows.length, total } : null);
+        }
       } catch (err) {
         toast.error(extractGCashErrorMessage(err));
       } finally {
@@ -166,7 +176,15 @@ export function ReportsTab() {
             customer settles.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {pendingShortfall && (
+            <IncompleteListNotice
+              shown={pendingShortfall.shown}
+              total={pendingShortfall.total}
+              noun="pending payments"
+              consequence="A pending Cash In that is not listed here cannot be marked paid from this screen."
+            />
+          )}
           <div className="rounded-md border">
             <Table>
               <TableHeader>

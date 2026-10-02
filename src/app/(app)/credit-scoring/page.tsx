@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
-import { useApiResource } from "@/hooks";
+import { useApiResource, useIsClient } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "./_components/page-header";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
@@ -43,8 +43,7 @@ function Figure({ label, value }: { label: string; value: string }) {
 }
 
 function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
 
   return (
     <div className="space-y-6">
@@ -111,35 +110,41 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
   );
 }
 
-export default function CreditScoringDashboardPage() {
+function CreditScoringDashboardContent() {
   const fetcher = useCallback(() => creditScoringService.getDashboardSummary(), []);
   const resource = useApiResource<CreditScoringDashboardSummary>(fetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Credit Scoring">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Credit Scoring"
-          description="Portfolio-wide view of borrower credit scores and risk distribution."
-        />
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Credit Scoring"
+        description="Portfolio-wide view of borrower credit scores and risk distribution."
+      />
 
-        <DataState
-          resource={resource}
-          summary="The credit scoring dashboard will summarize scored borrowers, average score, and risk distribution once the backend is connected."
-          endpoints={["GET /credit-scoring/dashboard"]}
-        >
-          {(data) => <DashboardBody data={data} />}
-        </DataState>
+      <DataState
+        resource={resource}
+        summary="The credit scoring dashboard will summarize scored borrowers, average score, and risk distribution once the backend is connected."
+        endpoints={["GET /credit-scoring/dashboard"]}
+      >
+        {(data) => <DashboardBody data={data} />}
+      </DataState>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {SHORTCUTS.map((s) => (
-            <Button key={s.href} variant="outline" className="h-auto justify-start gap-2 p-4" nativeButton={false} render={<Link href={s.href} />}>
-              <s.icon className="h-4 w-4" />
-              {s.title}
-            </Button>
-          ))}
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {SHORTCUTS.map((s) => (
+          <Button key={s.href} variant="outline" className="h-auto justify-start gap-2 p-4" nativeButton={false} render={<Link href={s.href} />}>
+            <s.icon className="h-4 w-4" />
+            {s.title}
+          </Button>
+        ))}
       </div>
+    </div>
+  );
+}
+
+export default function CreditScoringDashboardPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Credit Scoring">
+      <CreditScoringDashboardContent />
     </RouteGuard>
   );
 }

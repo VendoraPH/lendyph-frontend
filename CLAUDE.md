@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `lendyph-web` — the Next.js 16 (App Router) / React 19 / TypeScript frontend of Lendyph, a cooperative lending app. Its only backend is the separate Laravel API, `lendyph-backend`. One codebase serves several **single-tenant deployments that differ only by build-time env**: there is no tenant model, so anything one client needs goes behind an env flag (e.g. `NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION`), never a branch.
 
-The backend's `routes/api.php` is the endpoint source of truth. `docs/API_ENDPOINTS.md` is an April 2026 snapshot, and "not built yet" notes in code lag the backend. For example, `src/services/accounting.service.ts` says none of its endpoints exist, but the backend serves `/accounting/*`. Check the backend before assuming an endpoint is missing or present.
+The backend's `routes/api.php` is the endpoint source of truth. `docs/API_ENDPOINTS.md` is an April 2026 snapshot, and "not built yet" notes in code can lag the backend. Check the backend before assuming an endpoint is missing or present.
 
 ## Commands
 
@@ -62,10 +62,12 @@ npx playwright test e2e/fees-settings.spec.ts
 - ESLint enforces `per_page <= 100` (`pagination/no-oversized-per-page`).
 
 **Data and state.**
-- The house pattern is a service call in a `useCallback` fetcher, run by `useEffect`, with results in `useState`.
+- The house pattern: `useEffect` makes the service call and sets `useState` only in `.then`. `react-hooks/set-state-in-effect` does not model `await`, so an async fetcher that sets state and is called from an effect is flagged.
   - Parallel loads use `Promise.allSettled`.
-  - Refetch after a mutation through callbacks such as `onSave={fetchData}`.
+  - Loading starts `true`. A reload (Retry, or a refetch after a mutation such as `onSave={reload}`) resets loading and errors in its handler and bumps a `reloadCount` in the effect's deps. Or derive loading from whether the stored result belongs to the current request.
   - `useApiResource` (`src/hooks/use-api-resource.ts`) wraps this and treats 404/501 as `unavailable`.
+  - Refill a dialog's form as it opens with `useDialogOpening(open, source)`, and gate browser-only rendering with `useIsClient()`. Neither needs an effect.
+  - The React Compiler skips any component containing `try/finally`, so the hooks lint rules silently don't check it.
 - Global state is zustand (`src/store/`: auth, persisted as `lendy-auth`; ui; branding).
 - Forms are hand-rolled `useState` objects with `notifyValidation`. Toasts go through `src/lib/notify.ts`.
 - These are installed but unused, so don't introduce them as if they were the pattern:
@@ -76,11 +78,12 @@ npx playwright test e2e/fees-settings.spec.ts
 **Auth and permissions are client-side only.**
 - There is no `middleware.ts` / `proxy.ts`. `src/app/(app)/layout.tsx` redirects to `/login` when there is no token, and renders nothing until the user is loaded. The API is the real enforcer.
 - The bearer token is stored in localStorage.
-- The axios interceptor does one queued refresh on 401. On **423** (`password_change_required`) it sends the user to `/change-password`. A 423 must never reach the refresh path.
+- A token can only be renewed while it is still valid (`POST /auth/refresh` is authenticated by the token it replaces), so `SessionProvider` renews it ahead of expiry through `renewAccessToken()` (rules in `src/lib/session-token.ts`). A 401 never triggers a refresh: the interceptor replays the request if the token rotated mid-flight, otherwise it ends the session. On **423** (`password_change_required`) it sends the user to `/change-password`; a 423 must never end the session or reach a renewal.
 - Permissions are `module:action` strings from the server's `user.permissions`. Check them with `usePermission()`, and gate with:
   - `RouteGuard`: a whole page.
   - `PermissionGate`: hide something.
   - `PermissionButton`: a disabled button with a tooltip.
+- **Check permission before requesting data.** `RouteGuard` only swaps its children, so a page's data hooks and effects must live in an inner component rendered *inside* the guard, or they fire (and 403) for users the guard refuses. A read under another module's permission (members, fees, collaterals, share capital, …) is skipped when the user lacks it; `emptyDrain()` (`src/lib/paginate.ts`) stands in for a skipped `listAll()`.
 - `src/constants/rbac.ts` only documents roles for the roles screen; editing it grants nothing.
 - The sidebar is `SIDEBAR_NAV` in `src/constants/navigation.ts`, filtered by permission.
 

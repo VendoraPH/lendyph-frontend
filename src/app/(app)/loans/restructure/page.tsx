@@ -16,6 +16,7 @@ import {
 
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
   holdersSentence,
@@ -68,6 +69,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { completeRows, emptyDrain } from "@/lib/paginate";
 
 import {
   borrowerService,
@@ -75,7 +77,6 @@ import {
   collateralTypeService,
   loanProductService,
   loanService,
-  userService,
 } from "@/services";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
@@ -86,9 +87,15 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { usePermission } from "@/hooks/use-permission";
 import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import {
+  decimalInputValue,
+  percentOf,
+  roundCentavos,
+  sanitizeDecimalInput,
+} from "@/lib/percent";
 import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
@@ -96,8 +103,20 @@ import {
   LOAN_STATUS_LABELS,
 } from "@/constants";
 
-import type { Borrower, CollateralType, Loan, LoanStatus, User } from "@/types";
+import type { Borrower, CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import type { LoanProduct } from "@/types/loan";
+import {
+  DAYS_PER_MONTH,
+  instalments,
+  maturityDate as loanMaturityDate,
+  rateForDays,
+  ratePeriodWord,
+  readRateFrequency,
+  readTermUnit,
+  termUnitNoun,
+  type RateFrequency,
+  type TermUnit,
+} from "@/lib/loan-terms";
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -120,95 +139,77 @@ interface AmortizationRow {
   totalPayment: number;
 }
 
+/**
+ * A collateral on the form. `carried` marks one the source loan holds:
+ * `LoanService::restructure()` copies every one of those onto the new loan
+ * with its snapshot, so the form can neither drop nor re-attach it.
+ */
+interface SelectedCollateral {
+  collateral: CollateralValueRow;
+  snapshot_value: number;
+  carried: boolean;
+}
+
 // ── Amortization helpers (mirrors new/page.tsx) ───────────────────────────────
-
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily": return Math.round(termMonths * 30);
-    case "weekly": return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-    case "semi_monthly": return Math.round(termMonths * 2);
-    case "monthly":
-    default: return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily": return 1;
-    case "weekly": return 7;
-    case "bi_weekly":
-    case "semi_monthly": return 15;
-    case "monthly":
-    default: return 30;
-  }
-}
-
-function addMonthsToDate(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
-
-function addDaysToDate(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
 
 function computeAmortization(
   principal: number,
   interestRate: number,
   interestType: InterestType,
-  termMonths: number,
+  term: number,
+  termUnit: TermUnit,
+  rateFrequency: RateFrequency,
   frequency: PaymentFrequency,
   startDate: Date,
   scbAmount = 0,
 ): AmortizationRow[] {
-  const r = interestRate / 100;
   const scb = Math.round(scbAmount);
 
   if (frequency === "upon_maturity") {
-    const totalInterest = Math.round(principal * r * termMonths);
+    const fraction =
+      termUnit === "months"
+        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
+        : rateForDays(interestRate, term, rateFrequency);
+    const totalInterest = roundCentavos(principal * fraction);
     return [{
       period: 1,
-      dueDate: addMonthsToDate(startDate, termMonths),
+      dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
       principal,
       interest: totalInterest,
       shareCapitalBuildUp: scb,
-      totalPayment: principal + totalInterest + scb,
+      totalPayment: roundCentavos(principal + totalInterest) + scb,
     }];
   }
 
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
+  const plan = instalments(startDate, term, termUnit, frequency);
+  const totalPeriods = plan.length;
   const rows: AmortizationRow[] = [];
   let remaining = principal;
 
   if (interestType === "straight" || interestType === "fixed") {
-    const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r);
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonthsToDate(startDate, i)
-        : addDaysToDate(startDate, i * intervalDays);
+    // To the centavo, as the server's schedule rounds each figure.
+    const principalPerPeriod = roundCentavos(principal / totalPeriods);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
-      rows.push({ period: i, dueDate, principal: periodPrincipal, interest: interestPerPeriod, shareCapitalBuildUp: scb, totalPayment: periodPrincipal + interestPerPeriod + scb });
-      remaining -= periodPrincipal;
-    }
+      const interest = roundCentavos(principal * rateForDays(interestRate, days, rateFrequency));
+      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: roundCentavos(periodPrincipal + interest) + scb });
+      remaining = roundCentavos(remaining - periodPrincipal);
+    });
   } else if (interestType === "diminishing") {
+    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
     const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonthsToDate(startDate, i)
-        : addDaysToDate(startDate, i * intervalDays);
+    // To the centavo, at the points the server rounds its schedule.
+    const payment = roundCentavos(pmt);
+    plan.forEach(({ dueDate, days }, index) => {
+      const i = index + 1;
       const isLast = i === totalPeriods;
-      const interest = Math.round(remaining * r);
-      const periodPrincipal = isLast ? remaining : Math.round(pmt - interest);
-      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
+      const interest = roundCentavos(remaining * rateForDays(interestRate, days, rateFrequency));
+      const periodPrincipal = isLast ? remaining : roundCentavos(payment - interest);
+      const baseTotal = roundCentavos(periodPrincipal + interest);
       rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
-      remaining -= periodPrincipal;
-    }
+      remaining = roundCentavos(remaining - periodPrincipal);
+    });
   }
 
   return rows;
@@ -252,11 +253,21 @@ const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 function RestructureLoanInner() {
   const router = useRouter();
+  const { can } = usePermission();
+  // Attaching a collateral is `POST /loans/{loan}/collaterals`, which needs
+  // both of these. A role that can only restructure still gets the source
+  // loan's collaterals (the server carries them over) but cannot add others.
+  const canAddCollateral = can("loans:update") && can("collaterals:update");
+  // Lists this form reads under other modules' permissions, which
+  // `loans:restructure` does not imply. Without one, that list is not asked
+  // for and stays empty, as it would with nothing in it.
+  const canListMembers = can("borrowers:view");
+  const canListCollaterals = can("collaterals:view");
+  const canReadShareCapital = can("share_capital:view");
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   // ── Source loan selection ──
@@ -273,12 +284,11 @@ function RestructureLoanInner() {
   // ── Form state ──
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
   const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
-  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
-  const [aoOpen, setAoOpen] = useState(false);
+  const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
-  const [termMonths, setTermMonths] = useState<string>("");
+  const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [scbAmount, setScbAmount] = useState<string>("");
@@ -295,9 +305,7 @@ function RestructureLoanInner() {
   // ── Collaterals ──
   const [availableCollaterals, setAvailableCollaterals] = useState<CollateralValueRow[]>([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
-  const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralValueRow; snapshot_value: number }[]
-  >([]);
+  const [selectedCollaterals, setSelectedCollaterals] = useState<SelectedCollateral[]>([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -315,26 +323,22 @@ function RestructureLoanInner() {
     shown: number;
     total: number | null;
   } | null>(null);
-  // Same, for the officer drain: set only when the Account Officer picker is
-  // knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
 
   // ── Load seed data on mount ──
   useEffect(() => {
+    // Set by the cleanup, so Strict Mode's discarded first mount (or a real
+    // unmount) neither writes state nor toasts.
+    let cancelled = false;
     async function fetchData() {
-      const [borrowersRes, productsRes, usersRes] = await Promise.allSettled([
+      const [borrowersRes, productsRes] = await Promise.allSettled([
         // members_only: a rejected applicant must never be restructurable.
         // Drained across pages. `per_page: 200` was clamped to 100 by
         // BorrowerController without a word, so member 101 onwards could not be
         // picked and their loans could not be restructured from this screen.
-        borrowerService.listAll({ members_only: 1 }),
-        loanProductService.list(),
-        // Drained, and filtered to active on the server. This was
-        // `userService.list()` with no arguments — the endpoint's default page
-        // of 15, newest first — so from the 16th user on, the longest-serving
-        // officers were the ones missing from the Account Officer picker.
-        userService.listAll({ status: "active" }),
+        canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
+        loanProductService.listAll().then(completeRows),
       ]);
+      if (cancelled) return;
 
       if (borrowersRes.status === "fulfilled") {
         const memberDrain = borrowersRes.value;
@@ -346,21 +350,18 @@ function RestructureLoanInner() {
         );
       }
       if (productsRes.status === "fulfilled") {
-        const raw = productsRes.value;
-        setProducts(Array.isArray(raw) ? raw : (raw as { data: LoanProduct[] }).data ?? []);
-      }
-      if (usersRes.status === "fulfilled") {
-        const officers = toUserList(usersRes.value);
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
+        setProducts(productsRes.value);
+      } else {
+        toast.error("We couldn't load loan products. Please try again.");
       }
 
       setLoadingData(false);
     }
     fetchData();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [canListMembers]);
 
   // ── Load borrower's eligible loans when borrower changes ──
   useEffect(() => {
@@ -419,8 +420,7 @@ function RestructureLoanInner() {
       setCoMakerIds(cmIds.length > 0 ? cmIds : [null]);
 
       // Pre-fill AO + purpose
-      const l = loan as unknown as Record<string, unknown>;
-      setAccountOfficerId((l.account_officer_id as number | undefined) ?? null);
+      setAccountOfficer(loan.account_officer ?? null);
       setPurpose(loan.purpose ?? "");
 
       // Pre-fill product
@@ -430,13 +430,16 @@ function RestructureLoanInner() {
       // Principal = outstanding balance
       const outstanding = summary?.outstanding_balance ?? loan.outstanding_balance ?? loan.principal_amount;
       setSourceOutstanding(outstanding != null ? Number(outstanding) : null);
-      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding))) : "");
+      // To the centavo: rounding to whole pesos left a few centavos of
+      // "shortfall" to explain and write off, or overshot the balance the API
+      // caps the principal at.
+      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding) * 100) / 100) : "");
 
       // Terms. Interest type is not prefilled — it is snapshotted from the loan
       // product by the API, so the form derives it from the product instead.
-      setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+      setTermValue(String(loan.term ?? loan.term_months ?? ""));
       setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-      setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
+      setInterestRate(decimalInputValue(loan.interest_rate));
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
 
       // Restructure date defaults to today
@@ -448,8 +451,8 @@ function RestructureLoanInner() {
         const ap = prod as unknown as Record<string, unknown>;
         const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
         const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
-        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
-        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+        setProcessingFeeRate(decimalInputValue(procPct));
+        setServiceFeeRate(decimalInputValue(svcPct));
       } else {
         setProcessingFeeRate("");
         setServiceFeeRate("");
@@ -468,28 +471,47 @@ function RestructureLoanInner() {
 
   // ── Collateral types: load once ──
   useEffect(() => {
-    collateralTypeService.list().then(setCollateralTypes).catch(() => {});
-  }, []);
+    if (!canListCollaterals) return;
+    let cancelled = false;
+    collateralTypeService
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
+        if (!cancelled) setCollateralTypes(rows);
+      })
+      .catch(() => {
+        // Without types a share-capital collateral is valued at its recorded
+        // amount instead of the member's balance, so this is not optional.
+        if (!cancelled) {
+          toast.error("We couldn't load the collateral types, so collateral values may be wrong. Please reload before attaching collateral.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canListCollaterals]);
 
   // ── Available collaterals: rebuild when borrower changes ──
   useEffect(() => {
-    if (!borrowerId) {
+    if (!borrowerId || !canListCollaterals) {
       setAvailableCollaterals([]);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        // One request. `active_loans` on each row answers the lock question
-        // across the whole active book — no loan list, no per-loan fan-out.
-        const collRows = await collateralService.list({
-          borrower_id: borrowerId,
-        });
+        // One request today. `active_loans` on each row answers the lock
+        // question across the whole active book — no loan list, no per-loan
+        // fan-out. Drained so a paginated `/collaterals` cannot hand the picker
+        // page 1 as the member's whole set.
+        const collRows = completeRows(
+          await collateralService.listAll({ borrower_id: borrowerId }),
+        );
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsSc = collRows.some(
           (c) => typeById.get(c.collateral_type_id)?.source === "share_capital",
         );
-        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId) : null;
+        const scBalance = needsSc ? await getShareCapitalBalance(borrowerId, canReadShareCapital) : null;
         const enriched: CollateralValueRow[] = collRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
           return {
@@ -506,11 +528,14 @@ function RestructureLoanInner() {
         });
         if (!cancelled) setAvailableCollaterals(enriched);
       } catch {
-        if (!cancelled) setAvailableCollaterals([]);
+        if (!cancelled) {
+          setAvailableCollaterals([]);
+          toast.error("We couldn't load this member's collaterals. Please try again.");
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [borrowerId, collateralTypes, sourceLoanId]);
+  }, [borrowerId, collateralTypes, sourceLoanId, canListCollaterals, canReadShareCapital]);
 
   // ── Pre-fill collaterals from source loan ──
   useEffect(() => {
@@ -526,17 +551,18 @@ function RestructureLoanInner() {
         // they were both undefined, so the source loan's collaterals never
         // carried into the restructure form.
         const prefilled = links
-          .map((link) => {
+          .map((link): SelectedCollateral | null => {
             const c = byId.get(link.id);
             return c
               ? {
                   collateral: c,
                   snapshot_value:
                     link.pivot?.snapshot_value ?? c.effective_value,
+                  carried: true,
                 }
               : null;
           })
-          .filter((v): v is { collateral: CollateralValueRow; snapshot_value: number } => v !== null);
+          .filter((v): v is SelectedCollateral => v !== null);
         if (!cancelled) setSelectedCollaterals(prefilled);
       } catch {
         // Non-blocking
@@ -586,15 +612,19 @@ function RestructureLoanInner() {
     [interestType],
   );
 
+  // `term` is a length in the product's unit — months unless it says days.
+  const termUnit = readTermUnit(selectedProduct?.term_unit);
+  // …and the rate is quoted per the product's rate frequency.
+  const rateFrequency = readRateFrequency(selectedProduct?.interest_rate_frequency);
   const principal = parseFloat(principalAmount) || 0;
-  const term = parseInt(termMonths) || 0;
+  const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
   const processingFeePercent = parseFloat(processingFeeRate) || 0;
   const serviceFeePercent = parseFloat(serviceFeeRate) || 0;
 
-  const processingFeeAmount = Math.round((processingFeePercent / 100) * principal);
-  const serviceFeeAmount = Math.round((serviceFeePercent / 100) * principal);
+  const processingFeeAmount = percentOf(principal, processingFeePercent);
+  const serviceFeeAmount = percentOf(principal, serviceFeePercent);
   const otherDeductionsTotal = otherDeductions.reduce(
     (s, d) => s + (parseFloat(d.amount) || 0), 0,
   );
@@ -633,9 +663,13 @@ function RestructureLoanInner() {
   // Picker rows for collateral dialog
   const pickerRows = useMemo(() => {
     const selectedIds = new Set(selectedCollaterals.map((c) => c.collateral.id));
+    const carriedIds = new Set(
+      selectedCollaterals.filter((c) => c.carried).map((c) => c.collateral.id),
+    );
     return availableCollaterals.map((c) => ({
       collateral: c,
       isSelected: selectedIds.has(c.id),
+      isCarried: carriedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
       // No value to snapshot onto the replacement loan, so it cannot be picked.
       isValueUnknown: c.value_unknown,
@@ -658,11 +692,13 @@ function RestructureLoanInner() {
       rate,
       interestType as InterestType,
       term,
+      termUnit,
+      rateFrequency,
       paymentFrequency as PaymentFrequency,
       restructureDate,
       scb,
     );
-  }, [principal, rate, term, paymentFrequency, interestType, restructureDate, scb]);
+  }, [principal, rate, term, termUnit, rateFrequency, paymentFrequency, interestType, restructureDate, scb]);
 
   const amortTotals = useMemo(
     () =>
@@ -690,14 +726,14 @@ function RestructureLoanInner() {
   }, [principalAmount, principal, selectedProduct]);
 
   const termError = useMemo(() => {
-    if (!termMonths) return null;
+    if (!termValue) return null;
     if (term <= 0) return "Term must be greater than 0";
     if (selectedProduct) {
-      if (term < selectedProduct.min_term) return `Minimum is ${selectedProduct.min_term} months`;
-      if (selectedProduct.max_term && term > selectedProduct.max_term) return `Maximum is ${selectedProduct.max_term} months`;
+      if (term < selectedProduct.min_term) return `Minimum is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
+      if (selectedProduct.max_term && term > selectedProduct.max_term) return `Maximum is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     }
     return null;
-  }, [termMonths, term, selectedProduct]);
+  }, [termValue, term, termUnit, selectedProduct]);
 
   // ── Handlers ──
   const handleBorrowerChange = useCallback((id: number | null) => {
@@ -714,14 +750,14 @@ function RestructureLoanInner() {
       if (prod) {
         const ap = prod as unknown as Record<string, unknown>;
         const rawRate = ap.min_interest_rate ?? ap.interest_rate ?? prod.interest_rate;
-        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
+        setInterestRate(decimalInputValue(rawRate));
         const rawFreqs = ap.frequencies ?? ap.frequency ?? prod.payment_frequency;
         const freqArr = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
         setPaymentFrequency(String(freqArr[0] ?? "monthly"));
         const procPct = ap.max_processing_fee ?? ap.processing_fee ?? prod.processing_fee;
         const svcPct = ap.max_service_fee ?? ap.service_fee ?? prod.service_fee;
-        setProcessingFeeRate(procPct != null ? String(Math.round(Number(procPct))) : "");
-        setServiceFeeRate(svcPct != null ? String(Math.round(Number(svcPct))) : "");
+        setProcessingFeeRate(decimalInputValue(procPct));
+        setServiceFeeRate(decimalInputValue(svcPct));
         if (prod.scb_required) setScbAmount(String(prod.min_scb ?? ""));
         else setScbAmount("");
       }
@@ -777,7 +813,7 @@ function RestructureLoanInner() {
         start_date: formatDateISO(restructureDate),
         deductions,
         ...(scb > 0 && { scb_amount: scb }),
-        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        account_officer_id: accountOfficer?.id ?? null,
         ...(purpose.trim() && { purpose: purpose.trim() }),
         ...(remarks.trim() && { remarks: remarks.trim() }),
         ...(policyException && {
@@ -788,20 +824,19 @@ function RestructureLoanInner() {
 
       const newLoan = await loanService.restructure(sourceLoanId, payload);
 
-      // Attach the picked collaterals to the new loan — skipping any the API
-      // already carried over. `LoanService::restructure()` is gaining that
-      // carry-over, and `attach()` answers 422 for a collateral the loan
-      // already holds, so attaching blind would turn the happy path into
-      // "some collaterals failed to attach". Today this reads an empty list
-      // and behaves exactly as before.
-      if (selectedCollaterals.length > 0 && newLoan.id) {
+      // The source loan's collaterals are already on the new loan: the API
+      // copies them as it creates it. Only the ones added on this form are
+      // attached, skipping any the new loan already holds, because `attach()`
+      // answers 422 for a collateral the loan has.
+      const added = selectedCollaterals.filter((s) => !s.carried);
+      if (added.length > 0 && newLoan.id) {
         try {
-          const carried = await collateralService
+          const held = await collateralService
             .listForLoan(newLoan.id)
             .catch(() => []);
-          const alreadyHeld = new Set(carried.map((l) => l.id));
+          const alreadyHeld = new Set(held.map((l) => l.id));
           await Promise.all(
-            selectedCollaterals
+            added
               .filter((s) => !alreadyHeld.has(s.collateral.id))
               .map((s) =>
                 collateralService.attachToLoan(newLoan.id, s.collateral.id, s.snapshot_value),
@@ -812,16 +847,17 @@ function RestructureLoanInner() {
         }
       }
 
-      // Auto-forward for review
-      try {
-        await loanService.submit(newLoan.id);
-      } catch {
+      // Forward it for review. Submitting a restructure application needs only
+      // `loans:restructure`, the same permission as this page, so everyone
+      // who gets here can. Exactly one outcome is reported.
+      const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
+      if (forwarded) {
+        toast.success("Restructure application submitted", {
+          description: "Forwarded for review.",
+        });
+      } else {
         toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
       }
-
-      toast.success("Restructure application submitted", {
-        description: "Forwarded to Manager for approval.",
-      });
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
       notifyError(err, "We couldn't restructure this loan. Please try again.");
@@ -842,7 +878,7 @@ function RestructureLoanInner() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
+    <>
       <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
 
         {/* Header */}
@@ -873,15 +909,6 @@ function RestructureLoanInner() {
             total={loanShortfall.total}
             noun="loans"
             consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
-          />
-        )}
-
-        {officerShortfall && (
-          <IncompleteListNotice
-            shown={officerShortfall.shown}
-            total={officerShortfall.total}
-            noun="active users"
-            consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
           />
         )}
 
@@ -1101,43 +1128,13 @@ function RestructureLoanInner() {
 
                 {/* Account Officer */}
                 <div className="space-y-1.5">
-                  <Label>Account Officer <span className="text-muted-foreground">(optional)</span></Label>
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={<Button variant="outline" role="combobox" className="w-full justify-between font-normal" />}
-                    >
-                      {accountOfficerId
-                        ? (() => {
-                            const u = users.find((u) => u.id === accountOfficerId);
-                            return u?.full_name ?? "Unknown";
-                          })()
-                        : "Select account officer…"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer…" />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((u) => (
-                              <CommandItem
-                                key={u.id}
-                                value={u.full_name}
-                                onSelect={() => {
-                                  setAccountOfficerId(u.id === accountOfficerId ? null : u.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", accountOfficerId === u.id ? "opacity-100" : "opacity-0")} />
-                                {u.full_name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <Label htmlFor="account-officer">Account Officer <span className="text-muted-foreground">(optional)</span></Label>
+                  <StaffPicker
+                    id="account-officer"
+                    value={accountOfficer}
+                    onChange={setAccountOfficer}
+                    clearable
+                  />
                 </div>
 
                 {/* Purpose */}
@@ -1173,8 +1170,11 @@ function RestructureLoanInner() {
                       </SelectTrigger>
                       <SelectContent>
                         {products.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
+                          <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
                             {p.name}
+                            {!p.is_active && (
+                              <span className="text-muted-foreground"> (Inactive)</span>
+                            )}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1207,21 +1207,21 @@ function RestructureLoanInner() {
                         )}
                       >
                         {remarksRequired
-                          ? `${formatCurrency(shortfall)} below the outstanding balance of ${formatCurrency(sourceOutstanding)} — remarks required.`
-                          : `Outstanding balance: ${formatCurrency(sourceOutstanding)}`}
+                          ? `${formatCurrencyExact(shortfall)} below the outstanding balance of ${formatCurrencyExact(sourceOutstanding)} — remarks required.`
+                          : `Outstanding balance: ${formatCurrencyExact(sourceOutstanding)}`}
                       </p>
                     )}
                   </div>
 
                   {/* Term */}
                   <div className="space-y-1.5">
-                    <Label>Term (months)</Label>
+                    <Label>Term ({termUnit})</Label>
                     <Input
                       type="number"
                       min="1"
                       placeholder="e.g. 12"
-                      value={termMonths}
-                      onChange={(e) => setTermMonths(e.target.value)}
+                      value={termValue}
+                      onChange={(e) => setTermValue(e.target.value)}
                     />
                   </div>
 
@@ -1253,14 +1253,12 @@ function RestructureLoanInner() {
 
                   {/* Interest Rate */}
                   <div className="space-y-1.5">
-                    <Label>Interest Rate (%)</Label>
+                    <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      inputMode="decimal"
                       placeholder="e.g. 2"
                       value={interestRate}
-                      onChange={(e) => setInterestRate(e.target.value)}
+                      onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
                     />
                   </div>
 
@@ -1323,12 +1321,18 @@ function RestructureLoanInner() {
                     The source loan&rsquo;s collaterals carry over to the
                     replacement loan. Restructuring does not release them.
                   </p>
+                  {!canAddCollateral && (
+                    <p className="text-sm text-muted-foreground">
+                      Adding other collateral needs permission to edit loans
+                      and collaterals.
+                    </p>
+                  )}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCollateralPickerOpen(true)}
-                  disabled={!borrowerId}
+                  disabled={!borrowerId || !canAddCollateral}
                 >
                   <Plus className="mr-1.5 h-4 w-4" />
                   Manage
@@ -1339,7 +1343,7 @@ function RestructureLoanInner() {
                   <p className="text-sm text-muted-foreground">No collaterals attached.</p>
                 ) : (
                   <div className="space-y-2">
-                    {selectedCollaterals.map(({ collateral, snapshot_value }) => (
+                    {selectedCollaterals.map(({ collateral, snapshot_value, carried }) => (
                       <div
                         key={collateral.id}
                         className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
@@ -1347,17 +1351,26 @@ function RestructureLoanInner() {
                         <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{formatCurrency(snapshot_value)}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              setSelectedCollaterals((prev) =>
-                                prev.filter((c) => c.collateral.id !== collateral.id),
-                              )
-                            }
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          {/* A carried collateral cannot be dropped here: the
+                              API copies it onto the new loan regardless. */}
+                          {carried ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Carries over
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Remove collateral"
+                              onClick={() =>
+                                setSelectedCollaterals((prev) =>
+                                  prev.filter((c) => c.collateral.id !== collateral.id),
+                                )
+                              }
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1381,10 +1394,14 @@ function RestructureLoanInner() {
                       No collaterals found for this borrower.
                     </p>
                   ) : (
-                    pickerRows.map(({ collateral, isSelected, isLocked, isValueUnknown }) => (
+                    pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (
                       <button
                         key={collateral.id}
-                        disabled={(isLocked && !isSelected) || (isValueUnknown && !isSelected)}
+                        disabled={
+                          isCarried ||
+                          (isLocked && !isSelected) ||
+                          (isValueUnknown && !isSelected)
+                        }
                         onClick={() => {
                           if (isSelected) {
                             setSelectedCollaterals((prev) =>
@@ -1393,7 +1410,11 @@ function RestructureLoanInner() {
                           } else {
                             setSelectedCollaterals((prev) => [
                               ...prev,
-                              { collateral, snapshot_value: collateral.effective_value ?? collateral.amount },
+                              {
+                                collateral,
+                                snapshot_value: collateral.effective_value ?? collateral.amount,
+                                carried: false,
+                              },
                             ]);
                           }
                         }}
@@ -1402,6 +1423,7 @@ function RestructureLoanInner() {
                           isSelected
                             ? "border-brand-orange bg-brand-orange/5"
                             : "hover:bg-muted/50",
+                          isCarried && "cursor-not-allowed",
                           isLocked && !isSelected && "opacity-50 cursor-not-allowed",
                           isValueUnknown && !isSelected && "opacity-50 cursor-not-allowed",
                         )}
@@ -1418,11 +1440,9 @@ function RestructureLoanInner() {
                           <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
                           {/* Shown even when selected. A collateral carried over
                               from the source loan can ALSO be held by a third
-                              active loan, and that is exactly the case
-                              `attach()` will refuse with a 422 — so the conflict
-                              has to be visible before submit, not after. Still
-                              clickable when selected, so the operator can drop
-                              it and proceed. */}
+                              active loan, and releasing the new loan is then
+                              refused (CollateralPledgeGuard) — so the conflict
+                              has to be visible now, not at release. */}
                           {isLocked && (
                             <Badge
                               variant="outline"
@@ -1482,7 +1502,7 @@ function RestructureLoanInner() {
                   <div className="space-y-1.5">
                     <Label>Projected Maturity Date</Label>
                     <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                      {formatDateObj(addMonthsToDate(restructureDate, term))}
+                      {formatDateObj(loanMaturityDate(restructureDate, term, termUnit, paymentFrequency ?? "monthly"))}
                     </div>
                   </div>
                 )}
@@ -1501,14 +1521,11 @@ function RestructureLoanInner() {
                     <Label>Processing Fee (%)</Label>
                     <div className="flex gap-2">
                       <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
+                        inputMode="decimal"
                         value={editingFeeRate === "processing" ? processingFeeRate : processingFeeRate}
                         onChange={(e) => {
                           setEditingFeeRate("processing");
-                          setProcessingFeeRate(e.target.value);
+                          setProcessingFeeRate(sanitizeDecimalInput(e.target.value));
                         }}
                         onBlur={() => setEditingFeeRate(null)}
                         className="w-24"
@@ -1524,14 +1541,11 @@ function RestructureLoanInner() {
                     <Label>Service Fee (%)</Label>
                     <div className="flex gap-2">
                       <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
+                        inputMode="decimal"
                         value={serviceFeeRate}
                         onChange={(e) => {
                           setEditingFeeRate("service");
-                          setServiceFeeRate(e.target.value);
+                          setServiceFeeRate(sanitizeDecimalInput(e.target.value));
                         }}
                         onBlur={() => setEditingFeeRate(null)}
                         className="w-24"
@@ -1623,9 +1637,9 @@ function RestructureLoanInner() {
                   <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p>
-                      The new principal is {formatCurrency(shortfall)}{" "}
+                      The new principal is {formatCurrencyExact(shortfall)}{" "}
                       below this loan&rsquo;s outstanding balance of{" "}
-                      {formatCurrency(sourceOutstanding ?? 0)}. The difference is written
+                      {formatCurrencyExact(sourceOutstanding ?? 0)}. The difference is written
                       off, so a reason is required.
                     </p>
                   </div>
@@ -1760,7 +1774,7 @@ function RestructureLoanInner() {
           </>
         )}
       </div>
-    </RouteGuard>
+    </>
   );
 }
 
@@ -1773,7 +1787,12 @@ export default function RestructureLoanPage() {
         </div>
       }
     >
-      <RestructureLoanInner />
+      <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
+        {/* The loan being restructured is read under `loans:view`. */}
+        <RouteGuard permission="loans:view" pageName="Restructure Loan">
+          <RestructureLoanInner />
+        </RouteGuard>
+      </RouteGuard>
     </Suspense>
   );
 }

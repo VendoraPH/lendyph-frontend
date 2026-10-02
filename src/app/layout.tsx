@@ -4,6 +4,11 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+// Global rather than imported by the crop dialogs that use it. As a
+// route-level stylesheet it was style-hinted by every prefetch of a borrower
+// form, so pages that never open a cropper preloaded it and Chrome warned that
+// the preload went unused. It is 4.7 KB; one global copy costs less than that.
+import "react-image-crop/dist/ReactCrop.css";
 
 const inter = Inter({
   variable: "--font-sans",

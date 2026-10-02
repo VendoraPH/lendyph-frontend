@@ -67,6 +67,7 @@ export function GCashPartyPicker({
             <button
               id={id}
               type="button"
+              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
               role="combobox"
               aria-expanded={open}
               disabled={disabled || loading}

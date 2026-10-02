@@ -10,6 +10,7 @@ import {
   formatPercent,
   formatValue,
   percentOrDash,
+  rateOrDash,
   toNumber,
 } from "@/lib/report-format";
 import type {
@@ -111,7 +112,7 @@ const RELEASE_COLUMNS: ReportColumn[] = [
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
   { key: "term", header: "Term", format: "text", align: "right", width: 80 },
-  { key: "interest_rate", header: "Rate", format: "percent", align: "right", width: 80 },
+  { key: "interest_rate", header: "Rate", format: "rate", align: "right", width: 80 },
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
 
@@ -914,14 +915,14 @@ function accountFields(
   loan: Record<string, unknown> | null,
   borrower: Record<string, unknown> | null
 ): FieldItem[] {
-  const fields: [string, unknown, "text" | "currency" | "date" | "percent"][] = [
+  const fields: [string, unknown, "text" | "currency" | "date" | "rate"][] = [
     ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"]), "text"],
     ["Loan Account No.", pick(loan, ["loan_account_number", "account_number"]), "text"],
     ["Application No.", pick(loan, ["application_number"]), "text"],
     ["Loan Product", pick(loan, ["product_name", "loan_product_name"]), "text"],
     ["Principal", pick(loan, ["principal_amount", "principal"]), "currency"],
-    ["Interest Rate", pick(loan, ["interest_rate", "rate"]), "percent"],
+    ["Interest Rate", pick(loan, ["interest_rate", "rate"]), "rate"],
     ["Term", pick(loan, ["term_label", "term"]), "text"],
     ["Release Date", pick(loan, ["release_date", "released_at"]), "date"],
     ["Maturity Date", pick(loan, ["maturity_date", "end_date"]), "date"],
@@ -1766,7 +1767,7 @@ const PRODUCT_COLUMNS: ReportColumn[] = [
     align: "right",
     width: 105,
   },
-  { key: "avg_interest_rate", header: "Avg Rate", format: "percent", align: "right", width: 100 },
+  { key: "avg_interest_rate", header: "Avg Rate", format: "rate", align: "right", width: 100 },
   { key: "overdue_amount", header: "Overdue", format: "currency", align: "right", width: 145 },
   { key: "par_ratio", header: "PAR", format: "percent", align: "right", width: 90 },
 ];
@@ -1849,7 +1850,7 @@ export function buildPortfolioByProductDoc(
           }),
           kpi("Total Released", currencyOrDash(released), {
             tone: "positive",
-            hint: avgRate === null ? undefined : `Avg rate ${percentOrDash(avgRate)}`,
+            hint: avgRate === null ? undefined : `Avg rate ${rateOrDash(avgRate)}`,
           }),
           kpi("Outstanding Balance", currencyOrDash(outstanding)),
           kpi("Overdue Amount", currencyOrDash(overdue), {

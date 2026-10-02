@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
+import { notifyError } from "@/lib/notify";
+import { usePermission } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -23,8 +26,11 @@ interface FiltersStepProps {
 }
 
 export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
+  // `GET /loan-products` needs `loans:view`, which auto-pay does not. Without
+  // it the list is not asked for, and "All Products" is the only choice.
+  const canListProducts = usePermission().can("loans:view");
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(canListProducts);
   const [allProducts, setAllProducts] = useState(true);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -33,12 +39,26 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
   const [toOpen, setToOpen] = useState(false);
 
   useEffect(() => {
+    if (!canListProducts) return;
+    let cancelled = false;
     loanProductService
-      .list()
-      .then((res) => setProducts(res as LoanProduct[]))
-      .catch(() => {})
-      .finally(() => setProductsLoading(false));
-  }, []);
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
+        if (!cancelled) setProducts(rows);
+      })
+      .catch((err) => {
+        // "All Products" still works without the list, so the step stays
+        // usable — but picking specific products does not, and it says so.
+        if (!cancelled) notifyError(err, "We couldn't load the loan products. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canListProducts]);
 
   function toggleProduct(id: number) {
     setAllProducts(false);

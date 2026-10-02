@@ -269,7 +269,7 @@ const aggregateByLoan = (rows: PastDueLoan[]): PastDueLoan[] => {
 
 // ── Page ──
 
-export default function PastDueLoansPage() {
+function PastDueLoansContent() {
   const [loans, setLoans] = useState<PastDueLoan[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -407,315 +407,325 @@ export default function PastDueLoansPage() {
   };
 
   return (
-    <RouteGuard permission="loans:view" pageName="Past Due Loans">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Link
-              href="/loans"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to Loans
-            </Link>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
-              Past Due Loans
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Members with overdue loan payments as of today.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => load(true)}
-            disabled={loading || refreshing}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Link
+            href="/loans"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
           >
-            <RefreshCw
-              className={cn(
-                "mr-2 h-3.5 w-3.5",
-                refreshing && "animate-spin",
-              )}
-            />
-            Refresh
-          </Button>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Loans
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <AlertTriangle className="h-6 w-6 text-red-600" />
+            Past Due Loans
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Members with overdue loan payments as of today.
+          </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={loading || refreshing}
+        >
+          <RefreshCw
+            className={cn(
+              "mr-2 h-3.5 w-3.5",
+              refreshing && "animate-spin",
+            )}
+          />
+          Refresh
+        </Button>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-red-500/10 p-2">
-                  <Users className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Members Past Due
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : totals.memberCount}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-amber-500/10 p-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Past Due Loans
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : totals.loanCount}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-red-500/10 p-2">
-                  <Banknote className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Total Past Due
-                  </p>
-                  <p className="text-xl font-bold tabular-nums text-red-600">
-                    {figuresUnavailable ? "—" : formatCurrency(totals.pastDueSum)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-brand-orange/10 p-2">
-                  <Wallet className="h-5 w-5 text-brand-orange" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Outstanding Balance
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : formatCurrency(totals.outstandingSum)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters */}
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="py-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search member name, member ID, or loan number…"
-                  className="pl-8"
-                  disabled={loading}
-                />
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-500/10 p-2">
+                <Users className="h-5 w-5 text-red-600" />
               </div>
-              <Select
-                value={bucket}
-                onValueChange={(v) => setBucket(v as AgingBucket)}
-                disabled={loading}
-              >
-                <SelectTrigger className="sm:w-52">
-                  <SelectValue placeholder="Aging bucket" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All ages</SelectItem>
-                  <SelectItem value="1-30">1–30 days</SelectItem>
-                  <SelectItem value="31-60">31–60 days</SelectItem>
-                  <SelectItem value="61-90">61–90 days</SelectItem>
-                  <SelectItem value="90+">90+ days</SelectItem>
-                </SelectContent>
-              </Select>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Members Past Due
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : totals.memberCount}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Partial-set warning — only when the page walk stopped early. */}
-        {partial && !loading ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400"
-          >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              This list is incomplete — not every past due payment could be
-              loaded, so the totals below are a minimum, not the full amount.
-              Refresh to try again.
-            </p>
-          </div>
-        ) : null}
-
-        {/* Table */}
         <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div
-                className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <p className="text-sm">Loading past due loans…</p>
-                {progress && progress.total !== null && progress.total > 0 ? (
-                  <p className="text-xs tabular-nums">
-                    {progress.loaded.toLocaleString("en-PH")} of{" "}
-                    {progress.total.toLocaleString("en-PH")} scheduled payments
-                  </p>
-                ) : null}
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-amber-500/10 p-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
               </div>
-            ) : failed ? (
-              // Never the empty state on failure. Telling a collections officer
-              // "all members are current" when the request errored is a false
-              // all-clear on the one screen whose job is to say who is behind.
-              <div
-                className="flex flex-col items-center justify-center gap-3 py-16 text-center"
-                role="alert"
-              >
-                <AlertTriangle className="h-8 w-8 text-red-600" />
-                <div>
-                  <p className="text-sm font-medium">
-                    We couldn&apos;t load past due loans.
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    This list is unavailable right now — it is not a sign that
-                    every member is current.
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => load()}>
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  Try again
-                </Button>
-              </div>
-            ) : sorted.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
-                <AlertTriangle className="h-8 w-8 opacity-40" />
-                <p className="text-sm">
-                  {loans.length === 0
-                    ? "No past due loans — all members are current."
-                    : "No past due loans match your filter."}
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Past Due Loans
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : totals.loanCount}
                 </p>
               </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <button
-                        type="button"
-                        onClick={() => toggleSort("memberName")}
-                        className="flex items-center gap-1 hover:text-foreground"
-                      >
-                        Member
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead>Loan #</TableHead>
-                    <TableHead>
-                      <button
-                        type="button"
-                        onClick={() => toggleSort("daysPastDue")}
-                        className="flex items-center gap-1 hover:text-foreground"
-                      >
-                        Days Past Due
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead className="text-right">
-                      <button
-                        type="button"
-                        onClick={() => toggleSort("pastDue")}
-                        className="ml-auto flex items-center gap-1 hover:text-foreground"
-                      >
-                        Past Due Amount
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead className="text-right">
-                      <button
-                        type="button"
-                        onClick={() => toggleSort("outstanding")}
-                        className="ml-auto flex items-center gap-1 hover:text-foreground"
-                      >
-                        Outstanding
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead>Last Payment</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sorted.map((l) => (
-                    <TableRow key={l.loanId}>
-                      <TableCell>
-                        <div className="font-medium">{l.memberName}</div>
-                        <div className="text-xs text-muted-foreground tabular-nums">
-                          {l.memberId}
-                        </div>
-                      </TableCell>
-                      <TableCell className="tabular-nums text-sm">
-                        {l.loanNumber}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className={cn(
-                            "border tabular-nums",
-                            severityClass(l.daysPastDue),
-                          )}
-                        >
-                          {l.daysPastDue} {l.daysPastDue === 1 ? "day" : "days"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold text-red-600">
-                        {formatCurrency(totalPastDue(l))}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(l.outstandingBalance)}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatDate(l.lastPaymentDate)}
-                      </TableCell>
-                      <TableCell className="text-sm">{l.branch}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          nativeButton={false}
-                          render={<Link href={`/loans/${l.loanId}`} />}
-                          aria-label="Open loan"
-                        >
-                          Open
-                          <ArrowRight className="ml-1 h-3 w-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-500/10 p-2">
+                <Banknote className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Total Past Due
+                </p>
+                <p className="text-xl font-bold tabular-nums text-red-600">
+                  {figuresUnavailable ? "—" : formatCurrency(totals.pastDueSum)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-brand-orange/10 p-2">
+                <Wallet className="h-5 w-5 text-brand-orange" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Outstanding Balance
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : formatCurrency(totals.outstandingSum)}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search member name, member ID, or loan number…"
+                className="pl-8"
+                disabled={loading}
+              />
+            </div>
+            <Select
+              value={bucket}
+              onValueChange={(v) => setBucket(v as AgingBucket)}
+              disabled={loading}
+            >
+              <SelectTrigger className="sm:w-52">
+                <SelectValue placeholder="Aging bucket" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All ages</SelectItem>
+                <SelectItem value="1-30">1–30 days</SelectItem>
+                <SelectItem value="31-60">31–60 days</SelectItem>
+                <SelectItem value="61-90">61–90 days</SelectItem>
+                <SelectItem value="90+">90+ days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Partial-set warning — only when the page walk stopped early. */}
+      {partial && !loading ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            This list is incomplete — not every past due payment could be
+            loaded, so the totals below are a minimum, not the full amount.
+            Refresh to try again.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div
+              className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <p className="text-sm">Loading past due loans…</p>
+              {progress && progress.total !== null && progress.total > 0 ? (
+                <p className="text-xs tabular-nums">
+                  {progress.loaded.toLocaleString("en-PH")} of{" "}
+                  {progress.total.toLocaleString("en-PH")} scheduled payments
+                </p>
+              ) : null}
+            </div>
+          ) : failed ? (
+            // Never the empty state on failure. Telling a collections officer
+            // "all members are current" when the request errored is a false
+            // all-clear on the one screen whose job is to say who is behind.
+            <div
+              className="flex flex-col items-center justify-center gap-3 py-16 text-center"
+              role="alert"
+            >
+              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <div>
+                <p className="text-sm font-medium">
+                  We couldn&apos;t load past due loans.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This list is unavailable right now — it is not a sign that
+                  every member is current.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => load()}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Try again
+              </Button>
+            </div>
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+              <AlertTriangle className="h-8 w-8 opacity-40" />
+              <p className="text-sm">
+                {loans.length === 0
+                  ? "No past due loans — all members are current."
+                  : "No past due loans match your filter."}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("memberName")}
+                      className="flex items-center gap-1 hover:text-foreground"
+                    >
+                      Member
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </TableHead>
+                  <TableHead>Loan #</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("daysPastDue")}
+                      className="flex items-center gap-1 hover:text-foreground"
+                    >
+                      Days Past Due
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("pastDue")}
+                      className="ml-auto flex items-center gap-1 hover:text-foreground"
+                    >
+                      Past Due Amount
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("outstanding")}
+                      className="ml-auto flex items-center gap-1 hover:text-foreground"
+                    >
+                      Outstanding
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </TableHead>
+                  <TableHead>Last Payment</TableHead>
+                  <TableHead>Branch</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((l) => (
+                  <TableRow key={l.loanId}>
+                    <TableCell>
+                      <div className="font-medium">{l.memberName}</div>
+                      <div className="text-xs text-muted-foreground tabular-nums">
+                        {l.memberId}
+                      </div>
+                    </TableCell>
+                    <TableCell className="tabular-nums text-sm">
+                      {l.loanNumber}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={cn(
+                          "border tabular-nums",
+                          severityClass(l.daysPastDue),
+                        )}
+                      >
+                        {l.daysPastDue} {l.daysPastDue === 1 ? "day" : "days"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-red-600">
+                      {formatCurrency(totalPastDue(l))}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCurrency(l.outstandingBalance)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDate(l.lastPaymentDate)}
+                    </TableCell>
+                    <TableCell className="text-sm">{l.branch}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        nativeButton={false}
+                        render={<Link href={`/loans/${l.loanId}`} />}
+                        aria-label="Open loan"
+                      >
+                        Open
+                        <ArrowRight className="ml-1 h-3 w-3" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// The list is the due and past-due report, and `GET /reports/due-past-due` needs
+// `reports:view`, which `loans:view` does not imply.
+export default function PastDueLoansPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Past Due Loans">
+      <RouteGuard permission="reports:view" pageName="Past Due Loans">
+        <PastDueLoansContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

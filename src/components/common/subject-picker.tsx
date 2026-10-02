@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { borrowerService, loanService } from "@/services";
+import { usePermission } from "@/hooks";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { Borrower, Loan } from "@/types";
 
@@ -51,6 +52,12 @@ interface SubjectPickerProps {
  * print somebody's paperwork.
  */
 export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) {
+  // Loans need `loans:view` and members `borrowers:view`, neither of which the
+  // report and document screens imply. Without it the list is not asked for,
+  // and the picker is as empty as it would be with nothing to list.
+  const canList = usePermission().can(
+    subject === "loan" ? "loans:view" : "borrowers:view",
+  );
   const [options, setOptions] = useState<SubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +83,9 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
       shown: number;
       total: number | null;
     }> =
-      subject === "loan"
+      !canList
+        ? Promise.resolve({ options: [], truncated: false, shown: 0, total: 0 })
+        : subject === "loan"
         ? loanService
             .listAll({ status: "released" })
             .then(({ rows, truncated, total }) => ({
@@ -129,7 +138,7 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
     // onChange is a stable setter from the parent; re-running on identity
     // changes would clear the user's selection on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject]);
+  }, [subject, canList]);
 
   const selected = useMemo(
     () => options.find((o) => o.id === value) ?? null,

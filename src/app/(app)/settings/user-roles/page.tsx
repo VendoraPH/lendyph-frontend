@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { RouteGuard } from "@/components/common";
+import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ROLES } from "@/constants/rbac";
-import type { Module, Action, Permission } from "@/types";
+import type { Action, Permission } from "@/types";
+import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
+import {
+  roleItemFromApi,
+  setModulePermissions,
+  togglePermission as togglePermissionIn,
+  type RoleItem,
+} from "./_lib/role-item";
 import { roleService } from "@/services/role.service";
-import type { ApiRole } from "@/services/role.service";
 import { PermissionGate } from "@/components/common";
 import { useAuthStore } from "@/store";
 import { Spinner } from "@/components/ui/spinner";
@@ -56,19 +62,17 @@ import {
   ListTree,
   Receipt,
   Wallet,
-  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { notifyValidation } from "@/lib/notify";
+import { notifyError, notifyValidation } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Module metadata — describes each feature area protected by permissions
-// (Collections is excluded — no longer used in the system)
+// Module metadata — describes each feature area protected by permissions.
+// Which modules are offered at all is decided in _lib/permission-matrix.ts.
 // ---------------------------------------------------------------------------
-
-type UIModule = Exclude<Module, "collections">;
 
 interface ModuleMeta {
   label: string;
@@ -277,50 +281,8 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Move money between own accounts — a transfer, never income",
     ],
   },
-  credit_scoring: {
-    label: "Credit Scoring",
-    description: "Automated credit scoring, risk assessment and manual override for loan decisions.",
-    icon: Gauge,
-    features: [
-      "View borrower credit scores, risk levels and score history",
-      "Override an automated score with a manual credit decision",
-      "Configure scorecard weights, policy rules and module settings",
-    ],
-  },
 };
 
-// Applicable actions per module — only the actions that make sense for each area
-const MODULE_ACTIONS: Record<UIModule, Action[]> = {
-  fees: ["view", "create", "update", "delete"],
-  dashboard: ["view"],
-  borrowers: ["view", "create", "update", "delete", "approve"],
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
-  payments: ["view", "create", "update", "void"],
-  share_capital: ["view", "create", "update"],
-  collaterals: ["view", "create", "update", "delete"],
-  reports: ["view", "export"],
-  users: ["view", "create", "update", "delete"],
-  settings: ["view", "update"],
-  audit_logs: ["view", "export"],
-  auto_pay: ["view", "process", "toggle"],
-  gcash: ["view", "transact", "settings"],
-  // `process` only. There is no `imports:view`: the page has nothing to look at
-  // without running one, so a view-only grant would be a link to an empty
-  // wizard, and the template literal `Module:Action` type would happily mint it.
-  imports: ["process"],
-  // `close` and `settings` sit on `accounting` rather than on a module of their
-  // own because neither has a screen to view — they are verbs applied to the
-  // whole book.
-  accounting: ["view", "reconcile", "close", "settings"],
-  chart_of_accounts: ["view", "create", "update", "delete"],
-  // No `update` or `delete`: a posted entry is immutable, and the only lawful
-  // correction is `reverse`, which writes a second entry rather than editing
-  // the first. Granting "edit a journal" would be granting "rewrite history".
-  journals: ["view", "create", "post", "reverse"],
-  expenses: ["view", "create", "update"],
-  cash_accounts: ["view", "transfer"],
-  credit_scoring: ["view", "override", "settings"],
-};
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   view: { label: "View", colorClass: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
@@ -346,20 +308,6 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
 };
 
-// ---------------------------------------------------------------------------
-// Role model — local state (no mutation endpoints yet)
-// ---------------------------------------------------------------------------
-
-interface RoleItem {
-  id?: number;
-  key: string;
-  label: string;
-  description: string;
-  permissions: Permission[];
-  isSystem: boolean;
-  isActive: boolean;
-}
-
 const ROLE_BADGE: Record<string, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   loan_officer: "bg-blue-500/10 text-blue-700 border-blue-500/30",
@@ -376,34 +324,6 @@ const ROLE_BADGE: Record<string, string> = {
   bod6: "bg-sky-500/10 text-sky-700 border-sky-500/30",
   bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
-
-function stripCollections(perms: Permission[]): Permission[] {
-  return perms.filter((p) => !p.startsWith("collections:"));
-}
-
-function titleCase(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-// Map an API role to the UI RoleItem shape, enriching snake_case keys
-// with local label/description when the frontend recognises the role.
-function apiRoleToItem(api: ApiRole): RoleItem {
-  const key = api.name;
-  const known = (ROLES as Record<string, { label: string; description: string }>)[key];
-  return {
-    id: api.id,
-    key,
-    label: known?.label ?? titleCase(key),
-    description: api.description ?? known?.description ?? "",
-    permissions: stripCollections(api.permissions as Permission[]),
-    isSystem: api.is_system === true,
-    isActive: api.is_active ?? true,
-  };
-}
 
 function groupByModule(permissions: Permission[]): Record<string, Action[]> {
   const map: Record<string, Action[]> = {};
@@ -431,6 +351,8 @@ interface RoleFormDialogProps {
   existingKeys: string[];
   onSave: (role: RoleItem) => void;
   readOnly?: boolean;
+  /** Switch a read-only view into the editor. */
+  onEdit?: () => void;
   saving?: boolean;
 }
 
@@ -441,6 +363,7 @@ function RoleFormDialog({
   existingKeys,
   onSave,
   readOnly = false,
+  onEdit,
   saving = false,
 }: RoleFormDialogProps) {
   const isEdit = !!role;
@@ -448,34 +371,18 @@ function RoleFormDialog({
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
 
-  useEffect(() => {
-    if (open) {
-      setLabel(role?.label ?? "");
-      setDescription(role?.description ?? "");
-      setPermissions(new Set(role?.permissions ?? []));
-    }
-  }, [open, role]);
+  if (useDialogOpening(open, role)) {
+    setLabel(role?.label ?? "");
+    setDescription(role?.description ?? "");
+    setPermissions(new Set(role?.permissions ?? []));
+  }
 
   function togglePermission(mod: UIModule, act: Action) {
-    const perm = `${mod}:${act}` as Permission;
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      if (next.has(perm)) next.delete(perm);
-      else next.add(perm);
-      return next;
-    });
+    setPermissions((prev) => togglePermissionIn(prev, `${mod}:${act}` as Permission));
   }
 
   function toggleModule(mod: UIModule, enable: boolean) {
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      for (const act of MODULE_ACTIONS[mod]) {
-        const perm = `${mod}:${act}` as Permission;
-        if (enable) next.add(perm);
-        else next.delete(perm);
-      }
-      return next;
-    });
+    setPermissions((prev) => setModulePermissions(prev, mod, enable));
   }
 
   function handleSave() {
@@ -530,7 +437,7 @@ function RoleFormDialog({
           </DialogTitle>
           <DialogDescription>
             {readOnly
-              ? "System role — permissions are built-in and cannot be changed."
+              ? "What this role can do. Choose Edit to change it."
               : isEdit
                 ? "Update role details and configure permissions per module."
                 : "Define a new role and select which permissions it should grant."}
@@ -668,6 +575,17 @@ function RoleFormDialog({
           >
             {readOnly ? "Close" : "Cancel"}
           </Button>
+          {readOnly && onEdit && (
+            <PermissionGate permission="settings:update">
+              <Button
+                onClick={onEdit}
+                className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Button>
+            </PermissionGate>
+          )}
           {!readOnly && (
             <Button
               onClick={handleSave}
@@ -687,7 +605,7 @@ function RoleFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
-export default function UserRolesPage() {
+function UserRolesContent() {
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -709,11 +627,8 @@ export default function UserRolesPage() {
   async function loadRoles() {
     setLoading(true);
     try {
-      const res = await roleService.list();
-      const list = Array.isArray(res)
-        ? res
-        : (res as unknown as { data: ApiRole[] })?.data ?? [];
-      setRoles(list.map(apiRoleToItem));
+      const list = completeRows(await roleService.listAll());
+      setRoles(list.map(roleItemFromApi));
     } catch {
       toast.error("We couldn't load the roles. Please try again.");
     } finally {
@@ -745,8 +660,10 @@ export default function UserRolesPage() {
       if (formMode === "edit") {
         await maybeRefreshCurrentUser(item.key);
       }
-    } catch {
-      toast.error(formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
+    } catch (err) {
+      // The API's own reason (a taken name, a permission it does not have)
+      // is what tells the admin what to change; a bare "try again" hid it.
+      notifyError(err, formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -805,6 +722,12 @@ export default function UserRolesPage() {
 
   function openView(role: RoleItem) {
     setFormRole(role);
+    setFormMode("view");
+    setFormOpen(true);
+  }
+
+  function openEdit(role: RoleItem) {
+    setFormRole(role);
     setFormMode("edit");
     setFormOpen(true);
   }
@@ -816,285 +739,295 @@ export default function UserRolesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Role and Permissions">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage roles and their access rights across every system module
-            </p>
-          </div>
-          <PermissionGate permission="settings:update">
-            <Button
-              onClick={openCreate}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Role
-            </Button>
-          </PermissionGate>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage roles and their access rights across every system module
+          </p>
         </div>
+        <PermissionGate permission="settings:update">
+          <Button
+            onClick={openCreate}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Role
+          </Button>
+        </PermissionGate>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{roles.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Defined in the backend
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
-              <SettingsIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{totalModules}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
-              <UserCog className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{customCount}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Created on top of the built-in roles
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search roles..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Roles Table */}
+      {/* Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{roles.length}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Defined in the backend
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
+            <SettingsIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{totalModules}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{customCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Created on top of the built-in roles
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search roles..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/* Roles Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Modules</TableHead>
+                  <TableHead>Permissions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && (
                   <TableRow>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Modules</TableHead>
-                    <TableHead>Permissions</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <div className="flex items-center justify-center">
+                        <Spinner className="size-5 text-muted-foreground" />
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center">
-                        <div className="flex items-center justify-center">
-                          <Spinner className="size-5 text-muted-foreground" />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {!loading &&
-                    filtered.map((r) => {
-                      const grouped = groupByModule(r.permissions);
-                      const moduleCount = Object.keys(grouped).length;
-                      return (
-                        <TableRow
-                          key={r.key}
-                          className={cn(
-                            "cursor-pointer hover:bg-muted/50",
-                            !r.isActive && "opacity-60"
-                          )}
-                          onClick={() => openView(r)}
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "font-medium",
-                                  ROLE_BADGE[r.key] ??
-                                    "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                                )}
-                              >
-                                {r.label}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-muted-foreground">
-                              {r.description || "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm">
-                              {moduleCount}{" "}
-                              <span className="text-muted-foreground">of {totalModules}</span>
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {r.permissions.length}
+                )}
+                {!loading &&
+                  filtered.map((r) => {
+                    const grouped = groupByModule(r.permissions);
+                    const moduleCount = Object.keys(grouped).length;
+                    return (
+                      <TableRow
+                        key={r.key}
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/50",
+                          !r.isActive && "opacity-60"
+                        )}
+                        onClick={() => openView(r)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "font-medium",
+                                ROLE_BADGE[r.key] ??
+                                  "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                              )}
+                            >
+                              {r.label}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <PermissionGate permission="settings:update">
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {r.description || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {moduleCount}{" "}
+                            <span className="text-muted-foreground">of {totalModules}</span>
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {r.permissions.length}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <PermissionGate permission="settings:update">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEdit(r);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Edit
+                              </Button>
+                            </PermissionGate>
+                            <PermissionGate permission="settings:update">
+                              <>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openView(r);
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                  Edit
-                                </Button>
-                              </PermissionGate>
-                              <PermissionGate permission="settings:update">
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
-                                    disabled={actionLoading}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleActive(r);
-                                    }}
-                                  >
-                                    {r.isActive ? (
-                                      <PowerOff className="h-3 w-3" />
-                                    ) : (
-                                      <Power className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </>
-                              </PermissionGate>
-                              <PermissionGate permission="settings:delete">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                                  title="Delete role"
+                                  className="h-7 w-7 p-0"
+                                  title={r.isActive ? "Deactivate role" : "Reactivate role"}
                                   disabled={actionLoading}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteTarget(r);
+                                    handleToggleActive(r);
                                   }}
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  {r.isActive ? (
+                                    <PowerOff className="h-3 w-3" />
+                                  ) : (
+                                    <Power className="h-3 w-3" />
+                                  )}
                                 </Button>
-                              </PermissionGate>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  {!loading && filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                        No roles match your search.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                              </>
+                            </PermissionGate>
+                            <PermissionGate permission="settings:delete">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                title="Delete role"
+                                disabled={actionLoading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget(r);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </PermissionGate>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                {!loading && filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      No roles match your search.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Module reference */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Every feature area protected by access control
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
-                const meta = MODULE_META[mod];
-                const Icon = meta.icon;
-                return (
-                  <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
-                    <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold">{meta.label}</p>
-                      <p className="text-xs text-muted-foreground">{meta.description}</p>
-                    </div>
+      {/* Module reference */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Every feature area protected by access control
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
+              const meta = MODULE_META[mod];
+              const Icon = meta.icon;
+              return (
+                <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
+                  <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
+                    <Icon className="h-4 w-4" />
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{meta.label}</p>
+                    <p className="text-xs text-muted-foreground">{meta.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-        <RoleFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          role={formRole}
-          existingKeys={roles.map((r) => r.key)}
-          onSave={handleSaveRole}
-          readOnly={formMode === "view"}
-          saving={actionLoading}
-        />
+      <RoleFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        role={formRole}
+        existingKeys={roles.map((r) => r.key)}
+        onSave={handleSaveRole}
+        readOnly={formMode === "view"}
+        onEdit={() => setFormMode("edit")}
+        saving={actionLoading}
+      />
 
-        <Dialog
-          open={!!deleteTarget}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete role?</DialogTitle>
-              <DialogDescription>
-                This permanently deletes {deleteTarget?.label}. Users currently
-                assigned to this role will lose its permissions. This action
-                cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-                disabled={actionLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteRole}
-                disabled={actionLoading}
-              >
-                {actionLoading ? "Deleting..." : "Delete Role"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete role?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes {deleteTarget?.label}. Users currently
+              assigned to this role will lose its permissions. This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRole}
+              disabled={actionLoading}
+            >
+              {actionLoading ? "Deleting..." : "Delete Role"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// The roles themselves come from `GET /roles`, which needs `users:view`.
+export default function UserRolesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Role and Permissions">
+      <RouteGuard permission="users:view" pageName="Role and Permissions">
+        <UserRolesContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

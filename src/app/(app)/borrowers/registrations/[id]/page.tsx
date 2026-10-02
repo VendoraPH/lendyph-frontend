@@ -32,7 +32,7 @@ import {
 } from "./_components/registration-valid-ids-editor";
 import { compressImage } from "@/lib/image-compress";
 
-export default function RegistrationReviewPage() {
+function RegistrationReviewContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const registrationId = Number(id);
@@ -282,186 +282,195 @@ export default function RegistrationReviewPage() {
   const isRejected = registration.status === "rejected";
 
   return (
-    <RouteGuard permission="borrowers:approve" pageName="Review Registration">
-      <>
-        <div className="space-y-4 max-w-7xl mx-auto">
-          {/* Header */}
-          <Link
-            href="/borrowers"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    <>
+      <div className="space-y-4 max-w-7xl mx-auto">
+        {/* Header */}
+        <Link
+          href="/borrowers"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Members
+        </Link>
+        <div className="flex items-center gap-5">
+          <button
+            type="button"
+            aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}
+            onClick={() => registration.photo_url && setPhotoViewerOpen(true)}
+            disabled={!registration.photo_url}
+            className="group relative block shrink-0 rounded-full"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Members
-          </Link>
-          <div className="flex items-center gap-5">
-            <button
-              type="button"
-              aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}
-              onClick={() => registration.photo_url && setPhotoViewerOpen(true)}
-              disabled={!registration.photo_url}
-              className="group relative block shrink-0 rounded-full"
-            >
-              <Avatar className="size-20 sm:size-24">
-                {registration.photo_url ? (
-                  <AvatarImage src={fileUrl(registration.photo_url)} alt={fullName} />
-                ) : null}
-                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-2xl font-semibold">
-                  {getInitials(fullName)}
-                </AvatarFallback>
-              </Avatar>
+            <Avatar className="size-20 sm:size-24">
               {registration.photo_url ? (
-                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Maximize2 className="h-5 w-5 text-white" />
-                </div>
+                <AvatarImage src={fileUrl(registration.photo_url)} alt={fullName} />
               ) : null}
-            </button>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight truncate">
-                {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
-                {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
-              </p>
-            </div>
-          </div>
-
-          {/* Two-column layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-            <div className="space-y-4 min-w-0">
-              <RegistrationInfoCards
-                registration={registration}
-                editMode={editMode}
-                draft={draft}
-                onDraftChange={handleDraftChange}
-              />
-
-              <Card>
-                <CardContent className="pt-5">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
-                    Valid IDs
-                  </h3>
-                  {editMode ? (
-                    <RegistrationValidIdsEditor
-                      drafts={idDrafts}
-                      onChange={setIdDrafts}
-                    />
-                  ) : validIds.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic py-2">
-                      No valid IDs were uploaded with this application.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      {validIds.map((item) => {
-                        const label =
-                          item.custom_type_name?.trim() ||
-                          VALID_ID_OPTIONS.find((o) => o.value === item.type)?.label ||
-                          item.type;
-                        const sides = [
-                          { side: "Front", src: fileUrl(item.front_url) },
-                          { side: "Back", src: fileUrl(item.back_url) },
-                        ].filter((s) => s.src);
-                        return (
-                          <div key={item.id} className="space-y-2">
-                            <div>
-                              <p className="text-sm font-semibold capitalize">
-                                {label}
-                              </p>
-                              {item.id_number && (
-                                <p className="text-xs text-muted-foreground font-mono">
-                                  {item.id_number}
-                                </p>
-                              )}
-                            </div>
-                            {sides.length === 0 ? (
-                              <p className="text-xs text-muted-foreground italic">
-                                No images uploaded
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2">
-                                {sides.map((s) => (
-                                  <button
-                                    key={s.side}
-                                    type="button"
-                                    onClick={() => openValidId(item, label)}
-                                    className="group relative block aspect-[3/2] overflow-hidden rounded-md border border-border bg-muted/30 hover:border-brand-orange/50 transition-colors"
-                                  >
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                      src={s.src}
-                                      alt={`${label} ${s.side}`}
-                                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Maximize2 className="h-5 w-5 text-white" />
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                              {sides.map((s) => s.side).join(" · ")}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-            <ReviewActionPanel
-              registration={registration}
-              editMode={editMode}
-              approving={approving}
-              savingEdit={savingEdit}
-              onApprove={handleApprove}
-              onReject={() => setRejectOpen(true)}
-              onToggleEdit={() => {
-                setEditMode((prev) => {
-                  const next = !prev;
-                  if (next) setIdDrafts(validIds.map(draftFromServer));
-                  else setIdDrafts([]);
-                  return next;
-                });
-                setDraft({});
-              }}
-              onSaveEdit={handleSaveEdit}
-            />
+              <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-2xl font-semibold">
+                {getInitials(fullName)}
+              </AvatarFallback>
+            </Avatar>
+            {registration.photo_url ? (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Maximize2 className="h-5 w-5 text-white" />
+              </div>
+            ) : null}
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight truncate">
+              {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
+              {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
+            </p>
           </div>
         </div>
 
-        <RejectDialog
-          open={rejectOpen}
-          onOpenChange={setRejectOpen}
-          onConfirm={handleReject}
-        />
+        {/* Two-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          <div className="space-y-4 min-w-0">
+            <RegistrationInfoCards
+              registration={registration}
+              editMode={editMode}
+              draft={draft}
+              onDraftChange={handleDraftChange}
+            />
 
-        <ImagePreviewDialog
-          open={!!idPreview}
-          onOpenChange={(o) => !o && setIdPreview(null)}
-          title={idPreview?.title}
-          images={idPreview?.images ?? []}
-        />
+            <Card>
+              <CardContent className="pt-5">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
+                  Valid IDs
+                </h3>
+                {editMode ? (
+                  <RegistrationValidIdsEditor
+                    drafts={idDrafts}
+                    onChange={setIdDrafts}
+                  />
+                ) : validIds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-2">
+                    No valid IDs were uploaded with this application.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    {validIds.map((item) => {
+                      const label =
+                        item.custom_type_name?.trim() ||
+                        VALID_ID_OPTIONS.find((o) => o.value === item.type)?.label ||
+                        item.type;
+                      const sides = [
+                        { side: "Front", src: fileUrl(item.front_url) },
+                        { side: "Back", src: fileUrl(item.back_url) },
+                      ].filter((s) => s.src);
+                      return (
+                        <div key={item.id} className="space-y-2">
+                          <div>
+                            <p className="text-sm font-semibold capitalize">
+                              {label}
+                            </p>
+                            {item.id_number && (
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {item.id_number}
+                              </p>
+                            )}
+                          </div>
+                          {sides.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">
+                              No images uploaded
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              {sides.map((s) => (
+                                <button
+                                  key={s.side}
+                                  type="button"
+                                  onClick={() => openValidId(item, label)}
+                                  className="group relative block aspect-[3/2] overflow-hidden rounded-md border border-border bg-muted/30 hover:border-brand-orange/50 transition-colors"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={s.src}
+                                    alt={`${label} ${s.side}`}
+                                    className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Maximize2 className="h-5 w-5 text-white" />
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                            {sides.map((s) => s.side).join(" · ")}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <ReviewActionPanel
+            registration={registration}
+            editMode={editMode}
+            approving={approving}
+            savingEdit={savingEdit}
+            onApprove={handleApprove}
+            onReject={() => setRejectOpen(true)}
+            onToggleEdit={() => {
+              setEditMode((prev) => {
+                const next = !prev;
+                if (next) setIdDrafts(validIds.map(draftFromServer));
+                else setIdDrafts([]);
+                return next;
+              });
+              setDraft({});
+            }}
+            onSaveEdit={handleSaveEdit}
+          />
+        </div>
+      </div>
 
-        <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
-          <DialogContent size="lg" className="p-0">
-            <DialogHeader className="p-4 pb-2">
-              <DialogTitle>{fullName}</DialogTitle>
-            </DialogHeader>
-            {registration.photo_url ? (
-              <div className="flex items-center justify-center p-4 pt-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={fileUrl(registration.photo_url)}
-                  alt={fullName}
-                  className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
-                />
-              </div>
-            ) : null}
-          </DialogContent>
-        </Dialog>
-      </>
+      <RejectDialog
+        open={rejectOpen}
+        onOpenChange={setRejectOpen}
+        onConfirm={handleReject}
+      />
+
+      <ImagePreviewDialog
+        open={!!idPreview}
+        onOpenChange={(o) => !o && setIdPreview(null)}
+        title={idPreview?.title}
+        images={idPreview?.images ?? []}
+      />
+
+      <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
+        <DialogContent size="lg" className="p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle>{fullName}</DialogTitle>
+          </DialogHeader>
+          {registration.photo_url ? (
+            <div className="flex items-center justify-center p-4 pt-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fileUrl(registration.photo_url)}
+                alt={fullName}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// The review starts by reading the registration, which needs `borrowers:view`.
+export default function RegistrationReviewPage() {
+  return (
+    <RouteGuard permission="borrowers:approve" pageName="Review Registration">
+      <RouteGuard permission="borrowers:view" pageName="Review Registration">
+        <RegistrationReviewContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

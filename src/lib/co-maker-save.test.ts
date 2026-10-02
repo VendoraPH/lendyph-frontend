@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { AxiosError } from "axios";
 
 import { coMakerSaveNotice, saveCoMaker } from "./co-maker-save";
 
@@ -93,8 +94,15 @@ test("a failed save names the field the API refused", () => {
 });
 
 test("a save that never reached the server says so", () => {
-  const notice = coMakerSaveNotice({ status: "failed", error: new Error("Network Error") }, "add");
+  // What axios rejects with when the request went out and nothing came back.
+  const noReply = new AxiosError("Network Error", "ERR_NETWORK", undefined, { sent: true });
+  const notice = coMakerSaveNotice({ status: "failed", error: noReply }, "add");
   assert.match(notice.message, /offline/);
+});
+
+test("a failure that never touched the network does not claim to be offline", () => {
+  const notice = coMakerSaveNotice({ status: "failed", error: new TypeError("x is undefined") }, "add");
+  assert.equal(notice.message, "We couldn't add the co-maker. Please try again.");
 });
 
 test("retrying just the ID reads as the ID, not as another co-maker", () => {

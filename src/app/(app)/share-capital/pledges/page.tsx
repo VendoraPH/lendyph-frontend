@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { shareCapitalService } from "@/services";
 import type { Pledge } from "@/types";
 import {
@@ -87,7 +88,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
     : <ArrowDown className="h-3.5 w-3.5 ml-1 text-brand-orange" />;
 }
 
-export default function PledgeEntryPage() {
+function PledgeEntryContent() {
   const [pledges, setPledges] = useState<LocalPledge[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -333,7 +334,11 @@ export default function PledgeEntryPage() {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-        setBulkEntries((e) => { const { [id]: _, ...rest } = e; return rest; });
+        setBulkEntries((e) => {
+          const rest = { ...e };
+          delete rest[id];
+          return rest;
+        });
       } else {
         next.add(id);
         setBulkEntries((e) => ({ ...e, [id]: { amount: "", transaction: "credit" } }));
@@ -382,15 +387,19 @@ export default function PledgeEntryPage() {
       toast.error("Enter an amount for at least one member");
       return;
     }
+    // `ShareCapitalBulkEntryRequest` requires a date on every entry; without
+    // one the whole batch was refused with a 422.
+    const date = todayISO();
     try {
       await shareCapitalService.pledgeBulkEntries({
         entries: valid.map(([id, entry]) => ({
           pledge_id: Number(id),
           amount: Math.round(parseFloat(entry.amount)),
           type: entry.transaction,
+          date,
         })),
       });
-      toast.success(`${valid.length} entries created`);
+      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
       setSelectedIds(new Set());
       setBulkEntries({});
     } catch {
@@ -399,527 +408,540 @@ export default function PledgeEntryPage() {
   }
 
   return (
-    <RouteGuard permission="share_capital:view" pageName="Pledge Entry">
-      <div className="space-y-6">
-        {failed && (
-          <div
-            role="alert"
-            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
-          >
-            <AlertTriangle
-              className="mt-0.5 size-5 shrink-0 text-amber-600"
-              aria-hidden="true"
-            />
-            <div className="text-sm">
-              <p className="font-medium text-amber-900 dark:text-amber-200">
-                The pledge worksheet could not be loaded
-              </p>
-              <p className="mt-0.5 text-muted-foreground">
-                No members are listed below. That is a failure to read the pledges,
-                not a co-op with none — a bulk entry must not be posted from
-                this screen until it loads.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {shortfall && (
-          <IncompleteListNotice
-            shown={shortfall.shown}
-            total={shortfall.total}
-            noun="pledges"
-            consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+    <div className="space-y-6">
+      {failed && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle
+            className="mt-0.5 size-5 shrink-0 text-amber-600"
+            aria-hidden="true"
           />
-        )}
-
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
-          <p className="text-muted-foreground">
-            Configure share capital pledges for members
-          </p>
-        </div>
-
-        {/* Summary */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
-                <span className="text-2xl font-bold">{pledges.length}</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
-                <span className="text-2xl font-bold text-green-600">{activeCount}</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-                <span className="text-2xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Bulk Entry Action Bar */}
-        {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
-            <span className="text-sm font-medium">
-              {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
-            </span>
-            <Button
-              size="sm"
-              className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={() => setBulkDialogOpen(true)}
-            >
-              <PlusCircle className="h-3.5 w-3.5 mr-1" />
-              Manual Entry
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => { setSelectedIds(new Set()); setBulkEntries({}); }}
-            >
-              Clear
-            </Button>
+          <div className="text-sm">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              The pledge worksheet could not be loaded
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              No members are listed below. That is a failure to read the pledges,
+              not a co-op with none — a bulk entry must not be posted from
+              this screen until it loads.
+            </p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Table */}
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="pledges"
+          consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+        />
+      )}
+
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
+        <p className="text-muted-foreground">
+          Configure share capital pledges for members
+        </p>
+      </div>
+
+      {/* Summary */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-sm font-medium">
-                All Pledges
-                <span className="text-muted-foreground font-normal ml-1">({processed.length})</span>
-              </CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search member..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="pl-9 w-48 h-8 text-sm"
-                  />
-                </div>
-                {/* Filter: Schedule */}
-                <Select value={filterSchedule} onValueChange={(v) => { setFilterSchedule(v as string); setPage(1); }}>
-                  <SelectTrigger className="w-36 h-8 text-xs">
-                    <SelectValue>
-                      {(value: string | null) =>
-                        value === "all" ? "All Schedules" : (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Schedules</SelectItem>
-                    {SCHEDULE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Filter: Status */}
-                <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v as string); setPage(1); }}>
-                  <SelectTrigger className="w-32 h-8 text-xs">
-                    <SelectValue>
-                      {(value: string | null) =>
-                        value === "all" ? "All Status" : value === "active" ? "Active" : "Inactive"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={allPageSelected}
-                        indeterminate={somePageSelected && !allPageSelected}
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Select all"
-                      />
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("borrower")}
-                    >
-                      <span className="flex items-center">
-                        Member
-                        <SortIcon field="borrower" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("amount")}
-                    >
-                      <span className="flex items-center">
-                        Pledge Amount
-                        <SortIcon field="amount" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("schedule")}
-                    >
-                      <span className="flex items-center">
-                        Schedule
-                        <SortIcon field="schedule" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("autoCredit")}
-                    >
-                      <span className="flex items-center">
-                        Auto-Credit
-                        <SortIcon field="autoCredit" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead className="w-12" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginated.map((pledge) => (
-                    <React.Fragment key={pledge.id}>
-                      <TableRow>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedIds.has(pledge.id)}
-                            onCheckedChange={() => toggleSelect(pledge.id)}
-                            aria-label={`Select ${pledge.borrower}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">{pledge.borrower}</TableCell>
-                        <TableCell>
-                          {editingAmountId === pledge.id ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                min={1}
-                                step="1"
-                                autoFocus
-                                className="w-28 h-8 text-sm"
-                                value={editAmount}
-                                onChange={(e) => setEditAmount(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") saveAmountEdit(pledge.id);
-                                  if (e.key === "Escape") cancelAmountEdit();
-                                }}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-green-600 hover:text-green-700"
-                                onClick={() => saveAmountEdit(pledge.id)}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                onClick={cancelAmountEdit}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <span
-                              className="text-sm cursor-pointer hover:text-brand-orange hover:underline"
-                              onClick={() => startAmountEdit(pledge)}
-                              title="Click to edit"
-                            >
-                              {formatCurrency(pledge.amount)}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingScheduleId === pledge.id ? (
-                            <Select
-                              value={editSchedule}
-                              onValueChange={(v) => saveScheduleEdit(pledge.id, v as string)}
-                            >
-                              <SelectTrigger className="w-36 h-8 text-xs">
-                                <SelectValue>
-                                  {(value: string | null) =>
-                                    value
-                                      ? (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
-                                      : "Select"
-                                  }
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {SCHEDULE_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-xs cursor-pointer hover:border-brand-orange"
-                              onClick={() => startScheduleEdit(pledge)}
-                            >
-                              <Settings2 className="h-3 w-3 mr-1" />
-                              {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={pledge.autoCredit}
-                              onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
-                            />
-                            <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
-                              {pledge.autoCredit ? "Active" : "Inactive"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
-                            disabled={pledge.autoCredit}
-                            title={pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
-                            onClick={() =>
-                              manualEntryId === pledge.id
-                                ? setManualEntryId(null)
-                                : startManualEntry(pledge.id)
-                            }
-                          >
-                            <PlusCircle className="h-3.5 w-3.5 mr-1" />
-                            Entry
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      {manualEntryId === pledge.id && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="p-0">
-                            <div className="border-t border-b border-brand-orange/20 bg-brand-orange/5 px-6 py-4 space-y-3">
-                              <p className="text-sm font-medium">
-                                Manual Pledge Entry — {pledge.borrower}
-                              </p>
-                              <div className="flex items-end gap-4">
-                                <div className="space-y-1.5">
-                                  <p className="text-xs text-muted-foreground">Amount (PHP)</p>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    step="1"
-                                    placeholder="0"
-                                    autoFocus
-                                    className="w-40 h-9"
-                                    value={manualAmount}
-                                    onChange={(e) => setManualAmount(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleManualEntry(pledge.id);
-                                      if (e.key === "Escape") setManualEntryId(null);
-                                    }}
-                                  />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <p className="text-xs text-muted-foreground">Transaction</p>
-                                  <div className="flex rounded-md border overflow-hidden">
-                                    <button
-                                      type="button"
-                                      className={`px-4 py-2 text-xs font-medium transition-colors ${
-                                        manualTransaction === "credit"
-                                          ? "bg-green-600 text-white"
-                                          : "bg-background text-muted-foreground hover:bg-muted"
-                                      }`}
-                                      onClick={() => setManualTransaction("credit")}
-                                    >
-                                      Credit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={`px-4 py-2 text-xs font-medium border-l transition-colors ${
-                                        manualTransaction === "debit"
-                                          ? "bg-red-600 text-white"
-                                          : "bg-background text-muted-foreground hover:bg-muted"
-                                      }`}
-                                      onClick={() => setManualTransaction("debit")}
-                                    >
-                                      Debit
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                                    disabled={!manualAmount}
-                                    onClick={() => handleManualEntry(pledge.id)}
-                                  >
-                                    Submit
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-9"
-                                    onClick={() => setManualEntryId(null)}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
-                  ))}
-                  {paginated.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        <p>No pledges found.</p>
-                        <p className="text-xs mt-1">Pledges are created when borrowers are added to the system.</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between pt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Rows per page</span>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-                >
-                  <SelectTrigger className="w-16 h-8 text-xs">
-                    <SelectValue>{() => String(pageSize)}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZES.map((s) => (
-                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {processed.length === 0
-                    ? "0 of 0"
-                    : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, processed.length)} of ${processed.length}`}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={safePage <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={safePage >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
+              <span className="text-2xl font-bold">{pledges.length}</span>
             </div>
           </CardContent>
         </Card>
-        {/* Bulk Entry Dialog */}
-        <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Manual Pledge Entry</DialogTitle>
-              <DialogDescription>
-                Set amount and transaction type for each selected member.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 max-h-80 overflow-y-auto py-2">
-              {pledges
-                .filter((p) => selectedIds.has(p.id))
-                .map((p) => {
-                  const entry = bulkEntries[p.id] || { amount: "", transaction: "credit" };
-                  return (
-                    <div key={p.id} className="flex items-center gap-3">
-                      <span className="text-sm font-medium w-40 truncate shrink-0" title={p.borrower}>
-                        {p.borrower}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        step="1"
-                        placeholder="Amount"
-                        className="w-28 h-8 text-sm"
-                        value={entry.amount}
-                        onChange={(e) => updateBulkEntry(p.id, "amount", e.target.value)}
-                      />
-                      <div className="flex rounded-md border overflow-hidden shrink-0">
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            entry.transaction === "credit"
-                              ? "bg-green-600 text-white"
-                              : "bg-background text-muted-foreground hover:bg-muted"
-                          }`}
-                          onClick={() => updateBulkEntry(p.id, "transaction", "credit")}
-                        >
-                          Credit
-                        </button>
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 text-xs font-medium border-l transition-colors ${
-                            entry.transaction === "debit"
-                              ? "bg-red-600 text-white"
-                              : "bg-background text-muted-foreground hover:bg-muted"
-                          }`}
-                          onClick={() => updateBulkEntry(p.id, "transaction", "debit")}
-                        >
-                          Debit
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
+              <span className="text-2xl font-bold text-green-600">{activeCount}</span>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
-                Cancel
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
+              <span className="text-2xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bulk Entry Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
+          <span className="text-sm font-medium">
+            {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
+          </span>
+          <Button
+            size="sm"
+            className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            onClick={() => setBulkDialogOpen(true)}
+          >
+            <PlusCircle className="h-3.5 w-3.5 mr-1" />
+            Manual Entry
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => { setSelectedIds(new Set()); setBulkEntries({}); }}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-sm font-medium">
+              All Pledges
+              <span className="text-muted-foreground font-normal ml-1">({processed.length})</span>
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search member..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="pl-9 w-48 h-8 text-sm"
+                />
+              </div>
+              {/* Filter: Schedule */}
+              <Select value={filterSchedule} onValueChange={(v) => { setFilterSchedule(v as string); setPage(1); }}>
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value === "all" ? "All Schedules" : (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Schedules</SelectItem>
+                  {SCHEDULE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Filter: Status */}
+              <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v as string); setPage(1); }}>
+                <SelectTrigger className="w-32 h-8 text-xs">
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value === "all" ? "All Status" : value === "active" ? "Active" : "Inactive"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allPageSelected}
+                      indeterminate={somePageSelected && !allPageSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("borrower")}
+                  >
+                    <span className="flex items-center">
+                      Member
+                      <SortIcon field="borrower" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("amount")}
+                  >
+                    <span className="flex items-center">
+                      Pledge Amount
+                      <SortIcon field="amount" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("schedule")}
+                  >
+                    <span className="flex items-center">
+                      Schedule
+                      <SortIcon field="schedule" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("autoCredit")}
+                  >
+                    <span className="flex items-center">
+                      Auto-Credit
+                      <SortIcon field="autoCredit" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.map((pledge) => (
+                  <React.Fragment key={pledge.id}>
+                    <TableRow>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(pledge.id)}
+                          onCheckedChange={() => toggleSelect(pledge.id)}
+                          aria-label={`Select ${pledge.borrower}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium text-sm">{pledge.borrower}</TableCell>
+                      <TableCell>
+                        {editingAmountId === pledge.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={1}
+                              step="1"
+                              autoFocus
+                              className="w-28 h-8 text-sm"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveAmountEdit(pledge.id);
+                                if (e.key === "Escape") cancelAmountEdit();
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-green-600 hover:text-green-700"
+                              onClick={() => saveAmountEdit(pledge.id)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={cancelAmountEdit}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span
+                            className="text-sm cursor-pointer hover:text-brand-orange hover:underline"
+                            onClick={() => startAmountEdit(pledge)}
+                            title="Click to edit"
+                          >
+                            {formatCurrency(pledge.amount)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingScheduleId === pledge.id ? (
+                          <Select
+                            value={editSchedule}
+                            onValueChange={(v) => saveScheduleEdit(pledge.id, v as string)}
+                          >
+                            <SelectTrigger className="w-36 h-8 text-xs">
+                              <SelectValue>
+                                {(value: string | null) =>
+                                  value
+                                    ? (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
+                                    : "Select"
+                                }
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SCHEDULE_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-xs cursor-pointer hover:border-brand-orange"
+                            onClick={() => startScheduleEdit(pledge)}
+                          >
+                            <Settings2 className="h-3 w-3 mr-1" />
+                            {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={pledge.autoCredit}
+                            onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
+                          />
+                          <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
+                            {pledge.autoCredit ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
+                          disabled={pledge.autoCredit}
+                          title={pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
+                          onClick={() =>
+                            manualEntryId === pledge.id
+                              ? setManualEntryId(null)
+                              : startManualEntry(pledge.id)
+                          }
+                        >
+                          <PlusCircle className="h-3.5 w-3.5 mr-1" />
+                          Entry
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {manualEntryId === pledge.id && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="p-0">
+                          <div className="border-t border-b border-brand-orange/20 bg-brand-orange/5 px-6 py-4 space-y-3">
+                            <p className="text-sm font-medium">
+                              Manual Pledge Entry — {pledge.borrower}
+                            </p>
+                            <div className="flex items-end gap-4">
+                              <div className="space-y-1.5">
+                                <p className="text-xs text-muted-foreground">Amount (PHP)</p>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  step="1"
+                                  placeholder="0"
+                                  autoFocus
+                                  className="w-40 h-9"
+                                  value={manualAmount}
+                                  onChange={(e) => setManualAmount(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleManualEntry(pledge.id);
+                                    if (e.key === "Escape") setManualEntryId(null);
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <p className="text-xs text-muted-foreground">Transaction</p>
+                                <div className="flex rounded-md border overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className={`px-4 py-2 text-xs font-medium transition-colors ${
+                                      manualTransaction === "credit"
+                                        ? "bg-green-600 text-white"
+                                        : "bg-background text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    onClick={() => setManualTransaction("credit")}
+                                  >
+                                    Credit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`px-4 py-2 text-xs font-medium border-l transition-colors ${
+                                      manualTransaction === "debit"
+                                        ? "bg-red-600 text-white"
+                                        : "bg-background text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    onClick={() => setManualTransaction("debit")}
+                                  >
+                                    Debit
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                                  disabled={!manualAmount}
+                                  onClick={() => handleManualEntry(pledge.id)}
+                                >
+                                  Submit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  onClick={() => setManualEntryId(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                ))}
+                {paginated.length === 0 && loading && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <Spinner className="mx-auto size-5" />
+                    </TableCell>
+                  </TableRow>
+                )}
+                {paginated.length === 0 && !loading && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <p>No pledges found.</p>
+                      <p className="text-xs mt-1">Pledges are created when borrowers are added to the system.</p>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Rows per page</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+              >
+                <SelectTrigger className="w-16 h-8 text-xs">
+                  <SelectValue>{() => String(pageSize)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZES.map((s) => (
+                    <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {processed.length === 0
+                  ? "0 of 0"
+                  : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, processed.length)} of ${processed.length}`}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button
-                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                onClick={() => { handleBulkSubmit(); setBulkDialogOpen(false); }}
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
               >
-                Submit All
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+      {/* Bulk Entry Dialog */}
+      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manual Pledge Entry</DialogTitle>
+            <DialogDescription>
+              Set amount and transaction type for each selected member.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-80 overflow-y-auto py-2">
+            {pledges
+              .filter((p) => selectedIds.has(p.id))
+              .map((p) => {
+                const entry = bulkEntries[p.id] || { amount: "", transaction: "credit" };
+                return (
+                  <div key={p.id} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-40 truncate shrink-0" title={p.borrower}>
+                      {p.borrower}
+                    </span>
+                    <Input
+                      type="number"
+                      min={1}
+                      step="1"
+                      placeholder="Amount"
+                      className="w-28 h-8 text-sm"
+                      value={entry.amount}
+                      onChange={(e) => updateBulkEntry(p.id, "amount", e.target.value)}
+                    />
+                    <div className="flex rounded-md border overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          entry.transaction === "credit"
+                            ? "bg-green-600 text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                        onClick={() => updateBulkEntry(p.id, "transaction", "credit")}
+                      >
+                        Credit
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium border-l transition-colors ${
+                          entry.transaction === "debit"
+                            ? "bg-red-600 text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                        onClick={() => updateBulkEntry(p.id, "transaction", "debit")}
+                      >
+                        Debit
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              onClick={() => { handleBulkSubmit(); setBulkDialogOpen(false); }}
+            >
+              Submit All
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default function PledgeEntryPage() {
+  return (
+    <RouteGuard permission="share_capital:view" pageName="Pledge Entry">
+      <PledgeEntryContent />
     </RouteGuard>
   );
 }

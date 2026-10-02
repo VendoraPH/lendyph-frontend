@@ -93,7 +93,7 @@ function PolicyRulesTab({ config }: { config: ScorecardConfig }) {
   );
 }
 
-export default function ScorecardConfigurationPage() {
+function ScorecardConfigurationContent() {
   const fetcher = useCallback(() => creditScoringService.getScorecardConfig(), []);
   const resource = useApiResource<ScorecardConfig>(fetcher);
   const [draft, setDraft] = useState<ScorecardConfig | null>(null);
@@ -122,46 +122,52 @@ export default function ScorecardConfigurationPage() {
   }
 
   return (
-    <RouteGuard permission="credit_scoring:settings" pageName="Scorecard Configuration">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Scorecard Configuration"
-          description="Category weights, factor rules, and policy rules used to compute scores."
-          actions={
-            <Button onClick={handleSave} disabled={!active || !isValidWeightTotal(active.categories) || saving}>
-              {saving ? "Saving…" : "Save Changes"}
-            </Button>
-          }
-        />
+    <div className="space-y-6">
+      <CreditScoringPageHeader
+        title="Scorecard Configuration"
+        description="Category weights, factor rules, and policy rules used to compute scores."
+        actions={
+          <Button onClick={handleSave} disabled={!active || !isValidWeightTotal(active.categories) || saving}>
+            {saving ? "Saving…" : "Save Changes"}
+          </Button>
+        }
+      />
 
-        <DataState
-          resource={resource}
-          summary="Scorecard category weights, factor rules, and policy rules will be editable here once the backend is connected."
-          endpoints={["GET /credit-scoring/scorecard-config", "PUT /credit-scoring/scorecard-config"]}
-        >
-          {(config) => {
-            const current = active ?? config;
-            return (
-              <Tabs defaultValue="categories">
-                <TabsList>
-                  <TabsTrigger value="categories">Categories</TabsTrigger>
-                  <TabsTrigger value="factors">Factor Configuration</TabsTrigger>
-                  <TabsTrigger value="policy">Policy Rules</TabsTrigger>
-                </TabsList>
-                <TabsContent value="categories">
-                  <CategoriesTab config={current} onChange={setDraft} />
-                </TabsContent>
-                <TabsContent value="factors">
-                  <FactorRulesTab config={current} />
-                </TabsContent>
-                <TabsContent value="policy">
-                  <PolicyRulesTab config={current} />
-                </TabsContent>
-              </Tabs>
-            );
-          }}
-        </DataState>
-      </div>
+      <DataState
+        resource={resource}
+        summary="Scorecard category weights, factor rules, and policy rules will be editable here once the backend is connected."
+        endpoints={["GET /credit-scoring/scorecard-config", "PUT /credit-scoring/scorecard-config"]}
+      >
+        {(config) => {
+          const current = active ?? config;
+          return (
+            <Tabs defaultValue="categories">
+              <TabsList>
+                <TabsTrigger value="categories">Categories</TabsTrigger>
+                <TabsTrigger value="factors">Factor Configuration</TabsTrigger>
+                <TabsTrigger value="policy">Policy Rules</TabsTrigger>
+              </TabsList>
+              <TabsContent value="categories">
+                <CategoriesTab config={current} onChange={setDraft} />
+              </TabsContent>
+              <TabsContent value="factors">
+                <FactorRulesTab config={current} />
+              </TabsContent>
+              <TabsContent value="policy">
+                <PolicyRulesTab config={current} />
+              </TabsContent>
+            </Tabs>
+          );
+        }}
+      </DataState>
+    </div>
+  );
+}
+
+export default function ScorecardConfigurationPage() {
+  return (
+    <RouteGuard permission="credit_scoring:settings" pageName="Scorecard Configuration">
+      <ScorecardConfigurationContent />
     </RouteGuard>
   );
 }

@@ -9,6 +9,8 @@ import { Loader2, Landmark, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
+import { usePermission } from "@/hooks";
+import { ledgerAmounts } from "@/utils/share-capital";
 import type { ShareCapitalLedgerEntry } from "@/types";
 
 function formatCurrency(amount: number): string {
@@ -24,8 +26,12 @@ interface ShareCapitalTabProps {
 }
 
 export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
+  // The ledger needs `share_capital:view`, which a member's page does not
+  // imply. Without it the ledger is not asked for, and the tab says it could
+  // not be read rather than showing an empty ledger (see `failed` below).
+  const canReadLedger = usePermission().can("share_capital:view");
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canReadLedger);
   // Set only when the drain gave up with pages outstanding. This tab prints a
   // running balance per row, so a short ledger is not merely a short table:
   // every balance in the Balance column is accumulated from the first entry
@@ -39,9 +45,10 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   // point: a failed request used to land in the same state as a member who has
   // never contributed, so the screen said "No share capital entries found" and
   // showed a ₱0.00 balance for somebody holding six figures.
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(!canReadLedger);
 
   const fetchEntries = useCallback(async () => {
+    if (!canReadLedger) return;
     setLoading(true);
     try {
       // Drained across pages. `per_page: 9999` was clamped to 100, so a member
@@ -60,7 +67,7 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [borrowerId]);
+  }, [borrowerId, canReadLedger]);
 
   useEffect(() => {
     fetchEntries();
@@ -70,23 +77,25 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     let credits = 0;
     let debits = 0;
     for (const e of entries) {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      if (e.type === "credit") credits += amt;
-      else debits += amt;
+      const { debit, credit } = ledgerAmounts(e);
+      credits += credit;
+      debits += debit;
     }
     return { totalCredits: credits, totalDebits: debits, balance: credits - debits };
   }, [entries]);
 
-  // Compute running balance
+  // Running balance in posting order: by date, then by id within a day. The
+  // API lists newest first, so without the id tiebreak a day's entries summed
+  // in reverse and showed balances the member never had.
   const entriesWithBalance = useMemo(() => {
     const sorted = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id - b.id
     );
     let running = 0;
     return sorted.map((e) => {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      running += e.type === "credit" ? amt : -amt;
-      return { ...e, runningBalance: running };
+      const { debit, credit } = ledgerAmounts(e);
+      running += credit - debit;
+      return { ...e, debit, credit, runningBalance: running };
     });
   }, [entries]);
 
@@ -195,10 +204,10 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
                     </TableCell>
                     <TableCell className="text-sm">{entry.description}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-red-600">
-                      {entry.type === "debit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
+                      {entry.debit > 0 ? formatCurrency(entry.debit) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {entry.type === "credit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
+                      {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums font-semibold">
                       {formatCurrency(entry.runningBalance)}

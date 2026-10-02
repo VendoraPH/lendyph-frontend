@@ -44,7 +44,7 @@ const STATUS_STYLES: Record<ExpenseStatus, string> = {
   overdue: "bg-red-500/10 text-red-700 border-red-500/30",
 };
 
-export default function ExpensesPage() {
+function ExpensesContent() {
   const [status, setStatus] = useState(ANY_STATUS);
   const [creating, setCreating] = useState(false);
 
@@ -66,66 +66,72 @@ export default function ExpensesPage() {
   };
 
   return (
+    <div className="space-y-6">
+      <AccountingPageHeader
+        title="Expenses & Payables"
+        description="Operating costs, paid and owed."
+        actions={
+          <PermissionGate permission="expenses:create">
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Expense
+            </Button>
+          </PermissionGate>
+        }
+      />
+
+      <FilterBar>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ANY_STATUS}>Any status</SelectItem>
+              <SelectItem value="unpaid">Unpaid</SelectItem>
+              <SelectItem value="partially_paid">Partially paid</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </FilterBar>
+
+      <DataState
+        resource={resource}
+        summary="Recording expenses against a cash account or as a payable, and settling payables."
+        endpoints={[
+          "GET /accounting/expenses",
+          "POST /accounting/expenses",
+          "POST /accounting/expenses/{id}/pay",
+        ]}
+        isEmpty={(drain) => drain.rows.length === 0}
+        emptyMessage="No expense recorded yet."
+      >
+        {(drain) => (
+          <ExpenseTable
+            rows={drain.rows}
+            status={status}
+            truncated={drain.truncated}
+            total={drain.total}
+          />
+        )}
+      </DataState>
+
+      <ExpenseDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+      />
+    </div>
+  );
+}
+
+export default function ExpensesPage() {
+  return (
     <RouteGuard permission="expenses:view" pageName="Expenses & Payables">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Expenses & Payables"
-          description="Operating costs, paid and owed."
-          actions={
-            <PermissionGate permission="expenses:create">
-              <Button onClick={() => setCreating(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Expense
-              </Button>
-            </PermissionGate>
-          }
-        />
-
-        <FilterBar>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY_STATUS}>Any status</SelectItem>
-                <SelectItem value="unpaid">Unpaid</SelectItem>
-                <SelectItem value="partially_paid">Partially paid</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </FilterBar>
-
-        <DataState
-          resource={resource}
-          summary="Recording expenses against a cash account or as a payable, and settling payables."
-          endpoints={[
-            "GET /accounting/expenses",
-            "POST /accounting/expenses",
-            "POST /accounting/expenses/{id}/pay",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No expense recorded yet."
-        >
-          {(drain) => (
-            <ExpenseTable
-              rows={drain.rows}
-              status={status}
-              truncated={drain.truncated}
-              total={drain.total}
-            />
-          )}
-        </DataState>
-
-        <ExpenseDialog
-          open={creating}
-          onOpenChange={setCreating}
-          onSubmit={create}
-        />
-      </div>
+      <ExpensesContent />
     </RouteGuard>
   );
 }

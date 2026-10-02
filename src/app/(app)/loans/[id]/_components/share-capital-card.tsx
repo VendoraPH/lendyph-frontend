@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePermission } from "@/hooks";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,6 +20,12 @@ import {
 
 interface ShareCapitalCardProps {
   borrowerId: number | null | undefined;
+  /**
+   * Changed by the page after an action that posts to the share-capital
+   * ledger; a new value re-reads the balance. The card stays mounted, so an
+   * open/closed choice survives the re-read.
+   */
+  version?: number;
   defaultOpen?: boolean;
 }
 
@@ -31,33 +38,49 @@ function formatCurrency(amount: number): string {
   }).format(isNaN(amount) ? 0 : amount);
 }
 
-export function ShareCapitalCard({ borrowerId, defaultOpen = true }: ShareCapitalCardProps) {
+export function ShareCapitalCard({ borrowerId, version = 0, defaultOpen = true }: ShareCapitalCardProps) {
   // This card's entire job is one figure, so it asks for exactly that rather
   // than re-summing a ledger it fetched itself. The credits/debits loop that
   // used to live here was the fourth copy of the same arithmetic, over a
   // `per_page: 9999` page the API clamps to 100 — so on a long-standing member
   // it printed the sum of their hundred most recent entries and called it
   // "Current Balance".
-  const [result, setResult] = useState<ShareCapitalBalance | null>(null);
-  const [loading, setLoading] = useState(false);
+  //
+  // The answer is stored with the member and `version` it was read for, and
+  // loading is derived from that: until an answer for THIS `borrowerId` and
+  // `version` arrives, the card is loading. So the first paint shows the
+  // spinner rather than the "unavailable" alert, and neither a change of member
+  // nor a re-read shows a balance that no longer applies. `result: null` means
+  // the read itself failed.
+  const [fetched, setFetched] = useState<{
+    borrowerId: number;
+    version: number;
+    result: ShareCapitalBalance | null;
+  } | null>(null);
   const [open, setOpen] = useState(defaultOpen);
+  // Without `share_capital:view` the ledger is not asked for, and the card
+  // shows the balance as unavailable, as it does when the read is refused.
+  const canReadShareCapital = usePermission().can("share_capital:view");
 
   useEffect(() => {
     if (!borrowerId) return;
     let cancelled = false;
-    setLoading(true);
-    setResult(null);
-    getShareCapitalBalance(borrowerId)
+    getShareCapitalBalance(borrowerId, canReadShareCapital)
+      .catch(() => null)
       .then((next) => {
-        if (!cancelled) setResult(next);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setFetched({ borrowerId, version, result: next });
       });
     return () => {
       cancelled = true;
     };
-  }, [borrowerId]);
+  }, [borrowerId, version, canReadShareCapital]);
+
+  const current =
+    fetched !== null && fetched.borrowerId === borrowerId && fetched.version === version
+      ? fetched
+      : null;
+  const loading = !!borrowerId && current === null;
+  const result = current?.result ?? null;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>

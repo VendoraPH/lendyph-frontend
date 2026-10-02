@@ -12,6 +12,7 @@ import {
 import { LOAN_STATUS_COLORS, LOAN_STATUS_LABELS } from "@/constants";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import type { Loan } from "@/types";
 import { Check } from "lucide-react";
 
@@ -123,6 +124,7 @@ export function BorrowerLoansTable({
                 </TableCell>
                 <TableCell className="text-sm text-right tabular-nums">
                   {loan.term ?? loan.term_months ?? "—"}
+                  {(loan.term ?? loan.term_months) != null && ` ${termUnitNoun(readTermUnit(loan.term_unit))}`}
                 </TableCell>
                 <TableCell>
                   <Badge

@@ -12,3 +12,5 @@ export type { ApiResource } from "./use-api-resource";
 export { useChartOfAccounts } from "./use-chart-of-accounts";
 export type { ChartOfAccounts } from "./use-chart-of-accounts";
 export { useLoanApproval } from "./use-loan-approval";
+export { useDialogOpening } from "./use-dialog-opening";
+export { useIsClient } from "./use-is-client";

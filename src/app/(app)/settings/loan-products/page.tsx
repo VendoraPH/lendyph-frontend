@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useDialogOpening } from "@/hooks";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
+import { decimalInputValue } from "@/lib/percent";
+import { RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +40,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -65,6 +68,8 @@ import {
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
   PAST_DUE_TRANSFER_UNIT_OPTIONS,
+  TERM_UNIT_OPTIONS,
+  INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
 
@@ -87,8 +92,10 @@ function getProductField(product: LoanProduct, field: string): string {
     case "term": return String(p.term ?? p.min_term ?? "");
     case "min_term": return String(p.min_term ?? p.term ?? "");
     case "max_term": return String(p.max_term ?? p.term ?? "");
+    case "term_unit": return String(p.term_unit ?? "months");
     case "min_interest_rate": return String(p.min_interest_rate ?? p.interest_rate ?? "");
     case "max_interest_rate": return String(p.max_interest_rate ?? p.interest_rate ?? "");
+    case "interest_rate_frequency": return String(p.interest_rate_frequency ?? "monthly");
     case "grace_period_days": return String(p.grace_period_days ?? p.grace_period ?? "0");
     case "notarial_fee": return String(p.notarial_fee ?? "0");
     case "min_processing_fee": return String(p.min_processing_fee ?? p.processing_fee ?? "0");
@@ -99,13 +106,12 @@ function getProductField(product: LoanProduct, field: string): string {
   }
 }
 
-// Format a numeric rate/percentage with up to 2 decimals, trimming trailing zeros.
-// Examples: "0.0000" → "0", "5.50" → "5.5", "5.25" → "5.25", "" → "".
+// Format a numeric rate/percentage exactly, trimming trailing zeros.
+// Examples: "0.0000" → "0", "5.50" → "5.5", "1.1250" → "1.125", "" → "".
+// Never rounded: this also fills the edit form, so two places here saved a
+// 1.125% rate back as 1.13% whenever anything else on the product was edited.
 function formatRate(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "";
-  return n.toFixed(2).replace(/\.?0+$/, "");
+  return decimalInputValue(value);
 }
 
 function getFeeRange(product: LoanProduct, feeKey: "processing_fee" | "service_fee"): string {
@@ -125,26 +131,24 @@ function getProductFrequencies(product: LoanProduct): string {
 function getInterestRateDisplay(product: LoanProduct): string {
   const min = formatRate(getProductField(product, "min_interest_rate"));
   const max = formatRate(getProductField(product, "max_interest_rate"));
-  if (min && max && min !== max) return `${min}% – ${max}%`;
-  return `${min || max}%`;
+  const freq = getProductField(product, "interest_rate_frequency");
+  const freqLabel = PAYMENT_FREQUENCY_LABELS[freq] ?? freq;
+  const rate = min && max && min !== max ? `${min}% – ${max}%` : `${min || max}%`;
+  return `${rate} / ${freqLabel}`;
 }
 
 function getTermDisplay(product: LoanProduct): string {
   const min = getProductField(product, "min_term");
   const max = getProductField(product, "max_term");
-  if (min && max && min !== max) return `${min} – ${max} months`;
-  return `${min || max} months`;
+  const unit = getProductField(product, "term_unit") === "days" ? "days" : "months";
+  if (min && max && min !== max) return `${min} – ${max} ${unit}`;
+  return `${min || max} ${unit}`;
 }
 
 const INTEREST_METHOD_LABELS: Record<string, string> = {
   straight: "Straight",
   fixed: "Fixed",
   diminishing: "Diminishing",
-};
-
-const statusBadge = {
-  active: "bg-green-100 text-green-700 border-green-200",
-  inactive: "bg-red-100 text-red-700 border-red-200",
 };
 
 // ── Form Types ──
@@ -180,10 +184,12 @@ interface ProductForm {
   max_amount: string;
   min_term: string;
   max_term: string;
+  term_unit: string;
   frequencies: string[];
   min_interest_rate: string;
   max_interest_rate: string;
   interest_method: string;
+  interest_rate_frequency: string;
   min_processing_fee: string;
   max_processing_fee: string;
   min_service_fee: string;
@@ -211,10 +217,12 @@ const EMPTY_FORM: ProductForm = {
   max_amount: "",
   min_term: "",
   max_term: "",
+  term_unit: "months",
   frequencies: ["monthly"],
   min_interest_rate: "",
   max_interest_rate: "",
   interest_method: "straight",
+  interest_rate_frequency: "monthly",
   min_processing_fee: "",
   max_processing_fee: "",
   min_service_fee: "",
@@ -242,7 +250,7 @@ function productToForm(p: LoanProduct): ProductForm {
     ? (rawFreq as string[])
     : [String(rawFreq)];
 
-  // Parse interest rate range — keep up to 2 decimals, strip trailing zeros from API
+  // Parse interest rate range — exact, with the API's trailing zeros stripped
   const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
   const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
   const minRate = minRateRaw != null ? formatRate(minRateRaw) : "";
@@ -257,15 +265,17 @@ function productToForm(p: LoanProduct): ProductForm {
     max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
     min_term: String(apiProduct.min_term ?? p.min_term ?? ""),
     max_term: String(apiProduct.max_term ?? p.max_term ?? ""),
+    term_unit: String(apiProduct.term_unit ?? "months"),
     frequencies,
     min_interest_rate: minRate,
     max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
-    min_processing_fee: String(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
-    max_processing_fee: String(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee ?? ""),
-    min_service_fee: String(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
-    max_service_fee: String(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee ?? ""),
-    notarial_fee: String(apiProduct.notarial_fee ?? ""),
+    interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
+    min_processing_fee: formatRate(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
+    max_processing_fee: formatRate(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
+    min_service_fee: formatRate(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee),
+    max_service_fee: formatRate(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee),
+    notarial_fee: formatRate(apiProduct.notarial_fee),
     penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
@@ -315,8 +325,15 @@ function formToApiPayload(form: ProductForm) {
     min_interest_rate: Number(form.min_interest_rate),
     max_interest_rate: Number(form.max_interest_rate),
     interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
+    interest_rate_frequency: form.interest_rate_frequency as
+      | "daily"
+      | "weekly"
+      | "bi_weekly"
+      | "semi_monthly"
+      | "monthly",
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
+    term_unit: form.term_unit as "months" | "days",
     frequencies: form.frequencies,
     processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
     min_processing_fee: form.min_processing_fee ? Number(form.min_processing_fee) : undefined,
@@ -365,12 +382,10 @@ function ProductFormDialog({
   const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
   const [expandedFee, setExpandedFee] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setForm(initialData ?? EMPTY_FORM);
-      setExpandedFee(null);
-    }
-  }, [open, initialData]);
+  if (useDialogOpening(open, initialData)) {
+    setForm(initialData ?? EMPTY_FORM);
+    setExpandedFee(null);
+  }
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -476,7 +491,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-term">Minimum Term (months) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-term">Minimum Term <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-term"
                   type="number"
@@ -488,7 +503,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-term">Maximum Term (months) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-term">Maximum Term <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-term"
                   type="number"
@@ -499,6 +514,28 @@ function ProductFormDialog({
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
+              <Select
+                value={form.term_unit}
+                onValueChange={(v) => update("term_unit", v ?? "months")}
+              >
+                <SelectTrigger id="term-unit" className="w-full sm:w-1/2">
+                  <SelectValue>
+                    {(v: string | null) =>
+                      TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TERM_UNIT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -514,7 +551,7 @@ function ProductFormDialog({
                   id="min-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="1"
                   value={form.min_interest_rate}
                   onChange={(e) => update("min_interest_rate", e.target.value)}
@@ -527,13 +564,40 @@ function ProductFormDialog({
                   id="max-interest-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="5"
                   value={form.max_interest_rate}
                   onChange={(e) => update("max_interest_rate", e.target.value)}
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="interest-rate-frequency">
+                Interest Rate Frequency <span className="text-red-500">*</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
+              </p>
+              <Select
+                value={form.interest_rate_frequency}
+                onValueChange={(v) => update("interest_rate_frequency", v ?? "monthly")}
+              >
+                <SelectTrigger id="interest-rate-frequency" className="w-full sm:w-1/2">
+                  <SelectValue>
+                    {(v: string | null) =>
+                      INTEREST_RATE_FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select frequency"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -650,7 +714,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Min"
                     value={form.min_processing_fee}
                     onChange={(e) => update("min_processing_fee", e.target.value)}
@@ -659,7 +723,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Max"
                     value={form.max_processing_fee}
                     onChange={(e) => update("max_processing_fee", e.target.value)}
@@ -672,7 +736,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Min"
                     value={form.min_service_fee}
                     onChange={(e) => update("min_service_fee", e.target.value)}
@@ -681,7 +745,7 @@ function ProductFormDialog({
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
+                    step="0.0001"
                     placeholder="Max"
                     value={form.max_service_fee}
                     onChange={(e) => update("max_service_fee", e.target.value)}
@@ -696,7 +760,7 @@ function ProductFormDialog({
                   id="notarial-fee"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="1"
                   value={form.notarial_fee}
                   onChange={(e) => update("notarial_fee", e.target.value)}
@@ -708,7 +772,7 @@ function ProductFormDialog({
                   id="penalty-rate"
                   type="number"
                   min={0}
-                  step="0.01"
+                  step="0.0001"
                   placeholder="3"
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
@@ -941,7 +1005,7 @@ function ProductFormDialog({
                         <Input
                           type="number"
                           min={0}
-                          step={fee.type === "fixed" ? "1" : "0.01"}
+                          step={fee.type === "fixed" ? "0.01" : "0.0001"}
                           placeholder={fee.type === "fixed" ? "500" : "2"}
                           value={fee.value}
                           onChange={(e) => updateFee(idx, "value", e.target.value)}
@@ -1204,6 +1268,10 @@ function ProductActionsCell({
   onDelete: () => void;
 }) {
   const [openDialog, setOpenDialog] = useState<string | null>(null);
+  // Built once per product record, not per render: the edit dialog refills its
+  // form whenever this changes while it is open, which would drop what the
+  // user has typed on any unrelated re-render.
+  const initialData = useMemo(() => productToForm(product), [product]);
 
   return (
     <>
@@ -1239,7 +1307,7 @@ function ProductActionsCell({
         open={openDialog === "edit"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
         onSubmit={onEdit}
-        initialData={productToForm(product)}
+        initialData={initialData}
         title="Edit Loan Product"
         description={`Update the configuration for ${product.name}.`}
       />
@@ -1261,7 +1329,7 @@ function ProductActionsCell({
 
 // ── Main Page ──
 
-export default function LoanProductsPage() {
+function LoanProductsContent() {
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -1269,8 +1337,7 @@ export default function LoanProductsPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await loanProductService.list();
-      setProducts(Array.isArray(res) ? res : (res as unknown as { data: LoanProduct[] }).data ?? []);
+      setProducts(completeRows(await loanProductService.listAll()));
     } catch {
       toast.error("We couldn't load the loan products. Please try again.");
     } finally {
@@ -1587,5 +1654,13 @@ export default function LoanProductsPage() {
         description="Create a new loan product that staff can select during loan applications."
       />
     </div>
+  );
+}
+
+export default function LoanProductsPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Loan Products">
+      <LoanProductsContent />
+    </RouteGuard>
   );
 }

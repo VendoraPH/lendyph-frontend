@@ -20,7 +20,7 @@ import {
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
 import { buildReference, resolveOrgName } from "./report-chrome";
-import { DASH, formatValue } from "@/lib/report-format";
+import { DASH, formatCell, formatValue } from "@/lib/report-format";
 import { siteConfig } from "@/config/site";
 import {
   MAX_REPORT_SPAN_YEARS,
@@ -496,6 +496,25 @@ test("releases list maps LoanResource rows and totals the page when the API send
   assert.equal(noteText(doc), null);
 });
 
+test("releases list prints each loan's rate as stored, not to one decimal", () => {
+  const doc = buildReleasesListDoc(
+    {
+      data: [...RELEASE_ROWS, { ...RELEASE_ROWS[0], id: 3, interest_rate: "1.1250" }],
+      meta: { current_page: 1, last_page: 1, per_page: 200, total: 3 },
+    },
+    RANGE
+  );
+  const table = doc.sections.find((s) => s.kind === "table");
+  assert.ok(table && table.kind === "table");
+  const rate = table.columns.find((c) => c.key === "interest_rate");
+  assert.ok(rate);
+
+  const rows = tableRows(doc);
+  assert.equal(formatCell(rows[0], rate), "3.0%");
+  assert.equal(formatCell(rows[1], rate), "2.5%");
+  assert.equal(formatCell(rows[2], rate), "1.125%");
+});
+
 test("releases list prefers the server totals over the visible page", () => {
   const doc = buildReleasesListDoc(
     {
@@ -893,6 +912,15 @@ test("statement of account opens with the account particulars", () => {
   assert.equal(fieldValue(doc, "Account Particulars", "Loan Account No."), "LN-2026-0001");
   assert.equal(fieldValue(doc, "Account Particulars", "Principal"), "₱50,000.00");
   assert.equal(fieldValue(doc, "Account Particulars", "Interest Rate"), "3.0%");
+});
+
+test("statement of account states a fractional rate exactly", () => {
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, loan: { ...SOA_PAYLOAD.loan, interest_rate: "1.1250" } },
+    RANGE
+  );
+  // Not "1.1%": a loan's own rate keeps every stored place.
+  assert.equal(fieldValue(doc, "Account Particulars", "Interest Rate"), "1.125%");
 });
 
 test("statement of account particulars omit what the API did not send", () => {
@@ -1676,7 +1704,8 @@ test("the weighted PAR and average rate are quoted as hints, not column totals",
   // Server-weighted over the whole book, with the PAR window it was measured
   // against — averaging 6.32 / 14.18 / 10.25 would give 10.25%, not 9.66%.
   assert.equal(kpi(doc, "Overdue Amount").hint, "PAR 9.7% (>30d)");
-  assert.equal(kpi(doc, "Total Released").hint, "Avg rate 2.0%");
+  // A rate, so every place the server sends: 2.02%, not 2.0%.
+  assert.equal(kpi(doc, "Total Released").hint, "Avg rate 2.02%");
 });
 
 test("neither PAR nor the average rate is totalled across products", () => {

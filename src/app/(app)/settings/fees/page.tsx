@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +23,13 @@ import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatCurrencyExact } from "@/lib/format";
+import { formatCurrencyExact, formatRate } from "@/lib/format";
+import { decimalInputValue } from "@/lib/percent";
 import { buildFeePayload } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
+import { usePermission } from "@/hooks";
+import { completeRows } from "@/lib/paginate";
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -61,7 +64,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
     if (fee) {
       setName(fee.name);
       setType(fee.type);
-      setValue(String(fee.value));
+      setValue(decimalInputValue(fee.value));
       setSelectedProducts(fee.applicable_product_ids ?? []);
       setConditions(fee.conditions ?? {});
     } else {
@@ -169,7 +172,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               id="fee-value"
               type="number"
               min="0"
-              step={type === "fixed" ? "1" : "0.01"}
+              step={type === "fixed" ? "0.01" : "0.0001"}
               placeholder={type === "fixed" ? "500" : "2"}
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -351,7 +354,7 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 // ---------------------------------------------------------------------------
 
 function formatFeeValue(fee: Fee): string {
-  if (fee.type === "percentage") return `${fee.value}%`;
+  if (fee.type === "percentage") return `${formatRate(fee.value)}%`;
   // Same reason as formatConditions below: this is the amount that will be
   // deducted, and a ₱250.50 notarial fee must not be listed as ₱251.
   return formatCurrencyExact(fee.value);
@@ -382,32 +385,45 @@ function FeesContent() {
   const [editFee, setEditFee] = useState<Fee | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Fee | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
+  // Fees are scoped to loan products, and listing those needs `loans:view`.
+  // Without it the list is not asked for, and fee editing stays off exactly as
+  // it does when the list cannot be loaded.
+  const canListProducts = usePermission().can("loans:view");
 
-  const fetchData = useCallback(async () => {
+  // Runs on mount and on every `reload`, which first puts the page back to the
+  // state it starts in (loading, no errors) — so this only records how the
+  // requests ended.
+  useEffect(() => {
+    // Both APIs return complete resource collections. A product permission
+    // failure must not hide successfully loaded fees.
+    Promise.allSettled([
+      feeService.listAll().then(completeRows),
+      canListProducts ? loanProductService.listAll().then(completeRows) : null,
+    ]).then(([feesResult, productsResult]) => {
+      if (feesResult.status === "fulfilled") {
+        setFees(feesResult.value);
+      } else {
+        setLoadError(getErrorMessage(feesResult.reason));
+      }
+      if (productsResult.status === "rejected") {
+        setProductsError(getErrorMessage(productsResult.reason));
+      } else if (productsResult.value === null) {
+        setProductsError("You don't have permission to view them.");
+      } else {
+        setProducts(productsResult.value);
+      }
+      setLoading(false);
+    });
+  }, [reloadCount, canListProducts]);
+
+  // Retry, and the refresh after a save or delete.
+  function reload() {
     setLoading(true);
     setLoadError(null);
     setProductsError(null);
-    // Both APIs return complete resource collections. A product permission
-    // failure must not hide successfully loaded fees.
-    const [feesResult, productsResult] = await Promise.allSettled([
-      feeService.list({}), loanProductService.list({}),
-    ]);
-    if (feesResult.status === "fulfilled") {
-      setFees(feesResult.value);
-    } else {
-      setLoadError(getErrorMessage(feesResult.reason));
-    }
-    if (productsResult.status === "fulfilled") {
-      setProducts(productsResult.value);
-    } else {
-      setProductsError(getErrorMessage(productsResult.reason));
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    setReloadCount((n) => n + 1);
+  }
 
   const productNameById = new Map(products.map((p) => [p.id, p.name]));
 
@@ -467,7 +483,7 @@ function FeesContent() {
           <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
             {loadError && <p>Fees could not be loaded. {loadError}</p>}
             {productsError && <p>Loan products could not be loaded. {productsError} Fee editing is unavailable until they load.</p>}
-            <Button variant="outline" size="sm" onClick={fetchData}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={reload}>Retry</Button>
           </div>
         )}
         {!loadError && <>
@@ -534,9 +550,9 @@ function FeesContent() {
                     // false statement about what borrowers are charged.
                     //
                     // Not a rare edge case: productNameById is built from a
-                    // single loanProductService.list() whose shape guard falls
-                    // back to [] silently, so one unexpected envelope relabels
-                    // every product-scoped fee at once, with no error shown.
+                    // separate products load that can fail on its own, and
+                    // when it does every product-scoped fee is unresolved at
+                    // once.
                     const productNames =
                       (fee.applicable_product_ids ?? [])
                         .map((id) => productNameById.get(id) ?? `Product #${id}`);
@@ -615,14 +631,14 @@ function FeesContent() {
           onOpenChange={setFormOpen}
           fee={editFee}
           products={products}
-          onSave={fetchData}
+          onSave={reload}
         />
 
         <DeleteFeeDialog
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           fee={deleteTarget}
-          onConfirm={fetchData}
+          onConfirm={reload}
         />
       </div>
     </>
