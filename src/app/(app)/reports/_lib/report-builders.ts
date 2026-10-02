@@ -348,9 +348,17 @@ function serverTotalsTruncationNote(
 // KPI-only reports
 // ---------------------------------------------------------------------------
 
+/**
+ * The summary KPIs, plus the accounts behind them when the repayments for the
+ * same window are supplied. `/reports/daily-collection` only returns totals, so
+ * the account list comes from `/reports/repayments` over the same dates; it is
+ * left out (not shown empty) when that read failed, so a failed read is never
+ * mistaken for "nothing was collected".
+ */
 export function buildDailyCollectionDoc(
   raw: unknown,
-  range: DateRange
+  range: DateRange,
+  repaymentsRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
@@ -367,10 +375,48 @@ export function buildDailyCollectionDoc(
     }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (repaymentsRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
+    const rows = rawRows.map(normalizeRepaymentRow);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments");
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Payments Collected",
+      columns: REPAYMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "amount",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_amount_paid"])),
+              },
+              {
+                column: "penalty_amount",
+                value: currencyOrDash(pick(totals, ["total_penalty_applied"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No collections were recorded in the selected period.",
+    });
+  }
+
   return {
     reportId: "daily_collection",
-    meta: meta("Daily Collection Report", range, "Summary of amounts due vs collected"),
-    sections: [{ kind: "kpi_grid", items }],
+    meta: meta(
+      "Daily Collection Report",
+      range,
+      "Amounts due vs collected, and the payments collected"
+    ),
+    sections,
   };
 }
 
@@ -788,7 +834,30 @@ export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument
   };
 }
 
-export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocument {
+// Net Proceeds leads because it is what the "Total Disbursed" KPI adds up
+// (`disbursementReport()` sums `net_proceeds`), so the first money total in the
+// table is the figure staff compare it with. Principal, which is larger by the
+// deductions, follows.
+const DISBURSEMENT_COLUMNS: ReportColumn[] = [
+  { key: "release_date", header: "Release Date", format: "date", width: 120 },
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "net_proceeds", header: "Net Proceeds", format: "currency", align: "right", width: 150 },
+  { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
+  { key: "status", header: "Status", format: "text", width: 110 },
+];
+
+/**
+ * The summary figures, plus the loan accounts behind the total disbursed when
+ * the period's releases are supplied. `/reports/disbursements` returns totals
+ * only, so the list is read from `/reports/releases` over the same window; it
+ * is left out (not shown empty) when that read failed.
+ */
+export function buildDisbursementDoc(
+  raw: unknown,
+  range: DateRange,
+  releasesRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
@@ -802,10 +871,47 @@ export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocu
     kpi("Pending Release", countOrDash(pick(obj, ["pending_release", "pending"]))),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (releasesRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasesRaw);
+    const rows = rawRows.map((raw) => ({
+      ...normalizeReleaseRow(raw),
+      net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
+    }));
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Disbursed Loan Accounts",
+      columns: DISBURSEMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "net_proceeds",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_net_proceeds"])),
+              },
+              {
+                column: "principal",
+                value: currencyOrDash(pick(totals, ["total_principal"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No loans were released in the selected period.",
+    });
+  }
+
   return {
     reportId: "disbursement_report",
     meta: meta("Disbursement Report", range, "Loan releases during the selected period"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
