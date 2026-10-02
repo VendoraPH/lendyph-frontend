@@ -54,7 +54,9 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRate, todayISO } from "@/lib/format";
 import { currentDues } from "@/lib/loan-dues";
+import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
+import { previewAllocation, previewBadge } from "./_lib/payment-preview";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -106,77 +108,6 @@ const formatDate = (dateStr: string) => {
     day: "numeric",
   });
 };
-
-// ---------------------------------------------------------------------------
-// Allocation logic
-// ---------------------------------------------------------------------------
-
-function computeAllocation(
-  amountPaid: number,
-  currentDue: number,
-  overdueAmount: number,
-  penaltyAmount: number,
-  interestPortion: number,
-  scbAmount: number
-) {
-  let remaining = amountPaid;
-
-  // 1. Penalty first
-  const penaltyApplied = Math.min(remaining, penaltyAmount);
-  remaining -= penaltyApplied;
-
-  // 2. Overdue interest (if any arrears)
-  const overdueInterest =
-    overdueAmount > 0 ? Math.min(remaining, interestPortion) : 0;
-  remaining -= overdueInterest;
-
-  // 3. Current period interest
-  const currentInterest = Math.min(remaining, interestPortion);
-  remaining -= currentInterest;
-
-  // 4. Current period principal
-  const currentPrincipalDue = Math.max(0, currentDue - interestPortion - penaltyAmount);
-  const currentPrincipal = Math.min(remaining, currentPrincipalDue);
-  remaining -= currentPrincipal;
-
-  // 5. Excess → SCB (no cap; drains all remaining excess when loan has SCB)
-  const scbApplied = scbAmount > 0 ? remaining : 0;
-  remaining -= scbApplied;
-
-  // 6. Excess → next amortization interest (only reachable when scbAmount === 0)
-  const nextInterest = remaining > 0 ? Math.min(remaining, interestPortion) : 0;
-  remaining -= nextInterest;
-
-  // 7. Excess → next principal
-  const nextPrincipal = remaining;
-
-  return {
-    penaltyApplied,
-    interestApplied: overdueInterest + currentInterest + nextInterest,
-    principalApplied: currentPrincipal + nextPrincipal,
-    scbApplied,
-    nextInterestApplied: nextInterest,
-    nextPrincipalApplied: nextPrincipal,
-    total: amountPaid,
-  };
-}
-
-function detectPaymentType(
-  amountPaid: number,
-  currentDue: number,
-  overdueAmount: number,
-  penaltyAmount: number
-): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
-  if (amountPaid === 0)
-    return { label: "No Payment", variant: "outline" };
-  if (amountPaid < currentDue)
-    return { label: "Partial Payment", variant: "destructive" };
-  if (amountPaid === currentDue)
-    return { label: "Exact Payment", variant: "default" };
-  if (amountPaid <= currentDue + overdueAmount + penaltyAmount)
-    return { label: "Full Payment (with arrears)", variant: "secondary" };
-  return { label: "Advance Payment", variant: "secondary" };
-}
 
 function getLoanPaymentStatus(loan: ActiveLoan) {
   if (loan.overdue_amount > 0)
@@ -372,34 +303,23 @@ function PaymentsContent() {
     });
   }, [filteredLoans]);
 
-  // Allocation preview
-  const allocation = useMemo(() => {
-    if (!selectedLoan || !amountPaid || amountPaid <= 0) return null;
-    const interestPortion =
-      (selectedLoan.outstanding_balance ?? 0) * (selectedLoan.interest_rate / 100);
-    return computeAllocation(
-      amountPaid,
-      selectedLoan.current_due,
-      selectedLoan.overdue_amount,
-      selectedLoan.penalty_amount,
-      interestPortion,
-      selectedLoan.scb_amount ?? 0
-    );
-  }, [selectedLoan, amountPaid]);
-
-  const paymentType = useMemo(() => {
-    if (!selectedLoan || !amountPaid || amountPaid <= 0) return null;
-    return detectPaymentType(
-      amountPaid,
-      selectedLoan.current_due,
-      selectedLoan.overdue_amount,
-      selectedLoan.penalty_amount
-    );
-  }, [selectedLoan, amountPaid]);
-
-  // Server-side preview of the repayment breakdown — debounced to avoid spamming.
-  const [serverPreview, setServerPreview] = useState<RepaymentPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  // The server's preview of exactly this payment. It runs the real repayment
+  // code and rolls it back, so its allocation and badge are what posting this
+  // amount on this date will record; the page no longer estimates either.
+  // Kept with the request it answers, so a slow reply for an earlier amount
+  // can never stand in for the current one.
+  const previewKey =
+    selectedLoan && typeof amountPaid === "number" && amountPaid > 0 && paymentDate
+      ? `${selectedLoan.id}|${amountPaid}|${paymentDate}`
+      : null;
+  const [previewResult, setPreviewResult] = useState<{
+    key: string;
+    preview: RepaymentPreview | null;
+    error: string | null;
+  } | null>(null);
+  const currentPreview = previewResult?.key === previewKey ? previewResult : null;
+  const serverPreview = currentPreview?.preview ?? null;
+  const previewError = currentPreview?.error ?? null;
 
   // Breakdown of what's currently due (principal/interest/penalty/scb).
   // Computed once when the dialog opens by running a "full payment" preview.
@@ -464,57 +384,39 @@ function PaymentsContent() {
   }, [selectedLoan, dialogOpen]);
 
   const newOutstandingBalance = useMemo(() => {
-    if (!selectedLoan) return null;
-    const principalAppliedForBalance =
-      (typeof serverPreview?.total_principal === "number" ? serverPreview.total_principal : null) ??
-      allocation?.principalApplied ??
-      null;
-    if (principalAppliedForBalance === null) return null;
-    return Math.max(
-      0,
-      (selectedLoan.outstanding_balance ?? 0) - principalAppliedForBalance
-    );
-  }, [selectedLoan, allocation, serverPreview]);
+    if (!selectedLoan || typeof serverPreview?.total_principal !== "number") return null;
+    return Math.max(0, (selectedLoan.outstanding_balance ?? 0) - serverPreview.total_principal);
+  }, [selectedLoan, serverPreview]);
 
-  // Prefer server-returned numbers over client math when present.
-  const displayAllocation = useMemo(() => {
-    if (!allocation) return null;
-    if (!serverPreview) return allocation;
-    const pick = <T,>(server: T | undefined, fallback: T) =>
-      typeof server === "number" && !Number.isNaN(server) ? (server as T) : fallback;
-    return {
-      ...allocation,
-      penaltyApplied: pick(serverPreview.total_penalty, allocation.penaltyApplied),
-      interestApplied: pick(serverPreview.total_interest, allocation.interestApplied),
-      principalApplied: pick(serverPreview.total_principal, allocation.principalApplied),
-      scbApplied: pick(serverPreview.excess, allocation.scbApplied),
-    };
-  }, [allocation, serverPreview]);
+  const displayAllocation = useMemo(
+    () => (serverPreview ? previewAllocation(serverPreview) : null),
+    [serverPreview]
+  );
+  const paymentBadge = useMemo(
+    () => (serverPreview ? previewBadge(serverPreview) : null),
+    [serverPreview]
+  );
 
   useEffect(() => {
-    setServerPreview(null);
-    if (!selectedLoan || typeof amountPaid !== "number" || amountPaid <= 0 || !paymentDate) {
-      return;
-    }
-    const loanId = selectedLoan.id;
-    const amount = amountPaid;
-    const date = paymentDate;
-    const handle = setTimeout(async () => {
-      setPreviewLoading(true);
-      try {
-        const res = await repaymentService.preview(loanId, {
-          amount_paid: amount,
-          payment_date: date,
+    if (!previewKey || !selectedLoan || typeof amountPaid !== "number") return;
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      repaymentService
+        .preview(selectedLoan.id, { amount_paid: amountPaid, payment_date: paymentDate })
+        .then((preview) => {
+          if (!cancelled) setPreviewResult({ key: previewKey, preview: preview ?? null, error: null });
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setPreviewResult({ key: previewKey, preview: null, error: getErrorMessage(err) });
+          }
         });
-        setServerPreview(res ?? null);
-      } catch {
-        setServerPreview(null);
-      } finally {
-        setPreviewLoading(false);
-      }
     }, 350);
-    return () => clearTimeout(handle);
-  }, [selectedLoan, amountPaid, paymentDate]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [previewKey, selectedLoan, amountPaid, paymentDate]);
 
   function handleSelectLoan(loan: ActiveLoan) {
     setSelectedLoan(loan);
@@ -1022,7 +924,18 @@ function PaymentsContent() {
             </div>
 
             {/* Allocation Preview */}
-            {displayAllocation && paymentType && (
+            {previewKey && !displayAllocation && (
+              <>
+                <Separator />
+                <p className="text-sm flex items-center gap-2 text-muted-foreground">
+                  <CreditCard className="size-4" />
+                  {previewError
+                    ? `Couldn't preview this payment: ${previewError}`
+                    : "Working out the allocation…"}
+                </p>
+              </>
+            )}
+            {displayAllocation && paymentBadge && (
               <>
                 <Separator />
                 <div className="space-y-4">
@@ -1030,16 +943,8 @@ function PaymentsContent() {
                     <p className="text-sm font-medium flex items-center gap-2">
                       <CreditCard className="size-4" />
                       Payment Allocation
-                      {previewLoading && (
-                        <span className="text-[10px] font-normal text-muted-foreground">checking…</span>
-                      )}
-                      {!previewLoading && serverPreview && (
-                        <Badge variant="outline" className="text-[10px] font-normal">
-                          Server-verified
-                        </Badge>
-                      )}
                     </p>
-                    <Badge variant={paymentType.variant}>{paymentType.label}</Badge>
+                    <Badge variant={paymentBadge.variant}>{paymentBadge.label}</Badge>
                   </div>
 
                   {/* Component allocation totals */}

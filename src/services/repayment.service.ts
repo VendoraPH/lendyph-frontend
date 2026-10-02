@@ -19,12 +19,20 @@ export interface RepaymentPreviewAllocation {
   remaining_balance?: number;
 }
 
+export type PaymentBadgeType = "partial" | "exact" | "advance";
+
 export interface RepaymentPreview {
   total_paid?: number;
   total_principal?: number;
   total_interest?: number;
   total_penalty?: number;
   excess?: number;
+  allocated_to_next_interest?: number;
+  allocated_to_next_principal?: number;
+  /** What the payment will store; anything paid before its due date is `advance`. */
+  payment_type?: "exact" | "partial" | "advance";
+  /** The payments page's badge, measured against what is owed on the payment date. */
+  payment_badge?: { type: PaymentBadgeType; label: string };
   allocations?: RepaymentPreviewAllocation[];
   [key: string]: unknown;
 }
