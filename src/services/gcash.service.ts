@@ -65,6 +65,13 @@ export const gcashService = {
   createNonMember: (data: GCashNonMemberInput) =>
     api.post<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_CREATE, data),
 
+  updateNonMember: (id: number, data: GCashNonMemberInput) =>
+    api.put<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_UPDATE(id), data),
+
+  /** Soft delete: past transactions keep their walk-in. */
+  deleteNonMember: (id: number) =>
+    api.delete<void>(API_ENDPOINTS.GCASH.NON_MEMBERS_DELETE(id)),
+
   listTiers: () => api.get<GCashTier[]>(API_ENDPOINTS.GCASH.TIERS_LIST),
 
   upsertTiers: (tiers: GCashTierInput[]) =>
