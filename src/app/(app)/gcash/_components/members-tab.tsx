@@ -35,9 +35,12 @@ export function MembersTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
+  const { can } = usePermission();
   // The member list needs `borrowers:view`, which GCash does not. Without it
   // the tab is left empty instead of asking and being refused.
-  const canListMembers = usePermission().can("borrowers:view");
+  const canListMembers = can("borrowers:view");
+  // Recording a transaction needs `gcash:transact`; `gcash:view` only reads.
+  const canTransact = can("gcash:transact");
   const [loading, setLoading] = useState(canListMembers);
   const [dialog, setDialog] = useState<DialogState>(null);
 
@@ -94,9 +97,11 @@ export function MembersTab() {
             className="pl-8"
           />
         </div>
-        <Button onClick={() => setDialog({ type: "new_transaction" })}>
-          New Transaction
-        </Button>
+        {canTransact && (
+          <Button onClick={() => setDialog({ type: "new_transaction" })}>
+            New Transaction
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">

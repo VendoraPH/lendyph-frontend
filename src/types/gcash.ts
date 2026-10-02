@@ -2,6 +2,17 @@ export type GCashTransactionType = "cash_in" | "cash_out";
 
 export type GCashTransactionStatus = "pending" | "paid" | "completed";
 
+/**
+ * `GET /gcash/transactions/preview`: the charge and total recording this
+ * transaction would use, resolved by the server from its fee tiers.
+ */
+export interface GCashChargePreview {
+  type: GCashTransactionType;
+  amount: number;
+  charge_amount: number;
+  total_amount: number;
+}
+
 export interface GCashTransaction {
   id: number;
   reference_no: string;

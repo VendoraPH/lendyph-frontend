@@ -3,6 +3,8 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   GCashTransaction,
+  GCashTransactionType,
+  GCashChargePreview,
   GCashTier,
   GCashTierInput,
   GCashIncomeReport,
@@ -27,6 +29,18 @@ export const gcashService = {
 
   createTransaction: (data: CreateGCashTransactionData) =>
     api.post<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_CREATE, data),
+
+  /**
+   * The charge and total the server would record for this type and amount.
+   * Rejects with a 422 (`errors.amount`) when no fee tier covers the amount,
+   * the same message recording it would give, and a 403 without
+   * `gcash:transact`. `signal` lets a superseded preview be cancelled.
+   */
+  previewCharge: (type: GCashTransactionType, amount: number, signal?: AbortSignal) =>
+    api.get<GCashChargePreview>(API_ENDPOINTS.GCASH.TRANSACTIONS_PREVIEW, {
+      params: { type, amount },
+      signal,
+    }),
 
   markPaid: (id: number) =>
     api.patch<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_MARK_PAID(id)),
