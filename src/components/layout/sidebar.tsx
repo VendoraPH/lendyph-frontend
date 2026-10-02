@@ -49,7 +49,16 @@ const iconColors: Record<string, string> = {
   "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
 };
 
-function CountPill({ count, className }: { count?: number; className?: string }) {
+function CountPill({
+  count,
+  label,
+  className,
+}: {
+  count?: number;
+  /** What the count means, for screen readers ("3 loan applications awaiting approval"). */
+  label?: string;
+  className?: string;
+}) {
   if (!count || count <= 0) return null;
   return (
     <span
@@ -58,9 +67,16 @@ function CountPill({ count, className }: { count?: number; className?: string })
         className
       )}
     >
-      {count > 99 ? "99+" : count}
+      <span aria-hidden={label ? true : undefined}>{count > 99 ? "99+" : count}</span>
+      {label && <span className="sr-only">{label}</span>}
     </span>
   );
+}
+
+/** "1 loan application awaiting approval" / "3 loan applications awaiting approval". */
+function countLabel(count: number | undefined, noun: string, state: string): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return `${count} ${noun}${count === 1 ? "" : "s"} ${state}`;
 }
 
 // ── Nav Link ──
@@ -71,6 +87,7 @@ function NavLink({
   collapsed,
   onNavigate,
   badge,
+  badgeLabel,
   childBadges,
 }: {
   item: NavItem;
@@ -78,6 +95,8 @@ function NavLink({
   collapsed?: boolean;
   onNavigate?: () => void;
   badge?: number;
+  /** Screen-reader text for `badge`; the pill and the collapsed dot are visual only. */
+  badgeLabel?: string;
   /** Count shown on a child link, keyed by its href. */
   childBadges?: Record<string, number>;
 }) {
@@ -138,7 +157,13 @@ function NavLink({
           <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
             {badge && badge > 0 ? (
-              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background" />
+              <>
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
+                />
+                {badgeLabel && <span className="sr-only">{badgeLabel}</span>}
+              </>
             ) : null}
           </span>
         </TooltipTrigger>
@@ -213,7 +238,7 @@ function NavLink({
         </span>
         <span className="flex-1 text-left truncate">{item.title}</span>
         {/* Visible while the menu is closed; the child link carries it once open. */}
-        {!expanded && <CountPill count={badge} />}
+        {!expanded && <CountPill count={badge} label={badgeLabel} />}
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
       {/*
@@ -244,7 +269,10 @@ function NavLink({
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate">{child.title}</span>
-                  <CountPill count={childBadges?.[child.href]} />
+                  <CountPill
+                    count={childBadges?.[child.href]}
+                    label={child.href === item.href ? badgeLabel : undefined}
+                  />
                 </span>
               </Link>
             );
@@ -281,8 +309,11 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
-  // Loans waiting on an approver. Only asked for by someone who can approve.
-  const pendingLoanApprovals = usePendingLoanApprovals(can("loans:approve"));
+  // Loans waiting on an approver. Only asked for by someone who can approve
+  // and can read the list it is counted from (`GET /loans` needs loans:view).
+  const pendingLoanApprovals = usePendingLoanApprovals(
+    can("loans:approve") && can("loans:view")
+  );
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -373,6 +404,13 @@ function SidebarContent({
                   ? pendingRegistrationsCount
                   : item.href === "/loans"
                     ? pendingLoanApprovals
+                    : undefined
+              }
+              badgeLabel={
+                item.href === "/borrowers"
+                  ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
+                  : item.href === "/loans"
+                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting approval")
                     : undefined
               }
               childBadges={
