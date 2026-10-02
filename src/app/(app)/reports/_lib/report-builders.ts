@@ -1,4 +1,5 @@
 import { asArray, asRecord, pick, sum } from "@/lib/api-payload";
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import {
   DASH,
   countOrDash,
@@ -21,6 +22,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import type { LoanStatus } from "@/types/loan";
 
 /**
  * Pure payload → ReportDocument builders.
@@ -313,6 +315,34 @@ function truncationNote(
   return {
     kind: "note",
     text: `${scope} ${totalsScope} Export to CSV for the complete list.`,
+  };
+}
+
+/**
+ * Truncation note for a table whose totals row shows only the server's
+ * figures: a total the server did not send is "—", never a sum of this page.
+ * `noun` names what one row is ("repayments", "loans", "borrowers") because the
+ * count comes from the server's `meta.total`, which counts those. There is no
+ * "Export to CSV" pointer: these reports export the document, which holds only
+ * the rows listed.
+ */
+function serverTotalsTruncationNote(
+  shown: number,
+  totalRows: number | null,
+  noun: string
+): ReportSection | null {
+  const truncated =
+    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
+  if (!truncated || shown === 0) return null;
+
+  const scope =
+    totalRows !== null
+      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+      : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+
+  return {
+    kind: "note",
+    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
   };
 }
 
@@ -671,67 +701,49 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   };
 }
 
+// Keyed to the fields GET /reports/borrowers/released sends, so each row renders
+// as sent: the server groups the period's releases by borrower and sums every
+// figure.
 const BORROWER_LIST_COLUMNS: ReportColumn[] = [
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
   { key: "loan_count", header: "Loans", format: "number", align: "right", width: 80 },
-  { key: "loan_numbers", header: "Loan #", format: "text", width: 200 },
+  { key: "loan_account_numbers", header: "Loan #", format: "text", width: 200 },
   { key: "total_principal", header: "Total Principal", format: "currency", align: "right", width: 150 },
-  { key: "last_release_date", header: "Last Released", format: "date", width: 120 },
-  { key: "status", header: "Status", format: "text", width: 110 },
+  { key: "last_released_at", header: "Last Released", format: "date", width: 120 },
+  // The status of the borrower's newest release in the period, not a status
+  // of the borrower, so the header says whose status it is.
+  { key: "latest_loan_status", header: "Latest Loan Status", format: "text", width: 140 },
 ];
 
-/**
- * One row per borrower who was released a loan in the period, built from the
- * releases list: how many loans, which accounts, and how much principal. Rows
- * are keyed by borrower id (name when the row has none).
- */
-function borrowersFromReleases(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
-  const byBorrower = new Map<string, Record<string, unknown>>();
-  for (const raw of rawRows) {
-    const row = normalizeReleaseRow(raw);
-    const id = pick(raw, ["borrower_id"]) ?? pick(asRecord(raw.borrower), ["id"]);
-    const key = String(id ?? row.borrower_name ?? "—");
-    const entry =
-      byBorrower.get(key) ??
-      {
-        borrower_name: row.borrower_name,
-        loan_count: 0,
-        loan_numbers: "",
-        total_principal: 0,
-        last_release_date: null,
-        status: row.status,
-      };
-    entry.loan_count = (entry.loan_count as number) + 1;
-    entry.total_principal = (entry.total_principal as number) + (toNumber(row.principal) ?? 0);
-    if (row.loan_account_number != null) {
-      entry.loan_numbers = [entry.loan_numbers, String(row.loan_account_number)]
-        .filter(Boolean)
-        .join(", ");
-    }
-    const date = row.release_date == null ? null : String(row.release_date);
-    const last = entry.last_release_date == null ? null : String(entry.last_release_date);
-    // ISO dates compare correctly as strings; the newest release sets the status.
-    if (date && (!last || date >= last)) {
-      entry.last_release_date = date;
-      entry.status = row.status;
-    }
-    byBorrower.set(key, entry);
-  }
-  return [...byBorrower.values()].sort((x, y) =>
-    String(x.borrower_name ?? "").localeCompare(String(y.borrower_name ?? ""))
-  );
+/** A loan status as the loans screens label it; a value they don't know, as sent. */
+function loanStatusText(value: unknown): unknown {
+  return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as LoanStatus]
+    : value;
 }
 
 /**
- * The summary figures, plus the borrowers behind them when the period's
- * releases are supplied. `/reports/borrowers` returns totals only, so the list
- * is the borrowers released a loan in the period; it is left out (not shown
- * empty) when that read failed.
+ * Display shaping only: the loan numbers array becomes one cell, and the raw
+ * status its label. Every figure stays exactly as the server sent it.
+ */
+function normalizeBorrowerReleasedRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const numbers = raw.loan_account_numbers;
+  return {
+    ...raw,
+    loan_account_numbers: Array.isArray(numbers) ? numbers.join(", ") : numbers,
+    latest_loan_status: loanStatusText(raw.latest_loan_status),
+  };
+}
+
+/**
+ * The summary KPIs, plus the borrowers released a loan in the period when
+ * `/reports/borrowers/released` for the same window is supplied. The list is
+ * left out (not shown empty) when that read failed.
  */
 export function buildBorrowerDoc(
   raw: unknown,
   range: DateRange,
-  releasesRaw?: unknown
+  releasedRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
@@ -749,11 +761,15 @@ export function buildBorrowerDoc(
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  if (releasesRaw != null) {
-    const { rows: rawRows, totalRows } = readListEnvelope(releasesRaw);
-    const rows = borrowersFromReleases(rawRows);
-    const note = truncationNote(rawRows.length, totalRows, false);
+  if (releasedRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasedRaw);
+    const rows = rawRows.map(normalizeBorrowerReleasedRow);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers");
     if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
     sections.push({
       kind: "table",
       title: "Borrowers with Loans Released",
@@ -762,11 +778,23 @@ export function buildBorrowerDoc(
       totals:
         rows.length > 0
           ? [
-              { column: "loan_count", label: "Total", value: formatCount(sum(rows, "loan_count")) },
-              { column: "total_principal", value: formatCurrency(sum(rows, "total_principal")) },
+              {
+                column: "loan_count",
+                label: "Total",
+                value: countOrDash(pick(totals, ["loan_count"])),
+              },
+              {
+                column: "total_principal",
+                value: currencyOrDash(pick(totals, ["total_principal"])),
+              },
             ]
           : undefined,
       emptyText: "No loans were released to any borrower in the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Active and repeat borrowers above are all-time and new borrowers go by registration date, while this list is the borrowers released a loan in the period, so the counts need not match.",
     });
   }
 

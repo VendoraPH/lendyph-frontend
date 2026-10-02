@@ -181,6 +181,7 @@ export const API_ENDPOINTS = {
     INCOME: "/reports/income",
     AGING: "/reports/aging",
     BORROWERS: "/reports/borrowers",
+    BORROWERS_RELEASED: "/reports/borrowers/released",
     DISBURSEMENTS: "/reports/disbursements",
     CASH_FLOW: "/reports/cash-flow",
     COLLECTION_EFFICIENCY: "/reports/collection-efficiency",
