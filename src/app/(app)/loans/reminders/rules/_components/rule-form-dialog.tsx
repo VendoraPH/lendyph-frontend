@@ -65,7 +65,7 @@ const EMPTY: ReminderRuleInput = {
 const BORROWER_TYPES: { value: BorrowerType; label: string }[] = [
   { value: "all", label: "All borrowers" },
   { value: "member", label: "Members only" },
-  { value: "non_member", label: "Non-members only" },
+  { value: "non_member", label: "Walk-ins only" },
 ];
 
 const TRIGGERS = Object.keys(TRIGGER_LABELS) as ReminderTrigger[];

@@ -54,6 +54,7 @@ interface LindaConversationProps {
 function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
   const { messages, pending, ask } = useLindaChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // The question in the box, typed or picked from the suggestions. It stays
   // there until Linda answers it, so a failed request can be retried or
@@ -67,6 +68,14 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
     });
   };
 
+  // A picked suggestion is sent at once, and the list it was picked from is
+  // replaced by the conversation, so focus would drop to the page. Hand it to
+  // the question box instead, ready for the follow-up.
+  const pick = (text: string) => {
+    send(text);
+    inputRef.current?.focus({ preventScroll: true });
+  };
+
   // Scroll this box only. scrollIntoView would also scroll every ancestor,
   // and while the panel animates open that shoves the whole app sideways.
   useEffect(() => {
@@ -78,7 +87,7 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
     <>
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
         {messages.length === 0 ? (
-          <Suggestions onPick={send} />
+          <Suggestions onPick={pick} />
         ) : (
           <div className="space-y-4">
             {messages.map((m) =>
@@ -130,6 +139,7 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
           onSend={send}
           disabled={pending}
           autoFocus={autoFocus}
+          inputRef={inputRef}
         />
       </div>
     </>

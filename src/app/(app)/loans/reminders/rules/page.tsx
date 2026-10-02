@@ -28,7 +28,7 @@ import { RuleFormDialog } from "./_components/rule-form-dialog";
 const BORROWER_TYPE_LABELS: Record<ReminderRule["borrower_type"], string> = {
   all: "All borrowers",
   member: "Members",
-  non_member: "Non-members",
+  non_member: "Walk-ins",
 };
 
 /** Shown while no rule exists: the defaults the server seeds a new tenant with. */
@@ -96,6 +96,8 @@ export default function ReminderRulesPage() {
         </p>
         <PermissionButton
           permission="reminders:settings"
+          // Nothing to save to while the reminder service is not connected.
+          disabled={rules.unavailable}
           onClick={() =>
             // Settings promise their default send time to new rules.
             setDialog({ rule: null, draft: settings.data ? { send_time: settings.data.default_send_time } : undefined })

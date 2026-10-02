@@ -50,7 +50,7 @@ export function MissingAccessNotice({ missing, className }: MissingAccessNoticeP
               <span className="font-medium text-foreground">{m.grant}</span>
             </span>
           ))}{" "}
-          to your role in Settings → User Roles, then sign out and back in.
+          to your role in Settings → Role and Permissions, then sign out and back in.
         </p>
       </div>
     </div>

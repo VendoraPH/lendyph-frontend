@@ -6,6 +6,7 @@ import {
   TEMPLATE_VARIABLES,
   describeRule,
   formatSendTime,
+  messageSourceLabel,
   renderTemplateSample,
   smsLength,
   toSettingsPayload,
@@ -211,4 +212,18 @@ test("toSettingsPayload drops nothing but the blank credentials", () => {
 
   const filled = settingsForm({ api_key: "k", api_secret: "s" }, { api_key: "e" });
   assert.deepEqual(toSettingsPayload(filled), filled);
+});
+
+test("messageSourceLabel says Failed for a failed message, not that it was sent", () => {
+  assert.equal(messageSourceLabel({ status: "failed", source: "system", created_by_name: null }), "Failed");
+  assert.equal(messageSourceLabel({ status: "failed", source: "manual", created_by_name: "Ana Admin" }), "Failed");
+});
+
+test("messageSourceLabel names who sent a message that did go out", () => {
+  assert.equal(messageSourceLabel({ status: "delivered", source: "system", created_by_name: null }), "Sent automatically");
+  assert.equal(
+    messageSourceLabel({ status: "sent", source: "manual", created_by_name: "Ana Admin" }),
+    "Sent manually by Ana Admin",
+  );
+  assert.equal(messageSourceLabel({ status: "sent", source: "manual", created_by_name: null }), "Sent manually");
 });

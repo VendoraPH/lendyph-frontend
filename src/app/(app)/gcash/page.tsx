@@ -33,8 +33,8 @@ function GCashPageContent() {
       <div>
         <h1 className="text-2xl font-semibold">GCash</h1>
         <p className="text-sm text-muted-foreground">
-          Record Cash In / Cash Out transactions for members and walk-in
-          non-members, manage pending payments, and view income reports.
+          Record Cash In / Cash Out transactions for members and walk-ins,
+          manage pending payments, and view income reports.
         </p>
       </div>
 

@@ -10,6 +10,7 @@
 import type {
   DeliveryStatus,
   ReminderChannel,
+  ReminderMessage,
   ReminderQueueStatus,
   ReminderRuleInput,
   ReminderSettingsUpdate,
@@ -300,4 +301,18 @@ export function toSettingsPayload(form: ReminderSettingsUpdate): ReminderSetting
     },
     email_provider: { ...email, ...(emailKey?.trim() ? { api_key: emailKey.trim() } : {}) },
   };
+}
+
+/**
+ * The line beside a message's status badge: who sent it, or "Failed" when it
+ * never went out, so a failed message is not described as sent.
+ */
+export function messageSourceLabel(
+  message: Pick<ReminderMessage, "status" | "source" | "created_by_name">,
+): string {
+  if (message.status === "failed") return "Failed";
+  if (message.source === "manual") {
+    return `Sent manually${message.created_by_name ? ` by ${message.created_by_name}` : ""}`;
+  }
+  return "Sent automatically";
 }

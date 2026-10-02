@@ -65,6 +65,7 @@ function getSubLabel(segment: string): string {
     history: "History",
     profile: "Profile",
     "loan-products": "Loan Products",
+    "user-roles": "Role and Permissions",
   };
   return (
     labels[segment] ||
