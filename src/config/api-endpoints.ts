@@ -367,6 +367,15 @@ export const API_ENDPOINTS = {
     DECISIONS_CREATE: "/credit-scoring/decisions",
     SETTINGS: "/credit-scoring/settings",
   },
+  /**
+   * Linda, the AI lending assistant. Not built on the backend yet; the
+   * contract is the "Linda" backend handoff on PR feat/linda-ai-assistant.
+   * The server derives tenant, branch and permissions from the token, so the
+   * request carries only the question and this session's earlier turns.
+   */
+  LINDA: {
+    CHAT: "/linda/chat",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

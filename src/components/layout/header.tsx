@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LindaTrigger } from "@/components/linda/linda-trigger";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -209,6 +210,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right side: notifications + avatar */}
         <div className="flex items-center gap-2">
+          {/* Linda, the AI lending assistant (hidden unless enabled) */}
+          <LindaTrigger />
+
           {/* Theme toggle */}
           <ThemeToggle />
 
