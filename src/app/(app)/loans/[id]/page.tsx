@@ -140,6 +140,7 @@ import {
 import {
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
   PAYMENT_FREQUENCY_LABELS,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
@@ -2150,7 +2151,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
                 </Badge>
               </div>
             )}
@@ -2166,7 +2167,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
                 </Badge>
               )}
             </div>

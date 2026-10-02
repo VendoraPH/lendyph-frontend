@@ -67,7 +67,7 @@ export const ACTIVE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "draft", label: "Draft" },
-  { value: "for_review", label: "For Review" },
+  { value: "for_review", label: "For Approval" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "released", label: "Released" },
