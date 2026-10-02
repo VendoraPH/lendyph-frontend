@@ -49,7 +49,8 @@ export const LOAN_STATUS = {
 
 export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   draft: "Draft",
-  for_review: "For Review",
+  // The value stays `for_review` on the wire; only the wording is "For Approval".
+  for_review: "For Approval",
   approved: "Approved",
   rejected: "Rejected",
   released: "Released",
@@ -68,6 +69,21 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   // other label here and the payment detail screen's existing "Voided".
   void: "Voided",
 };
+
+/**
+ * The label for a loan status pill, with the assigned approving officer next to
+ * "For Approval" — "For Approval - Manager". Every other status, and a
+ * `for_review` loan whose approver is unknown, reads as plain
+ * `LOAN_STATUS_LABELS`.
+ */
+export function loanStatusLabel(
+  status: LoanStatus,
+  approver?: string | null,
+): string {
+  const label = LOAN_STATUS_LABELS[status] ?? status;
+  const officer = approver?.trim();
+  return status === LOAN_STATUS.FOR_REVIEW && officer ? `${label} - ${officer}` : label;
+}
 
 /**
  * Badge classes for a loan status pill.

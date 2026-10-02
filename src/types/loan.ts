@@ -180,6 +180,13 @@ export interface Loan {
   is_editable?: boolean;
   is_releasable?: boolean;
   // Approval workflow fields
+  /**
+   * Display name of the pending approval step's officer, e.g. "Manager". Sent
+   * on list/detail rows while `status` is `for_review`; the list screens read
+   * it because they do not load `approval-steps`. Absent until the backend
+   * ships it, in which case the badge reads plain "For Approval".
+   */
+  current_approver?: string | null;
   approval_remarks?: string;
   approved_at?: string;
   released_at?: string;

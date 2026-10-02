@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   LOAN_STATUS_COLORS,
-  LOAN_STATUS_LABELS,
+  loanStatusLabel,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import type { Loan } from "@/types/loan";
@@ -125,8 +125,8 @@ export function LoanTable({
               <TableCell>
                 <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
                   {loan.is_restructure && loan.status !== "restructured"
-                    ? `Restructured — ${LOAN_STATUS_LABELS[loan.status] ?? loan.status}`
-                    : (LOAN_STATUS_LABELS[loan.status] ?? loan.status)}
+                    ? `Restructured — ${loanStatusLabel(loan.status, loan.current_approver)}`
+                    : loanStatusLabel(loan.status, loan.current_approver)}
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
