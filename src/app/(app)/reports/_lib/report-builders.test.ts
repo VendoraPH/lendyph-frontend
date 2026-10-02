@@ -337,7 +337,7 @@ const COLLECTION_ROWS = [
   { paid_at: "2026-08-06", loan: { loan_account_number: "LN-2" }, borrower: { full_name: "Ben Reyes" }, amount: 300, penalty_amount: 0, method: "gcash", status: "paid" },
 ];
 
-test("daily collection lists the accounts collected from beneath the summary", () => {
+test("daily collection lists the payments collected beneath the summary", () => {
   const doc = buildDailyCollectionDoc(
     { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
     RANGE,
@@ -349,12 +349,12 @@ test("daily collection lists the accounts collected from beneath the summary", (
     }
   );
 
-  const table = namedTable(doc, "Collections by Account");
+  const table = namedTable(doc, "Payments Collected");
   assert.equal(table.rows.length, 2);
   assert.equal(table.rows[1].borrower_name, "Ben Reyes");
   assert.equal(table.rows[1].loan_account_number, "LN-2");
-  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), "₱700.50");
-  assert.equal(namedTableTotal(doc, "Collections by Account", "penalty_amount"), "₱12.25");
+  assert.equal(namedTableTotal(doc, "Payments Collected", "amount"), "₱700.50");
+  assert.equal(namedTableTotal(doc, "Payments Collected", "penalty_amount"), "₱12.25");
   assert.equal(noteText(doc), null);
 });
 
@@ -365,8 +365,8 @@ test("daily collection shows a dash, not a page sum, when the server sends no to
     { data: COLLECTION_ROWS, meta: { total: 2 } }
   );
 
-  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), DASH);
-  assert.equal(namedTableTotal(doc, "Collections by Account", "penalty_amount"), DASH);
+  assert.equal(namedTableTotal(doc, "Payments Collected", "amount"), DASH);
+  assert.equal(namedTableTotal(doc, "Payments Collected", "penalty_amount"), DASH);
 });
 
 test("daily collection's truncation note counts repayments and makes no CSV promise", () => {
@@ -385,7 +385,7 @@ test("daily collection's truncation note counts repayments and makes no CSV prom
   assert.match(note!, /Showing the first 200 of 450 repayments\./);
   assert.match(note!, /server's figures for the whole period/);
   assert.doesNotMatch(note!, /CSV/);
-  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), "₱180,000.00");
+  assert.equal(namedTableTotal(doc, "Payments Collected", "amount"), "₱180,000.00");
 });
 
 test("daily collection omits the account list when repayments could not be read", () => {

@@ -388,7 +388,7 @@ export function buildDailyCollectionDoc(
     // missing one is "—", never the rows on this page added up.
     sections.push({
       kind: "table",
-      title: "Collections by Account",
+      title: "Payments Collected",
       columns: REPAYMENT_COLUMNS,
       rows,
       totals:
@@ -414,7 +414,7 @@ export function buildDailyCollectionDoc(
     meta: meta(
       "Daily Collection Report",
       range,
-      "Amounts due vs collected, and the accounts collected from"
+      "Amounts due vs collected, and the payments collected"
     ),
     sections,
   };
