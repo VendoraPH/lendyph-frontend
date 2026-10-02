@@ -316,6 +316,34 @@ function truncationNote(
   };
 }
 
+/**
+ * Truncation note for a table whose totals row shows only the server's
+ * figures: a total the server did not send is "—", never a sum of this page.
+ * `noun` names what one row is ("repayments", "loans", "borrowers") because the
+ * count comes from the server's `meta.total`, which counts those. There is no
+ * "Export to CSV" pointer: these reports export the document, which holds only
+ * the rows listed.
+ */
+function serverTotalsTruncationNote(
+  shown: number,
+  totalRows: number | null,
+  noun: string
+): ReportSection | null {
+  const truncated =
+    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
+  if (!truncated || shown === 0) return null;
+
+  const scope =
+    totalRows !== null
+      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+      : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+
+  return {
+    kind: "note",
+    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // KPI-only reports
 // ---------------------------------------------------------------------------
@@ -693,12 +721,16 @@ export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument
   };
 }
 
+// Net Proceeds leads because it is what the "Total Disbursed" KPI adds up
+// (`disbursementReport()` sums `net_proceeds`), so the first money total in the
+// table is the figure staff compare it with. Principal, which is larger by the
+// deductions, follows.
 const DISBURSEMENT_COLUMNS: ReportColumn[] = [
   { key: "release_date", header: "Release Date", format: "date", width: 120 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
-  { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
   { key: "net_proceeds", header: "Net Proceeds", format: "currency", align: "right", width: 150 },
+  { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
 
@@ -734,17 +766,12 @@ export function buildDisbursementDoc(
       ...normalizeReleaseRow(raw),
       net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
     }));
-    const principal = resolveTotal(
-      totals,
-      ["total_principal", "principal", "total_amount"],
-      rows,
-      "principal"
-    );
-    const netProceeds = pick(totals, ["total_net_proceeds"]);
-    const hasNetProceeds = rows.some((r) => r.net_proceeds != null);
 
-    const note = truncationNote(rows.length, totalRows, principal.fromServer);
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
     if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
     sections.push({
       kind: "table",
       title: "Disbursed Loan Accounts",
@@ -753,18 +780,15 @@ export function buildDisbursementDoc(
       totals:
         rows.length > 0
           ? [
-              { column: "principal", label: "Total", value: formatCurrency(principal.value) },
-              ...(hasNetProceeds || netProceeds !== null
-                ? [
-                    {
-                      column: "net_proceeds",
-                      value:
-                        netProceeds !== null
-                          ? currencyOrDash(netProceeds)
-                          : formatCurrency(sum(rows, "net_proceeds")),
-                    },
-                  ]
-                : []),
+              {
+                column: "net_proceeds",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_net_proceeds"])),
+              },
+              {
+                column: "principal",
+                value: currencyOrDash(pick(totals, ["total_principal"])),
+              },
             ]
           : undefined,
       emptyText: "No loans were released in the selected period.",
