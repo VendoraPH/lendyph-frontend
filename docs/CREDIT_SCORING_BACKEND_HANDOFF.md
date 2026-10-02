@@ -44,17 +44,16 @@ The same 404/501 test is duplicated in three write paths, which toast "Not conne
 
 The **Settings → User Roles** matrix offers a **Credit Scoring** module again (`src/app/(app)/settings/user-roles/_lib/permission-matrix.ts`), with exactly three ticks: `view`, `override`, `settings`. It had been hidden since PR #386 because the backend seeds nothing for it.
 
-**What the backend must do, in the same release as the routes:**
+**What the backend does (lendyph-backend #174, 2026-10-02):**
 
-1. **Seed the three permissions** exactly as spelled above, with the same guard and naming convention as the other `module:action` rows (e.g. `accounting:settings`). No `credit_scoring:configure`, no extras.
-2. **Delete or invert `CreditScoringNotSeededTest`.** It exists to fail the build if these permissions are seeded; it will block this change otherwise.
-3. **Give the default roles their grants** (matches `src/constants/rbac.ts`): `admin` all three; `loan_officer` and `manager` `view` + `override`; the read-only role(s) `view` only. Super admin gets all three.
-4. **Make `PUT /roles/{id}` accept them.** Until step 1 ships, ticking Credit Scoring and saving a role answers **422** (`permissions.N is invalid`) and refuses the *whole* save, not just that tick. The frontend now toasts the API message, so the cause is visible. This is expected on any environment that has this frontend but not the seeded permissions.
-5. Run the seeder / migration on every deployment (staging, production, portfolio demo). Each is a separate single-tenant database.
+1. **Seeds the three permissions** exactly as spelled above (guard `web`), in a migration (`2026_10_02_160000_add_credit_scoring_permissions`) mirrored in `RoleAndPermissionSeeder`.
+2. **Grants them to `admin` and `super_admin` only** (owner's decision, 2026-10-02). `src/constants/rbac.ts` still describes broader grants for `loan_officer` and `manager`; those are not seeded. Give other roles access through this screen.
+3. **Answers every endpoint below except `GET /credit-scoring/alerts` with 501** for a caller holding its permission (403 without it), so the screens show "Not connected yet" until the real endpoints are built. Permission per route: `view` for the read screens, `settings` for scorecard-config and settings (GET and PUT), `override` for `POST /credit-scoring/decisions`.
+4. **Replaces `CreditScoringNotSeededTest`** with tests for this behaviour. `PUT /roles/{id}` now accepts the three.
 
-**Order of release:** routes + permissions + seed together → then deploy/promote this frontend. Deploying the frontend first is safe only as long as nobody ticks the Credit Scoring row.
+An API without #174 still refuses a role save that names one of them with a 422 (`permissions.N is invalid`) and saves nothing. The roles page then names the permission the server doesn't offer instead of showing the raw validation text.
 
-Once seeded, the sidebar's seven Credit Scoring items appear for any role holding `credit_scoring:view` with no further frontend change — see the degradation rule above.
+Once #174 is deployed, the sidebar's seven Credit Scoring items appear for any role holding `credit_scoring:view` (admin and super_admin by default) and each screen shows the "Not connected yet" panel — see the degradation rule above.
 
 ## Response envelope
 
