@@ -162,7 +162,8 @@ function NavLink({
                   aria-hidden="true"
                   className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
                 />
-                {badgeLabel && <span className="sr-only">{badgeLabel}</span>}
+                {/* The icon link has no visible name; say what it is before the count. */}
+                {badgeLabel && <span className="sr-only">{`${item.title}, ${badgeLabel}`}</span>}
               </>
             ) : null}
           </span>
@@ -269,8 +270,10 @@ function NavLink({
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate">{child.title}</span>
+                  {/* Only while open: the closed submenu stays in the accessibility
+                      tree, and the parent already announces the count. */}
                   <CountPill
-                    count={childBadges?.[child.href]}
+                    count={expanded ? childBadges?.[child.href] : undefined}
                     label={child.href === item.href ? badgeLabel : undefined}
                   />
                 </span>
