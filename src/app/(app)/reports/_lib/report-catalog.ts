@@ -274,7 +274,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
-    build: reportBuilder(reportService.borrowers, buildBorrowerDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, released] = await Promise.all([
+        reportService.borrowers(params).catch(() => null),
+        reportService.borrowersReleased({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildBorrowerDoc(summary, ctx.range, released);
+    },
   },
   {
     id: "disbursement_report",

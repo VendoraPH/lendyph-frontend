@@ -273,6 +273,115 @@ test("borrower report reads total_active_borrowers", () => {
   assert.equal(kpiValue(doc, "Repeat Borrowers"), "96");
 });
 
+// GET /reports/borrowers/released: one row per borrower, every figure summed by
+// the server. The totals are deliberately not the sum of these two rows.
+const BORROWERS_RELEASED = {
+  data: [
+    { borrower_id: 5, borrower_name: "Ana Cruz", loan_count: 2, loan_account_numbers: ["LN-000001", "LN-000004"], total_principal: 130000, last_released_at: "2026-08-05", latest_loan_status: "ongoing" },
+    { borrower_id: 7, borrower_name: "Ben Reyes", loan_count: 1, loan_account_numbers: ["LN-000002"], total_principal: 80000, last_released_at: "2026-08-02", latest_loan_status: "released" },
+  ],
+  meta: { current_page: 1, last_page: 1, per_page: 200, total: 2 },
+  totals: { count: 2, loan_count: 3, total_principal: 210000.5 },
+};
+
+test("borrower report lists each borrower released a loan, as the server sent them", () => {
+  const doc = buildBorrowerDoc({ total_active_borrowers: 2, new_borrowers: 1 }, RANGE, BORROWERS_RELEASED);
+
+  const table = namedTable(doc, "Borrowers with Loans Released");
+  assert.deepEqual(
+    table.rows.map((r) => [r.borrower_name, r.loan_count, r.loan_account_numbers, r.total_principal, r.last_released_at]),
+    [
+      ["Ana Cruz", 2, "LN-000001, LN-000004", 130000, "2026-08-05"],
+      ["Ben Reyes", 1, "LN-000002", 80000, "2026-08-02"],
+    ]
+  );
+  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "loan_count"), "3");
+  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), "₱210,000.50");
+});
+
+test("borrower list labels the latest loan's status the way the loans screens do", () => {
+  const doc = buildBorrowerDoc(null, RANGE, BORROWERS_RELEASED);
+  const table = namedTable(doc, "Borrowers with Loans Released");
+
+  assert.equal(table.columns.find((c) => c.key === "latest_loan_status")?.header, "Latest Loan Status");
+  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Released"]);
+});
+
+test("borrower list shows a dash for a borrower whose loans carry no number", () => {
+  const doc = buildBorrowerDoc(null, RANGE, {
+    data: [{ ...BORROWERS_RELEASED.data[0], loan_account_numbers: [] }],
+    meta: { total: 1 },
+    totals: BORROWERS_RELEASED.totals,
+  });
+  const table = namedTable(doc, "Borrowers with Loans Released");
+  const column = table.columns.find((c) => c.key === "loan_account_numbers")!;
+
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
+test("borrower list shows a dash when the newest loan has no release date", () => {
+  const doc = buildBorrowerDoc(null, RANGE, {
+    data: [{ ...BORROWERS_RELEASED.data[0], last_released_at: null }],
+    meta: { total: 1 },
+    totals: BORROWERS_RELEASED.totals,
+  });
+  const table = namedTable(doc, "Borrowers with Loans Released");
+  const column = table.columns.find((c) => c.key === "last_released_at")!;
+
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
+test("borrower list formats whole-peso amounts the server sends as integers", () => {
+  const doc = buildBorrowerDoc(null, RANGE, {
+    data: BORROWERS_RELEASED.data,
+    meta: { total: 2 },
+    totals: { count: 2, loan_count: 3, total_principal: 210000 },
+  });
+  const table = namedTable(doc, "Borrowers with Loans Released");
+  const column = table.columns.find((c) => c.key === "total_principal")!;
+
+  assert.equal(formatCell(table.rows[0], column), "₱130,000.00");
+  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), "₱210,000.00");
+});
+
+test("borrower list shows a dash, not a page sum, when the server sends no totals", () => {
+  const doc = buildBorrowerDoc(null, RANGE, { data: BORROWERS_RELEASED.data, meta: { total: 2 } });
+
+  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "loan_count"), DASH);
+  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), DASH);
+});
+
+test("borrower list's truncation note counts borrowers and makes no CSV promise", () => {
+  const doc = buildBorrowerDoc(null, RANGE, {
+    data: Array.from({ length: 200 }, (_, i) => ({ ...BORROWERS_RELEASED.data[1], borrower_id: i + 1 })),
+    meta: { current_page: 1, last_page: 3, per_page: 200, total: 450 },
+    totals: { count: 450, loan_count: 600, total_principal: 9000000 },
+  });
+  const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+
+  assert.ok(notes.some((n) => /^Showing the first 200 of 450 borrowers\./.test(n)), notes.join(" | "));
+  assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
+  assert.ok(notes.every((n) => !/CSV/.test(n)));
+});
+
+test("borrower list says, under the table, that it counts something other than the KPIs", () => {
+  const doc = buildBorrowerDoc(null, RANGE, BORROWERS_RELEASED);
+  const tableAt = doc.sections.findIndex(
+    (s) => s.kind === "table" && s.title === "Borrowers with Loans Released"
+  );
+  const after = doc.sections[tableAt + 1];
+
+  assert.ok(after && after.kind === "note", "expected a note right after the table");
+  assert.match(after.text, /all-time/);
+  assert.match(after.text, /registration date/);
+  assert.match(after.text, /released a loan in the period/);
+});
+
+test("borrower report omits the borrower list when its read failed", () => {
+  const doc = buildBorrowerDoc({ new_borrowers: 1 }, RANGE, null);
+  assert.equal(hasTable(doc, "Borrowers with Loans Released"), false);
+});
+
 test("disbursement report maps every KPI to a real figure", () => {
   const doc = buildDisbursementDoc(
     {

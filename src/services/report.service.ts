@@ -219,6 +219,12 @@ export const reportService = {
   borrowers: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.BORROWERS, { params }),
 
+  // A paginator envelope ({ data, meta, totals }) like the list reports, so
+  // getRaw: one row per borrower, every figure (and the totals) summed by the
+  // server.
+  borrowersReleased: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.BORROWERS_RELEASED, { params }),
+
   disbursements: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.DISBURSEMENTS, { params }),
 

@@ -1,4 +1,5 @@
 import { asArray, asRecord, pick, sum } from "@/lib/api-payload";
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import {
   DASH,
   countOrDash,
@@ -21,6 +22,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import type { LoanStatus } from "@/types/loan";
 
 /**
  * Pure payload → ReportDocument builders.
@@ -812,7 +814,50 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   };
 }
 
-export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument {
+// Keyed to the fields GET /reports/borrowers/released sends, so each row renders
+// as sent: the server groups the period's releases by borrower and sums every
+// figure.
+const BORROWER_LIST_COLUMNS: ReportColumn[] = [
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "loan_count", header: "Loans", format: "number", align: "right", width: 80 },
+  { key: "loan_account_numbers", header: "Loan #", format: "text", width: 200 },
+  { key: "total_principal", header: "Total Principal", format: "currency", align: "right", width: 150 },
+  { key: "last_released_at", header: "Last Released", format: "date", width: 120 },
+  // The status of the borrower's newest release in the period, not a status
+  // of the borrower, so the header says whose status it is.
+  { key: "latest_loan_status", header: "Latest Loan Status", format: "text", width: 140 },
+];
+
+/** A loan status as the loans screens label it; a value they don't know, as sent. */
+function loanStatusText(value: unknown): unknown {
+  return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as LoanStatus]
+    : value;
+}
+
+/**
+ * Display shaping only: the loan numbers array becomes one cell, and the raw
+ * status its label. Every figure stays exactly as the server sent it.
+ */
+function normalizeBorrowerReleasedRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const numbers = raw.loan_account_numbers;
+  return {
+    ...raw,
+    loan_account_numbers: Array.isArray(numbers) ? numbers.join(", ") : numbers,
+    latest_loan_status: loanStatusText(raw.latest_loan_status),
+  };
+}
+
+/**
+ * The summary KPIs, plus the borrowers released a loan in the period when
+ * `/reports/borrowers/released` for the same window is supplied. The list is
+ * left out (not shown empty) when that read failed.
+ */
+export function buildBorrowerDoc(
+  raw: unknown,
+  range: DateRange,
+  releasedRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
@@ -827,10 +872,49 @@ export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument
     kpi("Repeat Borrowers", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (releasedRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasedRaw);
+    const rows = rawRows.map(normalizeBorrowerReleasedRow);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers");
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Borrowers with Loans Released",
+      columns: BORROWER_LIST_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "loan_count",
+                label: "Total",
+                value: countOrDash(pick(totals, ["loan_count"])),
+              },
+              {
+                column: "total_principal",
+                value: currencyOrDash(pick(totals, ["total_principal"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No loans were released to any borrower in the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Active and repeat borrowers above are all-time and new borrowers go by registration date, while this list is the borrowers released a loan in the period, so the counts need not match.",
+    });
+  }
+
   return {
     reportId: "borrower_report",
     meta: meta("Borrower Report", range, "Active, new, and repeat borrower activity"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
