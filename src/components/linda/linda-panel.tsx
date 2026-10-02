@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { Info, X } from "lucide-react";
 import { env } from "@/config/env";
 import { cn } from "@/lib/utils";
-import { LINDA_MESSAGES, LINDA_SUGGESTED_QUESTIONS } from "@/lib/linda";
+import { LINDA_MESSAGES, LINDA_SUGGESTED_QUESTIONS, isImeComposing } from "@/lib/linda";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLindaStore } from "@/store";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { LindaComposer } from "./linda-composer";
 import { LindaMark } from "./linda-mark";
 import { LindaReplyView } from "./linda-reply";
 import { useLindaChat } from "./use-linda-chat";
+import { useLindaPanelFocus } from "./use-linda-panel-focus";
 
 function Suggestions({ onPick }: { onPick: (q: string) => void }) {
   return (
@@ -40,9 +41,16 @@ function Suggestions({ onPick }: { onPick: (q: string) => void }) {
   );
 }
 
+interface LindaConversationProps {
+  /** Whether the panel is open; closing it abandons a question in flight. */
+  active: boolean;
+  onNavigate: () => void;
+  autoFocus: boolean;
+}
+
 /** One conversation. Remounted per opening, which is what clears it. */
-function LindaConversation({ onNavigate, autoFocus }: { onNavigate: () => void; autoFocus: boolean }) {
-  const { messages, pending, ask } = useLindaChat();
+function LindaConversation({ active, onNavigate, autoFocus }: LindaConversationProps) {
+  const { messages, pending, ask } = useLindaChat(active);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll this box only. scrollIntoView would also scroll every ancestor,
@@ -111,37 +119,45 @@ function LindaConversation({ onNavigate, autoFocus }: { onNavigate: () => void; 
 /**
  * Linda's side panel. On desktop it sits beside the page and the page narrows
  * to make room (about 25% wide on large screens, wider on smaller ones so the
- * answers stay readable); on phones it covers the screen.
+ * answers stay readable); on phones it covers the screen as a modal dialog.
+ *
+ * With `NEXT_PUBLIC_ENABLE_LINDA` off this renders nothing and runs no hooks,
+ * so the app is exactly as it is without Linda.
  */
 export function LindaPanel() {
+  if (!env.features.linda) return null;
+  return <LindaSidePanel />;
+}
+
+function LindaSidePanel() {
   const open = useLindaStore((s) => s.open);
   const session = useLindaStore((s) => s.session);
   const closePanel = useLindaStore((s) => s.closePanel);
   const isMobile = useIsMobile();
+  const panelRef = useRef<HTMLElement>(null);
+  const modal = open && isMobile;
+  const onTab = useLindaPanelFocus(panelRef, open, modal);
 
-  // Leaving the app shell (logout, session end) or the page (reload) closes
-  // Linda with it, which also gives back the sidebar Linda collapsed — that
-  // state is persisted, so a reload would otherwise leave it stuck collapsed.
-  useEffect(() => {
-    window.addEventListener("pagehide", closePanel);
-    return () => {
-      window.removeEventListener("pagehide", closePanel);
-      closePanel();
-    };
-  }, [closePanel]);
-
-  if (!env.features.linda) return null;
+  // Leaving the app shell (logout, session end) closes Linda with it, so the
+  // next sign-in starts with the panel shut and the sidebar as the user left it.
+  useEffect(() => () => closePanel(), [closePanel]);
 
   return (
     <aside
+      ref={panelRef}
       id="linda-panel"
+      role={modal ? "dialog" : undefined}
+      aria-modal={modal || undefined}
       aria-label="Linda, AI lending assistant"
+      tabIndex={modal ? -1 : undefined}
       inert={!open}
       onKeyDown={(e) => {
-        if (e.key === "Escape") closePanel();
+        // Escape while an IME is composing cancels the candidate, not Linda.
+        if (e.key === "Escape" && !isImeComposing(e.nativeEvent)) closePanel();
+        onTab(e);
       }}
       className={cn(
-        "flex-col overflow-hidden bg-background md:shrink-0 md:transition-[width] md:duration-300 md:ease-in-out",
+        "flex-col overflow-hidden bg-background outline-none md:shrink-0 md:transition-[width] md:duration-300 md:ease-in-out",
         open
           ? "fixed inset-0 z-50 flex md:static md:z-auto md:w-[40%] md:min-w-80 md:border-l md:border-border lg:w-[32%] xl:w-[25%]"
           : "hidden md:flex md:w-0",
@@ -156,7 +172,12 @@ export function LindaPanel() {
               <p className="text-[11px] text-muted-foreground">AI Lending Assistant</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={closePanel} className="rounded-full">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={closePanel}
+            className="rounded-full max-md:size-11"
+          >
             <X className="h-4 w-4" />
             <span className="sr-only">Close Linda</span>
           </Button>
@@ -164,6 +185,7 @@ export function LindaPanel() {
         {session > 0 && (
           <LindaConversation
             key={session}
+            active={open}
             onNavigate={isMobile ? closePanel : () => {}}
             autoFocus={!isMobile}
           />

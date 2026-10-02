@@ -22,7 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/common";
-import { useUIStore } from "@/store/ui-store";
+import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
 
 interface SidebarProps {
@@ -438,7 +438,8 @@ function ResizeHandle({
 // ── Main Sidebar ──
 
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
-  const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useUIStore(selectSidebarCollapsed);
+  const toggleSidebarCollapsed = useUIStore((s) => s.toggleSidebarCollapsed);
   const [customWidth, setCustomWidth] = useState(DEFAULT_WIDTH);
   const shouldCollapseRef = useRef(false);
 

@@ -45,7 +45,7 @@ export type LindaBlock = LindaStatsBlock | LindaListBlock;
 
 export interface LindaLink {
   label: string;
-  /** In-app path only, e.g. "/reports/overdue". */
+  /** In-app path only, e.g. "/loans/152" or "/reports". */
   url: string;
 }
 

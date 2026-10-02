@@ -2,16 +2,21 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { SendHorizontal } from "lucide-react";
-import { LINDA_MAX_MESSAGE_LENGTH } from "@/lib/linda";
+import { LINDA_MAX_MESSAGE_LENGTH, isImeComposing } from "@/lib/linda";
 import { Button } from "@/components/ui/button";
 
 interface LindaComposerProps {
   disabled: boolean;
-  onSend: (text: string) => void;
+  /** Resolves `true` once Linda answered the question. */
+  onSend: (text: string) => Promise<boolean>;
   autoFocus?: boolean;
 }
 
-/** The question box. Enter sends, Shift+Enter starts a new line. */
+/**
+ * The question box. Enter sends, Shift+Enter starts a new line. The question
+ * stays in the box until Linda answers it, so a failed request can be retried
+ * or reworded without typing it again.
+ */
 export function LindaComposer({ disabled, onSend, autoFocus }: LindaComposerProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -25,13 +30,16 @@ export function LindaComposer({ disabled, onSend, autoFocus }: LindaComposerProp
 
   const send = () => {
     if (!canSend) return;
-    onSend(text);
-    setText("");
+    const sent = text;
+    onSend(sent).then((answered) => {
+      // Clear only what was sent; anything typed while waiting is kept.
+      if (answered) setText((current) => (current === sent ? "" : current));
+    });
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // isComposing: Enter that confirms an IME candidate must not send.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Enter that confirms an IME candidate must not send.
+    if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e.nativeEvent)) {
       e.preventDefault();
       send();
     }

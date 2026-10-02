@@ -33,12 +33,14 @@ export const LINDA_SUGGESTED_QUESTIONS = [
 
 export const LINDA_MESSAGES = {
   loading: "Linda is checking your lending data...",
-  empty: "I couldn't find any records matching your request.",
+  /** Stands in for a missing `answer` above figures the server did send. */
+  figuresOnly: "Here's what I found.",
   aiUnavailable: "Linda is currently unable to process your request. Please try again.",
   dataUnavailable: "I couldn't retrieve the lending data right now. Please try again.",
   forbidden: "Your role doesn't have access to Linda. Please ask your administrator.",
   notSetUp: "Linda isn't available on this account yet.",
   rateLimited: "You're sending questions a little fast. Please wait a moment and try again.",
+  invalidQuestion: "Linda can't take that question as written. Please rephrase it.",
   noHistory:
     "Linda does not save your chat history. Please take note of any important information before closing this chat.",
 } as const;
@@ -55,25 +57,37 @@ export interface LindaMessage {
 
 /**
  * The earlier turns sent with a new question: the most recent
- * `LINDA_HISTORY_LIMIT`, without failed answers (they carry no data the
- * backend should build on) or the user questions those failures answered.
+ * `LINDA_HISTORY_LIMIT`, as question-and-answer pairs. A question goes back
+ * only with the answer Linda gave it, so a failed answer (it carries no data
+ * the backend should build on) and a question whose request ended silently
+ * (cancelled, 401, 423) are both left out. The server therefore always gets
+ * alternating turns that start with a question, even after trimming.
  */
 export function buildLindaHistory(
   messages: readonly LindaMessage[],
   limit = LINDA_HISTORY_LIMIT,
 ): LindaHistoryTurn[] {
-  const turns: LindaHistoryTurn[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    if (m.failed) continue;
-    if (m.role === "user" && messages[i + 1]?.failed) continue;
-    turns.push(
-      m.role === "assistant" && m.reply
-        ? { role: "assistant", content: m.content, intent: m.reply.intent }
-        : { role: m.role, content: m.content },
-    );
+  const pairs: [LindaHistoryTurn, LindaHistoryTurn][] = [];
+  for (let i = 0; i < messages.length - 1; i++) {
+    const question = messages[i];
+    const answer = messages[i + 1];
+    if (question.role !== "user" || answer.role !== "assistant" || !answer.reply) continue;
+    pairs.push([
+      { role: "user", content: question.content },
+      { role: "assistant", content: answer.content, intent: answer.reply.intent },
+    ]);
   }
-  return limit > 0 ? turns.slice(-limit) : [];
+  const keep = Math.floor(limit / 2);
+  return keep > 0 ? pairs.slice(-keep).flat() : [];
+}
+
+/**
+ * True while an input method (Japanese, Chinese, Korean…) is composing, when
+ * Enter confirms a candidate and Escape cancels it. Safari ends composition
+ * before the keydown, so its 229 key code is checked as well.
+ */
+export function isImeComposing(e: { isComposing: boolean; keyCode: number }): boolean {
+  return e.isComposing || e.keyCode === 229;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,15 +104,48 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v : undefined;
 }
 
+/** Control characters, which browsers strip from a URL, and the backslash, which they read as "/". */
+const URL_TRICK_CHARS = /[\u0000-\u001F\u007F\\]/;
+
+/** `%XX` escapes decoded byte by byte. Lenient on purpose: never throws. */
+function percentDecode(s: string): string {
+  return s.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+function appOrigin(): string {
+  return typeof window === "undefined" ? "http://localhost" : window.location.origin;
+}
+
 /**
  * An in-app path, or nothing. Links come from a model-assisted response, so
- * anything that could leave the app (`https://…`, `//host`, `javascript:`) is
- * dropped rather than rendered.
+ * anything that could leave the app is dropped rather than rendered.
+ *
+ * Checking the raw string is not enough: browsers strip tabs and newlines
+ * before following a URL ("/\t/evil.com" opens evil.com), and dot segments
+ * resolve away ("/.//evil.com" becomes the path "//evil.com", which is a link
+ * to that host). So the candidate is resolved against the app's origin, must
+ * stay on it, and only its path, query and hash are kept, with the path
+ * checked again (also percent-decoded) for anything that reads as a host.
  */
-export function safeLindaPath(v: unknown): string | undefined {
+export function safeLindaPath(v: unknown, origin: string = appOrigin()): string | undefined {
   const s = str(v)?.trim();
-  if (!s || !s.startsWith("/") || s.startsWith("//") || s.includes("\\")) return undefined;
-  return s;
+  if (!s || !s.startsWith("/") || URL_TRICK_CHARS.test(s)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(s, origin);
+    if (url.origin !== new URL(origin).origin) return undefined;
+  } catch {
+    return undefined;
+  }
+  const path = percentDecode(url.pathname);
+  if (path.startsWith("//") || URL_TRICK_CHARS.test(path)) return undefined;
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** An ISO 8601 timestamp the panel can format, or nothing. */
+function validDate(v: unknown): string | undefined {
+  const s = str(v);
+  return s && !Number.isNaN(Date.parse(s)) ? s : undefined;
 }
 
 function normalizeField(v: unknown): LindaField | null {
@@ -166,10 +213,10 @@ export function normalizeLindaReply(raw: unknown): LindaReply | null {
     : [];
   return {
     intent: str(raw.intent) ?? "unknown",
-    answer: answer ?? LINDA_MESSAGES.empty,
+    answer: answer ?? LINDA_MESSAGES.figuresOnly,
     blocks,
     links,
-    as_of: str(raw.as_of),
+    as_of: validDate(raw.as_of),
   };
 }
 
@@ -193,6 +240,8 @@ export function lindaErrorMessage(
   if (status === 403) return LINDA_MESSAGES.forbidden;
   if (status === 404 || status === 501) return LINDA_MESSAGES.notSetUp;
   if (status === 429) return LINDA_MESSAGES.rateLimited;
+  // The server refused the question itself; sending it again changes nothing.
+  if (status === 400 || status === 422) return LINDA_MESSAGES.invalidQuestion;
   return LINDA_MESSAGES.aiUnavailable;
 }
 
@@ -201,12 +250,20 @@ export function lindaErrorMessage(
 // ---------------------------------------------------------------------------
 
 /**
+ * Every digit the server sent, grouped. Rates and figures are never rounded
+ * for display (a 2.375% rate must not read 2.38%); a trailing zero carries no
+ * value, so "2.3750" still reads 2.375, as `formatRate` shows rates.
+ */
+const exactNumber = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 20 });
+
+/**
  * A field's value as display text. Numbers arrive raw from the backend and are
- * formatted here, so "₱245,600" is spelled the same in every answer.
+ * formatted here, so "₱245,600" is spelled the same in every answer. A blank
+ * value is a dash: `Number(" ")` is 0, and "₱0" would be a figure nobody sent.
  */
 export function formatLindaValue(field: LindaField): string {
   const { value, format, currency } = field;
-  if (value === null || value === "") return "—";
+  if (value === null || (typeof value === "string" && value.trim() === "")) return "—";
   const n = typeof value === "number" ? value : Number(value);
   switch (format) {
     case "currency":
@@ -220,11 +277,9 @@ export function formatLindaValue(field: LindaField): string {
       }
       return formatCurrencyExact(n);
     case "number":
-      return Number.isFinite(n) ? n.toLocaleString("en-PH") : String(value);
+      return Number.isFinite(n) ? exactNumber.format(n) : String(value);
     case "percent":
-      return Number.isFinite(n)
-        ? `${n.toLocaleString("en-PH", { maximumFractionDigits: 2 })}%`
-        : String(value);
+      return Number.isFinite(n) ? `${exactNumber.format(n)}%` : String(value);
     case "date": {
       const s = String(value);
       return Number.isNaN(new Date(s).getTime()) ? s : formatDateLong(s);

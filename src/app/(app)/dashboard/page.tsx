@@ -334,11 +334,15 @@ function DashboardContent() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="@container/dashboard space-y-6">
       {/* ----------------------------------------------------------------- */}
       {/* Row 1: KPI Cards                                                  */}
+      {/* Five across from lg, but three when the page itself is narrower   */}
+      {/* than 43rem (a side panel such as Linda is open), where five would */}
+      {/* clip their figures. Without a panel the page is wider than that   */}
+      {/* at every lg width (716px at 1024), so this never applies there.   */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 lg:@max-[43rem]/dashboard:grid-cols-3 gap-4">
         {KPI_CARD_STRUCTURE.map((kpi) => (
           <Link key={kpi.label} href={kpi.href} className="group">
             <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
