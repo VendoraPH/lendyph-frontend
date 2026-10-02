@@ -151,6 +151,11 @@ export const env = {
     binhsAmortization: parseBoolEnvValue(
       process.env.NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION,
     ),
+    // Linda, the AI lending assistant. Off by default: the header icon and
+    // panel stay hidden on a deployment until its backend serves
+    // POST /linda/chat, so production never offers an assistant that can only
+    // answer "not available". Literal reference for the same reason as above.
+    linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

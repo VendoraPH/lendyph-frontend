@@ -179,8 +179,10 @@ export const API_ENDPOINTS = {
     SUBSIDIARY_LEDGER: (borrowerId: number) => `/reports/subsidiary-ledger/${borrowerId}`,
     DAILY_COLLECTION: "/reports/daily-collection",
     INCOME: "/reports/income",
+    INCOME_BY_LOAN: "/reports/income/by-loan",
     AGING: "/reports/aging",
     BORROWERS: "/reports/borrowers",
+    BORROWERS_RELEASED: "/reports/borrowers/released",
     DISBURSEMENTS: "/reports/disbursements",
     CASH_FLOW: "/reports/cash-flow",
     COLLECTION_EFFICIENCY: "/reports/collection-efficiency",
@@ -364,6 +366,15 @@ export const API_ENDPOINTS = {
     POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
     DECISIONS_CREATE: "/credit-scoring/decisions",
     SETTINGS: "/credit-scoring/settings",
+  },
+  /**
+   * Linda, the AI lending assistant. Not built on the backend yet; the
+   * contract is the "Linda" backend handoff on PR feat/linda-ai-assistant.
+   * The server derives tenant, branch and permissions from the token, so the
+   * request carries only the question and this session's earlier turns.
+   */
+  LINDA: {
+    CHAT: "/linda/chat",
   },
   SYSTEM: {
     HEALTH: "/health",

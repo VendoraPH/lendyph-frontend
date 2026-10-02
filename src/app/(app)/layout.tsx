@@ -11,6 +11,7 @@ import { isSessionRejection, isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { LindaPanel } from "@/components/linda/linda-panel";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -106,6 +107,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
         </div>
+        {/* Beside the page, not over it: opening Linda narrows the content. */}
+        <LindaPanel />
       </div>
     </SessionProvider>
   );

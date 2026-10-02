@@ -7,6 +7,7 @@ import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
+import { usePendingLoanApprovals } from "@/hooks/use-pending-loan-approvals";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -22,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/common";
-import { useUIStore } from "@/store/ui-store";
+import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
 
 interface SidebarProps {
@@ -48,6 +49,36 @@ const iconColors: Record<string, string> = {
   "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
 };
 
+function CountPill({
+  count,
+  label,
+  className,
+}: {
+  count?: number;
+  /** What the count means, for screen readers ("3 loan applications awaiting approval"). */
+  label?: string;
+  className?: string;
+}) {
+  if (!count || count <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center rounded-full bg-brand-orange px-1.5 py-0.5 text-[10px] font-bold text-white leading-none",
+        className
+      )}
+    >
+      <span aria-hidden={label ? true : undefined}>{count > 99 ? "99+" : count}</span>
+      {label && <span className="sr-only">{label}</span>}
+    </span>
+  );
+}
+
+/** "1 loan application awaiting approval" / "3 loan applications awaiting approval". */
+function countLabel(count: number | undefined, noun: string, state: string): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return `${count} ${noun}${count === 1 ? "" : "s"} ${state}`;
+}
+
 // ── Nav Link ──
 
 function NavLink({
@@ -56,12 +87,18 @@ function NavLink({
   collapsed,
   onNavigate,
   badge,
+  badgeLabel,
+  childBadges,
 }: {
   item: NavItem;
   pathname: string;
   collapsed?: boolean;
   onNavigate?: () => void;
   badge?: number;
+  /** Screen-reader text for `badge`; the pill and the collapsed dot are visual only. */
+  badgeLabel?: string;
+  /** Count shown on a child link, keyed by its href. */
+  childBadges?: Record<string, number>;
 }) {
   const { can } = usePermission();
   // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
@@ -117,8 +154,18 @@ function NavLink({
             />
           }
         >
-          <span className={cn("flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
+          <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
+            {badge && badge > 0 ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
+                />
+                {/* The icon link has no visible name; say what it is before the count. */}
+                {badgeLabel && <span className="sr-only">{`${item.title}, ${badgeLabel}`}</span>}
+              </>
+            ) : null}
           </span>
         </TooltipTrigger>
         <TooltipContent side="right" className={hasChildren ? "flex flex-col gap-1 p-2.5 min-w-[140px]" : undefined}>
@@ -191,6 +238,8 @@ function NavLink({
           <item.icon className="h-3.5 w-3.5" />
         </span>
         <span className="flex-1 text-left truncate">{item.title}</span>
+        {/* Visible while the menu is closed; the child link carries it once open. */}
+        {!expanded && <CountPill count={badge} label={badgeLabel} />}
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
       {/*
@@ -219,7 +268,15 @@ function NavLink({
                     : "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
                 )}
               >
-                {child.title}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate">{child.title}</span>
+                  {/* Only while open: the closed submenu stays in the accessibility
+                      tree, and the parent already announces the count. */}
+                  <CountPill
+                    count={expanded ? childBadges?.[child.href] : undefined}
+                    label={child.href === item.href ? badgeLabel : undefined}
+                  />
+                </span>
               </Link>
             );
           })}
@@ -255,6 +312,11 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
+  // Loans waiting on an approver. Only asked for by someone who can approve
+  // and can read the list it is counted from (`GET /loans` needs loans:view).
+  const pendingLoanApprovals = usePendingLoanApprovals(
+    can("loans:approve") && can("loans:view")
+  );
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -340,7 +402,23 @@ function SidebarContent({
               pathname={pathname}
               collapsed={collapsed}
               onNavigate={onNavigate}
-              badge={item.href === "/borrowers" ? pendingRegistrationsCount : undefined}
+              badge={
+                item.href === "/borrowers"
+                  ? pendingRegistrationsCount
+                  : item.href === "/loans"
+                    ? pendingLoanApprovals
+                    : undefined
+              }
+              badgeLabel={
+                item.href === "/borrowers"
+                  ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
+                  : item.href === "/loans"
+                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting approval")
+                    : undefined
+              }
+              childBadges={
+                item.href === "/loans" ? { "/loans": pendingLoanApprovals } : undefined
+              }
             />
           ))}
         </nav>
@@ -438,7 +516,8 @@ function ResizeHandle({
 // ── Main Sidebar ──
 
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
-  const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useUIStore(selectSidebarCollapsed);
+  const toggleSidebarCollapsed = useUIStore((s) => s.toggleSidebarCollapsed);
   const [customWidth, setCustomWidth] = useState(DEFAULT_WIDTH);
   const shouldCollapseRef = useRef(false);
 
