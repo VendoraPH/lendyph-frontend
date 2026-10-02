@@ -5,6 +5,7 @@ import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import type { Borrower, Loan, CoMaker } from "@/types";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
+import { NotificationPreferencesCard } from "./notification-preferences-card";
 // Constants removed — valid_id_type not in API response
 
 function formatDate(dateStr: string): string {
@@ -137,6 +138,8 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      <NotificationPreferencesCard borrowerId={borrower.id} />
     </div>
   );
 }

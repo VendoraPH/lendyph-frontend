@@ -367,6 +367,42 @@ export const API_ENDPOINTS = {
     DECISIONS_CREATE: "/credit-scoring/decisions",
     SETTINGS: "/credit-scoring/settings",
   },
+  /**
+   * Automated due-date reminders. None of these exist yet: the scheduler,
+   * providers and these routes are backend work still to do, and the contract
+   * is `@/types/reminder` plus the handoff in the commit that added this
+   * block. Until they land every screen shows "Not connected yet" (404).
+   */
+  REMINDERS: {
+    DASHBOARD: "/reminders/dashboard",
+    RULES: "/reminders/rules",
+    RULE: (id: number) => `/reminders/rules/${id}`,
+    RULE_DEACTIVATE: (id: number) => `/reminders/rules/${id}/deactivate`,
+    TEMPLATES: "/reminders/templates",
+    TEMPLATE: (id: number) => `/reminders/templates/${id}`,
+    TEMPLATE_PREVIEW: "/reminders/templates/preview",
+    QUEUE: "/reminders/queue",
+    HISTORY: "/reminders/history",
+    HISTORY_DETAIL: (id: number) => `/reminders/history/${id}`,
+    LOAN: (loanId: number) => `/loans/${loanId}/reminders`,
+    MANUAL_PREVIEW: "/reminders/manual-send/preview",
+    MANUAL_SEND: "/reminders/manual-send",
+    PAUSES: "/reminders/pauses",
+    PAUSE: "/reminders/pause",
+    RESUME: "/reminders/resume",
+    SETTINGS: "/reminders/settings",
+    BORROWER_PREFERENCES: (borrowerId: number) =>
+      `/borrowers/${borrowerId}/notification-preferences`,
+  },
+  /**
+   * Linda, the AI lending assistant. Not built on the backend yet; the
+   * contract is the "Linda" backend handoff on PR feat/linda-ai-assistant.
+   * The server derives tenant, branch and permissions from the token, so the
+   * request carries only the question and this session's earlier turns.
+   */
+  LINDA: {
+    CHAT: "/linda/chat",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

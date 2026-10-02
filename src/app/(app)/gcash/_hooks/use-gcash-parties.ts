@@ -1,133 +1,86 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePermission } from "@/hooks";
-import { emptyDrain } from "@/lib/paginate";
-import { borrowerService } from "@/services/borrower.service";
-import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { borrowerParty, nonMemberParty } from "@/lib/gcash-party";
-import type { Borrower, GCashParty } from "@/types";
-
-/** What a picker needs about one selectable party, already flattened. */
-export interface GCashPartyOption {
-  party: GCashParty;
-  /** Second line in the list row — member code, or the presented ID. */
-  hint: string | null;
-  /** Shown in the dialog's read-only Number field. */
-  contactNumber: string | null;
-  /** Everything cmdk should match a query against, joined. */
-  searchText: string;
-}
-
-/** Set only when a drain gave up with pages outstanding. Null means complete. */
-export interface GCashPartyShortfall {
-  shown: number;
-  total: number | null;
-}
-
-interface GCashPartyListState {
-  options: GCashPartyOption[];
-  shortfall: GCashPartyShortfall | null;
-}
+import {
+  loadGCashPartyLists,
+  type GCashPartyLists,
+} from "../_lib/load-party-lists";
+import {
+  EMPTY_PARTY_LIST,
+  type GCashPartyListState,
+} from "../_lib/party-options";
 
 export interface UseGCashPartiesResult {
   members: GCashPartyListState;
   nonMembers: GCashPartyListState;
+  /** Nothing has loaded yet. */
   loading: boolean;
+  /** The lists in hand answer an earlier search; the current one is on its way. */
+  searching: boolean;
+  /** Why the current search failed, if it did. */
   error: string | null;
-  /** Re-drains walk-ins, e.g. after one is added from inside a dialog. */
-  refreshNonMembers(): void;
+  /** Re-runs the current search, e.g. after a walk-in is added, edited or deleted. */
+  refresh(): void;
 }
 
-const EMPTY: GCashPartyListState = { options: [], shortfall: null };
+interface Loaded extends GCashPartyLists {
+  /** Which request these lists answer. */
+  key: string;
+  error: string | null;
+}
 
 /**
- * Both sides of the GCash counter — members and walk-ins — as one selectable
- * list each.
+ * Both sides of the GCash counter — members and walk-ins — for one search,
+ * searched on the server (see `loadGCashPartyLists`). The caller debounces.
  *
- * Drained rather than paged. A picker is the one place where a missing row is
- * indistinguishable from a person who was never registered: the teller types
- * "Dela Cruz", sees "No member found", and concludes the member is not in the
- * system. Asking for a single large page cannot fix that, because both
- * controllers clamp `per_page` to 100 in silence — so this follows the server's
- * own `meta.last_page` and reports a shortfall instead of hiding one.
+ * Loading is derived from whether the stored result belongs to the current
+ * request rather than set in the effect: an effect body that sets state
+ * synchronously triggers a cascading render. The lists in hand stay on screen
+ * while a newer search runs, flagged as `searching`.
  *
  * No TanStack Query here on purpose: the GCash module fetches with
  * `useState`/`useEffect` throughout, and one screen doing it differently costs
  * more than it saves.
  */
-export function useGCashParties(): UseGCashPartiesResult {
+export function useGCashParties(search: string): UseGCashPartiesResult {
   // Members need `borrowers:view`, which GCash does not. Without it only the
   // walk-ins are offered, rather than a refused member list taking them down too.
   const canListMembers = usePermission().can("borrowers:view");
-  const [members, setMembers] = useState<GCashPartyListState>(EMPTY);
-  const [nonMembers, setNonMembers] = useState<GCashPartyListState>(EMPTY);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
+  const [reloadCount, setReloadCount] = useState(0);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const key = JSON.stringify([search, canListMembers, reloadCount]);
 
-  // setLoading/setError live here rather than at the top of the effect below:
-  // an effect body that sets state synchronously triggers a cascading render,
-  // and an event handler is the honest place for "the user asked for a reload".
-  const refreshNonMembers = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setReloadToken((n) => n + 1);
-  }, []);
+  const refresh = () => setReloadCount((n) => n + 1);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      // members_only: every option here can be transacted for, so pending and
-      // rejected applicants must not be selectable at all.
-      canListMembers
-        ? borrowerService.listAll({ members_only: 1 })
-        : emptyDrain<Borrower>(),
-      gcashService.listAllNonMembers(),
-    ])
-      .then(([memberDrain, nonMemberDrain]) => {
-        if (cancelled) return;
-        setMembers({
-          options: memberDrain.rows.map((borrower) => ({
-            party: borrowerParty(borrower),
-            hint: borrower.borrower_code ?? null,
-            contactNumber: borrower.contact_number ?? null,
-            searchText: [borrower.full_name, borrower.borrower_code]
-              .filter(Boolean)
-              .join(" "),
-          })),
-          shortfall: memberDrain.truncated
-            ? { shown: memberDrain.rows.length, total: memberDrain.total }
-            : null,
-        });
-        setNonMembers({
-          options: nonMemberDrain.rows.map((nm) => ({
-            party: nonMemberParty(nm),
-            hint: nm.id_type ? `${nm.id_type} · ${nm.id_number}` : null,
-            contactNumber: nm.mobile_number ?? null,
-            searchText: [nm.full_name, nm.mobile_number, nm.id_number]
-              .filter(Boolean)
-              .join(" "),
-          })),
-          shortfall: nonMemberDrain.truncated
-            ? { shown: nonMemberDrain.rows.length, total: nonMemberDrain.total }
-            : null,
-        });
+    loadGCashPartyLists({ search, canListMembers })
+      .then((lists) => {
+        if (!cancelled) setLoaded({ key, ...lists, error: null });
       })
       .catch((err) => {
         if (cancelled) return;
-        setMembers(EMPTY);
-        setNonMembers(EMPTY);
-        setError(extractGCashErrorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        setLoaded({
+          key,
+          members: EMPTY_PARTY_LIST,
+          nonMembers: EMPTY_PARTY_LIST,
+          error: extractGCashErrorMessage(err),
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [reloadToken, canListMembers]);
+  }, [key, search, canListMembers]);
 
-  return { members, nonMembers, loading, error, refreshNonMembers };
+  const current = loaded?.key === key;
+  return {
+    members: loaded?.members ?? EMPTY_PARTY_LIST,
+    nonMembers: loaded?.nonMembers ?? EMPTY_PARTY_LIST,
+    loading: loaded === null,
+    searching: loaded !== null && !current,
+    error: current && loaded ? loaded.error : null,
+    refresh,
+  };
 }
