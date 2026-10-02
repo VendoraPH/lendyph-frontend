@@ -316,6 +316,34 @@ function truncationNote(
   };
 }
 
+/**
+ * Truncation note for a table whose totals row shows only the server's
+ * figures: a total the server did not send is "—", never a sum of this page.
+ * `noun` names what one row is ("repayments", "loans", "borrowers") because the
+ * count comes from the server's `meta.total`, which counts those. There is no
+ * "Export to CSV" pointer: these reports export the document, which holds only
+ * the rows listed.
+ */
+function serverTotalsTruncationNote(
+  shown: number,
+  totalRows: number | null,
+  noun: string
+): ReportSection | null {
+  const truncated =
+    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
+  if (!truncated || shown === 0) return null;
+
+  const scope =
+    totalRows !== null
+      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+      : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+
+  return {
+    kind: "note",
+    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // KPI-only reports
 // ---------------------------------------------------------------------------
@@ -352,22 +380,12 @@ export function buildDailyCollectionDoc(
   if (repaymentsRaw != null) {
     const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
     const rows = rawRows.map(normalizeRepaymentRow);
-    const amount = resolveTotal(
-      totals,
-      ["total_amount_paid", "amount", "total_amount", "amount_paid"],
-      rows,
-      "amount"
-    );
-    const penalty = resolveTotal(
-      totals,
-      ["total_penalty_applied", "penalty_amount", "total_penalty", "penalty_applied"],
-      rows,
-      "penalty_amount"
-    );
 
-    const note = truncationNote(rows.length, totalRows, amount.fromServer && penalty.fromServer);
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments");
     if (note) sections.push(note);
 
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
     sections.push({
       kind: "table",
       title: "Collections by Account",
@@ -376,8 +394,15 @@ export function buildDailyCollectionDoc(
       totals:
         rows.length > 0
           ? [
-              { column: "amount", label: "Total", value: formatCurrency(amount.value) },
-              { column: "penalty_amount", value: formatCurrency(penalty.value) },
+              {
+                column: "amount",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_amount_paid"])),
+              },
+              {
+                column: "penalty_amount",
+                value: currencyOrDash(pick(totals, ["total_penalty_applied"])),
+              },
             ]
           : undefined,
       emptyText: "No collections were recorded in the selected period.",

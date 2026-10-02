@@ -332,25 +332,60 @@ test("daily collection renders whole-percent rates verbatim", () => {
   assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
 });
 
+const COLLECTION_ROWS = [
+  { paid_at: "2026-08-06", loan_account_number: "LN-1", borrower_name: "Ana Cruz", amount: 400, penalty_amount: 0, method: "cash", status: "paid" },
+  { paid_at: "2026-08-06", loan: { loan_account_number: "LN-2" }, borrower: { full_name: "Ben Reyes" }, amount: 300, penalty_amount: 0, method: "gcash", status: "paid" },
+];
+
 test("daily collection lists the accounts collected from beneath the summary", () => {
   const doc = buildDailyCollectionDoc(
     { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
     RANGE,
     {
-      data: [
-        { paid_at: "2026-08-06", loan_account_number: "LN-1", borrower_name: "Ana Cruz", amount: 400, penalty_amount: 0, method: "cash", status: "paid" },
-        { paid_at: "2026-08-06", loan: { loan_account_number: "LN-2" }, borrower: { full_name: "Ben Reyes" }, amount: 300, penalty_amount: 0, method: "gcash", status: "paid" },
-      ],
+      data: COLLECTION_ROWS,
       meta: { total: 2 },
+      // Deliberately not the sum of the rows: the footer must show these as sent.
+      totals: { count: 2, total_amount_paid: 700.5, total_penalty_applied: 12.25 },
     }
   );
 
-  const table = doc.sections.find((s) => s.kind === "table");
-  assert.ok(table && table.kind === "table");
+  const table = namedTable(doc, "Collections by Account");
   assert.equal(table.rows.length, 2);
   assert.equal(table.rows[1].borrower_name, "Ben Reyes");
   assert.equal(table.rows[1].loan_account_number, "LN-2");
-  assert.equal(table.totals?.[0].value, "₱700.00");
+  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), "₱700.50");
+  assert.equal(namedTableTotal(doc, "Collections by Account", "penalty_amount"), "₱12.25");
+  assert.equal(noteText(doc), null);
+});
+
+test("daily collection shows a dash, not a page sum, when the server sends no totals", () => {
+  const doc = buildDailyCollectionDoc(
+    { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
+    RANGE,
+    { data: COLLECTION_ROWS, meta: { total: 2 } }
+  );
+
+  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), DASH);
+  assert.equal(namedTableTotal(doc, "Collections by Account", "penalty_amount"), DASH);
+});
+
+test("daily collection's truncation note counts repayments and makes no CSV promise", () => {
+  const doc = buildDailyCollectionDoc(
+    { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
+    RANGE,
+    {
+      data: Array.from({ length: 200 }, () => COLLECTION_ROWS[0]),
+      meta: { current_page: 1, last_page: 3, per_page: 200, total: 450 },
+      totals: { count: 450, total_amount_paid: 180000, total_penalty_applied: 0 },
+    }
+  );
+  const note = noteText(doc);
+
+  assert.ok(note, "expected a truncation note");
+  assert.match(note!, /Showing the first 200 of 450 repayments\./);
+  assert.match(note!, /server's figures for the whole period/);
+  assert.doesNotMatch(note!, /CSV/);
+  assert.equal(namedTableTotal(doc, "Collections by Account", "amount"), "₱180,000.00");
 });
 
 test("daily collection omits the account list when repayments could not be read", () => {
