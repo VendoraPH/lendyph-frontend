@@ -67,7 +67,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
-import { describePermission, roleSaveErrorMessage } from "./_lib/role-save-error";
+import { describePermission, otherRoleSaveErrors, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -686,6 +686,7 @@ function UserRolesContent() {
       const refused = roleSaveErrorMessage(err, item.permissions, describeMatrixPermission);
       if (refused) {
         toast.error(refused);
+        for (const message of otherRoleSaveErrors(err)) toast.error(message);
         return;
       }
       // The API's own reason (a taken name, a permission it does not have)

@@ -54,3 +54,20 @@ export function roleSaveErrorMessage(
   const pronoun = refused.length === 1 ? "it" : "them";
   return `This server doesn't offer ${names} yet, so nothing was saved. Untick ${pronoun} and save again.`;
 }
+
+/**
+ * The other field errors on the same refused save ("The name has already been
+ * taken."), so naming the refused permissions doesn't hide them.
+ */
+export function otherRoleSaveErrors(err: unknown): string[] {
+  if (!err || typeof err !== "object" || !("response" in err)) return [];
+  const response = (err as { response?: { status?: number; data?: { errors?: unknown } } }).response;
+  if (response?.status !== 422) return [];
+  const errors = response.data?.errors;
+  if (!errors || typeof errors !== "object") return [];
+
+  return Object.entries(errors as Record<string, unknown>)
+    .filter(([key]) => !PERMISSION_KEY.test(key))
+    .flatMap(([, messages]) => (Array.isArray(messages) ? messages : []))
+    .filter((m): m is string => typeof m === "string" && m.length > 0);
+}

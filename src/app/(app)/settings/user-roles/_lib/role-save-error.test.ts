@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { roleSaveErrorMessage } from "./role-save-error";
+import { otherRoleSaveErrors, roleSaveErrorMessage } from "./role-save-error";
 
 function http422(errors: Record<string, string[]>) {
   return { response: { status: 422, data: { message: "The given data was invalid.", errors } } };
@@ -46,4 +46,15 @@ test("an index the request didn't send is not guessed at", () => {
     roleSaveErrorMessage(http422({ "permissions.9": ["The selected permissions.9 is invalid."] }), sent),
     null
   );
+});
+
+test("keeps the other field errors of the same refused save", () => {
+  const err = http422({
+    name: ["The name has already been taken."],
+    "permissions.2": ["The selected permissions.2 is invalid."],
+  });
+  assert.ok(roleSaveErrorMessage(err, sent));
+  assert.deepEqual(otherRoleSaveErrors(err), ["The name has already been taken."]);
+  assert.deepEqual(otherRoleSaveErrors(http422({ "permissions.2": ["x"] })), []);
+  assert.deepEqual(otherRoleSaveErrors({ response: { status: 500, data: {} } }), []);
 });
