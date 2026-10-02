@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,12 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { nonMemberParty } from "@/lib/gcash-party";
-import type { GCashParty, GCashTransactionType } from "@/types";
+import { usePermission } from "@/hooks";
+import type { GCashNonMember, GCashTransactionType } from "@/types";
 import { useGCashParties } from "../_hooks/use-gcash-parties";
-import type { GCashPartyShortfall } from "../_hooks/use-gcash-parties";
+import {
+  combineShortfalls,
+  walkInOption,
+  type GCashPartyOption,
+} from "../_lib/party-options";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
+import { DeleteWalkInDialog } from "./delete-walk-in-dialog";
 import { GCashPartyPicker } from "./gcash-party-picker";
 import { NonMemberFormDialog } from "./non-member-form-dialog";
 
@@ -28,9 +33,13 @@ interface Props {
   onCreated?(): void;
 }
 
+/** The walk-in form, adding (`nonMember: null`) or editing one. */
+type WalkInFormState = { nonMember: GCashNonMember | null } | null;
+
 /**
  * The single entry point for recording a GCash transaction, for either side of
- * the counter: a coop member or a walk-in.
+ * the counter: a coop member or a walk-in. It is also where walk-ins are
+ * managed: added, and once selected, edited or deleted.
  *
  * Two steps on purpose. This dialog answers "which way, and for whom", then
  * hands off to the SAME `CashInDialog` / `CashOutDialog` the per-row buttons
@@ -42,42 +51,33 @@ interface Props {
  * impossible rather than merely fixed once.
  */
 export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
-  const { members, nonMembers, loading, error, refreshNonMembers } =
-    useGCashParties();
-  const [party, setParty] = useState<GCashParty | null>(null);
+  // Adding, editing and deleting walk-ins all need `gcash:transact`.
+  const canManageWalkIns = usePermission().can("gcash:transact");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const { members, nonMembers, loading, searching, error, refresh } =
+    useGCashParties(debouncedQuery);
+  const [selected, setSelected] = useState<GCashPartyOption | null>(null);
   const [type, setType] = useState<GCashTransactionType>("cash_in");
   const [step, setStep] = useState<"party" | "amount">("party");
-  const [addingWalkIn, setAddingWalkIn] = useState(false);
+  const [walkInForm, setWalkInForm] = useState<WalkInFormState>(null);
+  const [deleting, setDeleting] = useState<GCashNonMember | null>(null);
 
-  // One searchable list for both sides of the counter — there is no more
-  // upfront "who is this for" choice, so a member and a walk-in must be
-  // distinguishable by name/kind in the same picker rather than two lists
-  // gated behind a radio.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // One list for both sides of the counter, each row tagged Member or Walk-in.
   const options = useMemo(
     () => [...members.options, ...nonMembers.options],
     [members.options, nonMembers.options],
   );
-  const shortfall = useMemo<GCashPartyShortfall | null>(() => {
-    if (!members.shortfall && !nonMembers.shortfall) return null;
-    return {
-      shown:
-        (members.shortfall?.shown ?? members.options.length) +
-        (nonMembers.shortfall?.shown ?? nonMembers.options.length),
-      total:
-        members.shortfall?.total != null && nonMembers.shortfall?.total != null
-          ? members.shortfall.total + nonMembers.shortfall.total
-          : null,
-    };
-  }, [members, nonMembers]);
-
-  const contactNumber = useMemo(() => {
-    if (!party) return null;
-    return (
-      options.find(
-        (o) => o.party.kind === party.kind && o.party.id === party.id,
-      )?.contactNumber ?? null
-    );
-  }, [options, party]);
+  const shortfall = useMemo(
+    () => combineShortfalls(members, nonMembers),
+    [members, nonMembers],
+  );
+  const selectedWalkIn = selected?.nonMember ?? null;
 
   /**
    * Closing is the reset point, not an effect keyed on `open`. Reopening must
@@ -87,10 +87,13 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
    * component anyway.
    */
   const close = () => {
-    setParty(null);
+    setQuery("");
+    setDebouncedQuery("");
+    setSelected(null);
     setType("cash_in");
     setStep("party");
-    setAddingWalkIn(false);
+    setWalkInForm(null);
+    setDeleting(null);
     onOpenChange(false);
   };
 
@@ -136,24 +139,29 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="newtx-party">Name</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAddingWalkIn(true)}
-                >
-                  <Plus className="size-4" />
-                  Add walk-in
-                </Button>
+                {canManageWalkIns && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setWalkInForm({ nonMember: null })}
+                  >
+                    <Plus className="size-4" />
+                    Add walk-in
+                  </Button>
+                )}
               </div>
               <GCashPartyPicker
                 id="newtx-party"
                 options={options}
-                value={party}
-                onChange={setParty}
+                value={selected}
+                onChange={setSelected}
+                query={query}
+                onQueryChange={setQuery}
                 noun="names"
                 loading={loading}
-                disabled={Boolean(error)}
+                searching={searching || query.trim() !== debouncedQuery}
+                error={error}
                 shortfall={shortfall}
               />
               {error && (
@@ -161,12 +169,35 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
                   {error}
                 </p>
               )}
+              {selectedWalkIn && canManageWalkIns && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWalkInForm({ nonMember: selectedWalkIn })}
+                  >
+                    <Pencil className="size-4" />
+                    Edit walk-in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleting(selectedWalkIn)}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete walk-in
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Number</Label>
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                {contactNumber ?? "—"}
+                {selected?.contactNumber ?? "—"}
               </div>
             </div>
           </div>
@@ -177,7 +208,7 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
             </Button>
             <Button
               onClick={() => setStep("amount")}
-              disabled={!party || loading}
+              disabled={!selected || loading}
             >
               {loading && <Loader2 className="size-4 animate-spin" />}
               Continue
@@ -186,30 +217,43 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
         </DialogContent>
       </Dialog>
 
-      {step === "amount" && party && type === "cash_in" && (
+      {step === "amount" && selected && type === "cash_in" && (
         <CashInDialog
           open
           onOpenChange={(o) => !o && setStep("party")}
-          party={party}
+          party={selected.party}
           onCreated={finish}
         />
       )}
-      {step === "amount" && party && type === "cash_out" && (
+      {step === "amount" && selected && type === "cash_out" && (
         <CashOutDialog
           open
           onOpenChange={(o) => !o && setStep("party")}
-          party={party}
+          party={selected.party}
           onCreated={finish}
         />
       )}
 
-      {addingWalkIn && (
+      {walkInForm && (
         <NonMemberFormDialog
           open
-          onOpenChange={(o) => !o && setAddingWalkIn(false)}
+          onOpenChange={(o) => !o && setWalkInForm(null)}
+          nonMember={walkInForm.nonMember}
           onSaved={(saved) => {
-            refreshNonMembers();
-            if (saved) setParty(nonMemberParty(saved));
+            refresh();
+            if (saved) setSelected(walkInOption(saved));
+          }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteWalkInDialog
+          nonMember={deleting}
+          onOpenChange={(o) => !o && setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            setSelected(null);
+            refresh();
           }}
         />
       )}
