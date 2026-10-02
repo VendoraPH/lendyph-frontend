@@ -126,7 +126,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "operations",
     icon: ClipboardList,
     accent: ACCENT.orange,
-    build: reportBuilder(reportService.dailyCollection, buildDailyCollectionDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, repayments] = await Promise.all([
+        reportService.dailyCollection(params).catch(() => null),
+        reportService.repayments({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildDailyCollectionDoc(summary, ctx.range, repayments);
+    },
   },
   {
     id: "repayments_list",
