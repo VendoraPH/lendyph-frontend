@@ -179,6 +179,7 @@ export const API_ENDPOINTS = {
     SUBSIDIARY_LEDGER: (borrowerId: number) => `/reports/subsidiary-ledger/${borrowerId}`,
     DAILY_COLLECTION: "/reports/daily-collection",
     INCOME: "/reports/income",
+    INCOME_BY_LOAN: "/reports/income/by-loan",
     AGING: "/reports/aging",
     BORROWERS: "/reports/borrowers",
     BORROWERS_RELEASED: "/reports/borrowers/released",
