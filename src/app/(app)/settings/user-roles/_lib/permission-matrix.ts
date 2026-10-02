@@ -12,10 +12,12 @@ import type { Action, Module } from "@/types";
  * - `loan_adjustments` is named in the type so pages can check it; the matrix
  *   has never offered it, and a role keeps whatever it holds on save.
  *
- * `credit_scoring` is offered again, but the backend must seed
- * `credit_scoring:view|override|settings` before anyone ticks it: until it
- * does, saving a role with one ticked answers 422 (that is how `PUT /roles/{id}`
- * failed on staging). Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
+ * `credit_scoring` is offered again: the backend seeds
+ * `credit_scoring:view|override|settings` (admin and super_admin hold them by
+ * default) and answers its placeholder routes with 501 until the module's
+ * endpoints are built. An API that predates that refuses a save naming one
+ * with a 422; the roles page then names the permission (`role-save-error.ts`).
+ * Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments">;
 
