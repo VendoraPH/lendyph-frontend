@@ -6,10 +6,15 @@ const offered = Object.entries(MODULE_ACTIONS).flatMap(([mod, actions]) =>
   actions.map((action) => `${mod}:${action}`)
 );
 
-// The API seeds no credit_scoring:* permission, so a role update naming one
-// is refused whole with a 422. Offering it here is how PUT /roles/1 failed.
-test("the matrix offers no credit_scoring permission", () => {
-  assert.deepEqual(offered.filter((p) => p.startsWith("credit_scoring:")), []);
+// These are the exact strings the backend must seed. `settings`, not
+// `configure`: a seeder written from the old spec would create a permission
+// nothing reads, and a role update naming ours would 422.
+test("the matrix offers exactly the three credit_scoring permissions", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("credit_scoring:")), [
+    "credit_scoring:view",
+    "credit_scoring:override",
+    "credit_scoring:settings",
+  ]);
 });
 
 test("the matrix offers no collections permission", () => {

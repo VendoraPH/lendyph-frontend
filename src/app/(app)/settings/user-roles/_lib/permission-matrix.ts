@@ -3,19 +3,23 @@ import type { Action, Module } from "@/types";
 /**
  * The modules the roles screen offers permissions for.
  *
- * Two modules in `Module` are left out, because the API holds no permissions
- * for them. A role update that names a permission the API does not have is
- * refused whole (422 on `permissions.N`), so offering one breaks every later
- * save of that role, not just the one tick.
+ * Modules in `Module` that the API holds no permissions for are left out. A
+ * role update that names a permission the API does not have is refused whole
+ * (422 on `permissions.N`), so offering one breaks every later save of that
+ * role, not just the one tick.
  *
  * - `collections` is retired and no longer used in the system.
- * - `credit_scoring` is UI-only until its backend ships. The backend seeds none
- *   of its permissions on purpose (`CreditScoringNotSeededTest`), and ticking
- *   one here is what made `PUT /roles/{id}` answer 422 on staging.
  * - `loan_adjustments` is named in the type so pages can check it; the matrix
  *   has never offered it, and a role keeps whatever it holds on save.
+ *
+ * `credit_scoring` is offered again: the backend seeds
+ * `credit_scoring:view|override|settings` (admin and super_admin hold them by
+ * default) and answers its placeholder routes with 501 until the module's
+ * endpoints are built. An API that predates that refuses a save naming one
+ * with a 422; the roles page then names the permission (`role-save-error.ts`).
+ * Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
  */
-export type UIModule = Exclude<Module, "collections" | "credit_scoring" | "loan_adjustments">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
@@ -47,4 +51,7 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   journals: ["view", "create", "post", "reverse"],
   expenses: ["view", "create", "update"],
   cash_accounts: ["view", "transfer"],
+  // `settings` (not `configure`) mirrors `accounting:settings`; `override` is
+  // the human decision verb, an action on the borrower profile, not a page.
+  credit_scoring: ["view", "override", "settings"],
 };
