@@ -583,7 +583,28 @@ export function buildPortfolioSummaryDoc(
   };
 }
 
-export function buildIncomeDoc(raw: unknown, range: DateRange): ReportDocument {
+// Keyed to the fields GET /reports/income/by-loan sends, so each row renders as
+// sent: the server groups the posted repayments by loan and sums every figure,
+// including each row's Total Income.
+const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
+  { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
+  { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
+  { key: "total_income", header: "Total Income", format: "currency", align: "right", width: 140 },
+];
+
+/**
+ * The summary KPIs, plus the per-loan rows behind the interest and penalty
+ * income when `/reports/income/by-loan` for the same window is supplied. The
+ * list is left out (not shown empty) when that read failed.
+ */
+export function buildIncomeDoc(
+  raw: unknown,
+  range: DateRange,
+  byLoanRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const interest = toNumber(pick(obj, ["interest_income", "interest"]));
@@ -602,10 +623,56 @@ export function buildIncomeDoc(raw: unknown, range: DateRange): ReportDocument {
     kpi("Total Income", currencyOrDash(total), { tone: "positive" }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (byLoanRaw != null) {
+    const { rows, totals, totalRows } = readListEnvelope(byLoanRaw);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Income by Loan Account",
+      columns: INCOME_BY_LOAN_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "payments",
+                label: "Total",
+                value: countOrDash(pick(totals, ["payments"])),
+              },
+              {
+                column: "interest_income",
+                value: currencyOrDash(pick(totals, ["interest_income"])),
+              },
+              {
+                column: "penalty_income",
+                value: currencyOrDash(pick(totals, ["penalty_income"])),
+              },
+              {
+                column: "total_income",
+                value: currencyOrDash(pick(totals, ["total_income"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No income was collected on any loan account in the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Interest and penalty are taken from the repayments posted in the period, per loan account. Processing fees are charged at release and are not part of this list.",
+    });
+  }
+
   return {
     reportId: "income_report",
     meta: meta("Income Report", range, "Interest, fees, and penalty income"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 

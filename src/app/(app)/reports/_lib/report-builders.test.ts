@@ -386,6 +386,75 @@ test("income report prefers the API's own total key", () => {
   assert.equal(kpiValue(doc, "Total Income"), "₱157,701.00");
 });
 
+// GET /reports/income/by-loan: one row per loan, every figure summed by the
+// server. The totals are deliberately not the sum of these two rows.
+const INCOME_BY_LOAN = {
+  data: [
+    { loan_id: 2, loan_account_number: "LN-000002", borrower_id: 7, borrower_name: "Ben Reyes", payments: 1, interest_income: 2000, penalty_income: 115.98, total_income: 2115.98 },
+    { loan_id: 1, loan_account_number: "LN-000001", borrower_id: 5, borrower_name: "Ana Cruz", payments: 2, interest_income: 3000, penalty_income: 0, total_income: 3000 },
+  ],
+  meta: { current_page: 1, last_page: 1, per_page: 200, total: 2 },
+  totals: { count: 2, payments: 3, interest_income: 5000.5, penalty_income: 115.99, total_income: 5116.49 },
+};
+
+test("income report lists each loan account's income as the server sent it", () => {
+  const doc = buildIncomeDoc(
+    { interest_income: 5000.5, processing_fees: 50, penalty_income: 115.99, total: 5166.49 },
+    RANGE,
+    INCOME_BY_LOAN
+  );
+
+  const table = namedTable(doc, "Income by Loan Account");
+  assert.deepEqual(
+    table.rows.map((r) => [r.loan_account_number, r.borrower_name, r.payments, r.total_income]),
+    [
+      ["LN-000002", "Ben Reyes", 1, 2115.98],
+      ["LN-000001", "Ana Cruz", 2, 3000],
+    ]
+  );
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "payments"), "3");
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "interest_income"), "₱5,000.50");
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "penalty_income"), "₱115.99");
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "total_income"), "₱5,116.49");
+});
+
+test("income by loan never recomputes a row's total in the browser", () => {
+  const doc = buildIncomeDoc(null, RANGE, {
+    data: [{ ...INCOME_BY_LOAN.data[0], interest_income: 1, penalty_income: 1, total_income: 5 }],
+    meta: { total: 1 },
+    totals: INCOME_BY_LOAN.totals,
+  });
+
+  assert.equal(namedTable(doc, "Income by Loan Account").rows[0].total_income, 5);
+});
+
+test("income by loan shows a dash, not a page sum, when the server sends no totals", () => {
+  const doc = buildIncomeDoc(null, RANGE, { data: INCOME_BY_LOAN.data, meta: { total: 2 } });
+
+  for (const column of ["payments", "interest_income", "penalty_income", "total_income"]) {
+    assert.equal(namedTableTotal(doc, "Income by Loan Account", column), DASH, column);
+  }
+});
+
+test("income by loan's truncation note counts loans, and the fee note stays", () => {
+  const doc = buildIncomeDoc(null, RANGE, {
+    data: Array.from({ length: 200 }, (_, i) => ({ ...INCOME_BY_LOAN.data[1], loan_id: i + 1 })),
+    meta: { current_page: 1, last_page: 3, per_page: 200, total: 450 },
+    totals: { ...INCOME_BY_LOAN.totals, count: 450 },
+  });
+  const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+
+  assert.ok(notes.some((n) => /^Showing the first 200 of 450 loans\./.test(n)), notes.join(" | "));
+  assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
+  assert.ok(notes.every((n) => !/CSV/.test(n)));
+  assert.ok(notes.some((n) => /Processing fees are charged at release and are not part of this list/.test(n)));
+});
+
+test("income report omits the account list when its read failed", () => {
+  const doc = buildIncomeDoc({ total_income: 1 }, RANGE, null);
+  assert.equal(hasTable(doc, "Income by Loan Account"), false);
+});
+
 test("daily collection renders whole-percent rates verbatim", () => {
   const doc = buildDailyCollectionDoc(
     {
