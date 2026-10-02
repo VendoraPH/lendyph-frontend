@@ -171,6 +171,7 @@ export const SUFFIX_OPTIONS = [
 export {
   LOAN_STATUS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
   LOAN_STATUS_COLORS,
   ACTIVE_LOAN_STATUSES,
   isActiveLoanStatus,
