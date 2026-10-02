@@ -42,15 +42,17 @@ function Suggestions({ onPick }: { onPick: (q: string) => void }) {
 }
 
 interface LindaConversationProps {
-  /** Whether the panel is open; closing it abandons a question in flight. */
-  active: boolean;
   onNavigate: () => void;
   autoFocus: boolean;
 }
 
-/** One conversation. Remounted per opening, which is what clears it. */
-function LindaConversation({ active, onNavigate, autoFocus }: LindaConversationProps) {
-  const { messages, pending, ask } = useLindaChat(active);
+/**
+ * One conversation, mounted only while the panel is open. Closing unmounts
+ * it, which clears the chat, aborts a question in flight, and leaves no
+ * borrower names or figures in the page.
+ */
+function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
+  const { messages, pending, ask } = useLindaChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll this box only. scrollIntoView would also scroll every ancestor,
@@ -131,7 +133,6 @@ export function LindaPanel() {
 
 function LindaSidePanel() {
   const open = useLindaStore((s) => s.open);
-  const session = useLindaStore((s) => s.session);
   const closePanel = useLindaStore((s) => s.closePanel);
   const isMobile = useIsMobile();
   const panelRef = useRef<HTMLElement>(null);
@@ -182,10 +183,8 @@ function LindaSidePanel() {
             <span className="sr-only">Close Linda</span>
           </Button>
         </header>
-        {session > 0 && (
+        {open && (
           <LindaConversation
-            key={session}
-            active={open}
             onNavigate={isMobile ? closePanel : () => {}}
             autoFocus={!isMobile}
           />

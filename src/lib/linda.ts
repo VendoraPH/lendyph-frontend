@@ -23,6 +23,16 @@ export const LINDA_MAX_MESSAGE_LENGTH = 500;
  */
 export const LINDA_HISTORY_LIMIT = 10;
 
+/**
+ * Longest answer text sent back in history. A follow-up needs the gist, not
+ * a whole long answer, and this keeps a runaway reply from growing every
+ * request after it.
+ */
+export const LINDA_HISTORY_CONTENT_LIMIT = 2000;
+
+/** Longest link kept from a reply. No in-app page needs more. */
+export const LINDA_MAX_LINK_LENGTH = 2048;
+
 export const LINDA_SUGGESTED_QUESTIONS = [
   "How much have we collected this month?",
   "Which borrowers currently have overdue payments?",
@@ -74,11 +84,26 @@ export function buildLindaHistory(
     if (question.role !== "user" || answer.role !== "assistant" || !answer.reply) continue;
     pairs.push([
       { role: "user", content: question.content },
-      { role: "assistant", content: answer.content, intent: answer.reply.intent },
+      {
+        role: "assistant",
+        content: truncate(answer.content, LINDA_HISTORY_CONTENT_LIMIT),
+        intent: answer.reply.intent,
+      },
     ]);
   }
   const keep = Math.floor(limit / 2);
   return keep > 0 ? pairs.slice(-keep).flat() : [];
+}
+
+/**
+ * `s` cut to at most `max` UTF-16 units, never through a surrogate pair: a
+ * lone surrogate is not valid JSON text to many servers (PHP rejects it).
+ */
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
 /**
@@ -107,6 +132,9 @@ function str(v: unknown): string | undefined {
 /** Control characters, which browsers strip from a URL, and the backslash, which they read as "/". */
 const URL_TRICK_CHARS = /[\u0000-\u001F\u007F\\]/;
 
+/** The API proxy and API routes: requests, not pages a link should open. */
+const API_PATH = /^\/api(\/|$)/i;
+
 /** `%XX` escapes decoded byte by byte. Lenient on purpose: never throws. */
 function percentDecode(s: string): string {
   return s.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
@@ -126,10 +154,12 @@ function appOrigin(): string {
  * to that host). So the candidate is resolved against the app's origin, must
  * stay on it, and only its path, query and hash are kept, with the path
  * checked again (also percent-decoded) for anything that reads as a host.
+ * API paths and overlong links are dropped too: neither is a page.
  */
 export function safeLindaPath(v: unknown, origin: string = appOrigin()): string | undefined {
   const s = str(v)?.trim();
-  if (!s || !s.startsWith("/") || URL_TRICK_CHARS.test(s)) return undefined;
+  if (!s || s.length > LINDA_MAX_LINK_LENGTH) return undefined;
+  if (!s.startsWith("/") || URL_TRICK_CHARS.test(s)) return undefined;
   let url: URL;
   try {
     url = new URL(s, origin);
@@ -138,7 +168,7 @@ export function safeLindaPath(v: unknown, origin: string = appOrigin()): string 
     return undefined;
   }
   const path = percentDecode(url.pathname);
-  if (path.startsWith("//") || URL_TRICK_CHARS.test(path)) return undefined;
+  if (path.startsWith("//") || URL_TRICK_CHARS.test(path) || API_PATH.test(path)) return undefined;
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

@@ -8,8 +8,6 @@ import { useUIStore } from "./ui-store";
  */
 interface LindaState {
   open: boolean;
-  /** Bumped on every open, so each opening starts a fresh conversation. */
-  session: number;
   openPanel: () => void;
   closePanel: () => void;
   togglePanel: () => void;
@@ -17,7 +15,6 @@ interface LindaState {
 
 export const useLindaStore = create<LindaState>()((set, get) => ({
   open: false,
-  session: 0,
   openPanel: () => {
     if (get().open) return;
     // Make room for the panel by narrowing the sidebar rather than the page,
@@ -26,7 +23,7 @@ export const useLindaStore = create<LindaState>()((set, get) => ({
     // intact after Linda closes, after a reload and in other tabs. On phones
     // the desktop sidebar is hidden, so this changes nothing there.
     useUIStore.getState().setSidebarAutoCollapsed(true);
-    set((s) => ({ open: true, session: s.session + 1 }));
+    set({ open: true });
   },
   closePanel: () => {
     if (!get().open) return;

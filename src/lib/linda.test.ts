@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  LINDA_HISTORY_CONTENT_LIMIT,
   LINDA_MESSAGES,
+  LINDA_MAX_LINK_LENGTH,
   buildLindaHistory,
   formatLindaValue,
   isImeComposing,
@@ -61,6 +63,28 @@ test("trimmed history still starts with a question", () => {
   assert.deepEqual(buildLindaHistory(messages, 3).map((t) => t.content), ["6", "7"]);
 });
 
+test("a long answer goes back in history cut to the limit", () => {
+  const long = "x".repeat(LINDA_HISTORY_CONTENT_LIMIT + 500);
+  const messages: LindaMessage[] = [
+    { id: 1, role: "user", content: "q" },
+    { id: 2, role: "assistant", content: long, reply: reply("loan_summary") },
+  ];
+  const [, answer] = buildLindaHistory(messages);
+  assert.equal(answer.content.length, LINDA_HISTORY_CONTENT_LIMIT);
+});
+
+test("cutting an answer never splits an emoji or other surrogate pair", () => {
+  // A lone surrogate is invalid JSON text for many servers (PHP rejects it).
+  const content = `${"x".repeat(LINDA_HISTORY_CONTENT_LIMIT - 1)}😀 tail`;
+  const messages: LindaMessage[] = [
+    { id: 1, role: "user", content: "q" },
+    { id: 2, role: "assistant", content, reply: reply("loan_summary") },
+  ];
+  const [, answer] = buildLindaHistory(messages);
+  assert.equal(answer.content, "x".repeat(LINDA_HISTORY_CONTENT_LIMIT - 1));
+  assert.ok(answer.content.isWellFormed());
+});
+
 test("history sends only the most recent turns", () => {
   const messages: LindaMessage[] = Array.from({ length: 30 }, (_, i) => ({
     id: i,
@@ -99,6 +123,41 @@ test("encoded and dot-segment tricks cannot reach another site", () => {
   // The path resolves to "//evil.example", which is a link to that host.
   assert.equal(safeLindaPath("/.//evil.example"), undefined);
   assert.equal(safeLindaPath("/loans/..//evil.example"), undefined);
+});
+
+test("other ways to name another site or run script are dropped", () => {
+  // "%2e%2e" is "..", so this resolves to the path "//evil.example".
+  assert.equal(safeLindaPath("/%2e%2e//evil.example"), undefined);
+  assert.equal(safeLindaPath("/%2E%2E//evil.example"), undefined);
+  assert.equal(safeLindaPath("  //evil.example"), undefined);
+  assert.equal(safeLindaPath("\\evil.example"), undefined);
+  assert.equal(safeLindaPath("data:text/html,<script>alert(1)</script>"), undefined);
+  assert.equal(safeLindaPath("vbscript:msgbox(1)"), undefined);
+});
+
+test("slash lookalikes and an @ stay paths on the app", () => {
+  // U+2215 and U+FF0F are not "/" to a URL parser; they are encoded in place.
+  assert.equal(safeLindaPath("/\u2215evil.example"), "/%E2%88%95evil.example");
+  assert.equal(safeLindaPath("/\uFF0F\uFF0Fevil.example"), "/%EF%BC%8F%EF%BC%8Fevil.example");
+  assert.equal(safeLindaPath("\u2215\u2215evil.example"), undefined);
+  assert.equal(safeLindaPath("/@evil.example"), "/@evil.example");
+});
+
+test("API paths are not pages, so they are dropped", () => {
+  assert.equal(safeLindaPath("/api/proxy/loans/152"), undefined);
+  assert.equal(safeLindaPath("/api"), undefined);
+  assert.equal(safeLindaPath("/API/proxy/x"), undefined);
+  assert.equal(safeLindaPath("/./api/proxy/x"), undefined);
+  assert.equal(safeLindaPath("/%61pi/proxy/x"), undefined);
+  assert.equal(safeLindaPath("/apis"), "/apis");
+});
+
+test("an overlong link is dropped", () => {
+  const long = `/loans/152?q=${"a".repeat(LINDA_MAX_LINK_LENGTH)}`;
+  assert.equal(safeLindaPath(long), undefined);
+  const fits = `/loans?q=${"a".repeat(LINDA_MAX_LINK_LENGTH - 9)}`;
+  assert.equal(fits.length, LINDA_MAX_LINK_LENGTH);
+  assert.equal(safeLindaPath(fits), fits);
 });
 
 test("a kept link is resolved against the app, not passed through raw", () => {

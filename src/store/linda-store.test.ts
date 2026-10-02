@@ -74,11 +74,10 @@ test("expanding the sidebar while Linda is open keeps it expanded after close", 
   assert.equal(collapsed(), false);
 });
 
-test("each opening is a new session", () => {
-  const before = useLindaStore.getState().session;
-  useLindaStore.getState().openPanel();
-  useLindaStore.getState().openPanel();
-  assert.equal(useLindaStore.getState().session, before + 1);
+test("the header button opens and closes the panel", () => {
+  useLindaStore.getState().togglePanel();
+  assert.equal(useLindaStore.getState().open, true);
   useLindaStore.getState().togglePanel();
   assert.equal(useLindaStore.getState().open, false);
+  assert.equal(collapsed(), false);
 });

@@ -12,23 +12,19 @@ import {
 
 /**
  * One Linda conversation. Messages live in this hook's state and nowhere
- * else: no store, no localStorage. The panel remounts it on every open, which
+ * else: no store, no localStorage. The panel mounts it only while open, which
  * is what "chat history is not saved" means on this side.
  *
- * `active` is whether the panel is open. Closing it, or unmounting the
- * conversation, aborts the question in flight: the server can stop working on
- * it, and no answer lands in a hidden panel.
+ * Unmounting (closing the panel, or leaving the app) aborts the question in
+ * flight: the server can stop working on it, and no answer arrives later.
  */
-export function useLindaChat(active: boolean) {
+export function useLindaChat() {
   const [messages, setMessages] = useState<LindaMessage[]>([]);
   const [pending, setPending] = useState(false);
   const nextId = useRef(1);
   /** The request in flight, if any. One at a time, even on a fast double Enter. */
   const controller = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (!active) controller.current?.abort();
-  }, [active]);
   useEffect(() => () => controller.current?.abort(), []);
 
   /**
