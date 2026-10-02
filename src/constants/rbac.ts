@@ -103,6 +103,14 @@ export const ROLES: Record<Role, RoleConfig> = {
       // `configure` (since corrected, but older copies were not). A backend
       // seeded from that wording creates a permission nothing here reads.
       "credit_scoring:settings",
+      // Reminders — DOCUMENTED ONLY, like Credit Scoring above. The reminder
+      // routes do not exist yet, so the server must not grant these until
+      // they ship; seeding them early reveals Loans → Reminders to this role.
+      // `:settings` holds the SMS/email provider credentials — admin only.
+      "reminders:view",
+      "reminders:send",
+      "reminders:pause",
+      "reminders:settings",
     ],
   },
   loan_officer: {
@@ -138,6 +146,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       // which is also unbuilt.
       "credit_scoring:view",
       "credit_scoring:override",
+      // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
+      "reminders:view",
+      "reminders:send",
     ],
   },
   cashier: {
@@ -245,6 +256,10 @@ export const ROLES: Record<Role, RoleConfig> = {
       // note on `admin` above. Granting it here reveals five dead menu items to
       // every branch manager.
       "credit_scoring:view",
+      // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
+      "reminders:view",
+      "reminders:send",
+      "reminders:pause",
     ],
   },
   bod1: {

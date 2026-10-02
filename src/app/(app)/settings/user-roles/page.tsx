@@ -306,6 +306,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   close: { label: "Close Period", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
   transfer: { label: "Transfer", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
+  send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
 };
 
 const ROLE_BADGE: Record<string, string> = {

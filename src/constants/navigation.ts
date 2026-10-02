@@ -78,6 +78,10 @@ export const SIDEBAR_NAV: NavItem[] = [
         ? [{ title: "Amortization BINHS", href: "/loans/amortization-binhs" }]
         : []),
       { title: "Restructure", href: "/loans/restructure", permission: "loans:restructure" },
+      // Hidden until the server grants `reminders:view`, which it must not do
+      // before the reminder routes ship (see `@/constants/rbac`). The six
+      // reminder screens are tabs inside /loans/reminders, not menu items.
+      { title: "Reminders", href: "/loans/reminders", permission: "reminders:view" },
     ],
   },
   {
