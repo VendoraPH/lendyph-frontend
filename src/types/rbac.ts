@@ -96,7 +96,19 @@ export type Module =
   // sent them, so the server withholding these is the only thing keeping seven
   // dead menu items out of production. Contract for building it:
   // `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
-  | "credit_scoring";
+  | "credit_scoring"
+  // ── Automated due-date reminders ──
+  //
+  // `view` covers the dashboard, queue, message history and a loan's reminder
+  // timeline; `send` is a manual reminder to one borrower; `pause` stops
+  // reminders globally, per borrower or per loan; `settings` covers rules,
+  // templates and the SMS/email provider config (admin only — it holds
+  // provider credentials).
+  //
+  // Same rule as `credit_scoring`: none of these are granted by the backend,
+  // and none should be until the reminder routes exist. The server withholding
+  // them is what keeps Loans → Reminders out of production.
+  | "reminders";
 
 export type Action =
   | "view"
@@ -133,7 +145,11 @@ export type Action =
   // (Approve/Decline/Refer/Hold) with a required Reason against a specific
   // score, writing to an immutable audit trail. Distinct from `update`
   // because nothing about the score itself changes.
-  | "override";
+  | "override"
+  // Reminders: `send` contacts a borrower on demand, which is a different
+  // risk from creating anything; `pause` silences the automated ones.
+  | "send"
+  | "pause";
 
 export type Permission = `${Module}:${Action}`;
 

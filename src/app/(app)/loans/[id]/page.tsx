@@ -34,6 +34,7 @@ import {
 } from "./_components/schedule-notice";
 import { AmortizationBalanceTable } from "./_components/amortization-balance-table";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
+import { LoanRemindersCard } from "./_components/loan-reminders-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
@@ -3462,6 +3463,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
       {/* Attached documents — available for every loan, including drafts so
           the policy exception letter is reachable from the very first save. */}
       <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
+
+      {/* Reminders need a schedule, so only released loans have any. */}
+      {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
 
       {/* Ledger — shown for every status that has server-side repayment data
           (incl. current / past_due), matching the Adjustments & History card. */}

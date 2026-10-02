@@ -9,6 +9,8 @@ import type { Action, Module } from "@/types";
  * role, not just the one tick.
  *
  * - `collections` is retired and no longer used in the system.
+ * - `reminders` is UI-only: its routes and permissions are not on the backend
+ *   yet, so the matrix must not offer them.
  * - `loan_adjustments` is named in the type so pages can check it; the matrix
  *   has never offered it, and a role keeps whatever it holds on save.
  *
@@ -19,7 +21,7 @@ import type { Action, Module } from "@/types";
  * with a 422; the roles page then names the permission (`role-save-error.ts`).
  * Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "reminders">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {

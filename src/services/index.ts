@@ -28,4 +28,5 @@ export type { CreateCollateralTypeData, UpdateCollateralTypeData } from "./colla
 export { autoPayService } from "./auto-pay.service";
 export { accountingService } from "./accounting.service";
 export { creditScoringService } from "./credit-scoring.service";
+export { reminderService } from "./reminder.service";
 export { lindaService } from "./linda.service";
