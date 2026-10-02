@@ -30,7 +30,10 @@ import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
 import { ledgerAmounts } from "@/utils/share-capital";
+import { env } from "@/config/env";
+import { useLindaStore } from "@/store";
 import type { ShareCapitalLedgerEntry } from "@/types";
+import { dashboardKpiClasses } from "./_lib/kpi-layout";
 
 // ---------------------------------------------------------------------------
 // Backend response shapes
@@ -197,6 +200,9 @@ function formatCompactCurrency(amount: number): string {
 
 function DashboardContent() {
   const mounted = useIsClient();
+  // Make room for Linda's side panel only while it is open.
+  const lindaOpen = useLindaStore((s) => s.open);
+  const kpiClasses = dashboardKpiClasses({ lindaEnabled: env.features.linda, lindaOpen });
   const canViewShareCapital = usePermission().can("share_capital:view");
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -334,11 +340,11 @@ function DashboardContent() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className={kpiClasses.page}>
       {/* ----------------------------------------------------------------- */}
       {/* Row 1: KPI Cards                                                  */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className={kpiClasses.grid}>
         {KPI_CARD_STRUCTURE.map((kpi) => (
           <Link key={kpi.label} href={kpi.href} className="group">
             <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
