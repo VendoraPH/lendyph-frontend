@@ -3,6 +3,8 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { MissingAccessNotice } from "./_components/missing-access-notice";
+import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
@@ -299,6 +301,20 @@ function NewLoanApplicationInner() {
   const canListFees = can("fees:view");
   const canListCollaterals = can("collaterals:view");
   const canReadShareCapital = can("share_capital:view");
+  const missingAccess = useMemo(
+    () =>
+      missingLoanFormAccess({
+        members: canListMembers,
+        products: canListProducts,
+        fees: canListFees,
+        collaterals: canListCollaterals,
+        shareCapital: canReadShareCapital,
+      }),
+    [canListMembers, canListProducts, canListFees, canListCollaterals, canReadShareCapital],
+  );
+  // Said in the picker itself too: "No member found" reads as an empty
+  // member list, which is not what is wrong.
+  const memberPickerEmpty = canListMembers ? "No member found." : "Your role can't view members.";
 
   // ── API Data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -1119,6 +1135,8 @@ function NewLoanApplicationInner() {
         </div>
       </div>
 
+      <MissingAccessNotice missing={missingAccess} />
+
       {memberShortfall && (
         <IncompleteListNotice
           shown={memberShortfall.shown}
@@ -1165,7 +1183,7 @@ function NewLoanApplicationInner() {
                   <Command>
                     <CommandInput placeholder="Type a name to search..." />
                     <CommandList>
-                      <CommandEmpty>No member found.</CommandEmpty>
+                      <CommandEmpty>{memberPickerEmpty}</CommandEmpty>
                       <CommandGroup>
                         {borrowers.map((b) => (
                           <CommandItem
@@ -1240,7 +1258,9 @@ function NewLoanApplicationInner() {
                           <span className={cn("truncate", !selectedId && "text-muted-foreground")}>
                             {selected
                               ? (selected.full_name ?? `${selected.first_name} ${selected.last_name}`)
-                              : options.length === 0
+                              : !canListMembers
+                                ? "Your role can't view members"
+                                : options.length === 0
                                 ? "No members available"
                                 : "Search co-maker (optional)..."}
                           </span>
