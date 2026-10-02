@@ -1,32 +1,40 @@
 "use client";
 
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
+import { isTabbable, nextTabIndex } from "@/lib/focus-wrap";
 
 /** The header button that opens Linda; focus returns to it on close. */
 export const LINDA_TRIGGER_ID = "linda-trigger";
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** Everything that might take focus; `isTabbable` then drops what can't. */
+const FOCUS_CANDIDATES = "a[href], button, input, select, textarea, [tabindex]";
 
-/** Tab and Shift+Tab wrap around inside `container` instead of leaving it. */
-function wrapTab(e: KeyboardEvent<HTMLElement>, container: HTMLElement) {
-  const items = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-    (el) => el.getClientRects().length > 0,
+/**
+ * The elements Tab can reach inside `container`, in order. A disabled button
+ * can keep tabindex="0" (Base UI's does), so disabled, aria-disabled, hidden
+ * and inert elements are read explicitly rather than trusted to the selector.
+ */
+function tabbables(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUS_CANDIDATES)).filter((el) =>
+    isTabbable({
+      tabIndex: el.tabIndex,
+      disabled: el.matches(":disabled") || el.getAttribute("aria-disabled") === "true",
+      hidden: el.closest("[hidden], [inert]") !== null || el.getClientRects().length === 0,
+    }),
   );
-  if (items.length === 0) {
-    e.preventDefault();
-    return;
-  }
-  const first = items[0];
-  const last = items[items.length - 1];
-  const current = document.activeElement;
-  if (e.shiftKey && (current === first || current === container)) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && current === last) {
-    e.preventDefault();
-    first.focus();
-  }
+}
+
+/**
+ * Tab and Shift+Tab move through `container` only, wrapping at both ends.
+ * Every Tab is handled here rather than left to the browser, so focus cannot
+ * slip out past an element the browser and this list disagree about.
+ */
+function wrapTab(e: KeyboardEvent<HTMLElement>, container: HTMLElement) {
+  e.preventDefault();
+  const items = tabbables(container);
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  const next = nextTabIndex(items.length, current, e.shiftKey);
+  if (next >= 0) items[next].focus();
 }
 
 /**

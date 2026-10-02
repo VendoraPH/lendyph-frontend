@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Info, X } from "lucide-react";
 import { env } from "@/config/env";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,18 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
   const { messages, pending, ask } = useLindaChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // The question in the box, typed or picked from the suggestions. It stays
+  // there until Linda answers it, so a failed request can be retried or
+  // reworded without typing it again. Only what was sent is cleared, so
+  // anything typed while waiting is kept.
+  const [draft, setDraft] = useState("");
+  const send = (text: string) => {
+    setDraft(text);
+    ask(text).then((answered) => {
+      if (answered) setDraft((current) => (current === text ? "" : current));
+    });
+  };
+
   // Scroll this box only. scrollIntoView would also scroll every ancestor,
   // and while the panel animates open that shoves the whole app sideways.
   useEffect(() => {
@@ -66,7 +78,7 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
     <>
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
         {messages.length === 0 ? (
-          <Suggestions onPick={ask} />
+          <Suggestions onPick={send} />
         ) : (
           <div className="space-y-4">
             {messages.map((m) =>
@@ -112,7 +124,13 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
           <Info className="mt-px size-3 shrink-0" />
           {LINDA_MESSAGES.noHistory}
         </p>
-        <LindaComposer disabled={pending} onSend={ask} autoFocus={autoFocus} />
+        <LindaComposer
+          value={draft}
+          onChange={setDraft}
+          onSend={send}
+          disabled={pending}
+          autoFocus={autoFocus}
+        />
       </div>
     </>
   );
@@ -157,11 +175,15 @@ function LindaSidePanel() {
         if (e.key === "Escape" && !isImeComposing(e.nativeEvent)) closePanel();
         onTab(e);
       }}
+      // Positioned in every state (fixed on phones, relative beside the page),
+      // so absolutely positioned content such as the sr-only "Close Linda"
+      // label is clipped by overflow-hidden instead of widening the page while
+      // the panel is closed. `inset-0` moves a relative box by nothing.
       className={cn(
         "flex-col overflow-hidden bg-background outline-none md:shrink-0 md:transition-[width] md:duration-300 md:ease-in-out",
         open
-          ? "fixed inset-0 z-50 flex md:static md:z-auto md:w-[40%] md:min-w-80 md:border-l md:border-border lg:w-[32%] xl:w-[25%]"
-          : "hidden md:flex md:w-0",
+          ? "fixed inset-0 z-50 flex md:relative md:z-auto md:w-[40%] md:min-w-80 md:border-l md:border-border lg:w-[32%] xl:w-[25%]"
+          : "relative hidden md:flex md:w-0",
       )}
     >
       <div className="flex h-full w-full flex-col md:min-w-80">

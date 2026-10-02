@@ -1,24 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { SendHorizontal } from "lucide-react";
 import { LINDA_MAX_MESSAGE_LENGTH, isImeComposing } from "@/lib/linda";
 import { Button } from "@/components/ui/button";
 
 interface LindaComposerProps {
+  /** The question in the box. The conversation owns it, see `LindaConversation`. */
+  value: string;
+  onChange: (text: string) => void;
+  onSend: (text: string) => void;
   disabled: boolean;
-  /** Resolves `true` once Linda answered the question. */
-  onSend: (text: string) => Promise<boolean>;
   autoFocus?: boolean;
 }
 
-/**
- * The question box. Enter sends, Shift+Enter starts a new line. The question
- * stays in the box until Linda answers it, so a failed request can be retried
- * or reworded without typing it again.
- */
-export function LindaComposer({ disabled, onSend, autoFocus }: LindaComposerProps) {
-  const [text, setText] = useState("");
+/** The question box. Enter sends, Shift+Enter starts a new line. */
+export function LindaComposer({ value, onChange, onSend, disabled, autoFocus }: LindaComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Not the autoFocus attribute: focusing scrolls ancestors into view, and
@@ -26,15 +23,10 @@ export function LindaComposer({ disabled, onSend, autoFocus }: LindaComposerProp
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
-  const canSend = !disabled && text.trim() !== "";
+  const canSend = !disabled && value.trim() !== "";
 
   const send = () => {
-    if (!canSend) return;
-    const sent = text;
-    onSend(sent).then((answered) => {
-      // Clear only what was sent; anything typed while waiting is kept.
-      if (answered) setText((current) => (current === sent ? "" : current));
-    });
+    if (canSend) onSend(value);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -49,8 +41,8 @@ export function LindaComposer({ disabled, onSend, autoFocus }: LindaComposerProp
     <div className="flex items-end gap-2 rounded-xl border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
       <textarea
         ref={inputRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder="How can I help you today?"
         aria-label="Ask Linda a question"
