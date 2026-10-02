@@ -77,7 +77,14 @@ export function GCashPartyPicker({
 
   return (
     <div className="space-y-2">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // Reopening starts from a fresh search, not the last one's results.
+          if (!next) onQueryChange("");
+        }}
+      >
         <PopoverTrigger
           render={
             <button

@@ -57,6 +57,7 @@ export function DeleteWalkInDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {nonMember.full_name}?</AlertDialogTitle>
           <AlertDialogDescription>
+            {nonMember.id_type} · {nonMember.id_number} · {nonMember.mobile_number}.
             They will no longer come up when you search for a name. Past
             transactions keep this walk-in.
           </AlertDialogDescription>
