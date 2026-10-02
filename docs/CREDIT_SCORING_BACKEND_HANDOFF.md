@@ -40,6 +40,21 @@ The same 404/501 test is duplicated in three write paths, which toast "Not conne
 
 **The third verb is `settings`, not `configure`.** The design spec originally said `credit_scoring:configure`; the shipped code checks `credit_scoring:settings`, mirroring `accounting:settings` (`src/types/rbac.ts`, `src/constants/navigation.ts:131,134`, `src/constants/rbac.ts`). The spec has since been corrected, but a backend seeded from an older copy would create a permission nothing reads — and both admin screens would stay dark for everyone, including admins.
 
+## Roles & Permissions screen (added 2026-10-01)
+
+The **Settings → User Roles** matrix offers a **Credit Scoring** module again (`src/app/(app)/settings/user-roles/_lib/permission-matrix.ts`), with exactly three ticks: `view`, `override`, `settings`. It had been hidden since PR #386 because the backend seeds nothing for it.
+
+**What the backend does (lendyph-backend #174, 2026-10-02):**
+
+1. **Seeds the three permissions** exactly as spelled above (guard `web`), in a migration (`2026_10_02_160000_add_credit_scoring_permissions`) mirrored in `RoleAndPermissionSeeder`.
+2. **Grants them to `admin` and `super_admin` only** (owner's decision, 2026-10-02). `src/constants/rbac.ts` still describes broader grants for `loan_officer` and `manager`; those are not seeded. Give other roles access through this screen.
+3. **Answers every endpoint below except `GET /credit-scoring/alerts` with 501** for a caller holding its permission (403 without it), so the screens show "Not connected yet" until the real endpoints are built. Permission per route: `view` for the read screens, `settings` for scorecard-config and settings (GET and PUT), `override` for `POST /credit-scoring/decisions`.
+4. **Replaces `CreditScoringNotSeededTest`** with tests for this behaviour. `PUT /roles/{id}` now accepts the three.
+
+An API without #174 still refuses a role save that names one of them with a 422 (`permissions.N is invalid`) and saves nothing. The roles page then names the permission the server doesn't offer instead of showing the raw validation text.
+
+Once #174 is deployed, the sidebar's seven Credit Scoring items appear for any role holding `credit_scoring:view` (admin and super_admin by default) and each screen shows the "Not connected yet" panel — see the degradation rule above.
+
 ## Response envelope
 
 `src/lib/api-client.ts` returns `response.data.data` for every `get`/`post`/`put`. **Every endpoint below must answer with the standard `{ success, data, message? }` envelope**, payload inside `data`.

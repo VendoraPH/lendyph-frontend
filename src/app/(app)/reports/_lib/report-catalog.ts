@@ -126,7 +126,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "operations",
     icon: ClipboardList,
     accent: ACCENT.orange,
-    build: reportBuilder(reportService.dailyCollection, buildDailyCollectionDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, repayments] = await Promise.all([
+        reportService.dailyCollection(params).catch(() => null),
+        reportService.repayments({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildDailyCollectionDoc(summary, ctx.range, repayments);
+    },
   },
   {
     id: "repayments_list",
@@ -211,7 +223,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "portfolio",
     icon: TrendingUp,
     accent: ACCENT.green,
-    build: reportBuilder(reportService.income, buildIncomeDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, byLoan] = await Promise.all([
+        reportService.income(params).catch(() => null),
+        reportService.incomeByLoan({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildIncomeDoc(summary, ctx.range, byLoan);
+    },
   },
   {
     id: "aging_report",
@@ -250,7 +274,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
-    build: reportBuilder(reportService.borrowers, buildBorrowerDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, released] = await Promise.all([
+        reportService.borrowers(params).catch(() => null),
+        reportService.borrowersReleased({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildBorrowerDoc(summary, ctx.range, released);
+    },
   },
   {
     id: "disbursement_report",
@@ -260,7 +296,19 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: Banknote,
     accent: ACCENT.cyan,
     supportsBranch: true,
-    build: reportBuilder(reportService.disbursements, buildDisbursementDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, releases] = await Promise.all([
+        reportService.disbursements(params).catch(() => null),
+        reportService.releases({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildDisbursementDoc(summary, ctx.range, releases);
+    },
   },
   {
     id: "releases_list",

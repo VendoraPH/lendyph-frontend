@@ -80,30 +80,17 @@ export const ROLES: Record<Role, RoleConfig> = {
       "expenses:update",
       "cash_accounts:view",
       "cash_accounts:transfer",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant these server-side yet.
-      //
-      // The module is a UI shell: all eleven endpoints are unbuilt and
-      // `credit_scoring` appears nowhere in lendyph-backend (checked on
-      // `development` and `main`, 2026-09-19). These three lines are what an
-      // admin WOULD hold once it exists; they grant nothing today, because
-      // every gate reads `user.permissions` from the server (see the note at
-      // the top of this file).
-      //
-      // That cuts both ways. The menu is invisible in production ONLY because
-      // the server sends no `credit_scoring:*`. Seed them and all seven
-      // Credit Scoring menu items appear for this role immediately — no
-      // frontend change, no deploy, no review. `RouteGuard` will not catch it;
-      // it reads the same store as the sidebar.
-      //
-      // Grant these only in the release that ships the endpoints. Contract:
-      // `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
+      // Credit Scoring. Seeded for admin and super_admin only (lendyph-backend
+      // #174); its endpoints answer 501 until they are built, so the screens
+      // show "Not connected yet". Other roles get it only through the roles
+      // screen.
       "credit_scoring:view",
       "credit_scoring:override",
       // `:settings`, not `:configure` — the design spec originally said
       // `configure` (since corrected, but older copies were not). A backend
       // seeded from that wording creates a permission nothing here reads.
       "credit_scoring:settings",
-      // Reminders — DOCUMENTED ONLY, like Credit Scoring above. The reminder
+      // Reminders — DOCUMENTED ONLY. The reminder
       // routes do not exist yet, so the server must not grant these until
       // they ship; seeding them early reveals Loans → Reminders to this role.
       // `:settings` holds the SMS/email provider credentials — admin only.
@@ -135,17 +122,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "collaterals:view",
       "collaterals:create",
       "collaterals:update",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant these server-side yet;
-      // the eleven endpoints behind the module do not exist. See the fuller
-      // note on `admin` above. Granting `credit_scoring:view` here reveals five
-      // dead menu items to every loan officer (the two `:settings` screens stay
-      // hidden without `credit_scoring:settings`).
-      //
-      // `:override` gates the Record Decision action on the borrower profile,
-      // not a page of its own — it posts to `POST /credit-scoring/decisions`,
-      // which is also unbuilt.
-      "credit_scoring:view",
-      "credit_scoring:override",
       // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
       "reminders:view",
       "reminders:send",
@@ -251,11 +227,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "journals:view",
       "expenses:view",
       "cash_accounts:view",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant this server-side yet;
-      // the eleven endpoints behind the module do not exist. See the fuller
-      // note on `admin` above. Granting it here reveals five dead menu items to
-      // every branch manager.
-      "credit_scoring:view",
       // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
       "reminders:view",
       "reminders:send",

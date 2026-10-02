@@ -62,10 +62,12 @@ import {
   ListTree,
   Receipt,
   Wallet,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { describePermission, otherRoleSaveErrors, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -281,6 +283,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Move money between own accounts — a transfer, never income",
     ],
   },
+  credit_scoring: {
+    label: "Credit Scoring",
+    description: "Borrower credit scores, risk monitoring, and human credit decisions.",
+    icon: Gauge,
+    features: [
+      "View the dashboard, borrower scores, assessments, risk monitoring and score history",
+      "Record a credit decision (approve, decline, refer, hold) against a score",
+      "Configure the scorecard and credit scoring settings",
+    ],
+  },
 };
 
 
@@ -309,6 +321,14 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
 };
+
+/** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */
+function describeMatrixPermission(permission: string): string {
+  const [module, action] = permission.split(":");
+  const moduleLabel = MODULE_META[module as UIModule]?.label;
+  const actionLabel = ACTION_META[action as Action]?.label;
+  return moduleLabel && actionLabel ? `${moduleLabel}: ${actionLabel}` : describePermission(permission);
+}
 
 const ROLE_BADGE: Record<string, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
@@ -663,6 +683,14 @@ function UserRolesContent() {
         await maybeRefreshCurrentUser(item.key);
       }
     } catch (err) {
+      // A permission the server doesn't seed comes back as a raw
+      // "permissions.N is invalid"; name the permission instead.
+      const refused = roleSaveErrorMessage(err, item.permissions, describeMatrixPermission);
+      if (refused) {
+        toast.error(refused);
+        for (const message of otherRoleSaveErrors(err)) toast.error(message);
+        return;
+      }
       // The API's own reason (a taken name, a permission it does not have)
       // is what tells the admin what to change; a bare "try again" hid it.
       notifyError(err, formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");

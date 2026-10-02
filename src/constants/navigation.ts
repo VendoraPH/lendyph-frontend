@@ -128,27 +128,16 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: Gauge,
     permission: "credit_scoring:view",
     /**
-     * DO NOT GRANT `credit_scoring:*` SERVER-SIDE YET.
+     * The backend seeds `credit_scoring:view|override|settings` for admin and
+     * super_admin only (lendyph-backend #174, 2026-10-02), and every endpoint
+     * behind these seven destinations answers 501 until it is built. Each
+     * screen then shows its "Not connected yet" panel: `useApiResource` treats
+     * 404 and 501 as "not built yet" and anything else as an error, so a real
+     * endpoint must not ship as a 403/500 stub.
      *
-     * Every one of these seven destinations is a UI shell. All eleven
-     * endpoints behind them are unbuilt — `credit_scoring` does not appear
-     * anywhere in lendyph-backend (checked on `development` and `main`,
-     * 2026-09-19): no permission, no route, no migration.
-     *
-     * The only reason this menu is not visible in production is that the
-     * server sends no `credit_scoring:*` permission, so `can()` in
-     * `sidebar.tsx` drops the whole block. That is the entire defence.
-     * `RouteGuard` is NOT a second one — it reads the same `user.permissions`
-     * from the auth store, so it admits exactly the people the sidebar shows
-     * the link to. Seed these permissions and seven dead menu items appear
-     * across admin, loan_officer and manager with no frontend change and no
-     * deploy (see `@/constants/rbac`).
-     *
-     * Permissions and routes must therefore land in the SAME release. A
-     * backend that knows the permissions but not the routes answers 403/500,
-     * and `useApiResource` only treats 404/501 as "not built yet" — so these
-     * screens would degrade from a calm "Not connected yet" panel to red
-     * error states.
+     * The server's permissions are the only gate. `RouteGuard` reads the same
+     * `user.permissions` from the auth store as the sidebar, so granting
+     * `credit_scoring:view` to another role shows it this menu at once.
      *
      * Note the name: the two admin screens gate on `credit_scoring:settings`,
      * NOT `:configure`. The design spec originally said `configure` and has
