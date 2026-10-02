@@ -15,11 +15,15 @@ const STATUSES = Object.keys(QUEUE_STATUS_META) as ReminderQueueStatus[];
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 
 /**
- * Status tabs counted from `meta.stats`: global per-status totals, unaffected
- * by this request's own status filter, so every tab keeps its number while one
- * is selected. Without stats the tabs still filter, just without counts.
+ * Status filters counted from `meta.stats`: global per-status totals,
+ * unaffected by this request's own status filter, so every button keeps its
+ * number while one is selected. Without stats they still filter, just without
+ * counts.
+ *
+ * Toggle buttons (`role="group"` + `aria-pressed`), not a tablist: they
+ * re-query the one table below, like the members and loans status filters.
  */
-function StatusTabs({
+function StatusFilter({
   value,
   stats,
   onChange,
@@ -35,17 +39,16 @@ function StatusTabs({
   ];
   return (
     <div className="-mx-1 overflow-x-auto">
-      <div className="flex min-w-max gap-1 px-1" role="tablist" aria-label="Queue status">
+      <div className="flex min-w-max gap-1 px-1" role="group" aria-label="Filter the queue by status">
         {tabs.map((t) => (
           <button
             key={t.label}
             type="button"
-            role="tab"
-            aria-selected={value === t.key}
+            aria-pressed={value === t.key}
             onClick={() => onChange(t.key)}
             title={t.key ? QUEUE_STATUS_META[t.key].description : undefined}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs transition-colors",
+              "rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
               value === t.key ? "border-brand-orange bg-brand-orange/10 font-medium text-brand-orange" : "hover:bg-muted",
             )}
           >
@@ -66,7 +69,7 @@ export default function ReminderQueuePage() {
   return (
     <div className="space-y-4">
       <ReminderFilters value={filters} onChange={setFilters} dates="range" />
-      <StatusTabs
+      <StatusFilter
         value={filters.status}
         stats={queue.data?.meta.stats}
         onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}

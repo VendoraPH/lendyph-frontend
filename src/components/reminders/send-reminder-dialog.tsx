@@ -30,7 +30,11 @@ interface SendReminderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loanId: number;
-  defaultTemplate?: ReminderTemplateType;
+  /**
+   * The server's suggestion (`suggested_template_type`). Without one the
+   * template starts unselected and staff pick it.
+   */
+  defaultTemplate?: ReminderTemplateType | null;
   onSent?: () => void;
 }
 
@@ -39,6 +43,12 @@ const CHANNEL_OPTIONS: { value: ManualSendChannel; label: string }[] = [
   { value: "email", label: "Email" },
   { value: "both", label: "SMS and Email" },
 ];
+
+/** A payment confirmation is not a reminder, so it is never sent by hand. */
+const MANUAL_TEMPLATES: ReminderTemplateType[] = TEMPLATE_TYPES.filter((t) => t !== "payment_confirmation");
+
+const offeredOrNull = (t: ReminderTemplateType | null): ReminderTemplateType | null =>
+  t && MANUAL_TEMPLATES.includes(t) ? t : null;
 
 /** The preview for one channel/template choice, tagged with what it answers. */
 interface PreviewResult {
@@ -57,23 +67,26 @@ export function SendReminderDialog({
   open,
   onOpenChange,
   loanId,
-  defaultTemplate = "upcoming",
+  defaultTemplate = null,
   onSent,
 }: SendReminderDialogProps) {
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
-  const [template, setTemplate] = useState<ReminderTemplateType>(defaultTemplate);
+  const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate));
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [sending, setSending] = useState(false);
 
+  // A preview from an earlier opening may no longer hold (the loan was paused
+  // since, or paid), so each opening waits for a fresh one.
   if (useDialogOpening(open, loanId)) {
     setChannel("sms");
-    setTemplate(defaultTemplate);
+    setTemplate(offeredOrNull(defaultTemplate));
+    setResult(null);
   }
 
-  const key = `${loanId}|${channel}|${template}`;
+  const key = `${loanId}|${channel}|${template ?? ""}`;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !template) return;
     let cancelled = false;
     reminderService
       .previewManual({ loan_id: loanId, channel, template_type: template })
@@ -90,17 +103,18 @@ export function SendReminderDialog({
     };
   }, [open, loanId, channel, template, key]);
 
-  const current = result?.key === key ? result : null;
+  const current = template && result?.key === key ? result : null;
   const preview = current?.preview ?? null;
   const blocked = preview ? preview.blocked_reasons.length > 0 : true;
 
   const send = () => {
+    if (!template) return;
     setSending(true);
     reminderService
       .sendManual({ loan_id: loanId, channel, template_type: template })
       .then(() => {
         setSending(false);
-        notifySuccess("Reminder queued", "It goes out within the organization's contact hours.");
+        notifySuccess("Reminder queued for sending", "It shows in Message History once it has gone out.");
         onOpenChange(false);
         onSent?.();
       })
@@ -116,7 +130,7 @@ export function SendReminderDialog({
         <DialogHeader>
           <DialogTitle>Send reminder</DialogTitle>
           <DialogDescription>
-            Sends one reminder now, outside the automatic schedule. It is logged in Message History.
+            Queues one reminder to send now, outside the automatic schedule. It is logged in Message History.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,10 +155,13 @@ export function SendReminderDialog({
             <NativeSelect
               id="manual-template"
               className="w-full"
-              value={template}
-              onChange={(e) => setTemplate(e.target.value as ReminderTemplateType)}
+              value={template ?? ""}
+              onChange={(e) => setTemplate((e.target.value || null) as ReminderTemplateType | null)}
             >
-              {TEMPLATE_TYPES.filter((t) => t !== "payment_confirmation").map((t) => (
+              <NativeSelectOption value="" disabled>
+                Choose a template
+              </NativeSelectOption>
+              {MANUAL_TEMPLATES.map((t) => (
                 <NativeSelectOption key={t} value={t}>
                   {TEMPLATE_TYPE_LABELS[t]}
                 </NativeSelectOption>
@@ -154,7 +171,11 @@ export function SendReminderDialog({
         </div>
 
         <div className="max-h-[50vh] space-y-3 overflow-y-auto">
-          {!current ? (
+          {!template ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Choose a template to see the message the borrower would get.
+            </p>
+          ) : !current ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
               <Spinner className="h-4 w-4" /> Loading preview…
             </div>

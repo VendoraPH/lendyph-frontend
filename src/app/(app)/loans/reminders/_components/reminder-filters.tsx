@@ -27,7 +27,7 @@ const idOrUndefined = (v: string) => (v ? Number(v) : undefined);
 
 export function ReminderFilters<F extends SharedFilters>({ value, onChange, dates, children }: ReminderFiltersProps<F>) {
   const { branches } = useBranches();
-  const products = useLoanProducts();
+  const { products, error: productsError } = useLoanProducts();
   const set = (patch: Partial<SharedFilters>) => onChange({ ...value, ...patch, page: 1 });
 
   return (
@@ -86,13 +86,17 @@ export function ReminderFilters<F extends SharedFilters>({ value, onChange, date
           </NativeSelectOption>
         ))}
       </NativeSelect>
+      {/* Disabled with the reason as its text when the products can't load,
+          rather than an "All products" picker that silently offers nothing. */}
       <NativeSelect
         aria-label="Loan product"
         className="w-full"
+        disabled={productsError !== null}
+        title={productsError ?? undefined}
         value={value.loan_product_id ?? ""}
         onChange={(e) => set({ loan_product_id: idOrUndefined(e.target.value) })}
       >
-        <NativeSelectOption value="">All products</NativeSelectOption>
+        <NativeSelectOption value="">{productsError ? "Products unavailable" : "All products"}</NativeSelectOption>
         {products.map((p) => (
           <NativeSelectOption key={p.id} value={p.id}>
             {p.name}

@@ -88,7 +88,7 @@ function toInput(rule: ReminderRule): ReminderRuleInput {
 
 export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, onSaved }: RuleFormDialogProps) {
   const { branches } = useBranches();
-  const products = useLoanProducts();
+  const { products, error: productsError } = useLoanProducts();
   const [form, setForm] = useState<ReminderRuleInput>(EMPTY);
   const [saving, setSaving] = useState(false);
 
@@ -107,6 +107,12 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
       ...f,
       channels: on ? [...new Set([...f.channels, channel])] : f.channels.filter((c) => c !== channel),
     }));
+
+  // A rule's product that isn't in the list (still loading, failed to load, or
+  // since retired) still gets an option, so the picker shows the rule's real
+  // scope instead of falling back to "All products" while saving the id.
+  const productMissing =
+    form.loan_product_id !== null && !products.some((p) => p.id === form.loan_product_id);
 
   const save = () => {
     const problems = validateRule(form, contactHours);
@@ -237,12 +243,24 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               onChange={(e) => set("loan_product_id", e.target.value ? Number(e.target.value) : null)}
             >
               <NativeSelectOption value="">All products</NativeSelectOption>
+              {productMissing && form.loan_product_id !== null && (
+                <NativeSelectOption value={form.loan_product_id}>
+                  {rule?.loan_product_id === form.loan_product_id && rule.loan_product_name
+                    ? rule.loan_product_name
+                    : "This rule's product"}
+                </NativeSelectOption>
+              )}
               {products.map((p) => (
                 <NativeSelectOption key={p.id} value={p.id}>
                   {p.name}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            {productsError && (
+              <p className="text-xs text-muted-foreground">
+                {productsError} You can still apply the rule to all products, or reload the page to try again.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="rule-borrowers">Borrower type</Label>

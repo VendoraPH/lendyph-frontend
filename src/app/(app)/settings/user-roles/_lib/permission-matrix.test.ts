@@ -20,3 +20,9 @@ test("every offered permission is a well-formed module:action pair", () => {
   for (const p of offered) assert.match(p, /^[a-z_]+:[a-z_]+$/);
   assert.equal(new Set(offered).size, offered.length);
 });
+
+// Same hazard as credit_scoring: the API seeds no reminders:* permission yet,
+// so ticking one would make every later save of that role answer 422.
+test("the matrix offers no reminders permission", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("reminders:")), []);
+});

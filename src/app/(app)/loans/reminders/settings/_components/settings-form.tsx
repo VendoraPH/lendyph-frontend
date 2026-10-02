@@ -9,7 +9,12 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
-import { CONTACT_HOURS_LIMIT, formatSendTime, validateContactWindow } from "@/lib/reminders";
+import {
+  CONTACT_HOURS_LIMIT,
+  formatSendTime,
+  toSettingsPayload,
+  validateContactWindow,
+} from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
   BranchReminderConfig,
@@ -60,21 +65,6 @@ function toForm(s: ReminderSettings): ReminderSettingsUpdate {
       reply_to: email.reply_to,
       api_key: "",
     },
-  };
-}
-
-/** Blank credential fields mean "keep what is stored", so they are not sent. */
-function toPayload(form: ReminderSettingsUpdate): ReminderSettingsUpdate {
-  const { api_key: smsKey, api_secret: smsSecret, ...sms } = form.sms_provider;
-  const { api_key: emailKey, ...email } = form.email_provider;
-  return {
-    ...form,
-    sms_provider: {
-      ...sms,
-      ...(smsKey?.trim() ? { api_key: smsKey.trim() } : {}),
-      ...(smsSecret?.trim() ? { api_secret: smsSecret.trim() } : {}),
-    },
-    email_provider: { ...email, ...(emailKey?.trim() ? { api_key: emailKey.trim() } : {}) },
   };
 }
 
@@ -146,7 +136,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
     }
     setSaving(true);
     reminderService
-      .updateSettings(toPayload(form))
+      .updateSettings(toSettingsPayload(form))
       .then(() => {
         setSaving(false);
         // Credentials are never echoed back; clear what was typed.

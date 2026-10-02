@@ -62,18 +62,24 @@ export default function ReminderHistoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* The whole row opens the message for a mouse; the borrower
+                      name is a real button, so keyboard and screen-reader
+                      users get the same thing with Enter or Space. */}
                   {res.data.map((m) => (
-                    <TableRow
-                      key={m.id}
-                      className="cursor-pointer"
-                      tabIndex={0}
-                      onClick={() => setSelected(m)}
-                      onKeyDown={(e) => e.key === "Enter" && setSelected(m)}
-                    >
+                    <TableRow key={m.id} className="cursor-pointer" onClick={() => setSelected(m)}>
                       <TableCell className="whitespace-nowrap text-sm">
                         {m.sent_at ? formatDateTime(m.sent_at) : <span className="text-muted-foreground">Not sent</span>}
                       </TableCell>
-                      <TableCell className="font-medium">{m.borrower_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          type="button"
+                          onClick={() => setSelected(m)}
+                          className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40"
+                        >
+                          {m.borrower_name}
+                          <span className="sr-only">: view message</span>
+                        </button>
+                      </TableCell>
                       <TableCell>{m.loan_account_number}</TableCell>
                       <TableCell>
                         <span className="flex items-center gap-1.5 text-sm">

@@ -3,15 +3,17 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_RULES,
   QUEUE_STATUS_META,
+  TEMPLATE_VARIABLES,
   describeRule,
   formatSendTime,
   renderTemplateSample,
   smsLength,
+  toSettingsPayload,
   unknownVariables,
   validateContactWindow,
   validateRule,
 } from "./reminders";
-import type { ReminderRuleInput } from "@/types/reminder";
+import type { ReminderRuleInput, ReminderSettingsUpdate } from "@/types/reminder";
 
 const HOURS = { start: "08:00", end: "18:00" };
 
@@ -40,8 +42,26 @@ test("cancelled and skipped stay distinct statuses", () => {
 test("renderTemplateSample fills known variables and leaves unknown ones visible", () => {
   assert.equal(
     renderTemplateSample("Hi {{borrower_first_name}}, {{ amount_due }} is due. {{foo}}"),
-    "Hi Juan, ₱2,500.00 is due. {{foo}}",
+    "Hi Juan, PHP 2,500.00 is due. {{foo}}",
   );
+});
+
+// The server writes amounts as "PHP 2,541.67". A "₱" in the sample would
+// make the counter report Unicode and about twice the parts it really costs.
+test("a typical template with {{amount_due}} counts as one GSM-7 part", () => {
+  const sample = renderTemplateSample(
+    "Hi {{borrower_first_name}}, your payment of {{amount_due}} for loan {{loan_number}} is due on {{due_date}}. {{payment_method}}",
+  );
+  assert.deepEqual(
+    { encoding: smsLength(sample).encoding, segments: smsLength(sample).segments },
+    { encoding: "GSM-7", segments: 1 },
+  );
+});
+
+test("no variable's sample value forces Unicode on its own", () => {
+  for (const v of TEMPLATE_VARIABLES) {
+    assert.equal(smsLength(v.sample).encoding, "GSM-7", v.key);
+  }
 });
 
 test("unknownVariables lists each unrecognised token once", () => {
@@ -134,4 +154,61 @@ test("every default rule is valid under the default contact hours", () => {
       d.name,
     );
   }
+});
+
+function settingsForm(
+  sms: Pick<ReminderSettingsUpdate["sms_provider"], "api_key" | "api_secret">,
+  email: Pick<ReminderSettingsUpdate["email_provider"], "api_key">,
+): ReminderSettingsUpdate {
+  return {
+    enabled: true,
+    timezone: "Asia/Manila",
+    default_send_time: "09:00",
+    channels: { sms: true, email: true },
+    contact_hours: { start: "08:00", end: "18:00" },
+    retry: { max_attempts: 3, delay_minutes: 15 },
+    sms_provider: { provider: "semaphore", sender_id: "COOP", cost_per_segment: 0.355, ...sms },
+    email_provider: {
+      provider: "smtp",
+      sender_name: "Sample Cooperative",
+      sender_email: "no-reply@example.com",
+      reply_to: null,
+      ...email,
+    },
+    payment_instructions: "Pay at any branch.",
+    branches: [
+      {
+        branch_id: 1,
+        branch_name: "Main Branch",
+        use_company_default: false,
+        sender_name: "Main",
+        contact_phone: "(082) 123-4567",
+        contact_email: null,
+      },
+    ],
+  };
+}
+
+test("toSettingsPayload leaves blank credentials out, so the stored ones are kept", () => {
+  const payload = toSettingsPayload(settingsForm({ api_key: "", api_secret: "   " }, { api_key: "" }));
+  assert.equal("api_key" in payload.sms_provider, false);
+  assert.equal("api_secret" in payload.sms_provider, false);
+  assert.equal("api_key" in payload.email_provider, false);
+});
+
+test("toSettingsPayload sends filled credentials, trimmed", () => {
+  const payload = toSettingsPayload(
+    settingsForm({ api_key: " sms-key ", api_secret: "sms-secret" }, { api_key: "mail-key" }),
+  );
+  assert.equal(payload.sms_provider.api_key, "sms-key");
+  assert.equal(payload.sms_provider.api_secret, "sms-secret");
+  assert.equal(payload.email_provider.api_key, "mail-key");
+});
+
+test("toSettingsPayload drops nothing but the blank credentials", () => {
+  const blank = settingsForm({ api_key: "", api_secret: "" }, { api_key: "" });
+  assert.deepEqual(toSettingsPayload(blank), settingsForm({}, {}));
+
+  const filled = settingsForm({ api_key: "k", api_secret: "s" }, { api_key: "e" });
+  assert.deepEqual(toSettingsPayload(filled), filled);
 });

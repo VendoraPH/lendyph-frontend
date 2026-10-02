@@ -60,6 +60,14 @@ const LANGUAGES = [
 
 const CHANNELS = Object.keys(CHANNEL_LABELS) as ReminderChannel[];
 
+/**
+ * What a server preview was rendered for. A change to any of these retires the
+ * preview, so "As the server renders it" never describes another version.
+ */
+function previewKey(f: ReminderTemplateInput): string {
+  return JSON.stringify([f.type, f.channel, f.channel === "sms" ? null : f.subject, f.body]);
+}
+
 function toInput(t: ReminderTemplate): ReminderTemplateInput {
   return {
     name: t.name,
@@ -75,7 +83,7 @@ function toInput(t: ReminderTemplate): ReminderTemplateInput {
 export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: TemplateFormDialogProps) {
   const [form, setForm] = useState<ReminderTemplateInput>(EMPTY);
   const [saving, setSaving] = useState(false);
-  const [serverPreview, setServerPreview] = useState<{ body: string; preview: TemplatePreview } | null>(null);
+  const [serverPreview, setServerPreview] = useState<{ key: string; preview: TemplatePreview } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
@@ -103,18 +111,18 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
   const isSms = form.channel === "sms";
   const sample = renderTemplateSample(form.body);
   const length = smsLength(sample);
-  const unknown = unknownVariables(`${form.subject ?? ""} ${form.body}`);
-  // A server preview describes the body it was made for; editing retires it.
-  const preview = serverPreview?.body === form.body ? serverPreview.preview : null;
+  // An SMS has no subject; one left over from the email channel is never sent.
+  const unknown = unknownVariables(isSms ? form.body : `${form.subject ?? ""} ${form.body}`);
+  const preview = serverPreview?.key === previewKey(form) ? serverPreview.preview : null;
 
   const runPreview = () => {
     setPreviewing(true);
-    const body = form.body;
+    const key = previewKey(form);
     reminderService
-      .previewTemplate({ channel: form.channel, subject: form.subject, body })
+      .previewTemplate({ channel: form.channel, subject: isSms ? null : form.subject, body: form.body })
       .then((p) => {
         setPreviewing(false);
-        setServerPreview({ body, preview: p });
+        setServerPreview({ key, preview: p });
       })
       .catch((err) => {
         setPreviewing(false);

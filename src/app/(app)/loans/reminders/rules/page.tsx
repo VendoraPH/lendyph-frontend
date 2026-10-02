@@ -94,7 +94,13 @@ export default function ReminderRulesPage() {
         <p className="text-sm text-muted-foreground">
           Rules decide when reminders go out. A rule never sends for an installment that is already paid.
         </p>
-        <PermissionButton permission="reminders:settings" onClick={() => setDialog({ rule: null })}>
+        <PermissionButton
+          permission="reminders:settings"
+          onClick={() =>
+            // Settings promise their default send time to new rules.
+            setDialog({ rule: null, draft: settings.data ? { send_time: settings.data.default_send_time } : undefined })
+          }
+        >
           <Plus className="mr-1.5 h-4 w-4" /> New rule
         </PermissionButton>
       </div>

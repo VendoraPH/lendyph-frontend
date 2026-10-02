@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the reminders screens: labels, template variables, SMS
- * length, rule descriptions and form validation.
+ * length, rule descriptions, form validation and the settings payload.
  *
  * None of this decides whether a reminder is sent or what it says to a real
  * borrower — the server owns eligibility and renders every real message.
@@ -12,6 +12,7 @@ import type {
   ReminderChannel,
   ReminderQueueStatus,
   ReminderRuleInput,
+  ReminderSettingsUpdate,
   ReminderTemplateType,
   ReminderTrigger,
 } from "@/types/reminder";
@@ -88,15 +89,21 @@ export function channelsLabel(channels: ReminderChannel[]): string {
   return channels.map((c) => CHANNEL_LABELS[c]).join(" + ");
 }
 
-/** Variables a template may use, with the sample value the editor previews. */
+/**
+ * Variables a template may use, with the sample value the editor previews.
+ *
+ * Samples follow the server's rendering ("PHP 2,541.67", "Oct 5, 2026"), not
+ * the screen's: the SMS part counter runs on the rendered sample, and a "₱"
+ * would switch it to Unicode and roughly double the parts it reports.
+ */
 export const TEMPLATE_VARIABLES = [
   { key: "borrower_first_name", label: "First name", sample: "Juan" },
   { key: "borrower_full_name", label: "Full name", sample: "Juan Dela Cruz" },
   { key: "loan_number", label: "Loan number", sample: "LN-2026-00123" },
   { key: "installment_number", label: "Installment no.", sample: "4" },
-  { key: "due_date", label: "Due date", sample: "October 15, 2026" },
-  { key: "amount_due", label: "Amount due", sample: "₱2,500.00" },
-  { key: "remaining_balance", label: "Remaining due", sample: "₱1,200.00" },
+  { key: "due_date", label: "Due date", sample: "Oct 15, 2026" },
+  { key: "amount_due", label: "Amount due", sample: "PHP 2,500.00" },
+  { key: "remaining_balance", label: "Remaining due", sample: "PHP 1,200.00" },
   { key: "days_overdue", label: "Days overdue", sample: "3" },
   { key: "lender_name", label: "Lender name", sample: "Sample Cooperative" },
   { key: "branch_name", label: "Branch", sample: "Main Branch" },
@@ -274,3 +281,23 @@ export const DEFAULT_RULES: Pick<
   { name: "7 days overdue", trigger: "after_due", days: 7, send_time: "09:00", channels: ["sms", "email"], template_type: "past_due" },
   { name: "15 days overdue", trigger: "after_due", days: 15, send_time: "09:00", channels: ["sms", "email"], template_type: "long_past_due" },
 ];
+
+/**
+ * The settings form as `PUT /reminders/settings` takes it. Credentials are
+ * write-only, so a blank credential field means "keep what is stored" and is
+ * left out rather than sent as an empty string that would wipe it. Filled ones
+ * are sent trimmed; every other field goes through as it is.
+ */
+export function toSettingsPayload(form: ReminderSettingsUpdate): ReminderSettingsUpdate {
+  const { api_key: smsKey, api_secret: smsSecret, ...sms } = form.sms_provider;
+  const { api_key: emailKey, ...email } = form.email_provider;
+  return {
+    ...form,
+    sms_provider: {
+      ...sms,
+      ...(smsKey?.trim() ? { api_key: smsKey.trim() } : {}),
+      ...(smsSecret?.trim() ? { api_secret: smsSecret.trim() } : {}),
+    },
+    email_provider: { ...email, ...(emailKey?.trim() ? { api_key: emailKey.trim() } : {}) },
+  };
+}

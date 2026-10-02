@@ -20,7 +20,7 @@ import { PermissionButton } from "@/components/common/permission-button";
 import { PauseDialog } from "@/components/reminders/pause-dialog";
 import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog";
 import { useApiResource, usePermission } from "@/hooks";
-import { formatCurrencyExact, formatDate, formatDateTime, todayISO } from "@/lib/format";
+import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
@@ -168,11 +168,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
         open={sendOpen}
         onOpenChange={setSendOpen}
         loanId={loanId}
-        defaultTemplate={
-          summary.data?.next_due_date && summary.data.next_due_date < todayISO()
-            ? "past_due"
-            : "upcoming"
-        }
+        defaultTemplate={summary.data?.suggested_template_type ?? null}
         onSent={summary.refetch}
       />
       <PauseDialog

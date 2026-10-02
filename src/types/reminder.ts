@@ -232,6 +232,14 @@ export interface LoanReminderSummary {
   pause: ReminderPause | null;
   /** Borrower- or global-level pause that also stops this loan's reminders. */
   inherited_pause: ReminderPause | null;
+  /**
+   * The template the server's own rules would pick for this loan right now
+   * (e.g. `past_due`, or `long_past_due` past the escalation point). The
+   * "Send reminder" dialog preselects it. Optional: when it is missing or
+   * `null`, staff choose the template themselves; the browser never works it
+   * out from dates.
+   */
+  suggested_template_type?: ReminderTemplateType | null;
   events: ReminderTimelineEvent[];
 }
 
