@@ -8,6 +8,7 @@ import {
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
 } from "./loan-status";
 import type { LoanStatus } from "@/types/loan";
 
@@ -175,4 +176,18 @@ test("a loan that never released is not ever-released", () => {
   assert.equal(isEverReleasedLoanStatus(undefined), false);
   assert.equal(isEverReleasedLoanStatus(null), false);
   assert.equal(isEverReleasedLoanStatus(""), false);
+});
+
+test("a loan under approval reads \"For Approval\", with its approving officer when known", () => {
+  assert.equal(LOAN_STATUS_LABELS.for_review, "For Approval");
+  assert.equal(loanStatusLabel("for_review", "Manager"), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", "  Manager "), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", null), "For Approval");
+  assert.equal(loanStatusLabel("for_review", "  "), "For Approval");
+  assert.equal(loanStatusLabel("for_review"), "For Approval");
+});
+
+test("only For Approval carries an approver suffix", () => {
+  assert.equal(loanStatusLabel("approved", "Manager"), "Approved");
+  assert.equal(loanStatusLabel("draft", "Manager"), "Draft");
 });
