@@ -212,13 +212,17 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: TrendingUp,
     accent: ACCENT.green,
     build: async (ctx) => {
-      const params = { date_from: ctx.range.from, date_to: ctx.range.to };
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
       // Independent reads: either failing leaves the other's section intact.
-      const [summary, repayments] = await Promise.all([
+      const [summary, byLoan] = await Promise.all([
         reportService.income(params).catch(() => null),
-        reportService.repayments({ ...params, ...listParams }).catch(() => null),
+        reportService.incomeByLoan({ ...params, ...listParams }).catch(() => null),
       ]);
-      return buildIncomeDoc(summary, ctx.range, repayments);
+      return buildIncomeDoc(summary, ctx.range, byLoan);
     },
   },
   {

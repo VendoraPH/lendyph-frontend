@@ -316,6 +316,34 @@ function truncationNote(
   };
 }
 
+/**
+ * Truncation note for a table whose totals row shows only the server's
+ * figures: a total the server did not send is "—", never a sum of this page.
+ * `noun` names what one row is ("repayments", "loans", "borrowers") because the
+ * count comes from the server's `meta.total`, which counts those. There is no
+ * "Export to CSV" pointer: these reports export the document, which holds only
+ * the rows listed.
+ */
+function serverTotalsTruncationNote(
+  shown: number,
+  totalRows: number | null,
+  noun: string
+): ReportSection | null {
+  const truncated =
+    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
+  if (!truncated || shown === 0) return null;
+
+  const scope =
+    totalRows !== null
+      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+      : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+
+  return {
+    kind: "note",
+    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // KPI-only reports
 // ---------------------------------------------------------------------------
@@ -509,51 +537,27 @@ export function buildPortfolioSummaryDoc(
   };
 }
 
+// Keyed to the fields GET /reports/income/by-loan sends, so each row renders as
+// sent: the server groups the posted repayments by loan and sums every figure,
+// including each row's Total Income.
 const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
   { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
   { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
-  { key: "interest", header: "Interest", format: "currency", align: "right", width: 130 },
-  { key: "penalty", header: "Penalty", format: "currency", align: "right", width: 120 },
-  { key: "total", header: "Total Income", format: "currency", align: "right", width: 140 },
+  { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
+  { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
+  { key: "total_income", header: "Total Income", format: "currency", align: "right", width: 140 },
 ];
 
 /**
- * One row per loan account: the interest and penalty its repayments carried in
- * the period. Rows are grouped by loan number (borrower name when a repayment
- * has none), so every income figure traces to the account it came from.
+ * The summary KPIs, plus the per-loan rows behind the interest and penalty
+ * income when `/reports/income/by-loan` for the same window is supplied. The
+ * list is left out (not shown empty) when that read failed.
  */
-function incomeByLoan(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
-  const byLoan = new Map<string, Record<string, unknown>>();
-  for (const raw of rawRows) {
-    const borrower = asRecord(raw.borrower);
-    const loan = asRecord(raw.loan);
-    const loanNumber =
-      pick(raw, ["loan_account_number", "account_number"]) ??
-      pick(loan, ["loan_account_number", "account_number", "application_number"]);
-    const borrowerName =
-      pick(raw, ["borrower_name", "borrower_full_name"]) ??
-      pick(borrower, ["full_name", "name"]);
-    const key = String(loanNumber ?? borrowerName ?? "—");
-    const interest = toNumber(pick(raw, ["interest_applied", "interest_paid", "interest"])) ?? 0;
-    const penalty = toNumber(pick(raw, ["penalty_applied", "penalty_amount", "penalty"])) ?? 0;
-
-    const row =
-      byLoan.get(key) ??
-      { loan_account_number: loanNumber, borrower_name: borrowerName, payments: 0, interest: 0, penalty: 0, total: 0 };
-    row.payments = (row.payments as number) + 1;
-    row.interest = (row.interest as number) + interest;
-    row.penalty = (row.penalty as number) + penalty;
-    row.total = (row.interest as number) + (row.penalty as number);
-    byLoan.set(key, row);
-  }
-  return [...byLoan.values()].sort((x, y) => (y.total as number) - (x.total as number));
-}
-
 export function buildIncomeDoc(
   raw: unknown,
   range: DateRange,
-  repaymentsRaw?: unknown
+  byLoanRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
@@ -575,11 +579,14 @@ export function buildIncomeDoc(
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  if (repaymentsRaw != null) {
-    const { rows: rawRows, totalRows } = readListEnvelope(repaymentsRaw);
-    const rows = incomeByLoan(rawRows);
-    const note = truncationNote(rawRows.length, totalRows, false);
+  if (byLoanRaw != null) {
+    const { rows, totals, totalRows } = readListEnvelope(byLoanRaw);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
     if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
     sections.push({
       kind: "table",
       title: "Income by Loan Account",
@@ -588,10 +595,23 @@ export function buildIncomeDoc(
       totals:
         rows.length > 0
           ? [
-              { column: "payments", label: "Total", value: formatCount(sum(rows, "payments")) },
-              { column: "interest", value: formatCurrency(sum(rows, "interest")) },
-              { column: "penalty", value: formatCurrency(sum(rows, "penalty")) },
-              { column: "total", value: formatCurrency(sum(rows, "total")) },
+              {
+                column: "payments",
+                label: "Total",
+                value: countOrDash(pick(totals, ["payments"])),
+              },
+              {
+                column: "interest_income",
+                value: currencyOrDash(pick(totals, ["interest_income"])),
+              },
+              {
+                column: "penalty_income",
+                value: currencyOrDash(pick(totals, ["penalty_income"])),
+              },
+              {
+                column: "total_income",
+                value: currencyOrDash(pick(totals, ["total_income"])),
+              },
             ]
           : undefined,
       emptyText: "No income was collected on any loan account in the selected period.",
@@ -599,7 +619,7 @@ export function buildIncomeDoc(
     sections.push({
       kind: "note",
       text:
-        "Interest and penalty are taken from the repayments recorded in the period, per loan account. Processing fees are charged at release and are not part of this list.",
+        "Interest and penalty are taken from the repayments posted in the period, per loan account. Processing fees are charged at release and are not part of this list.",
     });
   }
 
