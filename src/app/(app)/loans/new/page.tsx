@@ -1619,129 +1619,135 @@ function NewLoanApplicationInner() {
         </CardContent>
       </Card>
 
-      {/* ── Card 3: Collaterals ── */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="size-5 text-brand-blue" />
-                Collaterals
-              </CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Attach the member&rsquo;s registered collaterals to secure
-                this loan. Only collaterals not currently locked to another
-                active loan can be selected.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCollateralPickerOpen(true)}
-              disabled={borrowerId === null}
-            >
-              <Plus className="mr-2 size-4" />
-              Add Collateral
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {borrowerId === null ? (
-            <p className="text-sm text-muted-foreground">
-              Pick a member first to load their registered collaterals.
-            </p>
-          ) : selectedCollaterals.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center">
-              <ShieldCheck className="mx-auto size-8 text-muted-foreground/50" />
-              <p className="mt-2 text-sm font-medium text-muted-foreground">
-                No collaterals attached
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/80">
-                {availableCollaterals.length === 0
-                  ? "This member has no registered collaterals yet."
-                  : "Click “Add Collateral” to attach one."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {selectedCollaterals.map(({ collateral: c, snapshot_value }) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
-                >
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
-                      {c.type?.name ?? "Unknown"}
-                    </Badge>
-                    <span className="text-sm font-medium">
-                      {c.detail_value}
-                    </span>
-                    {c.type?.source === "share_capital" && (
-                      <span className="text-xs text-muted-foreground">
-                        (auto-derived)
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums">
-                    {formatCurrency(snapshot_value)}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() =>
-                      setSelectedCollaterals((prev) =>
-                        prev.filter((s) => s.collateral.id !== c.id),
-                      )
-                    }
-                    aria-label="Remove collateral"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {selectedCollaterals.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* ── Card 3: Collaterals ──
+          Only for a role that can view collaterals. Without `collaterals:view`
+          the member's collaterals are never read, so the card could only say
+          "no registered collaterals" and offer a register link the role can't
+          use; the missing-access notice above says what is skipped instead. */}
+      {canListCollaterals && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">
-                  Total Collateral Value
-                </p>
-                <p className="text-lg font-bold tabular-nums">
-                  {formatCurrency(totalCollateralValue)}
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="size-5 text-brand-blue" />
+                  Collaterals
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Attach the member&rsquo;s registered collaterals to secure
+                  this loan. Only collaterals not currently locked to another
+                  active loan can be selected.
                 </p>
               </div>
-              <div className="flex flex-col items-start gap-1 sm:items-end">
-                <Badge
-                  className={cn(
-                    securityStatus === "secured" &&
-                      "bg-green-500/15 text-green-700 hover:bg-green-500/15",
-                    securityStatus === "partially_secured" &&
-                      "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
-                    securityStatus === "unsecured" &&
-                      "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                  )}
-                >
-                  {securityStatusLabel(securityStatus)}
-                </Badge>
-                {principal > 0 && securityStatus !== "secured" && (
-                  <p className="text-xs text-muted-foreground">
-                    Short by{" "}
-                    <span className="font-medium text-foreground">
-                      {formatCurrency(
-                        Math.max(0, principal - totalCollateralValue),
-                      )}
-                    </span>{" "}
-                    vs. principal
-                  </p>
-                )}
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCollateralPickerOpen(true)}
+                disabled={borrowerId === null}
+              >
+                <Plus className="mr-2 size-4" />
+                Add Collateral
+              </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {borrowerId === null ? (
+              <p className="text-sm text-muted-foreground">
+                Pick a member first to load their registered collaterals.
+              </p>
+            ) : selectedCollaterals.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center">
+                <ShieldCheck className="mx-auto size-8 text-muted-foreground/50" />
+                <p className="mt-2 text-sm font-medium text-muted-foreground">
+                  No collaterals attached
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  {availableCollaterals.length === 0
+                    ? "This member has no registered collaterals yet."
+                    : "Click “Add Collateral” to attach one."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedCollaterals.map(({ collateral: c, snapshot_value }) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
+                  >
+                    <div className="flex flex-1 flex-wrap items-center gap-2">
+                      <Badge variant="secondary">
+                        {c.type?.name ?? "Unknown"}
+                      </Badge>
+                      <span className="text-sm font-medium">
+                        {c.detail_value}
+                      </span>
+                      {c.type?.source === "share_capital" && (
+                        <span className="text-xs text-muted-foreground">
+                          (auto-derived)
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {formatCurrency(snapshot_value)}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() =>
+                        setSelectedCollaterals((prev) =>
+                          prev.filter((s) => s.collateral.id !== c.id),
+                        )
+                      }
+                      aria-label="Remove collateral"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedCollaterals.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Total Collateral Value
+                  </p>
+                  <p className="text-lg font-bold tabular-nums">
+                    {formatCurrency(totalCollateralValue)}
+                  </p>
+                </div>
+                <div className="flex flex-col items-start gap-1 sm:items-end">
+                  <Badge
+                    className={cn(
+                      securityStatus === "secured" &&
+                        "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                      securityStatus === "partially_secured" &&
+                        "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                      securityStatus === "unsecured" &&
+                        "bg-destructive/15 text-destructive hover:bg-destructive/15",
+                    )}
+                  >
+                    {securityStatusLabel(securityStatus)}
+                  </Badge>
+                  {principal > 0 && securityStatus !== "secured" && (
+                    <p className="text-xs text-muted-foreground">
+                      Short by{" "}
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(
+                          Math.max(0, principal - totalCollateralValue),
+                        )}
+                      </span>{" "}
+                      vs. principal
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Card 4: Dates ── */}
       <Card>

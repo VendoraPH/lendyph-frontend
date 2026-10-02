@@ -312,8 +312,9 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
-  // Loans waiting on an approver. Only asked for by someone who can approve
-  // and can read the list it is counted from (`GET /loans` needs loans:view).
+  // Loans waiting on the signed-in user's approval step. Only asked for by
+  // someone who can approve and can read the list it is counted from
+  // (`GET /loans` needs loans:view).
   const pendingLoanApprovals = usePendingLoanApprovals(
     can("loans:approve") && can("loans:view")
   );
@@ -413,7 +414,7 @@ function SidebarContent({
                 item.href === "/borrowers"
                   ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
                   : item.href === "/loans"
-                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting approval")
+                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting your approval")
                     : undefined
               }
               childBadges={

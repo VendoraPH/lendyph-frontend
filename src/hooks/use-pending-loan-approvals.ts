@@ -5,7 +5,10 @@ import { loanService } from "@/services/loan.service";
 const REFRESH_MS = 2 * 60_000;
 
 /**
- * How many loan applications are waiting on an approver ("For Approval").
+ * How many loan applications are waiting on the signed-in user's approval:
+ * For Approval loans whose current pending approval step belongs to one of
+ * the user's roles (`GET /loans?awaiting_me=1`). An application waiting on
+ * another role's step is not counted.
  *
  * One integer off `meta.total` of a `per_page: 1` read, like the Members
  * badge: the count covers the whole filtered query at any page size.
@@ -17,9 +20,6 @@ const REFRESH_MS = 2 * 60_000;
  *
  * The refresh pauses while the tab is hidden and catches up as soon as it is
  * shown again, so a background tab makes no reads.
- *
- * This counts every application in For Approval, not only the step assigned to
- * the signed-in user: the list endpoint has no "awaiting me" filter.
  */
 export function usePendingLoanApprovals(enabled: boolean): number {
   const [total, setTotal] = useState(0);
@@ -31,11 +31,10 @@ export function usePendingLoanApprovals(enabled: boolean): number {
 
     const load = () => {
       loanService
-        .list({ status: "for_review", per_page: 1 })
-        .then((res) => {
+        .countAwaitingMyApproval()
+        .then((n) => {
           if (cancelled) return;
-          const n = res?.meta?.total;
-          if (typeof n === "number") setTotal(n);
+          if (n !== null) setTotal(n);
         })
         .catch(() => {});
     };
