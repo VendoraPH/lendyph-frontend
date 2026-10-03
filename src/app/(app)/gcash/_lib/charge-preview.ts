@@ -9,6 +9,8 @@ import type { GCashChargePreview } from "@/types";
  * - `loading`: waiting for the preview of this exact amount.
  * - `no_tier`: no fee tier covers the amount (the server's 422).
  * - `invalid`: the server refused the amount for another reason.
+ * - `forbidden`: the role can't record GCash transactions (a 403); retrying
+ *   can't change that.
  * - `error`: the preview failed; retrying may fix it.
  */
 export type ChargePreviewView =
@@ -17,6 +19,7 @@ export type ChargePreviewView =
   | { status: "ready"; preview: GCashChargePreview }
   | { status: "no_tier" }
   | { status: "invalid"; message: string }
+  | { status: "forbidden"; message: string }
   | { status: "error"; message: string };
 
 type SettledView = Exclude<ChargePreviewView, { status: "idle" | "loading" }>;
@@ -61,6 +64,9 @@ interface ErrorResponse {
  */
 export function previewFailureView(err: unknown): SettledView {
   const response = (err as { response?: ErrorResponse } | null)?.response;
+  if (response?.status === 403) {
+    return { status: "forbidden", message: "You don't have permission to record GCash transactions." };
+  }
   if (response?.status === 422) {
     const message = response.data?.errors?.amount?.[0] ?? response.data?.message ?? "";
     if (/tier/i.test(message)) return { status: "no_tier" };

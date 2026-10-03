@@ -51,3 +51,10 @@ test("anything else is an error that can be retried", () => {
   const view = previewFailureView(httpError(500, { message: "Server Error" }));
   assert.equal(view.status, "error");
 });
+
+test("a 403 says the role can't record GCash, with nothing to retry", () => {
+  assert.deepEqual(previewFailureView(httpError(403, { message: "This action is unauthorized." })), {
+    status: "forbidden",
+    message: "You don't have permission to record GCash transactions.",
+  });
+});

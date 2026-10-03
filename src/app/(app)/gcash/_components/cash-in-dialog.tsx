@@ -110,7 +110,9 @@ export function CashInDialog({
             onRetry={retryPreview}
           />
 
-          {(preview.status === "error" || preview.status === "invalid") && (
+          {(preview.status === "error" ||
+            preview.status === "invalid" ||
+            preview.status === "forbidden") && (
             <div
               role="alert"
               className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
