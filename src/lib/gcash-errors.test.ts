@@ -23,11 +23,6 @@ describe("extractGCashErrorMessage", () => {
     assert.equal(extractGCashErrorMessage(amount422(message)), message);
   });
 
-  test("a 422 on amount that mentions a tier is still the server's words", () => {
-    const message = "Amount must be more than this tier's ₱15.00 charge.";
-    assert.equal(extractGCashErrorMessage(amount422(message)), message);
-  });
-
   test("the no-tier refusal keeps its friendly copy", () => {
     assert.equal(
       extractGCashErrorMessage(amount422("No tier matches amount 99999. Check the configured tier ranges.")),

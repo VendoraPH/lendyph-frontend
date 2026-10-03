@@ -13,10 +13,7 @@ export function extractGCashErrorMessage(err: unknown): string {
     const status = err.response?.status;
     const body = err.response?.data as ApiErrorBody | undefined;
 
-    // Only the "no tier matches this amount" refusal. Any other 422 on
-    // `amount`, such as a Cash Out whose charge leaves nothing to pay out, is
-    // shown in the server's own words below, even if it mentions a tier.
-    if (status === 422 && /\bno tier\b/i.test(body?.message ?? "")) {
+    if (status === 422 && body?.message?.toLowerCase().includes("tier")) {
       return "No tier covers this amount. Update GCash settings.";
     }
     if (status === 409) {

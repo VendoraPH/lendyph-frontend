@@ -1,4 +1,4 @@
-import { formatCurrency } from "@/lib/format";
+import { formatCurrencyExact } from "@/lib/format";
 
 /**
  * Why a Cash Out can't be recorded at this charge, or null when it can.
@@ -13,5 +13,5 @@ export function cashOutTotalIssue(
   total: number | null,
 ): string | null {
   if (charge === null || total === null) return null;
-  return total > 0 ? null : `Amount must be more than the ${formatCurrency(charge)} charge.`;
+  return total > 0 ? null : `Amount must be more than the ${formatCurrencyExact(charge)} charge.`;
 }
