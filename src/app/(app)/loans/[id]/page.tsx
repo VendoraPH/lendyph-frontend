@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
-import { httpStatusOf } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
@@ -41,6 +40,7 @@ import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import { releaseFigures, releaseInsurancePayload } from "./_lib/release-figures";
+import { releaseConflictOf } from "./_lib/release-conflict";
 import { extensionDueDate } from "./_lib/extension-due-date";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import {
@@ -1472,7 +1472,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       });
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      if (httpStatusOf(err) === 409) {
+      const conflict = releaseConflictOf(err);
+      if (conflict === "fees_changed") {
         // Nothing was released: the fees changed after they were quoted. Quote
         // them again, and the dialog stays open on the new figures.
         notifyError(
@@ -1481,6 +1482,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
           "The release figures have been read again. Check them before confirming.",
         );
         reloadReleasePreview();
+      } else if (conflict === "loan_changed") {
+        // Nothing was released: another request changed this loan first, or
+        // the two collided and this one was rolled back. Read the loan again so
+        // the page shows where it now stands.
+        notifyError(
+          err,
+          "We couldn't release this loan. Please try again.",
+          "The loan has been read again.",
+        );
+        setReleaseOpen(false);
+        reloadLoan();
       } else {
         notifyError(err, "We couldn't release this loan. Please try again.");
       }

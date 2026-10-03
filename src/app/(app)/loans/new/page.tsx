@@ -144,6 +144,7 @@ import {
   showsShortBy,
 } from "./_lib/loan-preview";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
+import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 
 // ── Currency Formatter ──
@@ -1998,7 +1999,7 @@ function NewLoanApplicationInner() {
                         <TableCell className="text-center">
                           {row.period_number}
                         </TableCell>
-                        <TableCell>{formatDate(new Date(row.due_date))}</TableCell>
+                        <TableCell>{formatDate(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(row.principal_due)}
                         </TableCell>
