@@ -97,10 +97,24 @@ export const loanService = {
    * `active`), `branch_id`, `borrower_id`, `loan_product_id`,
    * `date_from`/`date_to` (inclusive whole-day on `created_at`), `sort` and
    * `dir`. `sort` accepts columns only — there is no key for the
-   * schedule-derived `next_due_date` or `overdue_amount`.
+   * schedule-derived `next_due_date` or `overdue_amount`. `awaiting_me=1`
+   * keeps only for_review loans whose current pending approval step belongs to
+   * one of the signed-in user's roles.
    */
   list: (params?: Record<string, unknown>) =>
     api.getRaw<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
+
+  /**
+   * How many loan applications wait on the signed-in user: for_review loans
+   * whose current pending approval step is one of the user's roles. One
+   * integer off `meta.total` of a `per_page: 1` read, which counts the whole
+   * filtered query at any page size. Null when the server sends no total.
+   */
+  countAwaitingMyApproval: async (): Promise<number | null> => {
+    const res = await loanService.list({ status: "for_review", awaiting_me: 1, per_page: 1 });
+    const total = res?.meta?.total;
+    return typeof total === "number" ? total : null;
+  },
 
   /**
    * Every loan matching `params`, across as many pages as it takes.

@@ -22,6 +22,8 @@ interface CollapsibleCardProps {
   headerExtra?: ReactNode;
   /** Sections start open; pass false where the content is rarely wanted. */
   defaultOpen?: boolean;
+  /** Told each time the card opens or closes, e.g. to load its content on first open. */
+  onOpenChange?: (open: boolean) => void;
   className?: string;
   contentClassName?: string;
   children: ReactNode;
@@ -38,6 +40,7 @@ export function CollapsibleCard({
   icon,
   headerExtra,
   defaultOpen = true,
+  onOpenChange,
   className,
   contentClassName,
   children,
@@ -45,7 +48,13 @@ export function CollapsibleCard({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        onOpenChange?.(next);
+      }}
+    >
       <Card className={className}>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <div className="flex items-center gap-2">

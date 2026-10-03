@@ -399,6 +399,11 @@ test("disbursement report maps every KPI to a real figure", () => {
   assert.equal(kpiValue(doc, "Total Disbursed"), "₱1,845,200.40");
 });
 
+test("disbursement report's title is the name the Reports list shows", () => {
+  const doc = buildDisbursementDoc({ loans_released: 1 }, RANGE);
+  assert.equal(doc.meta.title, "Disbursement Summary");
+});
+
 const DISBURSED_ROWS = [
   { loan_account_number: "LN-1", borrower_name: "Ana Cruz", principal_amount: 1000, net_proceeds: 950, release_date: "2026-08-01", status: "ongoing" },
   { loan_account_number: "LN-2", borrower: { full_name: "Ben Reyes" }, principal_amount: 2000, net_proceeds: 1900, release_date: "2026-08-02", status: "ongoing" },

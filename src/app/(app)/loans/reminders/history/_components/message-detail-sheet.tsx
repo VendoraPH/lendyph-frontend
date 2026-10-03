@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatCurrencyExact, formatDateTime } from "@/lib/format";
-import { CHANNEL_LABELS, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
+import { CHANNEL_LABELS, TEMPLATE_TYPE_LABELS, messageSourceLabel } from "@/lib/reminders";
 import type { ReminderMessage } from "@/types/reminder";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -48,11 +48,7 @@ export function MessageDetailSheet({
             <div className="space-y-4 px-4 pb-6">
               <div className="flex items-center gap-2">
                 <DeliveryStatusBadge status={message.status} />
-                <span className="text-xs text-muted-foreground">
-                  {message.source === "manual"
-                    ? `Sent manually${message.created_by_name ? ` by ${message.created_by_name}` : ""}`
-                    : "Sent automatically"}
-                </span>
+                <span className="text-xs text-muted-foreground">{messageSourceLabel(message)}</span>
               </div>
 
               {message.failure_reason && (

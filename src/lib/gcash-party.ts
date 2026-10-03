@@ -17,9 +17,9 @@ export function gcashPartyPayload(
     : { gcash_non_member_id: party.id };
 }
 
-/** "member" / "non-member" — used in dialog copy so it reads right for both. */
+/** "member" / "walk-in" — used in dialog copy so it reads right for both. */
 export function gcashPartyNoun(party: GCashParty): string {
-  return party.kind === "member" ? "member" : "non-member";
+  return party.kind === "member" ? "member" : "walk-in";
 }
 
 /** Secondary identifier under the name: member code, or mobile for walk-ins. */

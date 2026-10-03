@@ -7,7 +7,10 @@ import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
-import { usePendingLoanApprovals } from "@/hooks/use-pending-loan-approvals";
+import {
+  pendingApprovalsBadgeEnabled,
+  usePendingLoanApprovals,
+} from "@/hooks/use-pending-loan-approvals";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -25,6 +28,7 @@ import {
 import { BrandLogo } from "@/components/common";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
+import { collapsedNavLabel, countLabel } from "./sidebar-labels";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -71,12 +75,6 @@ function CountPill({
       {label && <span className="sr-only">{label}</span>}
     </span>
   );
-}
-
-/** "1 loan application awaiting approval" / "3 loan applications awaiting approval". */
-function countLabel(count: number | undefined, noun: string, state: string): string | undefined {
-  if (!count || count <= 0) return undefined;
-  return `${count} ${noun}${count === 1 ? "" : "s"} ${state}`;
 }
 
 // ── Nav Link ──
@@ -146,6 +144,9 @@ function NavLink({
             <Link
               href={item.href}
               onClick={onNavigate}
+              // Only an icon shows, so the link is named here, the same way for
+              // every item; this also overrides an icon's own alt text.
+              aria-label={collapsedNavLabel(item.title, badgeLabel)}
               className={cn(
                 "flex items-center justify-center rounded-2xl p-2 transition-all duration-200",
                 "hover:bg-muted",
@@ -157,14 +158,10 @@ function NavLink({
           <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
             {badge && badge > 0 ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
-                />
-                {/* The icon link has no visible name; say what it is before the count. */}
-                {badgeLabel && <span className="sr-only">{`${item.title}, ${badgeLabel}`}</span>}
-              </>
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
+              />
             ) : null}
           </span>
         </TooltipTrigger>
@@ -312,11 +309,10 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
-  // Loans waiting on an approver. Only asked for by someone who can approve
-  // and can read the list it is counted from (`GET /loans` needs loans:view).
-  const pendingLoanApprovals = usePendingLoanApprovals(
-    can("loans:approve") && can("loans:view")
-  );
+  // Loans waiting on the signed-in user's approval step. Only asked for by
+  // someone who can read the list it is counted from (`GET /loans` needs
+  // loans:view); the server limits the count to the user's own steps.
+  const pendingLoanApprovals = usePendingLoanApprovals(pendingApprovalsBadgeEnabled(can));
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -413,7 +409,7 @@ function SidebarContent({
                 item.href === "/borrowers"
                   ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
                   : item.href === "/loans"
-                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting approval")
+                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting your approval")
                     : undefined
               }
               childBadges={
