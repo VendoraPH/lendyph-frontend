@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { Permission } from "@/types";
-import { gcashCanMarkPaid, gcashRowActions } from "./row-actions";
+import { gcashCanMarkPaid, gcashCanMarkPendingPaid, gcashRowActions } from "./row-actions";
 
 const holding = (...granted: Permission[]) => (p: Permission) => granted.includes(p);
 
@@ -42,5 +42,19 @@ describe("gcashCanMarkPaid", () => {
     assert.equal(gcashCanMarkPaid(can, { type: "cash_in", status: "paid" }), false);
     assert.equal(gcashCanMarkPaid(can, { type: "cash_in", status: "completed" }), false);
     assert.equal(gcashCanMarkPaid(can, { type: "cash_out", status: "completed" }), false);
+  });
+});
+
+describe("gcashCanMarkPendingPaid", () => {
+  test("gcash:view alone offers no Paid on the Reports tab's pending payments", () => {
+    assert.equal(gcashCanMarkPendingPaid(holding("gcash:view")), false);
+  });
+
+  test("gcash:transact offers Paid there", () => {
+    assert.equal(gcashCanMarkPendingPaid(holding("gcash:view", "gcash:transact")), true);
+  });
+
+  test("other permissions do not stand in for gcash:transact", () => {
+    assert.equal(gcashCanMarkPendingPaid(holding("gcash:view", "gcash:settings", "reports:view")), false);
   });
 });

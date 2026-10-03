@@ -20,3 +20,12 @@ export function gcashCanMarkPaid(
 ): boolean {
   return can("gcash:transact") && tx.type === "cash_in" && tx.status === "pending";
 }
+
+/**
+ * Whether the Reports tab's Pending Payments rows offer Paid. Every row there
+ * is a pending Cash In, so only `gcash:transact` decides it, exactly as it does
+ * for a pending Cash In on the Transactions tab.
+ */
+export function gcashCanMarkPendingPaid(can: (permission: Permission) => boolean): boolean {
+  return gcashCanMarkPaid(can, { type: "cash_in", status: "pending" });
+}

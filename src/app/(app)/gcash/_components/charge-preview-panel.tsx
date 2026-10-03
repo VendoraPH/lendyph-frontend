@@ -24,12 +24,7 @@ export function ChargePreviewPanel({ view, action, amount, onRetry }: Props) {
 
   return (
     <>
-      <GCashTierNotice
-        issue={view.status === "no_tier" ? "out_of_range" : null}
-        action={action}
-        amount={amount}
-        onRetry={onRetry}
-      />
+      {view.status === "no_tier" && <GCashTierNotice action={action} amount={amount} />}
 
       {(view.status === "error" || view.status === "invalid" || view.status === "forbidden") && (
         <div
