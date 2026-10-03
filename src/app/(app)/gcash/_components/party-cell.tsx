@@ -15,7 +15,7 @@ export function PartyCell({ borrower, nonMember }: Props) {
       <span className="inline-flex items-center gap-2">
         {nonMember.full_name}
         <Badge variant="outline" className="text-[10px] font-normal">
-          Non-member
+          Walk-in
         </Badge>
       </span>
     );

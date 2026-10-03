@@ -54,7 +54,12 @@ export default function ReminderTemplatesPage() {
         <p className="text-sm text-muted-foreground">
           One template per reminder type and channel. Amounts and dates are filled in from the loan when it sends.
         </p>
-        <PermissionButton permission="reminders:settings" onClick={() => setDialog({ template: null })}>
+        <PermissionButton
+          permission="reminders:settings"
+          // Nothing to save to while the reminder service is not connected.
+          disabled={templates.unavailable}
+          onClick={() => setDialog({ template: null })}
+        >
           <Plus className="mr-1.5 h-4 w-4" /> New template
         </PermissionButton>
       </div>

@@ -15,7 +15,7 @@ export interface LoanFormAccess {
 export interface MissingAccess {
   /** The permission string, e.g. `borrowers:view`. */
   permission: string;
-  /** Where to grant it, as the Settings → User Roles screen labels it. */
+  /** Where to grant it, as the Settings → Role and Permissions screen labels it. */
   grant: string;
   /** What the user will notice on this form without it. */
   effect: string;
