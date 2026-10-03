@@ -119,3 +119,20 @@ test("every settlement method in the mapping is a money account", () => {
     assert.equal(byCode.get(code)!.cash_kind, method);
   }
 });
+
+test("each release-deduction role defaults to the account the backend seeds, of the type it must be", () => {
+  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
+  const expected = {
+    service_fee_income: ["4040", "Service Fee Income", "income"],
+    notarial_fees_payable: ["2030", "Notarial Fees Payable", "liability"],
+    insurance_premium_payable: ["2040", "Insurance Premium Payable", "liability"],
+    share_capital: ["3060", "Share Capital", "equity"],
+    other_fee_income: ["4080", "Other Fee Income", "income"],
+  } as const;
+  for (const [role, [code, name, type]] of Object.entries(expected)) {
+    assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES[role as keyof typeof expected], code, role);
+    const seed = byCode.get(code)!;
+    assert.equal(seed.name, name, role);
+    assert.equal(seed.type, type, role);
+  }
+});

@@ -21,12 +21,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { usePermission } from "@/hooks";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency, formatDate, formatDateISO } from "@/lib/format";
+import { formatCurrencyExact, formatDate, formatDateISO } from "@/lib/format";
 import type { GCashIncomeReport, GCashPendingItem } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
+import { gcashCanMarkPendingPaid } from "../_lib/row-actions";
 
 // First and last day of the current month. Both bounds are built at LOCAL
 // midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
@@ -40,6 +42,8 @@ function defaultRange(): { start: string; end: string } {
 }
 
 export function ReportsTab() {
+  const { can } = usePermission();
+  const canMarkPaid = gcashCanMarkPendingPaid(can);
   const [{ start, end }, setRange] = useState(defaultRange);
   const [report, setReport] = useState<GCashIncomeReport | null>(null);
   const [pending, setPending] = useState<GCashPendingItem[]>([]);
@@ -140,7 +144,7 @@ export function ReportsTab() {
                   Total Income
                 </div>
                 <div className="text-2xl font-semibold">
-                  {formatCurrency(report.total_income)}
+                  {formatCurrencyExact(report.total_income)}
                 </div>
               </div>
               <div>
@@ -172,8 +176,8 @@ export function ReportsTab() {
         <CardHeader>
           <CardTitle>Pending Payments</CardTitle>
           <CardDescription>
-            Cash In transactions awaiting cash collection. Click Paid once the
-            customer settles.
+            Cash In transactions awaiting cash collection.
+            {canMarkPaid && " Click Paid once the customer settles."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -229,23 +233,25 @@ export function ReportsTab() {
                         />
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.amount)}
+                        {formatCurrencyExact(p.amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.charge_amount)}
+                        {formatCurrencyExact(p.charge_amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.total_amount)}
+                        {formatCurrencyExact(p.total_amount)}
                       </TableCell>
                       <TableCell className="text-right">
                         {p.days_pending}
                       </TableCell>
                       <TableCell className="text-right">
-                        <PaidButton
-                          transactionId={p.id}
-                          referenceNo={p.reference_no}
-                          onPaid={refresh}
-                        />
+                        {canMarkPaid && (
+                          <PaidButton
+                            transactionId={p.id}
+                            referenceNo={p.reference_no}
+                            onPaid={refresh}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

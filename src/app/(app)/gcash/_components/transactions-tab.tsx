@@ -24,7 +24,7 @@ import {
 import { usePermission } from "@/hooks";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrencyExact, formatDate } from "@/lib/format";
 import type {
   GCashListFilters,
   GCashTransaction,
@@ -231,13 +231,13 @@ export function TransactionsTab() {
                     {r.type === "cash_in" ? "Cash In" : "Cash Out"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(r.amount)}
+                    {formatCurrencyExact(r.amount)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(r.charge_amount)}
+                    {formatCurrencyExact(r.charge_amount)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(r.total_amount)}
+                    {formatCurrencyExact(r.total_amount)}
                   </TableCell>
                   <TableCell>{statusBadge(r.status)}</TableCell>
                   <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>

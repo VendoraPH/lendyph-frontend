@@ -75,7 +75,43 @@ const GROUPS: { title: string; description: string; fields: MappingField[] }[] =
       {
         key: "processing_fee_income",
         label: "Processing fee income",
-        hint: "Fees charged at release or collection.",
+        hint: "Processing fees, fees charged at collection, and any release deduction without an account below.",
+        types: ["income"],
+      },
+    ],
+  },
+  {
+    title: "Release deductions",
+    description: "Where each deduction withheld at release is credited, by type.",
+    fields: [
+      {
+        key: "service_fee_income",
+        label: "Service fee income",
+        hint: "Service fees withheld at release.",
+        types: ["income"],
+      },
+      {
+        key: "notarial_fees_payable",
+        label: "Notarial fees payable",
+        hint: "Notarial fees withheld at release, owed to the notary until paid over.",
+        types: ["liability"],
+      },
+      {
+        key: "insurance_premium_payable",
+        label: "Insurance premium payable",
+        hint: "Insurance premiums withheld at release, owed to the insurer until remitted.",
+        types: ["liability"],
+      },
+      {
+        key: "share_capital",
+        label: "Share capital",
+        hint: "Share capital a member pays through a release deduction.",
+        types: ["equity"],
+      },
+      {
+        key: "other_fee_income",
+        label: "Other fee income",
+        hint: "Other configured fees (Settings → Fees) withheld at release.",
         types: ["income"],
       },
     ],

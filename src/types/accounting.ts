@@ -325,6 +325,17 @@ export interface AccountMapping {
   interest_income: number;
   penalty_income: number;
   processing_fee_income: number;
+  /**
+   * Where each release deduction is credited, by type: Service Fee, Notarial
+   * Fee, Insurance Premium, Share Capital, and any other configured catalog
+   * fee. Any other deduction, and any unitemised remainder, stays on
+   * `processing_fee_income`.
+   */
+  service_fee_income: number;
+  notarial_fees_payable: number;
+  insurance_premium_payable: number;
+  share_capital: number;
+  other_fee_income: number;
   credit_loss_expense: number;
   allowance_credit_losses: number;
   accounts_payable: number;

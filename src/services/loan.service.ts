@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanAmortizationBalances, LoanCoMaker, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { Loan, LoanAmortizationBalances, LoanCoMaker, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -190,6 +190,16 @@ export const loanService = {
 
   create: (data: LoanApplicationPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.CREATE, data),
+
+  /**
+   * `POST /loans/preview`: the loan form's collateral total, security status,
+   * shortfall and amortization schedule, worked out by the server for the
+   * terms entered so far. Writes nothing. Needs `loans:create` or
+   * `loans:update` (403 otherwise); malformed input is a 422. `signal` lets a
+   * superseded preview be cancelled.
+   */
+  preview: (data: LoanFormPreviewRequest, signal?: AbortSignal) =>
+    api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.PREVIEW, data, { signal }),
 
   update: (id: number, data: LoanApplicationPayload) =>
     api.put<Loan>(API_ENDPOINTS.LOANS.UPDATE(id), data),

@@ -39,10 +39,7 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import {
-  computeSecurityStatus,
-  securityStatusLabel,
-} from "@/types/collateral";
+import { securityStatusLabel } from "@/types/collateral";
 import type {
   Borrower,
   CollateralType,
@@ -107,16 +104,11 @@ import {
   sanitizeDecimalInput,
 } from "@/lib/percent";
 import {
-  DAYS_PER_MONTH,
-  instalments,
   maturityDate as loanMaturityDate,
-  rateForDays,
   ratePeriodWord,
   readRateFrequency,
   readTermUnit,
   termUnitNoun,
-  type RateFrequency,
-  type TermUnit,
 } from "@/lib/loan-terms";
 import { editedAccountOfficer } from "@/lib/loan-account-officer";
 import {
@@ -146,6 +138,13 @@ import {
   type SelectedCollateral,
 } from "./_lib/edit-collaterals";
 import { memberPicker } from "./_lib/member-picker";
+import {
+  interestMethodLabel,
+  loanPreviewRequest,
+  showsShortBy,
+} from "./_lib/loan-preview";
+import { useLoanPreview } from "./_hooks/use-loan-preview";
+import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 
 // ── Currency Formatter ──
@@ -160,123 +159,12 @@ const formatCurrency = (amount: number) =>
 
 // ── Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
-type InterestType = "straight" | "fixed" | "diminishing";
-
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-PH", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
-}
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-}
-
-function computeAmortization(
-  principal: number,
-  interestRate: number,
-  interestType: InterestType,
-  term: number,
-  termUnit: TermUnit,
-  rateFrequency: RateFrequency,
-  frequency: PaymentFrequency,
-  releaseDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  const scb = Math.round(scbAmount);
-
-  // Upon Maturity is a bullet / balloon repayment schedule: one single
-  // payment on the maturity date containing full principal + simple
-  // interest for the whole term + any SCB. It's a payment-frequency
-  // concept, not an interest-type concept — the interest type is still
-  // straight or diminishing, but with no intermediate paydowns the two
-  // converge to the same total here. A months term accrues a month's
-  // interest per month; a days term accrues for its days.
-  if (frequency === "upon_maturity") {
-    const fraction =
-      termUnit === "months"
-        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
-        : rateForDays(interestRate, term, rateFrequency);
-    const totalInterest = roundCentavos(principal * fraction);
-    return [{
-      period: 1,
-      dueDate: loanMaturityDate(releaseDate, term, termUnit, frequency),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: scb,
-      totalPayment: roundCentavos(principal + totalInterest) + scb,
-    }];
-  }
-
-  const plan = instalments(releaseDate, term, termUnit, frequency);
-  const totalPeriods = plan.length;
-  const rows: AmortizationRow[] = [];
-  let remainingBalance = principal;
-
-  // Straight/Fixed: equal principal each period, interest on the original
-  // principal for the days each instalment covers. To the centavo, as the
-  // server's schedule rounds each figure.
-  if (interestType === "straight" || interestType === "fixed") {
-    const principalPerPeriod = roundCentavos(principal / totalPeriods);
-
-    plan.forEach(({ dueDate, days }, index) => {
-      const i = index + 1;
-      const isLast = i === totalPeriods;
-      const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
-      const interest = roundCentavos(principal * rateForDays(interestRate, days, rateFrequency));
-
-      rows.push({
-        period: i,
-        dueDate,
-        principal: periodPrincipal,
-        interest,
-        shareCapitalBuildUp: scb,
-        totalPayment: roundCentavos(periodPrincipal + interest) + scb,
-      });
-      remainingBalance = roundCentavos(remainingBalance - periodPrincipal);
-    });
-  }
-
-  // Diminishing: equal total payment (PMT) at one full instalment's rate,
-  // decreasing interest, increasing principal
-  else if (interestType === "diminishing") {
-    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
-    const pmt = r > 0
-      ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
-      : principal / totalPeriods;
-    // To the centavo, at the points the server rounds its schedule.
-    const payment = roundCentavos(pmt);
-
-    plan.forEach(({ dueDate, days }, index) => {
-      const i = index + 1;
-      const isLast = i === totalPeriods;
-      const interest = roundCentavos(remainingBalance * rateForDays(interestRate, days, rateFrequency));
-      const periodPrincipal = isLast
-        ? remainingBalance
-        : roundCentavos(payment - interest);
-      const baseTotal = roundCentavos(periodPrincipal + interest);
-
-      rows.push({
-        period: i,
-        dueDate,
-        principal: periodPrincipal,
-        interest,
-        shareCapitalBuildUp: scb,
-        totalPayment: baseTotal + scb,
-      });
-      remainingBalance = roundCentavos(remainingBalance - periodPrincipal);
-    });
-  }
-
-  return rows;
 }
 
 /**
@@ -812,57 +700,25 @@ function NewLoanApplicationInner() {
     !principalError &&
     !termError;
 
-  const amortizationSchedule = useMemo(() => {
-    if (!canShowAmortization || !releaseDate || !paymentFrequency || !interestType)
-      return [];
-    return computeAmortization(
-      principal,
-      rate,
-      interestType as InterestType,
-      term,
-      termUnit,
-      rateFrequency,
-      paymentFrequency as PaymentFrequency,
+  // The collateral total, security status, shortfall and amortization
+  // schedule are the server's (`POST /loans/preview`), asked for whenever the
+  // terms or the attached collaterals change. The form works none of them out:
+  // while a preview is on its way, or after one failed, it shows no figures.
+  const { view: preview, retry: retryPreview } = useLoanPreview(
+    loanPreviewRequest({
+      productId,
+      principalAmount,
+      interestRate,
+      termValue,
+      paymentFrequency,
       releaseDate,
-      scb,
-    );
-  }, [
-    canShowAmortization,
-    principal,
-    rate,
-    interestType,
-    term,
-    termUnit,
-    rateFrequency,
-    paymentFrequency,
-    releaseDate,
-    scb,
-  ]);
-
-  const amortizationTotals = useMemo(() => {
-    return amortizationSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 }
-    );
-  }, [amortizationSchedule]);
-
-  // ── Collaterals: total snapshot value + security status ──
-  const totalCollateralValue = useMemo(
-    () => selectedCollaterals.reduce((sum, c) => sum + c.snapshot_value, 0),
-    [selectedCollaterals],
+      scbAmount,
+      collaterals: selectedCollaterals,
+    }),
   );
-  const securityStatus = useMemo(
-    () =>
-      principal > 0
-        ? computeSecurityStatus(principal, totalCollateralValue)
-        : "unsecured",
-    [principal, totalCollateralValue],
-  );
+  const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;
+  const amortization = preview.status === "ready" ? preview.preview.amortization : null;
+
   // Picker rows: show all of the borrower's collaterals, but disable the
   // ones already selected here or locked to a different active loan.
   const pickerRows = useMemo(() => {
@@ -1772,38 +1628,63 @@ function NewLoanApplicationInner() {
             )}
 
             {selectedCollaterals.length > 0 && (
-              <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                aria-live="polite"
+                aria-busy={preview.status === "loading"}
+              >
                 <div>
                   <p className="text-xs text-muted-foreground">
                     Total Collateral Value
                   </p>
                   <p className="text-lg font-bold tabular-nums">
-                    {formatCurrency(totalCollateralValue)}
+                    {previewCollateral
+                      ? formatCurrency(previewCollateral.total_value)
+                      : "—"}
                   </p>
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
-                  <Badge
-                    className={cn(
-                      securityStatus === "secured" &&
-                        "bg-green-500/15 text-green-700 hover:bg-green-500/15",
-                      securityStatus === "partially_secured" &&
-                        "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
-                      securityStatus === "unsecured" &&
-                        "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                    )}
-                  >
-                    {securityStatusLabel(securityStatus)}
-                  </Badge>
-                  {principal > 0 && securityStatus !== "secured" && (
-                    <p className="text-xs text-muted-foreground">
-                      Short by{" "}
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(
-                          Math.max(0, principal - totalCollateralValue),
+                  {preview.status === "error" ? (
+                    <div role="alert" className="flex flex-col items-start gap-2 text-sm sm:items-end">
+                      <p className="flex items-center gap-1.5 text-destructive">
+                        <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                        We couldn&rsquo;t load the collateral preview.
+                      </p>
+                      <p className="text-xs text-muted-foreground">{preview.message}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                        <RefreshCw className="mr-2 size-4" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : previewCollateral ? (
+                    <>
+                      <Badge
+                        className={cn(
+                          previewCollateral.security_status === "secured" &&
+                            "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                          previewCollateral.security_status === "partially_secured" &&
+                            "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                          previewCollateral.security_status === "unsecured" &&
+                            "bg-destructive/15 text-destructive hover:bg-destructive/15",
                         )}
-                      </span>{" "}
-                      vs. principal
-                    </p>
+                      >
+                        {securityStatusLabel(previewCollateral.security_status)}
+                      </Badge>
+                      {showsShortBy(previewCollateral, principal) && (
+                        <p className="text-xs text-muted-foreground">
+                          Short by{" "}
+                          <span className="font-medium text-foreground">
+                            {formatCurrency(previewCollateral.short_by)}
+                          </span>{" "}
+                          vs. principal
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <span role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Spinner className="size-4" />
+                      Checking security…
+                    </span>
                   )}
                 </div>
               </div>
@@ -2065,61 +1946,96 @@ function NewLoanApplicationInner() {
           <CardTitle>Amortization Schedule Preview</CardTitle>
         </CardHeader>
         <CardContent>
-          {canShowAmortization && amortizationSchedule.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12 text-center">#</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Interest</TableHead>
-                                        <TableHead className="text-right">Share Capital Build-Up</TableHead>
-                    <TableHead className="text-right">Total Payment</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {amortizationSchedule.map((row) => (
-                    <TableRow key={row.period}>
-                      <TableCell className="text-center">
-                        {row.period}
+          {canShowAmortization && preview.status === "loading" ? (
+            <div
+              role="status"
+              className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
+            >
+              <Spinner className="size-4" />
+              Loading the schedule preview…
+            </div>
+          ) : canShowAmortization && preview.status === "error" ? (
+            <div
+              role="alert"
+              className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+            >
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0 text-destructive"
+                aria-hidden="true"
+              />
+              <div className="flex-1 space-y-2">
+                <p className="font-medium">
+                  We couldn&rsquo;t load the schedule preview.
+                </p>
+                <p className="text-muted-foreground">{preview.message}</p>
+                <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                  <RefreshCw className="mr-2 size-4" />
+                  Retry
+                </Button>
+              </div>
+            </div>
+          ) : canShowAmortization && amortization ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Built with the product&rsquo;s{" "}
+                {interestMethodLabel(amortization.interest_method)} interest
+                method, as the loan&rsquo;s schedule will be at release.
+              </p>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 text-center">#</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead className="text-right">Principal</TableHead>
+                      <TableHead className="text-right">Interest</TableHead>
+                      <TableHead className="text-right">Share Capital Build-Up</TableHead>
+                      <TableHead className="text-right">Total Payment</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {amortization.rows.map((row) => (
+                      <TableRow key={row.period_number}>
+                        <TableCell className="text-center">
+                          {row.period_number}
+                        </TableCell>
+                        <TableCell>{formatDate(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(row.principal_due)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(row.interest_due)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(row.share_capital_build_up)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(row.total_payment)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-semibold">
+                        Total
                       </TableCell>
-                      <TableCell>{formatDate(row.dueDate)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.principal)}
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(amortization.totals.principal_due)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.interest)}
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(amortization.totals.interest_due)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.shareCapitalBuildUp)}
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(amortization.totals.share_capital_build_up)}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(row.totalPayment)}
+                      <TableCell className="text-right font-bold">
+                        {formatCurrency(amortization.totals.total_payment)}
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={2} className="font-semibold">
-                      Total
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.principal)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.interest)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      {formatCurrency(amortizationTotals.totalPayment)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+                  </TableFooter>
+                </Table>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">

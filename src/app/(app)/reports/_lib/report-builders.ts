@@ -1,4 +1,4 @@
-import { asArray, asRecord, pick, sum } from "@/lib/api-payload";
+import { asArray, asRecord, pick } from "@/lib/api-payload";
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import {
   DASH,
@@ -48,31 +48,11 @@ export const LIST_PAGE_SIZE = 200;
 // ---------------------------------------------------------------------------
 // Raw payload helpers
 //
-// `pick` / `asRecord` / `asArray` / `sum` live in `@/lib/api-payload`, shared
-// with the printable templates so both read a response the same way.
+// `pick` / `asRecord` / `asArray` live in `@/lib/api-payload`, shared with the
+// printable templates so both read a response the same way. Money totals are
+// read as the server sent them, never added up from the rows, and a total the
+// server did not send is "—".
 // ---------------------------------------------------------------------------
-
-/**
- * Add up sibling fields of a nested block (e.g. outstanding.{principal,
- * interest,penalty}). Returns null when the block is missing entirely so the
- * KPI shows "—" instead of a misleading ₱0.00.
- */
-function sumFields(
-  obj: Record<string, unknown> | null,
-  keys: string[]
-): number | null {
-  if (!obj) return null;
-  let total = 0;
-  let found = false;
-  for (const key of keys) {
-    const n = toNumber(obj[key]);
-    if (n !== null) {
-      total += n;
-      found = true;
-    }
-  }
-  return found ? total : null;
-}
 
 /**
  * `org` is deliberately empty here.
@@ -195,11 +175,6 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
   const borrower = asRecord(raw.borrower);
   const loan = asRecord(raw.loan);
 
-  // The API reports what was paid per component, not a combined figure, so the
-  // "Paid" column adds them. sumFields returns null when neither key is
-  // present, keeping the cell a dash rather than claiming nothing was paid.
-  const amountPaid = sumFields(raw, ["principal_paid", "interest_paid"]);
-
   return {
     due_date: pick(raw, ["due_date", "scheduled_date", "date"]),
     period_number: pick(raw, ["period_number", "period", "installment_number"]),
@@ -215,7 +190,9 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
     interest_due: pick(raw, ["interest_due", "interest"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     amount_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
-    amount_paid: amountPaid,
+    // The server's per-row paid figure, the one `totals.total_paid` adds up.
+    // A row without it is "—", never its components added here.
+    amount_paid: pick(raw, ["amount_paid"]),
     // `amount_remaining` is the API's name for the unpaid balance of a schedule.
     balance: pick(raw, [
       "amount_remaining",
@@ -415,7 +392,10 @@ const COMPOSITION_COLUMNS: ReportColumn[] = [
  * summary; it was fetched and dropped, so a multi-branch cooperative could
  * only ever see the consolidated figure.
  */
-function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null {
+function byBranchSection(
+  rows: Record<string, unknown>[],
+  totals: Record<string, unknown> | null
+): ReportSection | null {
   if (rows.length === 0) return null;
 
   const normalized = rows.map((raw) => ({
@@ -425,6 +405,8 @@ function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null 
     outstanding_balance: pick(raw, ["outstanding_balance", "outstanding"]),
   }));
 
+  // The footer is the server's `by_branch_totals`; a figure it did not send is
+  // "—", never the branch rows added up.
   return {
     kind: "table",
     title: "Breakdown by Branch",
@@ -434,12 +416,12 @@ function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null 
       {
         column: "loan_count",
         label: "Total",
-        value: formatCount(sum(normalized, "loan_count")),
+        value: countOrDash(pick(totals, ["loan_count"])),
       },
-      { column: "total_released", value: formatCurrency(sum(normalized, "total_released")) },
+      { column: "total_released", value: currencyOrDash(pick(totals, ["total_released"])) },
       {
         column: "outstanding_balance",
-        value: formatCurrency(sum(normalized, "outstanding_balance")),
+        value: currencyOrDash(pick(totals, ["outstanding_balance"])),
       },
     ],
     emptyText: "No branch breakdown was returned for this period.",
@@ -450,6 +432,10 @@ function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null 
  * Principal / interest / penalty, outstanding against overdue. Both blocks
  * come back on every response and neither was rendered — the headline balance
  * alone cannot tell a collections officer what the arrears are made of.
+ *
+ * The footer is each block's own `total` (principal + interest + penalty, as
+ * the server added them), so it excludes insurance exactly as the rows do. A
+ * block without one shows "—", never the rows added up.
  */
 function compositionSection(
   outstanding: Record<string, unknown> | null,
@@ -480,8 +466,12 @@ function compositionSection(
     columns: COMPOSITION_COLUMNS,
     rows,
     totals: [
-      { column: "outstanding", label: "Total", value: formatCurrency(sum(rows, "outstanding")) },
-      { column: "overdue", value: formatCurrency(sum(rows, "overdue")) },
+      {
+        column: "outstanding",
+        label: "Total",
+        value: currencyOrDash(pick(outstanding, ["total"])),
+      },
+      { column: "overdue", value: currencyOrDash(pick(overdue, ["total"])) },
     ],
   };
 }
@@ -491,16 +481,15 @@ export function buildPortfolioSummaryDoc(
   range: DateRange
 ): ReportDocument {
   const obj = asRecord(raw);
-  // The API sends flat headline figures alongside the nested blocks; read the
-  // headline first and keep the nested blocks as the fallback.
   const portfolio = asRecord(obj?.portfolio);
   const outstanding = asRecord(obj?.outstanding);
   const overdue = asRecord(obj?.overdue);
 
   const loanCount = pick(obj, ["active_loans"]) ?? pick(portfolio, ["loan_count"]);
-  const flatOutstanding = pick(obj, ["outstanding_balance"]);
-  const outstandingTotal =
-    flatOutstanding ?? sumFields(outstanding, ["principal", "interest", "penalty"]);
+  // The headline balance is the server's flat figure only. The nested
+  // components are never added up in its place: they leave out insurance, so
+  // the sum would be a different, smaller balance under the same label.
+  const outstandingBalance = pick(obj, ["outstanding_balance"]);
   const atRisk = pick(obj, ["at_risk_amount"]) ?? pick(portfolio, ["at_risk_amount"]);
   const parRatio = pick(obj, ["par_ratio"]) ?? pick(portfolio, ["par_ratio"]);
   const overdueLoans = toNumber(pick(overdue, ["loan_count"]));
@@ -511,10 +500,7 @@ export function buildPortfolioSummaryDoc(
     kpi("Total Active Loans", countOrDash(loanCount), {
       hint: `Released: ${currencyOrDash(pick(portfolio, ["total_released"]))}`,
     }),
-    kpi("Outstanding Balance", currencyOrDash(outstandingTotal), {
-      // The headline balance includes insurance; the nested fallback does not.
-      hint: flatOutstanding === null ? "Principal + interest + penalty" : undefined,
-    }),
+    kpi("Outstanding Balance", currencyOrDash(outstandingBalance)),
     kpi(`At Risk (>${formatCount(thresholdDays)}d overdue)`, currencyOrDash(atRisk), {
       tone: "negative",
       hint:
@@ -535,7 +521,10 @@ export function buildPortfolioSummaryDoc(
   const composition = compositionSection(outstanding, overdue);
   if (composition) sections.push(composition);
 
-  const branches = byBranchSection(asArray(pick(obj, ["by_branch", "branches"])));
+  const branches = byBranchSection(
+    asArray(pick(obj, ["by_branch", "branches"])),
+    asRecord(pick(obj, ["by_branch_totals"]))
+  );
   if (branches) sections.push(branches);
 
   return {
@@ -1110,9 +1099,9 @@ function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unkn
     interest_due: pick(raw, ["interest_due", "interest"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     total_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
-    amount_paid:
-      sumFields(raw, ["principal_paid", "interest_paid"]) ??
-      toNumber(pick(raw, ["amount_paid", "total_paid"])),
+    // The server's principal_paid + interest_paid for the period; "—" when it
+    // is missing, never the components added here.
+    amount_paid: pick(raw, ["amount_paid"]),
     balance: pick(raw, ["amount_remaining", "balance", "remaining_balance"]),
     status: pick(raw, ["status"]),
   };
@@ -1183,6 +1172,10 @@ export function buildStatementOfAccountDoc(
   const loan = asRecord(pick(obj, ["loan"])) ?? obj;
   const borrower = asRecord(pick(obj, ["borrower"])) ?? asRecord(pick(loan, ["borrower"]));
   const summary = asRecord(pick(obj, ["summary", "balance", "totals"]));
+  // Both footers are the server's own totals; a figure it did not send is "—",
+  // never a column added up here.
+  const scheduleTotals = asRecord(pick(obj, ["schedule_totals"]));
+  const transactionTotals = asRecord(pick(obj, ["transaction_totals"]));
 
   const scheduleRows = asArray(
     pick(obj, ["schedule", "amortization_schedule", "schedules", "installments"])
@@ -1231,15 +1224,21 @@ export function buildStatementOfAccountDoc(
             {
               column: "principal_due",
               label: "Total",
-              value: formatCurrency(sum(scheduleRows, "principal_due")),
+              value: currencyOrDash(pick(scheduleTotals, ["principal_due"])),
             },
-            { column: "interest_due", value: formatCurrency(sum(scheduleRows, "interest_due")) },
+            {
+              column: "interest_due",
+              value: currencyOrDash(pick(scheduleTotals, ["interest_due"])),
+            },
             {
               column: "penalty_amount",
-              value: formatCurrency(sum(scheduleRows, "penalty_amount")),
+              value: currencyOrDash(pick(scheduleTotals, ["penalty_amount"])),
             },
-            { column: "total_due", value: formatCurrency(sum(scheduleRows, "total_due")) },
-            { column: "amount_paid", value: formatCurrency(sum(scheduleRows, "amount_paid")) },
+            { column: "total_due", value: currencyOrDash(pick(scheduleTotals, ["total_due"])) },
+            {
+              column: "amount_paid",
+              value: currencyOrDash(pick(scheduleTotals, ["amount_paid"])),
+            },
           ]
         : undefined,
     emptyText: "No amortization schedule is available for this loan.",
@@ -1256,9 +1255,9 @@ export function buildStatementOfAccountDoc(
             {
               column: "debit",
               label: "Total",
-              value: formatCurrency(sum(transactionRows, "debit")),
+              value: currencyOrDash(pick(transactionTotals, ["debit"])),
             },
-            { column: "credit", value: formatCurrency(sum(transactionRows, "credit")) },
+            { column: "credit", value: currencyOrDash(pick(transactionTotals, ["credit"])) },
           ]
         : undefined,
     emptyText: "No transactions have been recorded against this loan.",
@@ -1309,7 +1308,12 @@ export function buildSubsidiaryLedgerDoc(
 ): ReportDocument {
   const obj = asRecord(raw);
   const borrower = asRecord(pick(obj, ["borrower", "member"])) ?? obj;
-  const summary = asRecord(pick(obj, ["summary", "totals"]));
+  // Every ledger total is the server's; a figure it did not send is "—",
+  // never the loan rows added up.
+  const totals = asRecord(pick(obj, ["totals"]));
+  const totalPrincipal = pick(totals, ["total_principal"]);
+  const totalPaid = pick(totals, ["total_paid"]);
+  const totalOutstanding = pick(totals, ["total_outstanding"]);
 
   const loanRows = asArray(pick(obj, ["loans", "accounts"])).map(normalizeLedgerLoanRow);
   const entryRows = asArray(
@@ -1331,29 +1335,14 @@ export function buildSubsidiaryLedgerDoc(
     sections.push({ kind: "fields", title: "Member Particulars", items: fields });
   }
 
-  // Loan-level figures are summed from the account rows only when the API
-  // sends no summary block of its own.
   sections.push({
     kind: "kpi_grid",
     title: "Ledger Summary",
     items: [
-      kpi("Total Loans", countOrDash(pick(summary, ["loan_count", "total_loans"]) ?? loanRows.length)),
-      kpi(
-        "Total Released",
-        currencyOrDash(pick(summary, ["total_released", "total_principal"]) ?? sum(loanRows, "principal")),
-      ),
-      kpi(
-        "Total Paid",
-        currencyOrDash(pick(summary, ["total_paid", "total_amount_paid"]) ?? sum(loanRows, "total_paid")),
-        { tone: "positive" }
-      ),
-      kpi(
-        "Outstanding Balance",
-        currencyOrDash(
-          pick(summary, ["outstanding_balance", "total_balance"]) ?? sum(loanRows, "balance")
-        ),
-        { tone: "negative" }
-      ),
+      kpi("Total Loans", countOrDash(pick(totals, ["total_loans"]))),
+      kpi("Total Released", currencyOrDash(totalPrincipal)),
+      kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
+      kpi("Outstanding Balance", currencyOrDash(totalOutstanding), { tone: "negative" }),
     ],
   });
 
@@ -1365,14 +1354,11 @@ export function buildSubsidiaryLedgerDoc(
     totals:
       loanRows.length > 0
         ? [
-            {
-              column: "principal",
-              label: "Total",
-              value: formatCurrency(sum(loanRows, "principal")),
-            },
-            { column: "total_paid", value: formatCurrency(sum(loanRows, "total_paid")) },
-            { column: "balance", value: formatCurrency(sum(loanRows, "balance")) },
-            { column: "overdue", value: formatCurrency(sum(loanRows, "overdue")) },
+            { column: "principal", label: "Total", value: currencyOrDash(totalPrincipal) },
+            { column: "total_paid", value: currencyOrDash(totalPaid) },
+            { column: "balance", value: currencyOrDash(totalOutstanding) },
+            // No "Past Due" total: the server states no per-loan or overall
+            // overdue figure for the ledger.
           ]
         : undefined,
     emptyText: "This borrower has no loan accounts on record.",
@@ -1380,16 +1366,13 @@ export function buildSubsidiaryLedgerDoc(
 
   // Only rendered when the API returns entries — an empty transaction table on
   // a ledger reads as "no payments", which would be a claim we cannot make.
+  // No totals row: the server states no debit or credit total for the entries.
   if (entryRows.length > 0) {
     sections.push({
       kind: "table",
       title: "Payment History",
       columns: SOA_TRANSACTION_COLUMNS,
       rows: entryRows,
-      totals: [
-        { column: "debit", label: "Total", value: formatCurrency(sum(entryRows, "debit")) },
-        { column: "credit", value: formatCurrency(sum(entryRows, "credit")) },
-      ],
     });
   }
 
@@ -1519,62 +1502,12 @@ function statementLines(
 }
 
 /**
- * A section total: the server's figure when it sent one, otherwise the sum of
- * the lines it did send.
- *
- * Returns null — not 0 — when the block is missing entirely, so a failed
- * request shows "—" rather than asserting a zero the server never reported.
+ * The server's figure for one key, or null when it sent none. Reads exactly
+ * that key: a total or a rate the server omitted is "—", never re-derived from
+ * the rows or the other figures beside it.
  */
-function lineTotal(lines: StatementLine[], server: unknown): number | null {
-  const fromServer = toNumber(server);
-  if (fromServer !== null) return fromServer;
-  const present = lines.filter((line) => line.amount !== null);
-  return present.length === 0
-    ? null
-    : present.reduce((acc, line) => acc + (line.amount ?? 0), 0);
-}
-
-/** Sum a column, or null when not one row carried a figure for it. */
-function sumOrNull(rows: Record<string, unknown>[], key: string): number | null {
-  const present = rows.filter((r) => toNumber(r[key]) !== null);
-  return present.length === 0 ? null : sum(present, key);
-}
-
-/**
- * Whole-percent ratio of two figures, or null when it cannot be stated.
- *
- * Only ever a fallback: every one of these endpoints computes its own rates
- * server-side, where both sides of the ratio are scoped identically. A rate
- * derived here from two rounded display figures can disagree with the server's
- * in the last decimal, so the server's always wins.
- */
-function ratioPercent(part: number | null, whole: number | null): number | null {
-  if (part === null || whole === null || whole <= 0) return null;
-  return (part / whole) * 100;
-}
-
-/**
- * Normalise a rate that may arrive as a fraction into whole percent.
- *
- * Report percentages are always whole (12.5 means 12.5%), so a provisioning
- * ladder sent as 0.05/0.15/0.25/0.50 has to be scaled up or a 5% provision
- * prints as 0.05%.
- *
- * "At or below 1 is a fraction" is a guess, and it is wrong for exactly one
- * input: a genuine whole 1, meaning 1%, comes back out as 100. The assumption
- * that makes it safe is not about provisioning ladders in general — it is
- * about the single call site. `buildProvisioningDoc()` reads the API's
- * `rate_percent` first and only falls back to the raw `rate`/`provision_rate`
- * when that key is absent, which no response omits; and the raw key is a
- * fraction in every one of them. So the ambiguous input is unreachable.
- *
- * That is a property of the caller, not of this function. Anything that could
- * hand it a whole percent has to carry its own unit rather than have the unit
- * guessed here — do not widen the rule to cover it.
- */
-function scaleToPercent(value: number | null): number | null {
-  if (value === null) return null;
-  return value > 0 && value <= 1 ? value * 100 : value;
+function serverFigure(block: Record<string, unknown> | null, key: string): number | null {
+  return toNumber(pick(block, [key]));
 }
 
 /** Positive figures read green, negative red — a net movement is either. */
@@ -1644,22 +1577,13 @@ const CASH_FLOW_BRANCH_COLUMNS: ReportColumn[] = [
 ];
 
 function cashFlowBranchRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  return rows.map((raw) => {
-    // `inflow_total` / `outflow_total` are the API's names; the plain forms are
-    // the fallback.
-    const inflows = toNumber(pick(raw, ["inflow_total", "inflows", "total_inflows", "cash_in"]));
-    const outflows = toNumber(
-      pick(raw, ["outflow_total", "outflows", "total_outflows", "cash_out"])
-    );
-    return {
-      branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
-      inflows,
-      outflows,
-      net:
-        toNumber(pick(raw, ["net_movement", "net", "net_cash_flow"])) ??
-        (inflows !== null && outflows !== null ? inflows - outflows : null),
-    };
-  });
+  return rows.map((raw) => ({
+    branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
+    inflows: serverFigure(raw, "inflow_total"),
+    outflows: serverFigure(raw, "outflow_total"),
+    // The row's own net: never cash in less cash out worked out here.
+    net: serverFigure(raw, "net_movement"),
+  }));
 }
 
 /**
@@ -1705,20 +1629,11 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
     },
   ];
 
-  const totalIn = lineTotal(
-    inflowLines,
-    pick(inflowBlock, ["total"]) ?? pick(obj, ["total_inflows"])
-  );
-  const totalOut = lineTotal(
-    outflowLines,
-    pick(outflowBlock, ["total"]) ?? pick(obj, ["total_outflows"])
-  );
-
-  // The server states the net; subtracting the two totals is the fallback, and
-  // it is only meaningful when both sides actually came back.
-  const net =
-    toNumber(pick(obj, ["net_movement", "net_cash_flow", "net"])) ??
-    (totalIn !== null && totalOut !== null ? totalIn - totalOut : null);
+  // The three headline figures are the server's. A missing one is "—": the
+  // lines are never added up, nor one total taken from the other.
+  const totalIn = serverFigure(inflowBlock, "total");
+  const totalOut = serverFigure(outflowBlock, "total");
+  const net = serverFigure(obj, "net_movement");
 
   // Deductions are withheld at release and never leave the till, so they are
   // not an outflow. Shown beside the statement so the gross principal released
@@ -1730,6 +1645,7 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
   const principalReleased = pick(nonCashBlock, ["principal_released"]);
 
   const branchRows = cashFlowBranchRows(asArray(pick(obj, ["by_branch", "branches"])));
+  const branchTotals = asRecord(pick(obj, ["by_branch_totals"]));
 
   const sections: ReportSection[] = [
     {
@@ -1782,9 +1698,9 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
       columns: CASH_FLOW_BRANCH_COLUMNS,
       rows: branchRows,
       totals: [
-        totalCell("inflows", sumOrNull(branchRows, "inflows"), "Total"),
-        totalCell("outflows", sumOrNull(branchRows, "outflows")),
-        totalCell("net", sumOrNull(branchRows, "net")),
+        totalCell("inflows", serverFigure(branchTotals, "inflow_total"), "Total"),
+        totalCell("outflows", serverFigure(branchTotals, "outflow_total")),
+        totalCell("net", serverFigure(branchTotals, "net_movement")),
       ],
     });
     // The branch rows are loan cash ONLY: they sum to the repayment and
@@ -1831,50 +1747,39 @@ function efficiencyColumns(header: string, width: number): ReportColumn[] {
   ];
 }
 
+/** The four figures the server sends on the headline and on every row. */
+function efficiencyFigures(raw: Record<string, unknown> | null) {
+  return {
+    total_due: serverFigure(raw, "total_due"),
+    total_collected: serverFigure(raw, "total_collected"),
+    uncollected: serverFigure(raw, "uncollected"),
+    collection_rate: serverFigure(raw, "collection_rate"),
+  };
+}
+
 function normalizeEfficiencyRow(
   raw: Record<string, unknown>,
   labelKeys: string[],
   fallbackLabel: string
 ): Record<string, unknown> {
-  const due = toNumber(pick(raw, ["total_due", "due", "amount_due"]));
-  const collected = toNumber(
-    pick(raw, ["total_collected", "collected", "amount_collected"])
-  );
-
   return {
     label: pick(raw, labelKeys) ?? fallbackLabel,
-    total_due: due,
-    total_collected: collected,
-    uncollected:
-      toNumber(pick(raw, ["uncollected", "outstanding", "balance"])) ??
-      (due !== null && collected !== null ? Math.max(0, due - collected) : null),
-    collection_rate:
-      toNumber(pick(raw, ["collection_rate", "efficiency", "rate"])) ??
-      ratioPercent(collected, due),
+    ...efficiencyFigures(raw),
   };
 }
 
 /**
- * Footer for an efficiency table. The rate is the period rate the server
- * reported, never the average of the rates above it — averaging per-branch
- * rates weights a branch with ₱5,000 due the same as one with ₱5,000,000.
+ * Footer for an efficiency table: the headline four, as the server sent them.
+ * The rate is the period rate, never the average of the rates above it —
+ * averaging per-branch rates weights a branch with ₱5,000 due the same as one
+ * with ₱5,000,000.
  */
-function efficiencyTotals(
-  rows: Record<string, unknown>[],
-  headlineDue: number | null,
-  headlineCollected: number | null,
-  headlineUncollected: number | null,
-  headlineRate: number | null
-) {
-  const due = headlineDue ?? sumOrNull(rows, "total_due");
-  const collected = headlineCollected ?? sumOrNull(rows, "total_collected");
-  const rate = headlineRate ?? ratioPercent(collected, due);
-
+function efficiencyTotals(headline: ReturnType<typeof efficiencyFigures>) {
   return [
-    totalCell("total_due", due, "Total"),
-    totalCell("total_collected", collected),
-    totalCell("uncollected", headlineUncollected ?? sumOrNull(rows, "uncollected")),
-    { column: "collection_rate", value: percentOrDash(rate) },
+    totalCell("total_due", headline.total_due, "Total"),
+    totalCell("total_collected", headline.total_collected),
+    totalCell("uncollected", headline.uncollected),
+    { column: "collection_rate", value: percentOrDash(headline.collection_rate) },
   ];
 }
 
@@ -1890,15 +1795,7 @@ export function buildCollectionEfficiencyDoc(
   range: DateRange
 ): ReportDocument {
   const obj = asRecord(raw);
-
-  const due = toNumber(pick(obj, ["total_due", "due"]));
-  const collected = toNumber(pick(obj, ["total_collected", "collected"]));
-  const uncollected =
-    toNumber(pick(obj, ["uncollected", "outstanding"])) ??
-    (due !== null && collected !== null ? Math.max(0, due - collected) : null);
-  const rate =
-    toNumber(pick(obj, ["collection_rate", "efficiency", "rate"])) ??
-    ratioPercent(collected, due);
+  const headline = efficiencyFigures(obj);
 
   const branchRows = asArray(pick(obj, ["by_branch", "branches"])).map((r) =>
     normalizeEfficiencyRow(r, ["branch_name", "name"], "Unassigned")
@@ -1911,12 +1808,12 @@ export function buildCollectionEfficiencyDoc(
     {
         kind: "kpi_grid",
         items: [
-          kpi("Total Due", currencyOrDash(due)),
-          kpi("Total Collected", currencyOrDash(collected), { tone: "positive" }),
-          kpi("Collection Efficiency", percentOrDash(rate), {
+          kpi("Total Due", currencyOrDash(headline.total_due)),
+          kpi("Total Collected", currencyOrDash(headline.total_collected), { tone: "positive" }),
+          kpi("Collection Efficiency", percentOrDash(headline.collection_rate), {
             hint: "Collected over due, scoped identically on both sides",
           }),
-          kpi("Uncollected", currencyOrDash(uncollected), { tone: "negative" }),
+          kpi("Uncollected", currencyOrDash(headline.uncollected), { tone: "negative" }),
         ],
       },
       {
@@ -1925,9 +1822,7 @@ export function buildCollectionEfficiencyDoc(
         columns: efficiencyColumns("Branch", 200),
         rows: branchRows,
         totals:
-          branchRows.length > 0
-            ? efficiencyTotals(branchRows, due, collected, uncollected, rate)
-            : undefined,
+          branchRows.length > 0 ? efficiencyTotals(headline) : undefined,
         emptyText: "No branch breakdown was returned for this period.",
       },
       {
@@ -1936,9 +1831,7 @@ export function buildCollectionEfficiencyDoc(
         columns: efficiencyColumns("Period", 140),
         rows: periodRows,
         totals:
-          periodRows.length > 0
-            ? efficiencyTotals(periodRows, due, collected, uncollected, rate)
-            : undefined,
+          periodRows.length > 0 ? efficiencyTotals(headline) : undefined,
         emptyText: "No monthly breakdown was returned for this period.",
       },
   ];
@@ -2010,37 +1903,26 @@ function normalizeProductRow(raw: Record<string, unknown>): Record<string, unkno
 /**
  * Which products earn and which carry the risk.
  *
- * Every money column prefers the server's `totals` block. PAR has no fallback
- * at all: it is computed against outstanding principal server-side, so neither
- * summing nor averaging the column reproduces it, and a wrong PAR is worse
- * than an absent one.
+ * Every total is the server's `totals` block; a figure it did not send is
+ * "—", never the product rows added up. PAR is computed against outstanding
+ * principal server-side, so neither summing nor averaging the column
+ * reproduces it, and a wrong PAR is worse than an absent one.
  */
 export function buildPortfolioByProductDoc(
   raw: unknown,
   range: DateRange
 ): ReportDocument {
   const obj = asRecord(raw);
-  const totals = asRecord(pick(obj, ["totals", "summary"]));
+  const totals = asRecord(pick(obj, ["totals"]));
   const rows = asArray(pick(obj, ["products", "by_product", "data"])).map(
     normalizeProductRow
   );
 
-  const released =
-    toNumber(pick(totals, ["total_released", "released"])) ??
-    sumOrNull(rows, "total_released");
-  const outstanding =
-    toNumber(pick(totals, ["outstanding", "outstanding_balance"])) ??
-    sumOrNull(rows, "outstanding_balance");
-  const overdue =
-    toNumber(pick(totals, ["overdue_amount", "overdue"])) ??
-    sumOrNull(rows, "overdue_amount");
-  const loanCount =
-    toNumber(pick(totals, ["loan_count", "loans"])) ?? sumOrNull(rows, "loan_count");
-  // A response carrying an empty product list genuinely means zero products; a
-  // failed request means we know nothing, so it dashes rather than claiming a
-  // zero the server never sent.
-  const productCount =
-    toNumber(pick(totals, ["product_count"])) ?? (obj === null ? null : rows.length);
+  const released = serverFigure(totals, "total_released");
+  const outstanding = serverFigure(totals, "outstanding");
+  const overdue = serverFigure(totals, "overdue_amount");
+  const loanCount = serverFigure(totals, "loan_count");
+  const productCount = serverFigure(totals, "product_count");
   // Weighted server-side across the whole book. Quoted as hints rather than as
   // column footers, because neither is a sum of the column above it.
   const parRatio = pick(totals, ["par_ratio", "par"]);
@@ -2146,16 +2028,11 @@ const SHARE_CAPITAL_MEMBER_COLUMNS: ReportColumn[] = [
   { key: "balance", header: "Closing", format: "currency", align: "right", width: 150 },
 ];
 
-/** Credits/debits/net, shared by the monthly and per-member breakdowns. */
+/** Credits and debits, shared by the monthly and per-member breakdowns. */
 function shareCapitalMovement(raw: Record<string, unknown>) {
-  const credits = toNumber(pick(raw, ["credits", "credit", "total_credits"]));
-  const debits = toNumber(pick(raw, ["debits", "debit", "total_debits"]));
   return {
-    credits,
-    debits,
-    net:
-      toNumber(pick(raw, ["net", "net_movement"])) ??
-      (credits !== null && debits !== null ? credits - debits : null),
+    credits: toNumber(pick(raw, ["credits", "credit", "total_credits"])),
+    debits: toNumber(pick(raw, ["debits", "debit", "total_debits"])),
   };
 }
 
@@ -2170,12 +2047,10 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
   const opening = toNumber(pick(obj, ["opening_balance", "beginning_balance"]));
   const credits = toNumber(pick(obj, ["total_credits", "credits"]));
   const debits = toNumber(pick(obj, ["total_debits", "debits"]));
-  const net =
-    toNumber(pick(obj, ["net_movement", "net"])) ??
-    (credits !== null && debits !== null ? credits - debits : null);
-  const closing =
-    toNumber(pick(obj, ["closing_balance", "ending_balance"])) ??
-    (opening !== null && net !== null ? opening + net : null);
+  // The net and the closing balance are the server's; a missing one is "—",
+  // never credits less debits, or opening plus the net, worked out here.
+  const net = serverFigure(obj, "net_movement");
+  const closing = serverFigure(obj, "closing_balance");
 
   const pledges = asRecord(pick(obj, ["subscription", "pledges"]));
   // `total_subscribed_per_period` is the sum of PER-SCHEDULE pledges (the
@@ -2199,21 +2074,21 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
   const monthRows = asArray(pick(obj, ["by_month", "by_period", "months"])).map((r) => ({
     label: pick(r, ["period_label", "label", "period", "month"]) ?? DASH,
     ...shareCapitalMovement(r),
+    net: serverFigure(r, "net_movement"),
     closing_balance: pick(r, ["closing_balance", "balance", "running_balance"]),
   }));
+  const monthTotals = asRecord(pick(obj, ["by_month_totals"]));
 
-  const memberRows = asArray(pick(obj, ["by_member", "members_breakdown"])).map((r) => {
-    const movement = shareCapitalMovement(r);
-    return {
-      member_name:
-        pick(r, ["borrower_name", "member_name", "full_name", "name"]) ?? "Unassigned",
-      member_no: pick(r, ["borrower_code", "member_no", "code"]),
-      opening_balance: pick(r, ["opening_balance", "beginning_balance"]),
-      credits: movement.credits,
-      debits: movement.debits,
-      balance: pick(r, ["closing_balance", "balance", "total"]) ?? movement.net,
-    };
-  });
+  const memberRows = asArray(pick(obj, ["by_member", "members_breakdown"])).map((r) => ({
+    member_name:
+      pick(r, ["borrower_name", "member_name", "full_name", "name"]) ?? "Unassigned",
+    member_no: pick(r, ["borrower_code", "member_no", "code"]),
+    opening_balance: pick(r, ["opening_balance", "beginning_balance"]),
+    ...shareCapitalMovement(r),
+    balance: serverFigure(r, "closing_balance"),
+  }));
+  // Null when the roster is withheld, like `by_member` itself.
+  const memberTotals = asRecord(pick(obj, ["by_member_totals"]));
 
   const scope = pick(obj, ["branch_scope"]);
 
@@ -2260,9 +2135,9 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
         totals:
           monthRows.length > 0
             ? [
-                totalCell("credits", sumOrNull(monthRows, "credits"), "Total"),
-                totalCell("debits", sumOrNull(monthRows, "debits")),
-                totalCell("net", sumOrNull(monthRows, "net")),
+                totalCell("credits", serverFigure(monthTotals, "credits"), "Total"),
+                totalCell("debits", serverFigure(monthTotals, "debits")),
+                totalCell("net", serverFigure(monthTotals, "net_movement")),
                 // No total for `closing_balance`: it is a running figure, and
                 // adding a column of balances together means nothing.
               ]
@@ -2292,10 +2167,10 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
       totals:
         memberRows.length > 0
           ? [
-              totalCell("opening_balance", sumOrNull(memberRows, "opening_balance"), "Total"),
-              totalCell("credits", sumOrNull(memberRows, "credits")),
-              totalCell("debits", sumOrNull(memberRows, "debits")),
-              totalCell("balance", sumOrNull(memberRows, "balance")),
+              totalCell("opening_balance", serverFigure(memberTotals, "opening_balance"), "Total"),
+              totalCell("credits", serverFigure(memberTotals, "credits")),
+              totalCell("debits", serverFigure(memberTotals, "debits")),
+              totalCell("balance", serverFigure(memberTotals, "closing_balance")),
             ]
           : undefined,
       emptyText: "No member share capital activity was recorded in this period.",
@@ -2421,25 +2296,23 @@ function normalizePerformanceRow(
 }
 
 /**
- * Footer for a performance table.
- *
- * Every loan belongs to exactly one branch and to exactly one officer row —
- * "Unassigned" included — so the money and release counts sum exactly. PAR and
+ * Footer for a performance table: the server's totals block for that table,
+ * a figure it did not send shown as "—", never the rows added up. PAR and
  * `active_borrowers` deliberately have no footer: PAR is a weighted ratio, and
- * a borrower served by two officers is still one borrower, so both would be
- * wrong as a column sum and the API states neither as a grand total.
+ * a borrower served by two officers is still one borrower, so the API states
+ * neither as a grand total.
  */
-function performanceTotals(rows: Record<string, unknown>[]) {
+function performanceTotals(totals: Record<string, unknown> | null) {
   return [
     {
       column: "released_count",
       label: "Total",
-      value: countOrDash(sumOrNull(rows, "released_count")),
+      value: countOrDash(serverFigure(totals, "released_count")),
     },
-    totalCell("released_amount", sumOrNull(rows, "released_amount")),
-    totalCell("collected_amount", sumOrNull(rows, "collected_amount")),
-    totalCell("outstanding_balance", sumOrNull(rows, "outstanding_balance")),
-    totalCell("overdue_amount", sumOrNull(rows, "overdue_amount")),
+    totalCell("released_amount", serverFigure(totals, "released_amount")),
+    totalCell("collected_amount", serverFigure(totals, "collected")),
+    totalCell("outstanding_balance", serverFigure(totals, "outstanding")),
+    totalCell("overdue_amount", serverFigure(totals, "overdue_amount")),
   ];
 }
 
@@ -2450,10 +2323,12 @@ function performanceTotals(rows: Record<string, unknown>[]) {
  */
 export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
-  // The API sends no grand-total block: every headline below is summed from
-  // the officer rows, which is exact because each loan appears in exactly one
-  // of them ("Unassigned" included).
-  const totals = asRecord(pick(obj, ["totals", "summary"]));
+  // Three server totals blocks: the headline, and one per table. Every loan
+  // sits in exactly one officer row and one branch row ("Unassigned"
+  // included), so the server's figures agree; none is added up here.
+  const totals = asRecord(pick(obj, ["totals"]));
+  const officerTotals = asRecord(pick(obj, ["by_officer_totals"]));
+  const branchTotals = asRecord(pick(obj, ["by_branch_totals"]));
 
   const officerRows = asArray(pick(obj, ["by_officer", "officers"])).map((r) =>
     normalizePerformanceRow(
@@ -2466,23 +2341,13 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
     normalizePerformanceRow(r, ["branch_name", "name"], "Unassigned")
   );
 
-  const headline = officerRows.length > 0 ? officerRows : branchRows;
-
-  const releasedCount =
-    toNumber(pick(totals, ["released_count", "loans_released"])) ??
-    sumOrNull(headline, "released_count");
-  const releasedAmount =
-    toNumber(pick(totals, ["released_amount", "total_released"])) ??
-    sumOrNull(headline, "released_amount");
-  const collected =
-    toNumber(pick(totals, ["collected", "collected_amount", "total_collected"])) ??
-    sumOrNull(headline, "collected_amount");
-  // Outstanding sums exactly and is always available; `active_borrowers` does
-  // not (a borrower can be counted under two officers) and the API states no
-  // distinct total, so the fourth headline is the one that can be trusted.
-  const outstanding =
-    toNumber(pick(totals, ["outstanding", "outstanding_balance"])) ??
-    sumOrNull(headline, "outstanding_balance");
+  const releasedCount = serverFigure(totals, "released_count");
+  const releasedAmount = serverFigure(totals, "released_amount");
+  const collected = serverFigure(totals, "collected");
+  // `active_borrowers` has no headline (a borrower can be counted under two
+  // officers and the API states no distinct total), so the fourth KPI is the
+  // outstanding book.
+  const outstanding = serverFigure(totals, "outstanding");
 
   const sections: ReportSection[] = [
     {
@@ -2501,7 +2366,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
       title: "By Account Officer",
       columns: performanceColumns("Account Officer", 190),
       rows: officerRows,
-      totals: officerRows.length > 0 ? performanceTotals(officerRows) : undefined,
+      totals: officerRows.length > 0 ? performanceTotals(officerTotals) : undefined,
       emptyText: "No account officer activity was recorded in this period.",
     },
     {
@@ -2509,7 +2374,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
       title: "By Branch",
       columns: performanceColumns("Branch", 190),
       rows: branchRows,
-      totals: branchRows.length > 0 ? performanceTotals(branchRows) : undefined,
+      totals: branchRows.length > 0 ? performanceTotals(branchTotals) : undefined,
       emptyText: "No branch activity was recorded in this period.",
     },
   ];
@@ -2565,50 +2430,34 @@ const PROVISIONING_COLUMNS: ReportColumn[] = [
 export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
   const buckets = asRecord(pick(obj, ["buckets", "aging_buckets"]));
-  const total = asRecord(pick(obj, ["total", "totals"]));
-  const rates = asRecord(pick(obj, ["provision_rates", "rates"]));
+  const totals = asRecord(pick(obj, ["totals"]));
 
   // `buckets` is an object keyed by bucket, not an array — the same shape the
   // Aging Report returns — so AGING_BUCKETS drives both the iteration order
   // and the labels, and the two reports can never disagree on either.
+  //
+  // Every figure is the server's. The API sends BOTH `rate` (a fraction, 0.05)
+  // and `rate_percent` (whole, 5); everything in a report is whole percent, so
+  // only `rate_percent` is read. A missing allowance is "—", never amount
+  // times rate worked out here.
   const rows = AGING_BUCKETS.map(([label, keys]) => {
     const bucket = asRecord(pick(buckets, keys));
-    const amount = toNumber(bucket?.amount);
-
-    // The API sends BOTH `rate` (a fraction, 0.05) and `rate_percent` (whole,
-    // 5). Everything in a report is whole percent, so reading `rate` would
-    // print a 5% provision as 0.1%. `rate_percent` first; a bare fraction from
-    // `rates` is scaled up rather than trusted as-is.
-    const ratePercent =
-      toNumber(pick(bucket, ["rate_percent"])) ??
-      scaleToPercent(toNumber(pick(bucket, ["rate", "provision_rate"]))) ??
-      scaleToPercent(toNumber(pick(rates, keys)));
-
     return {
       bucket: label,
-      amount,
-      rate: ratePercent,
-      count: toNumber(bucket?.count),
-      // Server-first. The fallback is the report's own definition — amount
-      // times rate — and only runs when the server sent both inputs, so it
-      // cannot invent a figure.
-      required_allowance:
-        toNumber(pick(bucket, ["required_allowance", "allowance", "provision"])) ??
-        (amount !== null && ratePercent !== null ? (amount * ratePercent) / 100 : null),
+      amount: serverFigure(bucket, "amount"),
+      rate: serverFigure(bucket, "rate_percent"),
+      count: serverFigure(bucket, "count"),
+      required_allowance: serverFigure(bucket, "required_allowance"),
     };
   });
 
-  const totalAmount = toNumber(total?.amount) ?? sumOrNull(rows, "amount");
-  const totalAllowance =
-    toNumber(pick(total, ["required_allowance", "allowance", "provision"])) ??
-    sumOrNull(rows, "required_allowance");
-  const delinquentLoans = toNumber(total?.count);
-  // Weighted, not the average of the four rates — the mix of buckets is the
-  // whole point of the report.
-  const effectiveRate =
-    toNumber(pick(total, ["effective_rate"])) ??
-    toNumber(pick(obj, ["effective_rate", "provision_rate"])) ??
-    ratioPercent(totalAllowance, totalAmount);
+  // The server's totals; a missing one is "—", never the buckets added up nor
+  // allowance over amount. The effective rate is weighted server-side, not the
+  // average of the four rates — the mix of buckets is the whole point.
+  const totalAmount = serverFigure(totals, "amount");
+  const totalAllowance = serverFigure(totals, "required_allowance");
+  const delinquentLoans = serverFigure(totals, "count");
+  const effectiveRate = serverFigure(totals, "effective_rate");
   const asOf = pick(obj, ["as_of_date", "as_of"]);
 
   const sections: ReportSection[] = [
