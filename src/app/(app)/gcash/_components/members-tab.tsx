@@ -22,6 +22,7 @@ import type { Borrower, GCashParty } from "@/types";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
 import { NewTransactionDialog } from "./new-transaction-dialog";
+import { gcashRowActions } from "../_lib/row-actions";
 
 type DialogState =
   | { type: "cash_in" | "cash_out"; party: GCashParty }
@@ -41,6 +42,9 @@ export function MembersTab() {
   const canListMembers = can("borrowers:view");
   // Recording a transaction needs `gcash:transact`; `gcash:view` only reads.
   const canTransact = can("gcash:transact");
+  const rowActions = gcashRowActions(can);
+  const showActions = rowActions.length > 0;
+  const columnCount = showActions ? 3 : 2;
   const [loading, setLoading] = useState(canListMembers);
   const [dialog, setDialog] = useState<DialogState>(null);
 
@@ -110,20 +114,22 @@ export function MembersTab() {
             <TableRow>
               <TableHead>Member Code</TableHead>
               <TableHead>Full Name</TableHead>
-              <TableHead className="text-right w-[260px]">Actions</TableHead>
+              {showActions && (
+                <TableHead className="text-right w-[260px]">Actions</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-8">
+                <TableCell colSpan={columnCount} className="text-center py-8">
                   <Loader2 className="inline h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : members.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={3}
+                  colSpan={columnCount}
                   className="text-center text-muted-foreground py-8"
                 >
                   No members found.
@@ -136,25 +142,31 @@ export function MembersTab() {
                     {b.borrower_code ?? "—"}
                   </TableCell>
                   <TableCell>{b.full_name ?? "—"}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        setDialog({ type: "cash_in", party: borrowerParty(b) })
-                      }
-                    >
-                      Cash In
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setDialog({ type: "cash_out", party: borrowerParty(b) })
-                      }
-                    >
-                      Cash Out
-                    </Button>
-                  </TableCell>
+                  {showActions && (
+                    <TableCell className="text-right space-x-2">
+                      {rowActions.includes("cash_in") && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setDialog({ type: "cash_in", party: borrowerParty(b) })
+                          }
+                        >
+                          Cash In
+                        </Button>
+                      )}
+                      {rowActions.includes("cash_out") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setDialog({ type: "cash_out", party: borrowerParty(b) })
+                          }
+                        >
+                          Cash Out
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}

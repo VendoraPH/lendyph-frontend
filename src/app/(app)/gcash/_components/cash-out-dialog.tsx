@@ -20,6 +20,7 @@ import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
+import { cashOutTotalIssue } from "../_lib/cash-out-total";
 import { gcashTierIssue } from "../_lib/tier-issue";
 import { GCashTierNotice } from "./gcash-tier-notice";
 
@@ -71,13 +72,13 @@ export function CashOutDialog({
     charge,
   });
   // The one reason Record is disabled that the tier notice doesn't cover.
-  const chargeExceedsAmount = charge !== null && total !== null && total < 0;
+  const totalIssue = cashOutTotalIssue(charge, total);
   const canSubmit =
     !submitting &&
     amountNum > 0 &&
     charge !== null &&
     total !== null &&
-    total >= 0 &&
+    totalIssue === null &&
     !tiersLoading;
 
   const handleSubmit = async () => {
@@ -133,9 +134,9 @@ export function CashOutDialog({
             onRetry={() => void retryTiers()}
           />
 
-          {chargeExceedsAmount && (
+          {totalIssue && (
             <p role="alert" className="text-sm text-destructive">
-              Amount must be at least the {formatCurrency(charge)} charge.
+              {totalIssue}
             </p>
           )}
 

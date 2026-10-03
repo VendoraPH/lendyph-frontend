@@ -13,6 +13,20 @@ import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure
  */
 export type LoanApplicationPayload = Omit<Partial<Loan>, "deductions"> & {
   deductions?: LoanDeductionInput[];
+  /**
+   * `PUT /loans/{id}` only: the loan's full collateral list. The server
+   * detaches the unlisted ones, attaches the new ones at their
+   * `snapshot_value`, and leaves the ones already attached untouched with
+   * their original snapshot. `[]` detaches everything. Absent, the loan's
+   * collaterals are not touched. Sending it needs `collaterals:update`.
+   */
+  collaterals?: LoanCollateralInput[];
+};
+
+/** One collateral in an edit's `collaterals` list. */
+export type LoanCollateralInput = {
+  collateral_id: number;
+  snapshot_value: number;
 };
 
 export type ReleaseLoanPayload = {
