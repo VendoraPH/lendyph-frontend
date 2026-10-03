@@ -19,5 +19,7 @@ interface ConflictBody {
 export function releaseConflictOf(err: unknown): ReleaseConflict | null {
   if (httpStatusOf(err) !== 409) return null;
   const errors = (err as ConflictBody | null)?.response?.data?.errors;
-  return errors && "fee_fingerprint" in errors ? "fees_changed" : "loan_changed";
+  return typeof errors === "object" && errors !== null && "fee_fingerprint" in errors
+    ? "fees_changed"
+    : "loan_changed";
 }

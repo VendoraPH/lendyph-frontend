@@ -21,6 +21,10 @@ test("any other 409 is another change to the loan", () => {
   assert.equal(releaseConflictOf(err), "loan_changed");
 });
 
+test("a 409 whose errors are not a field map is another change to the loan", () => {
+  assert.equal(releaseConflictOf(httpError(409, { message: "Conflict", errors: "fee_fingerprint" })), "loan_changed");
+});
+
 test("anything that is not a 409 is no conflict", () => {
   assert.equal(releaseConflictOf(httpError(422, { errors: { status: ["Loan must be approved."] } })), null);
   assert.equal(releaseConflictOf(new Error("network")), null);
