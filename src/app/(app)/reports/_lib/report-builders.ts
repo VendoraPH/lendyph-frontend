@@ -169,7 +169,7 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
     principal: pick(raw, ["principal_amount", "principal", "amount"]),
     term: pick(raw, ["term", "term_months", "term_label"]),
     interest_rate: pick(raw, ["interest_rate", "rate"]),
-    status: pick(raw, ["status"]),
+    status: loanStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -263,23 +263,6 @@ function readListEnvelope(raw: unknown): ListEnvelope {
   };
 }
 
-interface ResolvedTotal {
-  value: number;
-  fromServer: boolean;
-}
-
-/** Prefer the server total; fall back to summing the page we were given. */
-function resolveTotal(
-  totals: Record<string, unknown> | null,
-  keys: string[],
-  rows: Record<string, unknown>[],
-  rowKey: string
-): ResolvedTotal {
-  const server = toNumber(pick(totals, keys));
-  if (server !== null) return { value: server, fromServer: true };
-  return { value: sum(rows, rowKey), fromServer: false };
-}
-
 /** "Principal ₱1,200.00 · Interest ₱300.00" — skips figures the API omits. */
 function breakdownHint(parts: [string, unknown][]): string | undefined {
   const segments = parts
@@ -292,44 +275,20 @@ function breakdownHint(parts: [string, unknown][]): string | undefined {
 }
 
 /**
- * Warn in the preview (and in every export) when the table is only the first
- * page, so a partial list is never read as the complete one.
- */
-function truncationNote(
-  shown: number,
-  totalRows: number | null,
-  totalsFromServer: boolean
-): ReportSection | null {
-  const truncated =
-    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
-  if (!truncated || shown === 0) return null;
-
-  const scope =
-    totalRows !== null
-      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} rows.`
-      : `Showing the first ${formatCount(shown)} rows — the API did not report a row count, so there may be more.`;
-  const totalsScope = totalsFromServer
-    ? "The totals above cover every row in the period, not just the rows listed."
-    : "The totals above cover only the rows listed.";
-
-  return {
-    kind: "note",
-    text: `${scope} ${totalsScope} Export to CSV for the complete list.`,
-  };
-}
-
-/**
  * Truncation note for a table whose totals row shows only the server's
  * figures: a total the server did not send is "—", never a sum of this page.
  * `noun` names what one row is ("repayments", "loans", "borrowers") because the
  * count comes from the server's `meta.total`, which counts those. There is no
  * "Export to CSV" pointer: these reports export the document, which holds only
- * the rows listed.
+ * the rows listed. `totals` is the block the server sent, if any: without one
+ * the footers are dashes, so the note says so instead of calling them the
+ * server's figures.
  */
 function serverTotalsTruncationNote(
   shown: number,
   totalRows: number | null,
-  noun: string
+  noun: string,
+  totals: Record<string, unknown> | null
 ): ReportSection | null {
   const truncated =
     totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
@@ -340,10 +299,11 @@ function serverTotalsTruncationNote(
       ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
       : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
 
-  return {
-    kind: "note",
-    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
-  };
+  const totalsScope = totals
+    ? `The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`
+    : `The server did not provide totals for the period, so the table totals show "—" rather than a sum of the ${noun} listed.`;
+
+  return { kind: "note", text: `${scope} ${totalsScope}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +343,7 @@ export function buildDailyCollectionDoc(
     const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
     const rows = rawRows.map(normalizeRepaymentRow);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -612,11 +572,9 @@ export function buildIncomeDoc(
   const interest = toNumber(pick(obj, ["interest_income", "interest"]));
   const fees = toNumber(pick(obj, ["processing_fees", "fees", "fee_income"]));
   const penalties = toNumber(pick(obj, ["penalty_income", "penalties"]));
-  const total =
-    toNumber(pick(obj, ["total_income", "total"])) ??
-    (interest !== null || fees !== null || penalties !== null
-      ? (interest ?? 0) + (fees ?? 0) + (penalties ?? 0)
-      : null);
+  // The server's total, or "—" when it sent none: never the three components
+  // added up here.
+  const total = toNumber(pick(obj, ["total_income", "total"]));
 
   const items: KpiItem[] = [
     kpi("Interest Income", currencyOrDash(interest), { tone: "positive" }),
@@ -630,7 +588,7 @@ export function buildIncomeDoc(
   if (byLoanRaw != null) {
     const { rows, totals, totalRows } = readListEnvelope(byLoanRaw);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -761,13 +719,14 @@ function agingScheduleSection(
 
   if (rows.length === 0) return null;
 
-  // Prefer the server's total as the denominator; fall back to the buckets we
-  // were given so the shares still add to 100% rather than to nothing.
-  const totalAmount = toNumber(total?.amount) ?? sum(rows, "amount");
+  // The server's total is the denominator. Without it the total and every
+  // share are "—": the buckets are never added up here.
+  const totalAmount = toNumber(total?.amount);
+  const hasTotal = totalAmount !== null && totalAmount > 0;
   const withShare = rows.map((r) => ({
     ...r,
     // A zero total would make every share NaN — report no share instead.
-    share: totalAmount > 0 ? ((r.amount ?? 0) / totalAmount) * 100 : null,
+    share: hasTotal ? ((r.amount ?? 0) / totalAmount) * 100 : null,
   }));
 
   return {
@@ -776,10 +735,10 @@ function agingScheduleSection(
     columns: AGING_COLUMNS,
     rows: withShare,
     totals: [
-      { column: "amount", label: "Total", value: formatCurrency(totalAmount) },
+      { column: "amount", label: "Total", value: currencyOrDash(totalAmount) },
       // Deliberately no total for `count`: bucket counts double-count a loan
       // that is late in two buckets, so a column sum would be wrong.
-      { column: "share", value: totalAmount > 0 ? formatPercent(100) : DASH },
+      { column: "share", value: hasTotal ? formatPercent(100) : DASH },
     ],
   };
 }
@@ -828,7 +787,10 @@ const BORROWER_LIST_COLUMNS: ReportColumn[] = [
   { key: "latest_loan_status", header: "Latest Loan Status", format: "text", width: 140 },
 ];
 
-/** A loan status as the loans screens label it; a value they don't know, as sent. */
+/**
+ * A loan status as the loans screens label it; a value they don't know, as
+ * sent. Legacy `ongoing` reads "Current", the reports' word for it.
+ */
 function loanStatusText(value: unknown): unknown {
   return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
     ? LOAN_STATUS_LABELS[value as LoanStatus]
@@ -878,7 +840,7 @@ export function buildBorrowerDoc(
     const { rows: rawRows, totals, totalRows } = readListEnvelope(releasedRaw);
     const rows = rawRows.map(normalizeBorrowerReleasedRow);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -964,7 +926,7 @@ export function buildDisbursementDoc(
       net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
     }));
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -1006,18 +968,15 @@ export function buildDisbursementDoc(
 export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeReleaseRow);
-  const principal = resolveTotal(
-    totals,
-    ["total_principal", "principal", "principal_amount"],
-    rows,
-    "principal"
-  );
+  // Every money total is the server's period-wide figure, or "—" when it sent
+  // none: never the rows on this page added up.
+  const principal = pick(totals, ["total_principal", "principal", "principal_amount"]);
   const netProceeds = pick(totals, ["total_net_proceeds"]);
   const outstanding = pick(totals, ["total_outstanding_balance"]);
 
   const items: KpiItem[] = [
     kpi("Total Releases", countOrDash(totalRows ?? rows.length)),
-    kpi("Total Principal", formatCurrency(principal.value), { tone: "positive" }),
+    kpi("Total Principal", currencyOrDash(principal), { tone: "positive" }),
   ];
   // Only shown when the API sends period-wide totals — never summed from a page.
   if (netProceeds !== null) {
@@ -1033,7 +992,7 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  const note = truncationNote(rows.length, totalRows, principal.fromServer);
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -1043,7 +1002,7 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
     rows,
     totals:
       rows.length > 0
-        ? [{ column: "principal", label: "Total", value: formatCurrency(principal.value) }]
+        ? [{ column: "principal", label: "Total", value: currencyOrDash(principal) }]
         : undefined,
     emptyText: "No loans were released in the selected period.",
   });
@@ -1058,41 +1017,33 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
 export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeRepaymentRow);
-  const amount = resolveTotal(
-    totals,
-    ["total_amount_paid", "amount", "total_amount", "amount_paid"],
-    rows,
-    "amount"
-  );
-  const penalty = resolveTotal(
-    totals,
-    ["total_penalty_applied", "penalty_amount", "total_penalty", "penalty_applied"],
-    rows,
-    "penalty_amount"
-  );
+  // Server totals only; "—" when one was not sent, never a page sum.
+  const amount = pick(totals, ["total_amount_paid", "amount", "total_amount", "amount_paid"]);
+  const penalty = pick(totals, [
+    "total_penalty_applied",
+    "penalty_amount",
+    "total_penalty",
+    "penalty_applied",
+  ]);
 
   const sections: ReportSection[] = [
     {
       kind: "kpi_grid",
       items: [
         kpi("Total Repayments", countOrDash(totalRows ?? rows.length)),
-        kpi("Total Collected", formatCurrency(amount.value), {
+        kpi("Total Collected", currencyOrDash(amount), {
           tone: "positive",
           hint: breakdownHint([
             ["Principal", pick(totals, ["total_principal_applied"])],
             ["Interest", pick(totals, ["total_interest_applied"])],
           ]),
         }),
-        kpi("Penalty Collected", formatCurrency(penalty.value)),
+        kpi("Penalty Collected", currencyOrDash(penalty)),
       ],
     },
   ];
 
-  const note = truncationNote(
-    rows.length,
-    totalRows,
-    amount.fromServer && penalty.fromServer
-  );
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -1103,8 +1054,8 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
     totals:
       rows.length > 0
         ? [
-            { column: "amount", label: "Total", value: formatCurrency(amount.value) },
-            { column: "penalty_amount", value: formatCurrency(penalty.value) },
+            { column: "amount", label: "Total", value: currencyOrDash(amount) },
+            { column: "penalty_amount", value: currencyOrDash(penalty) },
           ]
         : undefined,
     emptyText: "No repayments were recorded in the selected period.",
@@ -1211,7 +1162,7 @@ function accountFields(
     ["Term", pick(loan, ["term_label", "term"]), "text"],
     ["Release Date", pick(loan, ["release_date", "released_at"]), "date"],
     ["Maturity Date", pick(loan, ["maturity_date", "end_date"]), "date"],
-    ["Status", pick(loan, ["status"]), "text"],
+    ["Status", loanStatusText(pick(loan, ["status"])), "text"],
   ];
 
   // Only particulars the API actually sent — a statement padded with dashes
@@ -1348,7 +1299,7 @@ function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, un
     total_paid: pick(raw, ["total_paid", "amount_paid", "total_amount_paid"]),
     balance: pick(raw, ["outstanding_balance", "balance", "remaining_balance"]),
     overdue: pick(raw, ["overdue_amount", "past_due_amount", "total_overdue"]),
-    status: pick(raw, ["status"]),
+    status: loanStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -1458,18 +1409,12 @@ export function buildSubsidiaryLedgerDoc(
 export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeDueRow);
-  const due = resolveTotal(
-    totals,
-    ["total_due", "amount_due", "total_amount_due"],
-    rows,
-    "amount_due"
-  );
-  const balance = resolveTotal(
-    totals,
-    ["total_balance", "amount_remaining", "total_remaining", "balance"],
-    rows,
-    "balance"
-  );
+  // Every money figure below, KPI and footer alike, is the server's
+  // period-wide total or "—" when it sent none: never this page added up, so
+  // the footer never mixes a period total in one column with a page sum in
+  // the next.
+  const due = pick(totals, ["total_due", "amount_due", "total_amount_due"]);
+  const balance = pick(totals, ["total_balance", "amount_remaining", "total_remaining", "balance"]);
 
   const serverOverdueCount = toNumber(
     pick(totals, ["overdue_count", "overdue", "past_due_count"])
@@ -1486,7 +1431,7 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
         kpi("Overdue Count", countOrDash(overdueCount), {
           tone: overdueCount > 0 ? "negative" : "neutral",
         }),
-        kpi("Total Amount Due", formatCurrency(due.value), {
+        kpi("Total Amount Due", currencyOrDash(due), {
           tone: "negative",
           hint: breakdownHint([
             ["Principal", pick(totals, ["total_principal_due"])],
@@ -1494,29 +1439,13 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
             ["Penalty", pick(totals, ["total_penalty"])],
           ]),
         }),
-        kpi("Total Balance", formatCurrency(balance.value)),
+        kpi("Total Balance", currencyOrDash(balance)),
       ],
     },
   ];
 
-  const note = truncationNote(
-    rows.length,
-    totalRows,
-    due.fromServer && balance.fromServer && serverOverdueCount !== null
-  );
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "schedules", totals);
   if (note) sections.push(note);
-
-  // Each component prefers the server's period-wide total and falls back to
-  // summing the page, exactly as the headline figures do — so the footer never
-  // mixes a period total in one column with a page total in the next.
-  const principalDue = resolveTotal(
-    totals,
-    ["total_principal_due"],
-    rows,
-    "principal_due"
-  );
-  const interestDue = resolveTotal(totals, ["total_interest_due"], rows, "interest_due");
-  const penalty = resolveTotal(totals, ["total_penalty"], rows, "penalty_amount");
 
   sections.push({
     kind: "table",
@@ -1529,13 +1458,16 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
             {
               column: "principal_due",
               label: "Total",
-              value: formatCurrency(principalDue.value),
+              value: currencyOrDash(pick(totals, ["total_principal_due"])),
             },
-            { column: "interest_due", value: formatCurrency(interestDue.value) },
-            { column: "penalty_amount", value: formatCurrency(penalty.value) },
-            { column: "amount_due", value: formatCurrency(due.value) },
-            { column: "amount_paid", value: formatCurrency(sum(rows, "amount_paid")) },
-            { column: "balance", value: formatCurrency(balance.value) },
+            { column: "interest_due", value: currencyOrDash(pick(totals, ["total_interest_due"])) },
+            { column: "penalty_amount", value: currencyOrDash(pick(totals, ["total_penalty"])) },
+            { column: "amount_due", value: currencyOrDash(due) },
+            {
+              column: "amount_paid",
+              value: currencyOrDash(pick(totals, ["total_paid", "total_amount_paid"])),
+            },
+            { column: "balance", value: currencyOrDash(balance) },
           ]
         : undefined,
     emptyText: "No schedules due or past due for the selected period.",
