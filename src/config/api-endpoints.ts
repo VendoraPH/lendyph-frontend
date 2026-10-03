@@ -260,6 +260,7 @@ export const API_ENDPOINTS = {
   GCASH: {
     TRANSACTIONS_LIST: "/gcash/transactions",
     TRANSACTIONS_CREATE: "/gcash/transactions",
+    TRANSACTIONS_PREVIEW: "/gcash/transactions/preview",
     TRANSACTIONS_MARK_PAID: (id: number) => `/gcash/transactions/${id}/paid`,
     NON_MEMBERS_LIST: "/gcash/non-members",
     NON_MEMBERS_CREATE: "/gcash/non-members",

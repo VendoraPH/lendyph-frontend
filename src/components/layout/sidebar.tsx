@@ -28,6 +28,7 @@ import {
 import { BrandLogo } from "@/components/common";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
+import { collapsedNavLabel, countLabel } from "./sidebar-labels";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -74,12 +75,6 @@ function CountPill({
       {label && <span className="sr-only">{label}</span>}
     </span>
   );
-}
-
-/** "1 loan application awaiting approval" / "3 loan applications awaiting approval". */
-function countLabel(count: number | undefined, noun: string, state: string): string | undefined {
-  if (!count || count <= 0) return undefined;
-  return `${count} ${noun}${count === 1 ? "" : "s"} ${state}`;
 }
 
 // ── Nav Link ──
@@ -149,6 +144,9 @@ function NavLink({
             <Link
               href={item.href}
               onClick={onNavigate}
+              // Only an icon shows, so the link is named here, the same way for
+              // every item; this also overrides an icon's own alt text.
+              aria-label={collapsedNavLabel(item.title, badgeLabel)}
               className={cn(
                 "flex items-center justify-center rounded-2xl p-2 transition-all duration-200",
                 "hover:bg-muted",
@@ -160,14 +158,10 @@ function NavLink({
           <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
             {badge && badge > 0 ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
-                />
-                {/* The icon link has no visible name; say what it is before the count. */}
-                {badgeLabel && <span className="sr-only">{`${item.title}, ${badgeLabel}`}</span>}
-              </>
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
+              />
             ) : null}
           </span>
         </TooltipTrigger>

@@ -994,7 +994,7 @@ export function buildDisbursementDoc(
 
   return {
     reportId: "disbursement_report",
-    meta: meta("Disbursement Report", range, "Loan releases during the selected period"),
+    meta: meta("Disbursement Summary", range, "Loan releases during the selected period"),
     sections,
   };
 }

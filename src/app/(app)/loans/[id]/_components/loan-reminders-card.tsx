@@ -100,8 +100,11 @@ function Summary({ data }: { data: LoanReminderSummary }) {
 }
 
 function LoanRemindersContent({ loanId }: { loanId: number }) {
+  // The card starts collapsed, so nothing is requested until it is first
+  // opened; after that it stays loaded while it is closed and reopened.
+  const [opened, setOpened] = useState(false);
   const fetcher = useCallback(() => reminderService.getLoanReminders(loanId), [loanId]);
-  const summary = useApiResource(fetcher);
+  const summary = useApiResource(fetcher, opened);
   const [sendOpen, setSendOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -127,6 +130,9 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
       icon={<BellRing className="h-4 w-4 text-muted-foreground" />}
       title="Reminders"
       defaultOpen={false}
+      onOpenChange={(open) => {
+        if (open) setOpened(true);
+      }}
       headerExtra={
         summary.data && (
           <div className="flex flex-wrap gap-2">

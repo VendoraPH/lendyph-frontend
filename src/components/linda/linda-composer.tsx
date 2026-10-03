@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { SendHorizontal } from "lucide-react";
 import { LINDA_MAX_MESSAGE_LENGTH, isImeComposing } from "@/lib/linda";
 import { Button } from "@/components/ui/button";
@@ -12,17 +12,20 @@ interface LindaComposerProps {
   onSend: (text: string) => void;
   disabled: boolean;
   autoFocus?: boolean;
+  /** The question box, for a caller that hands focus back to it. */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
 /** The question box. Enter sends, Shift+Enter starts a new line. */
-export function LindaComposer({ value, onChange, onSend, disabled, autoFocus }: LindaComposerProps) {
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+export function LindaComposer({ value, onChange, onSend, disabled, autoFocus, inputRef: outerRef }: LindaComposerProps) {
+  const ownRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = outerRef ?? ownRef;
 
   // Not the autoFocus attribute: focusing scrolls ancestors into view, and
   // while the panel animates open that shifts the whole app sideways.
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus({ preventScroll: true });
-  }, [autoFocus]);
+  }, [autoFocus, inputRef]);
   const canSend = !disabled && value.trim() !== "";
 
   const send = () => {
