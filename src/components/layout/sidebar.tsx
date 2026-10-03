@@ -7,7 +7,10 @@ import { SIDEBAR_NAV } from "@/constants";
 import type { NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
-import { usePendingLoanApprovals } from "@/hooks/use-pending-loan-approvals";
+import {
+  pendingApprovalsBadgeEnabled,
+  usePendingLoanApprovals,
+} from "@/hooks/use-pending-loan-approvals";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -306,11 +309,10 @@ function SidebarContent({
     per_page: 1,
     enabled: can("borrowers:view"),
   });
-  // Loans waiting on an approver. Only asked for by someone who can approve
-  // and can read the list it is counted from (`GET /loans` needs loans:view).
-  const pendingLoanApprovals = usePendingLoanApprovals(
-    can("loans:approve") && can("loans:view")
-  );
+  // Loans waiting on the signed-in user's approval step. Only asked for by
+  // someone who can read the list it is counted from (`GET /loans` needs
+  // loans:view); the server limits the count to the user's own steps.
+  const pendingLoanApprovals = usePendingLoanApprovals(pendingApprovalsBadgeEnabled(can));
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -407,7 +409,7 @@ function SidebarContent({
                 item.href === "/borrowers"
                   ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
                   : item.href === "/loans"
-                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting approval")
+                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting your approval")
                     : undefined
               }
               childBadges={
