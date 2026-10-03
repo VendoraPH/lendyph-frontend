@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, RefreshCw, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
   borrowerService,
@@ -28,7 +28,7 @@ import {
   loanService,
 } from "@/services";
 import { api } from "@/lib/api-client";
-import { httpStatusOf } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { completeRows, emptyDrain } from "@/lib/paginate";
 import { usePermission } from "@/hooks";
 import {
@@ -135,6 +135,15 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import { parseEditLoanId } from "./_lib/edit-loan-id";
+import {
+  attachedCollateralRows,
+  collateralSaveBlock,
+  editCollateralLoad,
+  tracksEditCollaterals,
+  type EditCollateralResult,
+  type SelectedCollateral,
+} from "./_lib/edit-collaterals";
+import { saveLoanEdit } from "./_lib/save-loan-edit";
 
 // ── Currency Formatter ──
 
@@ -300,6 +309,9 @@ function NewLoanApplicationInner() {
   const canListProducts = can("loans:view");
   const canListFees = can("fees:view");
   const canListCollaterals = can("collaterals:view");
+  // Changing a loan's collaterals. Edit mode states them on the loan update,
+  // which the server refuses outright without this.
+  const canUpdateCollaterals = can("collaterals:update");
   const canReadShareCapital = can("share_capital:view");
   const missingAccess = useMemo(
     () =>
@@ -352,7 +364,7 @@ function NewLoanApplicationInner() {
   // value snapshotted at attach time so post-attach ledger drift doesn't
   // silently move security status.
   const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralValueRow; snapshot_value: number }[]
+    SelectedCollateral[]
   >([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
@@ -576,49 +588,50 @@ function NewLoanApplicationInner() {
     };
   }, [borrowerId, collateralTypes, editLoanId, canListCollaterals, canReadShareCapital]);
 
-  // ── Edit mode: prefill selected collaterals from the loan ──
+  // ── Edit mode: the loan's attached collaterals ──
+  // Read on their own, not after the collateral types and the member's
+  // collaterals: waiting on those left a loan whose member has none
+  // registered, or whose list was slow or failed, with no collaterals on the
+  // form, and saving then detached them all. Save waits for this read
+  // (`collateralSaveBlock`), because the save states the loan's collaterals
+  // from it.
+  const tracksCollaterals = tracksEditCollaterals(isEditMode, canListCollaterals);
+  const [collateralReload, setCollateralReload] = useState(0);
+  const [collateralResult, setCollateralResult] = useState<EditCollateralResult | null>(null);
   useEffect(() => {
-    if (!editLoanId) return;
-    if (collateralTypes.length === 0) return;
-    if (availableCollaterals.length === 0) return;
+    if (!editLoanId || !canListCollaterals) return;
+    const request = `${editLoanId}:${collateralReload}`;
     let cancelled = false;
-    (async () => {
-      try {
-        const links = await collateralService.listForLoan(editLoanId);
+    collateralService
+      .listForLoan(editLoanId)
+      .then((links) => {
         if (cancelled) return;
-        const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
-        // Rows are CollateralResource objects: the collateral id is `id`, and
-        // the booked amount is under `pivot`. They were read as `collateral_id`
-        // and `snapshot_value`, which the endpoint has never sent — so this
-        // prefill silently produced an empty list and edit mode looked as
-        // though the loan had no collateral attached.
-        const prefilled = links
-          .map((link) => {
-            const c = byId.get(link.id);
-            return c
-              ? {
-                  collateral: c,
-                  snapshot_value: link.pivot?.snapshot_value ?? c.effective_value,
-                }
-              : null;
-          })
-          .filter(
-            (
-              v,
-            ): v is {
-              collateral: CollateralValueRow;
-              snapshot_value: number;
-            } => v !== null,
-          );
-        setSelectedCollaterals(prefilled);
-      } catch {
-        // Non-blocking
-      }
-    })();
+        const attached = attachedCollateralRows(links, editLoanId);
+        setSelectedCollaterals(attached);
+        setCollateralResult({ request, attached, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCollateralResult({
+          request,
+          attached: null,
+          error: getErrorMessage(err, "Please try again."),
+        });
+      });
     return () => {
       cancelled = true;
     };
-  }, [editLoanId, collateralTypes, availableCollaterals]);
+  }, [editLoanId, canListCollaterals, collateralReload]);
+  const collateralLoad = tracksCollaterals
+    ? editCollateralLoad(collateralResult, `${editLoanId}:${collateralReload}`)
+    : null;
+  const collateralBlock = collateralSaveBlock(collateralLoad);
+  // In edit mode the collaterals can be changed once the loan's are known, and
+  // only by a role that may change them; otherwise the save never states them.
+  const canEditCollaterals =
+    !isEditMode || (collateralLoad === "ready" && canUpdateCollaterals);
+  const attachedCollaterals =
+    isEditMode && canEditCollaterals ? collateralResult?.attached ?? null : null;
 
   // Co-makers: all borrowers except the selected borrower and already-picked co-makers
   const availableCoMakersFor = useCallback(
@@ -918,6 +931,7 @@ function NewLoanApplicationInner() {
 
   // ── Submit ──
   const handleSubmit = async () => {
+    if (collateralBlock) return;
     // Collect every field the user still needs to fix and surface them in a
     // single consolidated pop-up instead of inline red messages.
     const missing: string[] = [];
@@ -986,7 +1000,13 @@ function NewLoanApplicationInner() {
       // Edit mode — update existing loan, skip auto-submit (the loan is
       // already beyond draft and already in the approval chain).
       if (isEditMode && editLoanId) {
-        const updated = await loanService.update(editLoanId, payload);
+        // Collaterals go in the same update, and only when they changed.
+        const updated = await saveLoanEdit(
+          editLoanId,
+          payload,
+          selectedCollaterals,
+          attachedCollaterals,
+        );
 
         if (policyException && policyExceptionLetter) {
           try {
@@ -997,39 +1017,6 @@ function NewLoanApplicationInner() {
           } catch {
             toast.warning("Loan updated but policy exception letter upload failed");
           }
-        }
-
-        // Reconcile collaterals: detach what's no longer selected, attach
-        // the new picks. Snapshot value is captured at attach time so
-        // post-edit ledger drift doesn't move security status silently.
-        try {
-          const existingLinks = await collateralService.listForLoan(
-            updated.id,
-          );
-          const selectedIds = new Set(
-            selectedCollaterals.map((s) => s.collateral.id),
-          );
-          await Promise.all(
-            existingLinks
-              .filter((l) => !selectedIds.has(l.id))
-              .map((l) => collateralService.detachFromLoan(updated.id, l.id)),
-          );
-          // Re-attaching one the loan already holds is a 422, so skip those:
-          // `attach()` rejects a duplicate rather than treating it as a no-op.
-          const alreadyAttached = new Set(existingLinks.map((l) => l.id));
-          await Promise.all(
-            selectedCollaterals
-              .filter((s) => !alreadyAttached.has(s.collateral.id))
-              .map((s) =>
-                collateralService.attachToLoan(
-                  updated.id,
-                  s.collateral.id,
-                  s.snapshot_value,
-                ),
-              ),
-          );
-        } catch {
-          toast.warning("Loan updated but some collaterals failed to sync");
         }
 
         toast.success("Loan application updated");
@@ -1638,20 +1625,64 @@ function NewLoanApplicationInner() {
                   this loan. Only collaterals not currently locked to another
                   active loan can be selected.
                 </p>
+                {isEditMode && !canUpdateCollaterals && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Your role can view this loan&rsquo;s collaterals but not
+                    change them.
+                  </p>
+                )}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCollateralPickerOpen(true)}
-                disabled={borrowerId === null}
-              >
-                <Plus className="mr-2 size-4" />
-                Add Collateral
-              </Button>
+              {(!isEditMode || canUpdateCollaterals) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCollateralPickerOpen(true)}
+                  disabled={borrowerId === null || !canEditCollaterals}
+                >
+                  <Plus className="mr-2 size-4" />
+                  Add Collateral
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {borrowerId === null ? (
+            {collateralLoad === "loading" ? (
+              <div
+                role="status"
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <Spinner className="size-4" />
+                Loading this loan&rsquo;s collaterals…
+              </div>
+            ) : collateralLoad === "error" ? (
+              <div
+                role="alert"
+                className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+              >
+                <AlertCircle
+                  className="mt-0.5 size-4 shrink-0 text-destructive"
+                  aria-hidden="true"
+                />
+                <div className="flex-1 space-y-2">
+                  <p className="font-medium">
+                    We couldn&rsquo;t load this loan&rsquo;s collaterals.
+                  </p>
+                  <p className="text-muted-foreground">
+                    {collateralResult?.error} Saving is off until they load, so
+                    the loan&rsquo;s collaterals stay as they are.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCollateralReload((n) => n + 1)}
+                  >
+                    <RefreshCw className="mr-2 size-4" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            ) : borrowerId === null ? (
               <p className="text-sm text-muted-foreground">
                 Pick a member first to load their registered collaterals.
               </p>
@@ -1664,7 +1695,9 @@ function NewLoanApplicationInner() {
                 <p className="mt-1 text-xs text-muted-foreground/80">
                   {availableCollaterals.length === 0
                     ? "This member has no registered collaterals yet."
-                    : "Click “Add Collateral” to attach one."}
+                    : canEditCollaterals
+                      ? "Click “Add Collateral” to attach one."
+                      : null}
                 </p>
               </div>
             ) : (
@@ -1690,19 +1723,21 @@ function NewLoanApplicationInner() {
                     <span className="text-sm font-semibold tabular-nums">
                       {formatCurrency(snapshot_value)}
                     </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() =>
-                        setSelectedCollaterals((prev) =>
-                          prev.filter((s) => s.collateral.id !== c.id),
-                        )
-                      }
-                      aria-label="Remove collateral"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    {canEditCollaterals && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() =>
+                          setSelectedCollaterals((prev) =>
+                            prev.filter((s) => s.collateral.id !== c.id),
+                          )
+                        }
+                        aria-label="Remove collateral"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2075,11 +2110,20 @@ function NewLoanApplicationInner() {
       </Card>
 
       {/* ── Submit ── */}
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-2 sm:items-end">
+        {collateralBlock && (
+          <p
+            id="save-blocked-reason"
+            className="text-sm text-muted-foreground sm:text-right"
+          >
+            {collateralBlock}
+          </p>
+        )}
         <Button
           size="lg"
           className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark sm:w-auto"
-          disabled={submitting}
+          disabled={submitting || collateralBlock !== null}
+          aria-describedby={collateralBlock ? "save-blocked-reason" : undefined}
           onClick={handleSubmit}
         >
           {submitting

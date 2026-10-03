@@ -77,6 +77,9 @@ export interface Collateral {
 export interface LoanCollateral extends Collateral {
   type?: CollateralType;
   collateral_type?: CollateralType;
+  /** The server's valuation, as on every `CollateralController` response. */
+  effective_value?: number;
+  value_unknown?: boolean;
   pivot?: {
     loan_id: number;
     snapshot_value: number;
