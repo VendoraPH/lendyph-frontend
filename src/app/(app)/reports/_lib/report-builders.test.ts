@@ -115,7 +115,7 @@ function assertNoDashes(doc: ReportDocument): void {
 
 // Flat headline keys sit alongside the nested blocks. `outstanding_balance`
 // includes insurance, so it is deliberately larger than principal + interest +
-// penalty (3,418,151.50) — the two are not meant to match.
+// penalty (`outstanding.total`, 3,418,151.50) — the two are not meant to match.
 const PORTFOLIO_PAYLOAD = {
   active_loans: 42,
   outstanding_balance: 3462980.15,
@@ -123,8 +123,21 @@ const PORTFOLIO_PAYLOAD = {
   par_ratio: 12.5,
   par_threshold_days: 30,
   portfolio: { loan_count: 42, total_released: 5250000 },
-  outstanding: { principal: 3120450.75, interest: 285300.5, penalty: 12400.25 },
-  overdue: { principal: 410200.4, interest: 38100.6, penalty: 9800, loan_count: 7 },
+  outstanding: {
+    principal: 3120450.75,
+    interest: 285300.5,
+    penalty: 12400.25,
+    insurance: 44828.65,
+    balance: 3462980.15,
+    total: 3418151.5,
+  },
+  overdue: {
+    principal: 410200.4,
+    interest: 38100.6,
+    penalty: 9800,
+    loan_count: 7,
+    total: 458101,
+  },
   by_branch: [
     {
       branch_id: 1,
@@ -134,6 +147,7 @@ const PORTFOLIO_PAYLOAD = {
       outstanding_balance: 3120450.75,
     },
   ],
+  by_branch_totals: { loan_count: 42, total_released: 5250000, outstanding_balance: 3120450.75 },
   generated_at: "2026-08-06 09:15:00",
 };
 
@@ -168,16 +182,16 @@ test("portfolio summary surfaces the overdue loan count as a hint", () => {
   assert.equal(kpi(doc, "At Risk (>30d overdue)").hint, "7 overdue loans");
 });
 
-test("portfolio summary falls back to the nested blocks when the flat keys are absent", () => {
+test("portfolio summary never adds up the nested blocks in place of the headline balance", () => {
   const { active_loans, outstanding_balance, ...nestedOnly } = PORTFOLIO_PAYLOAD;
   void active_loans;
   void outstanding_balance;
   const doc = buildPortfolioSummaryDoc(nestedOnly, RANGE);
 
   assert.equal(kpiValue(doc, "Total Active Loans"), "42");
-  // outstanding.principal + interest + penalty
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱3,418,151.50");
-  assert.equal(kpi(doc, "Outstanding Balance").hint, "Principal + interest + penalty");
+  // Not ₱3,418,151.50 (principal + interest + penalty), nor outstanding.total.
+  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(kpi(doc, "Outstanding Balance").hint, undefined);
 });
 
 test("portfolio summary dashes only the figures the API omits", () => {
@@ -702,6 +716,7 @@ const DUE_ROWS = [
     total_due: 5450.5,
     principal_paid: 0,
     interest_paid: 0,
+    amount_paid: 0,
     amount_remaining: 5450.5,
     days_overdue: 22,
     status: "overdue",
@@ -719,6 +734,7 @@ const DUE_ROWS = [
     total_due: 3900.25,
     principal_paid: 1000,
     interest_paid: 0,
+    amount_paid: 1000,
     amount_remaining: 2900.25,
     days_overdue: 0,
     status: "partial",
@@ -1057,7 +1073,39 @@ test("portfolio summary renders the by_branch breakdown it used to drop", () => 
   assert.equal(table.rows.length, 1);
   assert.equal(table.rows[0].branch_name, "Main");
   assert.equal(table.rows[0].loan_count, 42);
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "loan_count"), "42");
   assert.equal(namedTableTotal(doc, "Breakdown by Branch", "total_released"), "₱5,250,000.00");
+  assert.equal(
+    namedTableTotal(doc, "Breakdown by Branch", "outstanding_balance"),
+    "₱3,120,450.75"
+  );
+});
+
+test("the branch footer is the server's by_branch_totals, read figure by figure", () => {
+  const doc = buildPortfolioSummaryDoc(
+    {
+      ...PORTFOLIO_PAYLOAD,
+      // Deliberately unlike the row, so a sum of the rows cannot pass.
+      by_branch_totals: { loan_count: 50, total_released: 6000000.5, outstanding_balance: 4000000.25 },
+    },
+    RANGE
+  );
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "loan_count"), "50");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "total_released"), "₱6,000,000.50");
+  assert.equal(
+    namedTableTotal(doc, "Breakdown by Branch", "outstanding_balance"),
+    "₱4,000,000.25"
+  );
+});
+
+test("the branch footer shows dashes, not a sum of the branches, without by_branch_totals", () => {
+  const { by_branch_totals, ...withoutTotals } = PORTFOLIO_PAYLOAD;
+  void by_branch_totals;
+  const doc = buildPortfolioSummaryDoc(withoutTotals, RANGE);
+
+  for (const column of ["loan_count", "total_released", "outstanding_balance"]) {
+    assert.equal(namedTableTotal(doc, "Breakdown by Branch", column), DASH, column);
+  }
 });
 
 test("a branch row with no name is labelled rather than left blank", () => {
@@ -1087,11 +1135,28 @@ test("portfolio summary splits outstanding against overdue by component", () => 
   );
   assert.equal(table.rows[0].outstanding, 3120450.75);
   assert.equal(table.rows[0].overdue, 410200.4);
-  // 3,120,450.75 + 285,300.50 + 12,400.25
+  // The server's outstanding.total and overdue.total, insurance excluded.
   assert.equal(
     namedTableTotal(doc, "Outstanding vs Overdue Composition", "outstanding"),
     "₱3,418,151.50"
   );
+  assert.equal(
+    namedTableTotal(doc, "Outstanding vs Overdue Composition", "overdue"),
+    "₱458,101.00"
+  );
+});
+
+test("the composition footer shows dashes, not a sum of the components, without a total", () => {
+  const doc = buildPortfolioSummaryDoc(
+    {
+      ...PORTFOLIO_PAYLOAD,
+      outstanding: { principal: 3120450.75, interest: 285300.5, penalty: 12400.25 },
+      overdue: { principal: 410200.4, interest: 38100.6, penalty: 9800, loan_count: 7 },
+    },
+    RANGE
+  );
+  assert.equal(namedTableTotal(doc, "Outstanding vs Overdue Composition", "outstanding"), DASH);
+  assert.equal(namedTableTotal(doc, "Outstanding vs Overdue Composition", "overdue"), DASH);
 });
 
 test("a component the API omitted on both sides is dropped, not shown as zero", () => {
@@ -1167,18 +1232,17 @@ test("due/past due carries the per-row breakdown the API already sends", () => {
   assert.equal(rows[0].principal_due, 4000);
   assert.equal(rows[0].interest_due, 1200.5);
   assert.equal(rows[0].penalty_amount, 250);
-  assert.equal(rows[1].amount_paid, 1000); // principal_paid + interest_paid
+  assert.equal(rows[1].amount_paid, 1000); // the server's amount_paid
 });
 
-test("an unpaid row reports zero paid, while a silent API reports nothing", () => {
+test("a row's Paid is the server's amount_paid, never its components added up", () => {
   const doc = buildDuePastDueListDoc(
     {
       data: [
         DUE_ROWS[0],
         (() => {
-          const { principal_paid, interest_paid, ...silent } = DUE_ROWS[1];
-          void principal_paid;
-          void interest_paid;
+          const { amount_paid, ...silent } = DUE_ROWS[1];
+          void amount_paid;
           return silent;
         })(),
       ],
@@ -1187,8 +1251,14 @@ test("an unpaid row reports zero paid, while a silent API reports nothing", () =
   );
   const rows = tableRows(doc);
 
+  // An unpaid row the server reports as 0 stays a real zero.
   assert.equal(rows[0].amount_paid, 0);
+  // principal_paid (1,000) + interest_paid (0) is not worked out here.
   assert.equal(rows[1].amount_paid, null);
+  const table = namedTable(doc, "Due / Past Due");
+  const paid = table.columns.find((c) => c.key === "amount_paid");
+  assert.ok(paid);
+  assert.equal(formatCell(rows[1], paid), DASH);
 });
 
 test("due/past due footer money comes from the server totals, not the page", () => {
@@ -1225,9 +1295,8 @@ test("releases list carries the application number", () => {
 // ---------------------------------------------------------------------------
 // Statement of Account / Subsidiary Ledger
 //
-// The API documents no response schema for either endpoint, so the builders
-// read a wide set of aliases. These fixtures pin the primary shape; the alias
-// tests below pin the fallbacks.
+// These fixtures pin the shape ReportService sends; the alias tests below pin
+// the fallbacks the builders still read. Every total is the server's.
 // ---------------------------------------------------------------------------
 
 const SOA_PAYLOAD = {
@@ -1243,8 +1312,8 @@ const SOA_PAYLOAD = {
     status: "ongoing",
   },
   borrower: { id: 5, full_name: "Maria Santos", borrower_code: "MB-0005" },
-  summary: { total_paid: 21000.5, outstanding_balance: 34500.25, overdue_amount: 5450.5 },
-  schedule: [
+  summary: { total_paid: 9500, outstanding_balance: 34500.25, overdue_amount: 5450.5 },
+  amortization_schedule: [
     {
       period_number: 1,
       due_date: "2026-03-01",
@@ -1255,6 +1324,7 @@ const SOA_PAYLOAD = {
       total_due: 9500,
       principal_paid: 8000,
       interest_paid: 1500,
+      amount_paid: 9500,
       amount_remaining: 0,
       status: "paid",
     },
@@ -1268,21 +1338,32 @@ const SOA_PAYLOAD = {
       total_due: 9510,
       principal_paid: 0,
       interest_paid: 0,
+      amount_paid: 0,
       amount_remaining: 9510,
       status: "overdue",
     },
   ],
+  schedule_totals: {
+    principal_due: 16000,
+    interest_due: 2760,
+    penalty_amount: 250,
+    total_due: 19010,
+    amount_paid: 9500,
+  },
   transactions: [
     {
-      id: 1,
       date: "2026-03-01",
-      type: "repayment",
-      reference: "OR-1001",
-      method: "cash",
-      amount: 9500,
+      receipt_number: "OR-1001",
+      amount_paid: 9500,
+      principal_applied: 8000,
+      interest_applied: 1500,
+      penalty_applied: 0,
+      debit: null,
+      credit: 9500,
       running_balance: 42000,
     },
   ],
+  transaction_totals: { debit: 0, credit: 9500 },
 };
 
 test("statement of account opens with the account particulars", () => {
@@ -1323,25 +1404,111 @@ test("statement of account particulars omit what the API did not send", () => {
 test("statement of account reads the summary block for its balances", () => {
   const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
 
-  assert.equal(kpiValue(doc, "Total Paid"), "₱21,000.50");
+  assert.equal(kpiValue(doc, "Total Paid"), "₱9,500.00");
   assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
   assert.equal(kpiValue(doc, "Past Due"), "₱5,450.50");
 });
 
-test("the amortization schedule sums paid from principal_paid + interest_paid", () => {
+test("the amortization schedule shows each period's paid figure as the server sent it", () => {
   const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Amortization Schedule");
 
   assert.equal(table.rows[0].amount_paid, 9500);
   assert.equal(table.rows[1].amount_paid, 0);
   assert.equal(table.rows[1].balance, 9510);
-  assert.equal(
-    table.totals?.find((t) => t.column === "total_due")?.value,
-    "₱19,010.00"
+});
+
+test("a period without amount_paid shows a dash, not principal_paid + interest_paid", () => {
+  const [first, second] = SOA_PAYLOAD.amortization_schedule;
+  const { amount_paid, ...withoutPaid } = first;
+  void amount_paid;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_PAYLOAD, amortization_schedule: [withoutPaid, second] },
+      RANGE
+    ),
+    "Amortization Schedule"
   );
+  const paid = table.columns.find((c) => c.key === "amount_paid");
+  assert.ok(paid);
+
+  assert.equal(table.rows[0].amount_paid, null);
+  assert.equal(formatCell(table.rows[0], paid), DASH);
+});
+
+test("the schedule footer is the server's schedule_totals", () => {
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_PAYLOAD,
+      // Deliberately unlike the rows, so a sum of the rows cannot pass.
+      schedule_totals: {
+        principal_due: 48000,
+        interest_due: 7560.5,
+        penalty_amount: 1250.25,
+        total_due: 56810.75,
+        amount_paid: 28500,
+      },
+    },
+    RANGE
+  );
+
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "principal_due"), "₱48,000.00");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "interest_due"), "₱7,560.50");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "penalty_amount"), "₱1,250.25");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_due"), "₱56,810.75");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "amount_paid"), "₱28,500.00");
+});
+
+test("the transaction footer is the server's transaction_totals", () => {
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, transaction_totals: { debit: 0, credit: 21000.5 } },
+    RANGE
+  );
+
+  assert.equal(namedTableTotal(doc, "Transaction History", "debit"), "₱0.00");
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱21,000.50");
+});
+
+test("statement footers show dashes, not sums of the rows, without the server's totals", () => {
+  const { schedule_totals, transaction_totals, ...withoutTotals } = SOA_PAYLOAD;
+  void schedule_totals;
+  void transaction_totals;
+  const doc = buildStatementOfAccountDoc(withoutTotals, RANGE);
+
+  for (const column of ["principal_due", "interest_due", "penalty_amount", "total_due", "amount_paid"]) {
+    assert.equal(namedTableTotal(doc, "Amortization Schedule", column), DASH, column);
+  }
+  assert.equal(namedTableTotal(doc, "Transaction History", "debit"), DASH);
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), DASH);
+});
+
+test("a transaction row carries the server's debit and credit", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+
+  assert.equal(table.rows[0].credit, 9500);
+  assert.equal(table.rows[0].debit, null);
+  assert.equal(table.rows[0].running_balance, 42000);
 });
 
 test("a typed transaction is posted to the correct side of the ledger", () => {
-  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        transactions: [
+          {
+            date: "2026-03-01",
+            type: "repayment",
+            reference: "OR-1001",
+            method: "cash",
+            amount: 9500,
+            running_balance: 42000,
+          },
+        ],
+      },
+      RANGE
+    ),
+    "Transaction History"
+  );
 
   assert.equal(table.rows[0].credit, 9500);
   assert.equal(table.rows[0].debit, null);
@@ -1408,16 +1575,24 @@ const LEDGER_PAYLOAD = {
       status: "closed",
     },
   ],
-  entries: [
-    {
-      transaction_date: "2026-03-01",
-      type: "payment",
-      reference: "OR-1001",
-      amount: 9500,
-      running_balance: 42000,
-    },
-  ],
+  totals: {
+    total_loans: 2,
+    total_portfolio: 80000,
+    total_principal: 80000,
+    total_paid: 51000.5,
+    total_outstanding: 34500.25,
+  },
 };
+
+const LEDGER_ENTRIES = [
+  {
+    transaction_date: "2026-03-01",
+    type: "payment",
+    reference: "OR-1001",
+    amount: 9500,
+    running_balance: 42000,
+  },
+];
 
 test("subsidiary ledger lists every loan account for the borrower", () => {
   const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
@@ -1427,7 +1602,10 @@ test("subsidiary ledger lists every loan account for the borrower", () => {
   assert.equal(table.rows.length, 2);
   assert.equal(table.rows[0].loan_account_number, "LN-2026-0001");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "principal"), "₱80,000.00");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "total_paid"), "₱51,000.50");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "balance"), "₱34,500.25");
+  // The server states no overdue figure for the ledger, so none is footed.
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "overdue"), undefined);
 });
 
 test("subsidiary ledger labels each loan's status as the loans screens do", () => {
@@ -1441,30 +1619,62 @@ test("subsidiary ledger reads the branch off the nested relation", () => {
   assert.equal(fieldValue(doc, "Member Particulars", "Member No."), "MB-0005");
 });
 
-test("ledger totals are summed from the accounts when the API sends no summary", () => {
+test("ledger KPIs read the server's totals block", () => {
   const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
 
   assert.equal(kpiValue(doc, "Total Loans"), "2");
   assert.equal(kpiValue(doc, "Total Released"), "₱80,000.00");
   assert.equal(kpiValue(doc, "Total Paid"), "₱51,000.50");
+  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
 });
 
-test("a server summary block wins over the summed accounts", () => {
+test("the ledger's KPIs and footer are the server's figures, not the accounts added up", () => {
   const doc = buildSubsidiaryLedgerDoc(
-    { ...LEDGER_PAYLOAD, summary: { loan_count: 9, total_released: 410000, total_paid: 220000 } },
+    {
+      ...LEDGER_PAYLOAD,
+      totals: {
+        total_loans: 9,
+        total_principal: 410000,
+        total_paid: 220000.75,
+        total_outstanding: 190000.25,
+      },
+    },
     RANGE
   );
 
   assert.equal(kpiValue(doc, "Total Loans"), "9");
   assert.equal(kpiValue(doc, "Total Released"), "₱410,000.00");
+  assert.equal(kpiValue(doc, "Total Paid"), "₱220,000.75");
+  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱190,000.25");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "principal"), "₱410,000.00");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "total_paid"), "₱220,000.75");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "balance"), "₱190,000.25");
+});
+
+test("the ledger shows dashes, not sums of the accounts, without server totals", () => {
+  const { totals, ...withoutTotals } = LEDGER_PAYLOAD;
+  void totals;
+  const doc = buildSubsidiaryLedgerDoc(withoutTotals, RANGE);
+
+  for (const label of ["Total Loans", "Total Released", "Total Paid", "Outstanding Balance"]) {
+    assert.equal(kpiValue(doc, label), DASH, label);
+  }
+  for (const column of ["principal", "total_paid", "balance"]) {
+    assert.equal(namedTableTotal(doc, "Loan Accounts", column), DASH, column);
+  }
 });
 
 test("the ledger hides payment history rather than claim there were no payments", () => {
-  const { entries, ...withoutEntries } = LEDGER_PAYLOAD;
-  void entries;
+  assert.equal(
+    hasTable(buildSubsidiaryLedgerDoc({ ...LEDGER_PAYLOAD, entries: LEDGER_ENTRIES }, RANGE), "Payment History"),
+    true
+  );
+  assert.equal(hasTable(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE), "Payment History"), false);
+});
 
-  assert.equal(hasTable(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE), "Payment History"), true);
-  assert.equal(hasTable(buildSubsidiaryLedgerDoc(withoutEntries, RANGE), "Payment History"), false);
+test("payment history is never footed with a sum of its entries", () => {
+  const doc = buildSubsidiaryLedgerDoc({ ...LEDGER_PAYLOAD, entries: LEDGER_ENTRIES }, RANGE);
+  assert.equal(namedTable(doc, "Payment History").totals, undefined);
 });
 
 test("the ledger subtitle names the borrower it covers", () => {
@@ -1626,6 +1836,11 @@ const CASH_FLOW_PAYLOAD = {
       net_movement: 63201.25,
     },
   ],
+  by_branch_totals: {
+    inflow_total: 1013651.5,
+    outflow_total: 742800.4,
+    net_movement: 270851.1,
+  },
   generated_at: "2026-08-06 09:15:00",
 };
 
@@ -1706,8 +1921,8 @@ test("cash flow reads the repayment components out of their nested block", () =>
 test("cash flow still reads a flat payload that never nested the components", () => {
   const doc = buildCashFlowDoc(
     {
-      inflows: { principal: 100.25, interest: 20.5, share_capital_credit: 5 },
-      outflows: { net_proceeds: 60.75 },
+      inflows: { principal: 100.25, interest: 20.5, share_capital_credit: 5, total: 125.75 },
+      outflows: { net_proceeds: 60.75, total: 60.75 },
     },
     RANGE
   );
@@ -1717,15 +1932,18 @@ test("cash flow still reads a flat payload that never nested the components", ()
   assert.equal(kpiValue(doc, "Total Cash In"), "₱125.75");
 });
 
-test("cash flow derives the net when the API states only the two totals", () => {
+test("cash flow never derives the net from the two totals", () => {
   const { net_movement, ...withoutNet } = CASH_FLOW_PAYLOAD;
   void net_movement;
   const doc = buildCashFlowDoc(withoutNet, RANGE);
 
-  assert.equal(kpiValue(doc, "Net Movement"), "₱335,851.10");
+  // Not ₱335,851.10 (cash in less cash out).
+  assert.equal(kpiValue(doc, "Net Movement"), DASH);
+  assert.equal(kpi(doc, "Net Movement").tone, "neutral");
+  assert.equal(fieldValue(doc, "Net Cash Movement", "Net movement for the period"), DASH);
 });
 
-test("cash flow totals the components when a block sends no total", () => {
+test("cash flow never totals the lines when a block sends no total", () => {
   const doc = buildCashFlowDoc(
     {
       inflows: { repayments: { principal: 100.25, interest: 20.5 } },
@@ -1734,9 +1952,47 @@ test("cash flow totals the components when a block sends no total", () => {
     RANGE
   );
 
-  assert.equal(kpiValue(doc, "Total Cash In"), "₱120.75");
-  assert.equal(kpiValue(doc, "Total Cash Out"), "₱60.75");
-  assert.equal(kpiValue(doc, "Net Movement"), "₱60.00");
+  // The lines still show; only the totals the server did not send are dashes.
+  assert.equal(namedTable(doc, "Cash Inflows").rows[0].amount, 100.25);
+  assert.equal(kpiValue(doc, "Total Cash In"), DASH);
+  assert.equal(kpiValue(doc, "Total Cash Out"), DASH);
+  assert.equal(kpiValue(doc, "Net Movement"), DASH);
+  assert.equal(namedTableTotal(doc, "Cash Inflows", "amount"), DASH);
+  assert.equal(namedTableTotal(doc, "Cash Outflows", "amount"), DASH);
+});
+
+test("a branch row's net is the server's, never cash in less cash out", () => {
+  const [main, talisay] = CASH_FLOW_PAYLOAD.by_branch;
+  const { net_movement, ...mainWithoutNet } = main;
+  void net_movement;
+  const table = namedTable(
+    buildCashFlowDoc({ ...CASH_FLOW_PAYLOAD, by_branch: [mainWithoutNet, talisay] }, RANGE),
+    "Breakdown by Branch"
+  );
+
+  assert.equal(table.rows[0].net, null);
+  assert.equal(table.rows[1].net, 63201.25);
+});
+
+test("the cash flow branch footer is by_branch_totals, or dashes without it", () => {
+  const withTotals = buildCashFlowDoc(
+    {
+      ...CASH_FLOW_PAYLOAD,
+      // Deliberately unlike the rows, so a sum of the rows cannot pass.
+      by_branch_totals: { inflow_total: 2000000.5, outflow_total: 1500000.25, net_movement: 500000.25 },
+    },
+    RANGE
+  );
+  assert.equal(namedTableTotal(withTotals, "Breakdown by Branch", "inflows"), "₱2,000,000.50");
+  assert.equal(namedTableTotal(withTotals, "Breakdown by Branch", "outflows"), "₱1,500,000.25");
+  assert.equal(namedTableTotal(withTotals, "Breakdown by Branch", "net"), "₱500,000.25");
+
+  const { by_branch_totals, ...withoutTotals } = CASH_FLOW_PAYLOAD;
+  void by_branch_totals;
+  const without = buildCashFlowDoc(withoutTotals, RANGE);
+  for (const column of ["inflows", "outflows", "net"]) {
+    assert.equal(namedTableTotal(without, "Breakdown by Branch", column), DASH, column);
+  }
 });
 
 test("a negative net movement is toned as a loss, a positive one as a gain", () => {
@@ -1938,7 +2194,7 @@ test("the efficiency footer is the period rate, never the average of the rows", 
   assert.equal(namedTableTotal(doc, "Efficiency by Branch", "uncollected"), "₱186,560.25");
 });
 
-test("a row without a rate falls back to collected over due", () => {
+test("a row without a rate or uncollected figure shows dashes, never derives them", () => {
   const doc = buildCollectionEfficiencyDoc(
     {
       ...EFFICIENCY_PAYLOAD,
@@ -1946,10 +2202,37 @@ test("a row without a rate falls back to collected over due", () => {
     },
     RANGE
   );
-  const row = namedTable(doc, "Efficiency by Branch").rows[0];
+  const table = namedTable(doc, "Efficiency by Branch");
+  const row = table.rows[0];
 
-  assert.equal(row.collection_rate, 75);
-  assert.equal(row.uncollected, 50);
+  // Not 75% (collected over due) nor ₱50.00 (due less collected).
+  assert.equal(row.collection_rate, null);
+  assert.equal(row.uncollected, null);
+  for (const key of ["collection_rate", "uncollected"]) {
+    const column = table.columns.find((c) => c.key === key);
+    assert.ok(column);
+    assert.equal(formatCell(row, column), DASH, key);
+  }
+});
+
+test("missing headline figures are dashes, never derived from the others or the rows", () => {
+  const { uncollected, collection_rate, total_due, ...partial } = EFFICIENCY_PAYLOAD;
+  void uncollected;
+  void collection_rate;
+  void total_due;
+  const doc = buildCollectionEfficiencyDoc(partial, RANGE);
+
+  assert.equal(kpiValue(doc, "Total Due"), DASH);
+  assert.equal(kpiValue(doc, "Collection Efficiency"), DASH);
+  assert.equal(kpiValue(doc, "Uncollected"), DASH);
+  // The footers are the headline four, so they dash with it rather than
+  // adding up the branch or month rows.
+  for (const title of ["Efficiency by Branch", "Monthly Trend"]) {
+    assert.equal(namedTableTotal(doc, title, "total_due"), DASH, title);
+    assert.equal(namedTableTotal(doc, title, "uncollected"), DASH, title);
+    assert.equal(namedTableTotal(doc, title, "collection_rate"), DASH, title);
+    assert.equal(namedTableTotal(doc, title, "total_collected"), "₱1,063,840.25", title);
+  }
 });
 
 test("an unnamed branch is labelled rather than left blank", () => {
@@ -2064,15 +2347,20 @@ test("portfolio by product prefers the server totals over the rows", () => {
   assert.equal(namedTableTotal(doc, "Portfolio by Product", "total_released"), "₱9,999,999.00");
 });
 
-test("portfolio by product sums the rows when the API sends no totals block", () => {
+test("portfolio by product shows dashes, not sums of the rows, without a totals block", () => {
   const { totals, ...withoutTotals } = PRODUCT_PAYLOAD;
   void totals;
   const doc = buildPortfolioByProductDoc(withoutTotals, RANGE);
 
-  assert.equal(kpiValue(doc, "Loan Products"), "3");
-  assert.equal(kpiValue(doc, "Total Released"), "₱9,095,000.75");
-  assert.equal(namedTableTotal(doc, "Portfolio by Product", "loan_count"), "386");
-  assert.equal(namedTableTotal(doc, "Portfolio by Product", "overdue_amount"), "₱524,051.00");
+  // Not 3 / ₱9,095,000.75 / 386 / ₱524,051.00, the rows counted and added up.
+  assert.equal(kpiValue(doc, "Loan Products"), DASH);
+  assert.equal(kpi(doc, "Loan Products").hint, undefined);
+  assert.equal(kpiValue(doc, "Total Released"), DASH);
+  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(kpiValue(doc, "Overdue Amount"), DASH);
+  for (const column of ["loan_count", "total_released", "outstanding_balance", "overdue_amount", "portfolio_share"]) {
+    assert.equal(namedTableTotal(doc, "Portfolio by Product", column), DASH, column);
+  }
 });
 
 test("portfolio by product renders each product's share of the book", () => {
@@ -2121,9 +2409,23 @@ test("a failed portfolio-by-product request dashes every figure", () => {
   assert.equal(namedTable(doc, "Portfolio by Product").rows.length, 0);
 });
 
-test("an empty product list is a real zero, not an unknown", () => {
-  const doc = buildPortfolioByProductDoc({ products: [] }, RANGE);
+test("an empty product list reports the server's zero, not an unknown", () => {
+  const doc = buildPortfolioByProductDoc(
+    {
+      products: [],
+      totals: {
+        product_count: 0,
+        loan_count: 0,
+        total_released: 0,
+        outstanding: 0,
+        overdue_amount: 0,
+      },
+    },
+    RANGE
+  );
   assert.equal(kpiValue(doc, "Loan Products"), "0");
+  assert.equal(kpi(doc, "Loan Products").hint, "0 loans");
+  assert.equal(kpiValue(doc, "Total Released"), "₱0.00");
 });
 
 // ---------------------------------------------------------------------------
@@ -2214,6 +2516,13 @@ const SHARE_CAPITAL_PAYLOAD = {
       closing_balance: 61200.5,
     },
   ],
+  by_month_totals: { credits: 386500.5, debits: 74200.25, net_movement: 312300.25 },
+  by_member_totals: {
+    opening_balance: 132200,
+    credits: 30500.5,
+    debits: 5000,
+    closing_balance: 157700.5,
+  },
   generated_at: "2026-08-06 09:15:00",
 };
 
@@ -2273,16 +2582,40 @@ test("the per-period pledge is never netted against paid-in capital", () => {
   );
 });
 
-test("share capital derives the closing balance when the API omits it", () => {
+test("share capital never derives the net or the closing balance", () => {
   const doc = buildShareCapitalDoc(
     { opening_balance: 2450000, credits: 386500.5, debits: 74200.25 },
     RANGE
   );
 
-  assert.equal(kpiValue(doc, "Closing Balance"), "₱2,762,300.25");
+  // Not ₱2,762,300.25 (opening + credits − debits) nor ₱312,300.25.
+  assert.equal(kpiValue(doc, "Closing Balance"), DASH);
+  assert.equal(fieldValue(doc, "Subscription Status", "Net movement for the period"), DASH);
 });
 
-test("share capital totals the monthly and per-member movement", () => {
+test("a share capital row's net and closing are the server's, never worked out", () => {
+  const [june, ...laterMonths] = SHARE_CAPITAL_PAYLOAD.by_month;
+  const { net_movement, ...juneWithoutNet } = june;
+  void net_movement;
+  const [maria, jose] = SHARE_CAPITAL_PAYLOAD.by_member;
+  const { closing_balance, ...mariaWithoutClosing } = maria;
+  void closing_balance;
+  const doc = buildShareCapitalDoc(
+    {
+      ...SHARE_CAPITAL_PAYLOAD,
+      by_month: [juneWithoutNet, ...laterMonths],
+      by_member: [mariaWithoutClosing, jose],
+    },
+    RANGE
+  );
+
+  // Not ₱107,400.50 (credits − debits) nor ₱96,500.00 (opening + net).
+  assert.equal(namedTable(doc, "Monthly Movement").rows[0].net, null);
+  assert.equal(namedTable(doc, "Movement by Member").rows[0].balance, null);
+  assert.equal(namedTable(doc, "Movement by Member").rows[1].balance, 61200.5);
+});
+
+test("share capital footers are the server's monthly and per-member totals", () => {
   const doc = buildShareCapitalDoc(SHARE_CAPITAL_PAYLOAD, RANGE);
   const months = namedTable(doc, "Monthly Movement");
   const members = namedTable(doc, "Movement by Member");
@@ -2302,7 +2635,23 @@ test("share capital totals the monthly and per-member movement", () => {
   assert.equal(members.rows[0].opening_balance, 78500);
   assert.equal(members.rows[0].balance, 96500);
   assert.equal(namedTableTotal(doc, "Movement by Member", "opening_balance"), "₱132,200.00");
+  assert.equal(namedTableTotal(doc, "Movement by Member", "credits"), "₱30,500.50");
+  assert.equal(namedTableTotal(doc, "Movement by Member", "debits"), "₱5,000.00");
   assert.equal(namedTableTotal(doc, "Movement by Member", "balance"), "₱157,700.50");
+});
+
+test("share capital footers show dashes, not sums of the rows, without server totals", () => {
+  const { by_month_totals, by_member_totals, ...withoutTotals } = SHARE_CAPITAL_PAYLOAD;
+  void by_month_totals;
+  void by_member_totals;
+  const doc = buildShareCapitalDoc(withoutTotals, RANGE);
+
+  for (const column of ["credits", "debits", "net"]) {
+    assert.equal(namedTableTotal(doc, "Monthly Movement", column), DASH, column);
+  }
+  for (const column of ["opening_balance", "credits", "debits", "balance"]) {
+    assert.equal(namedTableTotal(doc, "Movement by Member", column), DASH, column);
+  }
 });
 
 test("a running closing balance is never totalled", () => {
@@ -2340,6 +2689,7 @@ const SHARE_CAPITAL_ROSTER_OMITTED = (() => {
   return {
     ...rest,
     by_member: null,
+    by_member_totals: null,
     by_member_omitted: {
       reason: "permission_required",
       required_permission: "reports:export",
@@ -2418,9 +2768,17 @@ test("a failed share capital request still renders the shell", () => {
 // Officer / Branch Performance
 // ---------------------------------------------------------------------------
 
-// There is NO grand-total block in this response. Officer rows and branch rows
-// each cover the same book, so both sum to the same headline figures — that is
-// what makes summing them exact rather than a guess.
+// Officer rows and branch rows each cover the same book, so the server's three
+// totals blocks (`totals`, `by_officer_totals`, `by_branch_totals`) carry the
+// same figures.
+const PERFORMANCE_TOTALS = {
+  released_count: 74,
+  released_amount: 3655700.75,
+  collected: 2480850.25,
+  outstanding: 2272101.5,
+  overdue_amount: 257700.75,
+};
+
 const PERFORMANCE_PAYLOAD = {
   date_from: "2026-08-01",
   date_to: "2026-08-06",
@@ -2507,11 +2865,14 @@ const PERFORMANCE_PAYLOAD = {
       active_borrowers: 20,
     },
   ],
+  totals: PERFORMANCE_TOTALS,
+  by_officer_totals: PERFORMANCE_TOTALS,
+  by_branch_totals: PERFORMANCE_TOTALS,
   note: "released_* and collected cover date_from..date_to; outstanding, overdue, at_risk and active_borrowers are as_of_date figures over the whole book.",
   generated_at: "2026-08-06 09:15:00",
 };
 
-test("performance sums its headline from the rows, since the API sends no totals", () => {
+test("performance reads its headline from the server's totals", () => {
   const doc = buildPerformanceDoc(PERFORMANCE_PAYLOAD, RANGE);
 
   assertNoDashes(doc);
@@ -2519,9 +2880,50 @@ test("performance sums its headline from the rows, since the API sends no totals
   assert.equal(kpiValue(doc, "Loans Released"), "74");
   assert.equal(kpiValue(doc, "Amount Released"), "₱3,655,700.75");
   assert.equal(kpiValue(doc, "Total Collected"), "₱2,480,850.25");
-  // Outstanding sums exactly (one loan, one officer); borrower counts do not,
+  // Borrower counts do not total (a borrower can sit under two officers),
   // which is why the fourth headline is this and not "Active Borrowers".
   assert.equal(kpiValue(doc, "Outstanding Balance"), "₱2,272,101.50");
+});
+
+test("each performance block is read from its own server totals", () => {
+  const doc = buildPerformanceDoc(
+    {
+      ...PERFORMANCE_PAYLOAD,
+      // Deliberately unlike each other and the rows, so neither a sum of the
+      // rows nor a shared block can pass.
+      totals: { ...PERFORMANCE_TOTALS, released_amount: 1000000.5 },
+      by_officer_totals: { ...PERFORMANCE_TOTALS, released_amount: 2000000.25 },
+      by_branch_totals: { ...PERFORMANCE_TOTALS, released_amount: 3000000.75 },
+    },
+    RANGE
+  );
+
+  assert.equal(kpiValue(doc, "Amount Released"), "₱1,000,000.50");
+  assert.equal(namedTableTotal(doc, "By Account Officer", "released_amount"), "₱2,000,000.25");
+  assert.equal(namedTableTotal(doc, "By Branch", "released_amount"), "₱3,000,000.75");
+});
+
+test("performance shows dashes, not sums of the rows, without server totals", () => {
+  const { totals, by_officer_totals, by_branch_totals, ...withoutTotals } = PERFORMANCE_PAYLOAD;
+  void totals;
+  void by_officer_totals;
+  void by_branch_totals;
+  const doc = buildPerformanceDoc(withoutTotals, RANGE);
+
+  for (const label of ["Loans Released", "Amount Released", "Total Collected", "Outstanding Balance"]) {
+    assert.equal(kpiValue(doc, label), DASH, label);
+  }
+  for (const title of ["By Account Officer", "By Branch"]) {
+    for (const column of [
+      "released_count",
+      "released_amount",
+      "collected_amount",
+      "outstanding_balance",
+      "overdue_amount",
+    ]) {
+      assert.equal(namedTableTotal(doc, title, column), DASH, `${title} ${column}`);
+    }
+  }
 });
 
 test("the officer rows and the branch rows describe the same book", () => {
@@ -2567,7 +2969,7 @@ test("the unassigned officer row is carried, never dropped", () => {
   // the figures are real portfolio.
   assert.ok(unassigned, "the unassigned row must render");
   assert.equal(unassigned!.released_amount, 210000);
-  // Without it the officer rows would be ₱210,000 short of the branch rows.
+  // With it the officer rows reconcile to the server's officer total.
   assert.equal(namedTableTotal(doc, "By Account Officer", "released_amount"), "₱3,655,700.75");
 });
 
@@ -2598,7 +3000,7 @@ test("the performance footer never averages PAR nor sums distinct borrowers", ()
   // states neither as a grand total, so neither gets a footer.
   assert.equal(totals?.some((t) => t.column === "par_ratio"), false);
   assert.equal(totals?.some((t) => t.column === "active_borrowers"), false);
-  // The money and the release counts do sum exactly.
+  // The money and the release counts are the server's officer totals.
   assert.equal(totals?.find((t) => t.column === "released_count")?.value, "74");
   assert.equal(totals?.find((t) => t.column === "overdue_amount")?.value, "₱257,700.75");
 });
@@ -2703,7 +3105,7 @@ test("provisioning displays the whole-percent rate, not the fraction", () => {
   assert.equal(formatValue(table.rows[3].rate, "percent"), "50.0%");
 });
 
-test("a bucket sending only the fraction is still shown as whole percent", () => {
+test("a bucket without rate_percent shows no rate, never the fraction scaled up", () => {
   const doc = buildProvisioningDoc(
     {
       buckets: {
@@ -2717,9 +3119,10 @@ test("a bucket sending only the fraction is still shown as whole percent", () =>
   );
   const rows = namedTable(doc, "Provisioning Schedule").rows;
 
-  assert.equal(rows[0].rate, 5);
-  // …and the allowance follows the corrected rate: 100 × 5% = 5, not 0.05.
-  assert.equal(rows[0].required_allowance, 5);
+  // Not 5 (0.05 × 100), and the fraction itself is never shown as "0.1%".
+  assert.equal(rows[0].rate, null);
+  // Nor is the allowance worked out as 100 × 5%.
+  assert.equal(rows[0].required_allowance, null);
 });
 
 test("provisioning is a four-column schedule with a totals row", () => {
@@ -2747,17 +3150,17 @@ test("provisioning is a four-column schedule with a totals row", () => {
   assert.equal(table.totals?.some((t) => t.column === "rate"), false);
 });
 
-test("provisioning multiplies amount by rate when the API sends no allowance", () => {
+test("provisioning never multiplies amount by rate, sums the buckets, or divides the totals", () => {
   const doc = buildProvisioningDoc(
     {
       as_of_date: "2026-08-06",
       buckets: {
-        "1_30": { amount: 128450.5, count: 12 },
-        "31_60": { amount: 64200.25, count: 5 },
-        "61_90": { amount: 18900, count: 1 },
-        over_90: { amount: 240310.75, count: 9 },
+        "1_30": { amount: 128450.5, count: 12, rate_percent: 5 },
+        "31_60": { amount: 64200.25, count: 5, rate_percent: 15 },
+        "61_90": { amount: 18900, count: 1, rate_percent: 25 },
+        over_90: { amount: 240310.75, count: 9, rate_percent: 50 },
       },
-      totals: { amount: 451861.5, count: 21 },
+      totals: { count: 21 },
       // The policy ladder as fractions, exactly as the API sends it.
       rates: { "1_30": 0.05, "31_60": 0.15, "61_90": 0.25, over_90: 0.5 },
     },
@@ -2765,14 +3168,16 @@ test("provisioning multiplies amount by rate when the API sends no allowance", (
   );
   const rows = namedTable(doc, "Provisioning Schedule").rows;
 
-  // Rates read off the top-level policy map, scaled to whole percent.
   assert.equal(rows[0].rate, 5);
-  assert.equal(Math.round((rows[0].required_allowance as number) * 100) / 100, 6422.53);
-  assert.equal(Math.round((rows[3].required_allowance as number) * 100) / 100, 120155.38);
-  // A centavo below the server's ₱140,932.95: the fallback adds up unrounded
-  // products, while the server rounds each bucket before summing. Exactly why
-  // the server's own figure is preferred whenever it sends one.
-  assert.equal(kpiValue(doc, "Required Allowance"), "₱140,932.94");
+  // Not ₱6,422.53 (amount × rate).
+  assert.equal(rows[0].required_allowance, null);
+  // Not ₱451,861.50 (the buckets added up), nor a rate of allowance ÷ amount.
+  assert.equal(kpiValue(doc, "Total Overdue"), DASH);
+  assert.equal(kpiValue(doc, "Required Allowance"), DASH);
+  assert.equal(kpiValue(doc, "Effective Provision Rate"), DASH);
+  assert.equal(namedTableTotal(doc, "Provisioning Schedule", "amount"), DASH);
+  assert.equal(namedTableTotal(doc, "Provisioning Schedule", "required_allowance"), DASH);
+  assert.equal(kpiValue(doc, "Delinquent Loans"), "21");
 });
 
 test("provisioning names the rates as policy, not as a derived figure", () => {
