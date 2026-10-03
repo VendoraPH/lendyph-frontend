@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import type { CollateralType, LoanCollateral } from "@/types/collateral";
 import {
   attachedCollateralRows,
+  canChangeCollaterals,
   collateralSaveBlock,
   editCollateralLoad,
   editedCollaterals,
+  statedAttachedCollaterals,
   tracksEditCollaterals,
   type EditCollateralResult,
   type SelectedCollateral,
@@ -164,5 +166,61 @@ describe("editedCollaterals: the `collaterals` key of an edit", () => {
     // collaterals:update, and before the loan's collaterals have loaded.
     assert.deepEqual(editedCollaterals([picked(4, 30_000)], null), {});
     assert.deepEqual(editedCollaterals([], null), {});
+  });
+});
+
+describe("statedAttachedCollaterals: whether an edit may state the loan's collaterals", () => {
+  const attached = attachedCollateralRows([link(1, 50_000)], LOAN_ID);
+  const loaded = ready(attached);
+  const failed: EditCollateralResult = { request: "7:0", attached: null, error: "Please try again." };
+
+  test("ready, with collaterals:update: the loaded list, and the collaterals can change", () => {
+    assert.equal(statedAttachedCollaterals(true, "ready", true, loaded), attached);
+    assert.equal(canChangeCollaterals(true, "ready", true), true);
+  });
+
+  test("view-only (no collaterals:update): nothing stated, and read-only", () => {
+    assert.equal(statedAttachedCollaterals(true, "ready", false, loaded), null);
+    assert.equal(canChangeCollaterals(true, "ready", false), false);
+  });
+
+  test("no collaterals:view: never read (load is null), nothing stated, and read-only", () => {
+    assert.equal(statedAttachedCollaterals(true, null, true, null), null);
+    assert.equal(statedAttachedCollaterals(true, null, false, null), null);
+    assert.equal(canChangeCollaterals(true, null, true), false);
+  });
+
+  test("still loading: nothing stated, and read-only", () => {
+    assert.equal(statedAttachedCollaterals(true, "loading", true, null), null);
+    assert.equal(canChangeCollaterals(true, "loading", true), false);
+  });
+
+  test("a failed read: nothing stated, and read-only", () => {
+    assert.equal(statedAttachedCollaterals(true, "error", true, failed), null);
+    assert.equal(canChangeCollaterals(true, "error", true), false);
+  });
+
+  test("a new application: nothing stated (it attaches after create), and the collaterals can change", () => {
+    assert.equal(statedAttachedCollaterals(false, null, true, null), null);
+    assert.equal(statedAttachedCollaterals(false, null, false, null), null);
+    assert.equal(canChangeCollaterals(false, null, false), true);
+  });
+
+  test("feeds editedCollaterals: only ready with update can send the key", () => {
+    const removedAll: SelectedCollateral[] = [];
+    assert.deepEqual(editedCollaterals(removedAll, statedAttachedCollaterals(true, "ready", true, loaded)), {
+      collaterals: [],
+    });
+    for (const [load, canUpdate, result] of [
+      ["ready", false, loaded],
+      [null, true, null],
+      ["loading", true, null],
+      ["error", true, failed],
+    ] as const) {
+      assert.deepEqual(
+        editedCollaterals(removedAll, statedAttachedCollaterals(true, load, canUpdate, result)),
+        {},
+      );
+    }
   });
 });

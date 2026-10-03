@@ -67,6 +67,40 @@ export function collateralSaveBlock(load: EditCollateralLoad | null): string | n
 }
 
 /**
+ * Whether the form lets the user change the collaterals.
+ *
+ * Always for a new application. In edit mode only once the loan's collaterals
+ * are known (`ready`) and for a role with `collaterals:update`: the edit
+ * states them on the loan update, which the server refuses without it.
+ */
+export function canChangeCollaterals(
+  isEditMode: boolean,
+  load: EditCollateralLoad | null,
+  canUpdate: boolean,
+): boolean {
+  return !isEditMode || (load === "ready" && canUpdate);
+}
+
+/**
+ * What the loan held when the form loaded, for `editedCollaterals` to diff the
+ * selection against, or null when the save must not state the collaterals.
+ *
+ * Null for a new application (it attaches after create instead), and in edit
+ * mode whenever the collaterals can't be changed: no `collaterals:view` (so
+ * `load` is null and they were never read), no `collaterals:update`, or a read
+ * that is still loading or failed.
+ */
+export function statedAttachedCollaterals(
+  isEditMode: boolean,
+  load: EditCollateralLoad | null,
+  canUpdate: boolean,
+  result: EditCollateralResult | null,
+): SelectedCollateral[] | null {
+  if (!isEditMode || !canChangeCollaterals(isEditMode, load, canUpdate)) return null;
+  return result?.attached ?? null;
+}
+
+/**
  * The loan's attached collaterals as form rows, built from the link rows
  * themselves.
  *

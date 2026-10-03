@@ -137,12 +137,15 @@ import {
 import { parseEditLoanId } from "./_lib/edit-loan-id";
 import {
   attachedCollateralRows,
+  canChangeCollaterals,
   collateralSaveBlock,
   editCollateralLoad,
+  statedAttachedCollaterals,
   tracksEditCollaterals,
   type EditCollateralResult,
   type SelectedCollateral,
 } from "./_lib/edit-collaterals";
+import { memberPicker } from "./_lib/member-picker";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 
 // ── Currency Formatter ──
@@ -628,10 +631,13 @@ function NewLoanApplicationInner() {
   const collateralBlock = collateralSaveBlock(collateralLoad);
   // In edit mode the collaterals can be changed once the loan's are known, and
   // only by a role that may change them; otherwise the save never states them.
-  const canEditCollaterals =
-    !isEditMode || (collateralLoad === "ready" && canUpdateCollaterals);
-  const attachedCollaterals =
-    isEditMode && canEditCollaterals ? collateralResult?.attached ?? null : null;
+  const canEditCollaterals = canChangeCollaterals(isEditMode, collateralLoad, canUpdateCollaterals);
+  const attachedCollaterals = statedAttachedCollaterals(
+    isEditMode,
+    collateralLoad,
+    canUpdateCollaterals,
+    collateralResult,
+  );
 
   // Co-makers: all borrowers except the selected borrower and already-picked co-makers
   const availableCoMakersFor = useCallback(
@@ -648,6 +654,11 @@ function NewLoanApplicationInner() {
   const selectedBorrower = useMemo(
     () => borrowers.find((b) => b.id === borrowerId) ?? null,
     [borrowerId, borrowers]
+  );
+  const member = memberPicker(
+    isEditMode,
+    selectedBorrower?.full_name ?? null,
+    existingLoan?.borrower?.full_name ?? existingLoan?.borrower?.name ?? null,
   );
   const selectedProduct = useMemo(
     () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
@@ -905,6 +916,7 @@ function NewLoanApplicationInner() {
   );
 
   // ── Borrower Selection Handler ──
+  // A new application only: an edit's member is fixed (`memberPicker`).
   const handleBorrowerChange = useCallback((id: number | null) => {
     setBorrowerId(id);
     setCoMakerIds([null]);
@@ -1143,10 +1155,25 @@ function NewLoanApplicationInner() {
             {/* Borrower */}
             <div className="space-y-2">
               <div className="flex h-6 items-center">
-                <Label>
+                <Label htmlFor={member.locked ? "loan-member" : undefined}>
                   Member <span className="text-destructive">*</span>
                 </Label>
               </div>
+              {member.locked ? (
+                <>
+                  <Input
+                    id="loan-member"
+                    value={member.label ?? ""}
+                    disabled
+                    readOnly
+                    aria-describedby="loan-member-note"
+                  />
+                  <p id="loan-member-note" className="text-xs text-muted-foreground">
+                    The member can&rsquo;t be changed after the application is
+                    created.
+                  </p>
+                </>
+              ) : (
               <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
                 <PopoverTrigger
                   render={
@@ -1202,6 +1229,7 @@ function NewLoanApplicationInner() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              )}
             </div>
 
             {/* Co-Makers */}
