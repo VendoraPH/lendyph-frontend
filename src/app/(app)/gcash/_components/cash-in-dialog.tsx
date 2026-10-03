@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -18,11 +17,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
-import { GCashTierNotice } from "./gcash-tier-notice";
+import { ChargePreviewPanel } from "./charge-preview-panel";
 
 interface Props {
   open: boolean;
@@ -103,65 +101,12 @@ export function CashInDialog({
             />
           </div>
 
-          <GCashTierNotice
-            issue={preview.status === "no_tier" ? "out_of_range" : null}
+          <ChargePreviewPanel
+            view={preview}
             action="Cash In"
             amount={amountNum}
             onRetry={retryPreview}
           />
-
-          {(preview.status === "error" ||
-            preview.status === "invalid" ||
-            preview.status === "forbidden") && (
-            <div
-              role="alert"
-              className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
-            >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <div className="flex-1 space-y-2">
-                <p>
-                  {preview.status === "error"
-                    ? `Couldn’t work out the charge. ${preview.message}`
-                    : preview.message}
-                </p>
-                {preview.status === "error" && (
-                  <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Retry
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div
-            className="grid grid-cols-2 gap-3"
-            aria-live="polite"
-            aria-busy={preview.status === "loading"}
-          >
-            <div>
-              <Label className="text-muted-foreground">Charge</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                {preview.status === "ready"
-                  ? formatCurrency(preview.preview.charge_amount)
-                  : preview.status === "loading"
-                    ? "Calculating…"
-                    : preview.status === "no_tier"
-                      ? "No tier"
-                      : "—"}
-              </div>
-            </div>
-            <div>
-              <Label className="text-muted-foreground">Total</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
-                {preview.status === "ready"
-                  ? formatCurrency(preview.preview.total_amount)
-                  : preview.status === "loading"
-                    ? "Calculating…"
-                    : "—"}
-              </div>
-            </div>
-          </div>
 
           <div className="flex items-start gap-2">
             <Checkbox

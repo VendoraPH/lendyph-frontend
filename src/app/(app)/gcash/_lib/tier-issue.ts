@@ -9,27 +9,3 @@
  *   one, below the first, or in a gap between two).
  */
 export type GCashTierIssue = "load_error" | "no_tiers" | "out_of_range";
-
-interface TierIssueInput {
-  loading: boolean;
-  error: string | null;
-  tierCount: number;
-  amount: number;
-  charge: number | null;
-}
-
-export function gcashTierIssue({
-  loading,
-  error,
-  tierCount,
-  amount,
-  charge,
-}: TierIssueInput): GCashTierIssue | null {
-  if (loading) return null;
-  if (error) return "load_error";
-  if (tierCount === 0) return "no_tiers";
-  if (Number.isFinite(amount) && amount > 0 && charge === null) {
-    return "out_of_range";
-  }
-  return null;
-}
