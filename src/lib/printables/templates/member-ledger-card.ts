@@ -173,14 +173,8 @@ export function buildMemberLedgerCardDoc(
         { key: "amount", header: "Amount Paid", format: "currency", align: "right", width: "18%" },
       ],
       rows: paymentRows,
-      // The server sends no totals for this table, and none is added up here.
-      totals: {
-        loan_account_number: "TOTAL",
-        principal: DASH,
-        interest: DASH,
-        penalty: DASH,
-        amount: DASH,
-      },
+      // No TOTAL row: the server sends no totals for this table, and none is
+      // added up here.
     });
   } else {
     blocks.push({

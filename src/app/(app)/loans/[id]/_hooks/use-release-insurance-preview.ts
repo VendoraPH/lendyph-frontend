@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { loanService, type ReleasePreviewInsuranceQuery } from "@/services/loan.service";
 import {
   releaseInsuranceFailureMessage,
@@ -73,10 +73,11 @@ export function useReleaseInsurancePreview(
 
   const currentPremiumKey =
     key !== null && query ? premiumKey(loanId, query.insurance_premium_percentage) : null;
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
   return {
     view: releaseInsuranceView(key, attempt, outcome),
     premiumAmount: premium !== null && premium.key === currentPremiumKey ? premium.amount : null,
-    retry: () => setAttempt((n) => n + 1),
+    retry,
   };
 }
 

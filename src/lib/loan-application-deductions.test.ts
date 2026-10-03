@@ -5,6 +5,7 @@ import {
   feePercent,
   productDeductionFields,
   storedDeductionFields,
+  storedDeductionInputs,
   type DeductionFields,
   type ProductFees,
 } from "./loan-application-deductions";
@@ -181,4 +182,36 @@ test("a blank fee field stands for the product's rate; 0 waives it", () => {
   assert.equal(feePercent("1.75", "2.5000"), 1.75);
   assert.equal(feePercent(".", "2.5000"), 0);
   assert.equal(feePercent("", null), 0);
+});
+
+// ── storedDeductionInputs ──────────────────────────────────────────────────
+
+test("a saved loan's deductions read back as the inputs they were stated with", () => {
+  // As LoanService::deductionInputsFrom(): the rate or the pesos from
+  // original_value, never the peso amount a percentage came to.
+  assert.deepEqual(
+    storedDeductionInputs([
+      { name: "Processing Fee", amount: 175, type: "percentage", original_value: 1.75 },
+      { name: "Membership Fee", amount: 250.5, type: "fixed", original_value: 250.5 },
+    ]),
+    [
+      { name: "Processing Fee", amount: 1.75, type: "percentage" },
+      { name: "Membership Fee", amount: 250.5, type: "fixed" },
+    ],
+  );
+});
+
+test("the API's padded strings are read as numbers", () => {
+  assert.deepEqual(
+    storedDeductionInputs([
+      { name: "Service Fee", amount: 250, type: "percentage", original_value: "2.5000" as unknown as number },
+    ]),
+    [{ name: "Service Fee", amount: 2.5, type: "percentage" }],
+  );
+});
+
+test("a saved loan with no deductions states none", () => {
+  assert.deepEqual(storedDeductionInputs([]), []);
+  assert.deepEqual(storedDeductionInputs(null), []);
+  assert.deepEqual(storedDeductionInputs(undefined), []);
 });

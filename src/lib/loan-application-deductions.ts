@@ -97,6 +97,22 @@ export function storedDeductionFields(
   return fields;
 }
 
+/**
+ * A saved loan's deductions as the inputs they were stated with, exactly as
+ * `LoanService::deductionInputsFrom()` reads them back when an edit states no
+ * deductions: a percentage item's rate and a fixed item's pesos, both from
+ * `original_value` (falling back to `amount`). No figure is worked out here.
+ */
+export function storedDeductionInputs(
+  items: readonly StoredDeduction[] | null | undefined,
+): LoanDeduction[] {
+  return (items ?? []).map((item) => ({
+    name: item.name,
+    amount: toRate(item.original_value ?? item.amount),
+    type: item.type,
+  }));
+}
+
 /** The rate a fee field stands for: what it says, or the product's while it is blank. */
 export function feePercent(field: string, productRate: unknown): number {
   return field.trim() === "" ? toRate(productRate) : parseFloat(field) || 0;

@@ -132,10 +132,8 @@ test("member ledger card: a payment history is rendered if the API grows one", (
   const table = tableBlock(doc, "Payment History");
   assert.equal(table.rows.length, 2);
   assert.equal(table.rows[0]?.reference, "OR-0142");
-  // The server sends no totals for this table, so none is printed.
-  for (const key of ["principal", "interest", "penalty", "amount"]) {
-    assert.equal(table.totals?.[key], DASH, key);
-  }
+  // The server sends no totals for this table, so it has no TOTAL row.
+  assert.equal(table.totals, undefined);
   // The note is replaced by the thing it was apologising for.
   assert.ok(!notes(doc).includes("Statement of Account"));
 });

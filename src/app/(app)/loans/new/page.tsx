@@ -112,6 +112,7 @@ import {
   feePercent,
   productDeductionFields,
   storedDeductionFields,
+  storedDeductionInputs,
 } from "@/lib/loan-application-deductions";
 import {
   PROCESSING_FEE_LABEL,
@@ -669,8 +670,14 @@ function NewLoanApplicationInner() {
       releaseDate,
       scbAmount,
       collaterals: selectedCollaterals,
-      // As the save states them: only once the product is known.
-      deductions: selectedProduct ? deductions : null,
+      // What the save would charge: the form's deductions once the product is
+      // known. Before then the save states none, and an edit keeps the loan's
+      // own, so the preview asks about those; a new loan asks about none yet.
+      deductions: selectedProduct
+        ? deductions
+        : existingLoan
+          ? storedDeductionInputs(existingLoan.deductions)
+          : null,
     }),
   );
   const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;

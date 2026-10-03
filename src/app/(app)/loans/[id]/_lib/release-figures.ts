@@ -138,6 +138,45 @@ export function releaseInsuranceView(
   return outcome.view;
 }
 
+/**
+ * The server answer Confirm Release would stand on.
+ * - `ready`: every figure on screen comes from `answer`, and its
+ *   `fee_fingerprint` is the one the fee list above was read with.
+ * - `waiting`: an answer for what is typed now is not in yet, or was refused.
+ * - `stale`: the insurance answer was read against other fees than the fee
+ *   list on screen (the fees changed between the two reads). Both are read
+ *   again; until they agree nothing may be confirmed.
+ * - `no_premium`: insurance is typed but the answer carries no premium, so
+ *   there would be nothing to send for it.
+ */
+export type ReleaseConfirmView =
+  | { status: "ready"; answer: LoanReleasePreview }
+  | { status: "waiting" }
+  | { status: "stale" }
+  | { status: "no_premium" };
+
+/**
+ * Which server answer the release would be confirmed against. With no
+ * insurance it is the release preview itself. With insurance it is the
+ * preview asked about that insurance, and only while it was read against the
+ * same fees (`fee_fingerprint`) as the release preview whose fee list is on
+ * screen: confirming otherwise would send a fingerprint the server refuses
+ * (409), or quote a net that disagrees with the fees listed above it.
+ */
+export function releaseConfirmView(
+  base: LoanReleasePreview | null,
+  query: ReleasePreviewInsuranceQuery | null,
+  insurance: ReleaseInsuranceView,
+): ReleaseConfirmView {
+  if (base === null) return { status: "waiting" };
+  if (query === null) return { status: "ready", answer: base };
+  if (insurance.status !== "ready") return { status: "waiting" };
+  const answer = insurance.preview;
+  if (answer.fee_fingerprint !== base.fee_fingerprint) return { status: "stale" };
+  if (!answer.insurance) return { status: "no_premium" };
+  return { status: "ready", answer };
+}
+
 /** Why an insurance preview failed, in the server's words where it gave any. */
 export function releaseInsuranceFailureMessage(err: unknown): string {
   return getErrorMessage(err, "We couldn't work out the insurance. Please try again.");

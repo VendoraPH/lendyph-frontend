@@ -10,7 +10,8 @@
  * WHAT THIS PROVES: the query built from what was typed; that the release
  * sends the previewed premium and remaining balance, never one of its own;
  * the partial field's tidy on blur and its over-the-premium warning; and that
- * a stale or failed insurance preview shows no figures.
+ * a stale or failed insurance preview shows no figures; and which answer
+ * Confirm Release stands on (same fees as the fee list, a premium to send).
  * WHAT IT DOES NOT PROVE: the figures themselves, which are the server's (see
  * `src/services/loan-release.test.ts` for how the preview is read).
  */
@@ -21,6 +22,7 @@ import type { LoanReleasePreview } from "@/types/loan";
 import {
   partialAmountOnBlur,
   partialExceedsPremium,
+  releaseConfirmView,
   releaseInsuranceFailureMessage,
   releaseInsuranceKey,
   releaseInsurancePayload,
@@ -201,5 +203,53 @@ describe("releaseInsuranceFailureMessage", () => {
 
   test("anything else falls back to a retry hint", () => {
     assert.match(releaseInsuranceFailureMessage(new Error("boom")), /try again/i);
+  });
+});
+
+describe("releaseConfirmView", () => {
+  /** The release preview the fee list on screen came from, before insurance. */
+  const BASE: LoanReleasePreview = {
+    ...PREVIEW,
+    insurance: null,
+    total_deductions_after_insurance: "1250.00",
+    net_proceeds_after_insurance: "13750.00",
+  };
+  const query = typed({ percentage: "2", paymentType: "partial", partialAmount: "120" });
+  const ready = { status: "ready" as const, preview: PREVIEW };
+
+  test("with no insurance, the release preview itself", () => {
+    assert.deepEqual(releaseConfirmView(BASE, null, { status: "idle" }), { status: "ready", answer: BASE });
+  });
+
+  test("nothing until the release preview is in", () => {
+    assert.deepEqual(releaseConfirmView(null, null, { status: "idle" }), { status: "waiting" });
+    assert.deepEqual(releaseConfirmView(null, query, ready), { status: "waiting" });
+  });
+
+  test("with insurance, the insurance answer once it is in and read against the same fees", () => {
+    assert.deepEqual(releaseConfirmView(BASE, query, ready), { status: "ready", answer: PREVIEW });
+  });
+
+  test("an insurance answer still loading, or refused, confirms nothing", () => {
+    assert.deepEqual(releaseConfirmView(BASE, query, { status: "loading" }), { status: "waiting" });
+    assert.deepEqual(releaseConfirmView(BASE, query, { status: "error", message: "Too much." }), {
+      status: "waiting",
+    });
+  });
+
+  test("an insurance answer read against other fees is stale", () => {
+    // After a 409 the fee list is read again; an insurance answer still
+    // carrying the old fingerprint would send it, and be refused, every time.
+    const old = { status: "ready" as const, preview: { ...PREVIEW, fee_fingerprint: "a41b07" } };
+    assert.deepEqual(releaseConfirmView(BASE, query, old), { status: "stale" });
+    // And the other way round: the fees changed after the fee list was read.
+    assert.deepEqual(releaseConfirmView({ ...BASE, fee_fingerprint: "a41b07" }, query, ready), {
+      status: "stale",
+    });
+  });
+
+  test("insurance typed but no premium in the answer: nothing to send, so nothing to confirm", () => {
+    const noPremium = { status: "ready" as const, preview: { ...PREVIEW, insurance: null } };
+    assert.deepEqual(releaseConfirmView(BASE, query, noPremium), { status: "no_premium" });
   });
 });

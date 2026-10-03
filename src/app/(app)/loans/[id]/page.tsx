@@ -44,6 +44,7 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { extensionDueDate } from "./_lib/extension-due-date";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
+import { useReleaseConfirm } from "./_hooks/use-release-confirm";
 import {
   INSURANCE_PREMIUM_INITIAL,
   type InsurancePremiumValue,
@@ -988,6 +989,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
     releaseInsurance,
     releaseOpen && loan?.status === "approved",
   );
+  // The answer Confirm Release stands on: the release preview with no
+  // insurance, else the insurance preview read against the same fees as the
+  // fee list on screen. When the two were read against different fees, both
+  // are read again.
+  const { view: releaseConfirm, reread: rereadRelease } = useReleaseConfirm({
+    base: releasePreview,
+    query: releaseInsurance,
+    insurance: insurancePreview,
+    reloadBase: reloadReleasePreview,
+    retryInsurance: retryInsurancePreview,
+  });
 
   // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
   // step goes to the API and is followed by a refetch; nothing on this page is
@@ -1439,21 +1451,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
     );
   }
 
-  // What the release will store, from the server: with no insurance, the
-  // release preview as it stands; with insurance, the preview asked about that
-  // insurance. Null until the right one is in for what is typed now, and
-  // Confirm Release stays off until then.
-  const releaseAnswer =
-    releaseInsurance === null
-      ? releasePreview.status === "loaded"
-        ? releasePreview.preview
-        : null
-      : insurancePreview.status === "ready"
-        ? insurancePreview.preview
-        : null;
+  // What the release will store, from the server (see `releaseConfirmView`).
+  // Null until the right answer is in for what is typed now, and Confirm
+  // Release stays off until then.
+  const releaseAnswer = releaseConfirm.status === "ready" ? releaseConfirm.answer : null;
   const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
-  const canConfirmRelease =
-    releasePreview.status === "loaded" && releaseAnswer !== null && !releaseExceedsNet && !actionLoading;
+  const canConfirmRelease = releaseAnswer !== null && !releaseExceedsNet && !actionLoading;
 
   const handleRelease = async () => {
     if (releaseAnswer === null || !canConfirmRelease) return;
@@ -1472,13 +1475,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
       const conflict = releaseConflictOf(err);
       if (conflict === "fees_changed") {
         // Nothing was released: the fees changed after they were quoted. Quote
-        // them again, and the dialog stays open on the new figures.
+        // them again, the insurance with them (its fingerprint is the one sent),
+        // and the dialog stays open on the new figures.
         notifyError(
           err,
           "We couldn't release this loan. Please try again.",
           "The release figures have been read again. Check them before confirming.",
         );
-        reloadReleasePreview();
+        rereadRelease();
       } else if (conflict === "loan_changed") {
         // Nothing was released: another request changed this loan first, or
         // the two collided and this one was rolled back. Read the loan again so
@@ -3968,6 +3972,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
               )}
             </div>
+
+            {(releaseConfirm.status === "stale" || releaseConfirm.status === "no_premium") && (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+              >
+                <p className="text-sm text-destructive">
+                  {releaseConfirm.status === "stale"
+                    ? "The fees changed while these figures were being read. They are being read again."
+                    : "The server sent no premium for this insurance, so the release can't be confirmed."}
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={rereadRelease}>
+                  Try again
+                </Button>
+              </div>
+            )}
 
             {/* Warning */}
             {releaseExceedsNet ? (
