@@ -110,6 +110,10 @@ export type GCashNonMemberInput = {
   remarks?: string | null;
 };
 
+/** Creating a walk-in: the New Transaction dialog sends only a typed name and number. */
+export type GCashNonMemberCreateInput = Omit<GCashNonMemberInput, "id_type" | "id_number"> &
+  Partial<Pick<GCashNonMemberInput, "id_type" | "id_number">>;
+
 export type GCashNonMemberFilters = {
   search?: string;
   page?: number;
