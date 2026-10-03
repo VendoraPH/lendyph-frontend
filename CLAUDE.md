@@ -92,7 +92,7 @@ npx playwright test e2e/fees-settings.spec.ts
 - `(auth)` holds login and change-password; `(public)` holds self-registration.
 - Almost every page is a client component.
 - Module-private code sits beside its route in `_components/`, `_hooks/` and `_lib/`, and tests sit beside the code they test.
-- Credit scoring is UI-only. Its backend contract is `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`, and it stays hidden because no one holds `credit_scoring:*`.
+- Credit scoring is UI-only. Its backend contract is `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`. The backend seeds `credit_scoring:view|override|settings` for admin and super_admin only, so the menu shows for them, and its routes answer 501 until they are built, which every screen shows as "Not connected yet".
 
 **Reports and printables.**
 - Reports live in `src/app/(app)/reports/_lib/`. `report-builders.ts` turns API payloads into a `ReportDocument`. There is one exporter per format (PDF, docx, xlsx, csv), each loaded with `await import()` on click so it stays out of the page bundle.

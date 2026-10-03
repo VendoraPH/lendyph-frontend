@@ -31,6 +31,7 @@ export type {
   GCashTransaction,
   GCashTransactionType,
   GCashTransactionStatus,
+  GCashChargePreview,
   GCashTier,
   GCashTierInput,
   GCashIncomeReport,
