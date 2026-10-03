@@ -1,40 +1,40 @@
 // Shared formatters used across the app.
 // Locale: en-PH, Currency: PHP. Keep formatting consistent everywhere.
 
+const pesoFmt = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Every peso amount the app shows: always two decimals, so ₱1,500 reads
+ * "₱1,500.00" and ₱10.50 reads "₱10.50".
+ *
+ * Money is held to the centavo, and a figure rounded to whole pesos states a
+ * different amount from the one the server holds — a fee rule of
+ * `amount > 9999.50` shown as "₱10,000" advertises a threshold fifty centavos
+ * above the one that fires. The only figures that may drop decimals are the
+ * deliberately abbreviated dashboard tiles ("₱130K").
+ *
+ * Accepts the strings Laravel's `decimal:2` cast sends; anything absent or
+ * unparseable renders as ₱0.00, never NaN.
+ */
 export function formatCurrency(
   amount: number | string | undefined | null,
 ): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
+  return pesoFmt.format(parseFloat(String(amount ?? 0)) || 0);
 }
 
 /**
- * Peso amounts whose decimals carry meaning — thresholds, rules, anything the
- * reader may retype rather than merely skim.
- *
- * `formatCurrency` rounds to whole pesos, which is right for the totals it was
- * built for and wrong wherever the number defines a boundary: a fee rule of
- * `amount > 9999.50` rendered as "₱10,000" states a threshold fifty centavos
- * above the one that will actually fire.
- *
- * Centavos appear only when there are any, so whole amounts stay "₱10,000"
- * rather than "₱10,000.00". Two decimals is the full precision of the value,
- * not a truncation of it: the API compares money to half a centavo.
+ * Same output as `formatCurrency`. Kept for the call sites that reached for it
+ * when `formatCurrency` still rounded to whole pesos.
  */
 export function formatCurrencyExact(
   amount: number | string | undefined | null,
 ): string {
-  const value = parseFloat(String(amount ?? 0)) || 0;
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return formatCurrency(amount);
 }
 
 /**

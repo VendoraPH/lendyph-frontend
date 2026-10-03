@@ -11,6 +11,8 @@ interface LedgerMovement {
   interestDebit?: number;
   interestCredit?: number;
   scbPaid?: number;
+  /** A repayment's status; a voided one moves nothing (see `movesBalances`). */
+  status?: string;
 }
 
 /** The running balances after one Ledger row. Null while its opening is unknown. */
@@ -21,6 +23,26 @@ export interface LedgerBalances {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * A voided repayment stays on the Ledger, struck through, but the server has
+ * reversed it: it moves no balance and adds nothing to the opening. Counting
+ * it put its interest into the opening (every earlier row too high by it) and
+ * took its principal off the walk (that row and every later one too low).
+ */
+function movesBalances(row: { status?: string }): boolean {
+  return row.status !== "voided";
+}
+
+/**
+ * The interest the repayments paid, for `ledgerOpening`. Voided repayments are
+ * left out, exactly as the walk steps over them.
+ */
+export function ledgerInterestPaid(
+  repayments: readonly { interest_paid?: number | null; status?: string }[],
+): number {
+  return repayments.reduce((s, r) => s + (movesBalances(r) ? (r.interest_paid ?? 0) : 0), 0);
+}
 
 /**
  * Where the Ledger's running balances start.
@@ -38,7 +60,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  *
  *   opening = currentInterestDue − debits + credits + interest paid
  *
- * and SCB at the schedule's build-up total.
+ * (interest paid from `ledgerInterestPaid`, so voided repayments are out) and
+ * SCB at the schedule's build-up total.
  */
 export function ledgerOpening({
   principalAmount,
@@ -72,8 +95,9 @@ export function ledgerOpening({
 /**
  * The Ledger's rows, in order, with the running balance after each. Interest
  * walks both ways (a debit raises it, a credit or repayment lowers it);
- * Principal and SCB only go down. An unknown opening stays unknown on every
- * row, while the row's own amounts are left as they are.
+ * Principal and SCB only go down. A voided repayment carries the balances
+ * through unchanged. An unknown opening stays unknown on every row, while the
+ * row's own amounts are left as they are.
  */
 export function walkLedgerBalances<T extends LedgerMovement>(
   rows: readonly T[],
@@ -83,6 +107,7 @@ export function walkLedgerBalances<T extends LedgerMovement>(
   let interestBal = opening.interest;
   let scbBal = opening.scb;
   return rows.map((row) => {
+    if (!movesBalances(row)) return { ...row, principalBal, interestBal, scbBal };
     principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
     scbBal = scbBal === null ? null : Math.max(0, scbBal - (row.scbPaid ?? 0));
     interestBal =

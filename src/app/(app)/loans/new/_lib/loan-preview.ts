@@ -1,8 +1,16 @@
-import { INTEREST_TYPE_OPTIONS } from "@/constants";
+import { INTEREST_METHOD_LABELS } from "@/constants";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { formatDateISO } from "@/lib/format";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
+import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
 import type { SelectedCollateral } from "./edit-collaterals";
+
+/** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
+export interface StatedDeduction {
+  name: string;
+  amount: number;
+  type: "percentage" | "fixed";
+}
 
 /** The loan form's fields that `POST /loans/preview` is asked about. */
 export interface LoanPreviewInputs {
@@ -14,6 +22,11 @@ export interface LoanPreviewInputs {
   releaseDate: Date | undefined;
   scbAmount: string;
   collaterals: readonly SelectedCollateral[];
+  /**
+   * The deductions the save would state, or null when it states none and the
+   * server charges the product's own fees.
+   */
+  deductions: readonly StatedDeduction[] | null;
 }
 
 /** A positive figure typed into the form, parsed as the submit parses it. */
@@ -23,13 +36,13 @@ function positive(value: number): number | undefined {
 
 /**
  * The `POST /loans/preview` body for the form as it stands, or null when there
- * is nothing to preview: no collateral attached, and the schedule's inputs
- * (product, principal, rate, term, frequency, release date) not all known.
+ * is nothing to preview: no product chosen and no collateral attached.
  *
  * Fields the form has no usable value for are left out; the server works out
- * whatever sections it can from the rest. The figures are parsed exactly as
- * the submit parses them, so the preview describes the loan that would be
- * saved.
+ * whatever sections it can from the rest — the maturity date needs no
+ * principal, the deductions no term. The figures are parsed exactly as the
+ * submit parses them, and the deductions are the inputs the submit sends, so
+ * the preview describes the loan that would be saved.
  */
 export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRequest | null {
   const productId = inputs.productId ? Number(inputs.productId) : undefined;
@@ -40,14 +53,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   const frequency = inputs.paymentFrequency ?? undefined;
   const startDate = inputs.releaseDate ? formatDateISO(inputs.releaseDate) : undefined;
 
-  const scheduleKnown =
-    productId !== undefined &&
-    principal !== undefined &&
-    rate !== undefined &&
-    term !== undefined &&
-    frequency !== undefined &&
-    startDate !== undefined;
-  if (!scheduleKnown && inputs.collaterals.length === 0) return null;
+  if (productId === undefined && inputs.collaterals.length === 0) return null;
 
   return {
     ...(productId !== undefined && { loan_product_id: productId }),
@@ -61,6 +67,9 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
       collateral_id: c.collateral.id,
       snapshot_value: c.snapshot_value,
     })),
+    ...(inputs.deductions !== null && {
+      deductions: inputs.deductions.map((d) => ({ name: d.name, amount: d.amount, type: d.type })),
+    }),
   };
 }
 
@@ -126,11 +135,47 @@ export function showsShortBy(
   return principal > 0 && collateral.security_status !== "secured";
 }
 
-/**
- * The interest method the server built the schedule with, as the form's
- * Interest Type select names it ("fixed" is the select's "straight").
- */
+/** An interest method by name ("fixed" is the legacy spelling of "straight"). */
 export function interestMethodLabel(method: string): string {
   const value = method === "fixed" ? "straight" : method;
-  return INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? method;
+  return INTEREST_METHOD_LABELS[value] ?? method;
+}
+
+/**
+ * The Interest Type the form shows, read-only. The server builds every loan
+ * with its product's interest method — a new loan snapshots it from the
+ * product, and a sent `interest_method` is ignored — so there is nothing to
+ * choose. An edit always shows the loan's stored method: `PUT /loans/{id}`
+ * keeps the loan's product whatever the form picks, so the method stays the
+ * loan's own. Null with neither.
+ */
+export function formInterestMethod({
+  product,
+  storedMethod,
+}: {
+  product: Pick<LoanProduct, "interest_method"> | null;
+  /** The loan's own method when editing; null for a new application. */
+  storedMethod: string | null;
+}): string | null {
+  if (storedMethod) return storedMethod === "fixed" ? "straight" : storedMethod;
+  return product?.interest_method ?? null;
+}
+
+/**
+ * The server's peso amount for one deduction the form states, or null when the
+ * preview has no figure for it. Matched on name and type, and on position
+ * among the inputs sharing both, so two items with one name each get their
+ * own figure and a missing item is never filled from its neighbour.
+ */
+export function previewDeductionAmount(
+  items: readonly LoanFormPreviewDeduction[] | null | undefined,
+  inputs: readonly StatedDeduction[],
+  input: StatedDeduction | undefined,
+): number | null {
+  if (!items || !input) return null;
+  const index = inputs.indexOf(input);
+  if (index < 0) return null;
+  const same = (d: { name: string; type: string }) => d.name === input.name && d.type === input.type;
+  const occurrence = inputs.slice(0, index).filter(same).length;
+  return items.filter(same)[occurrence]?.amount ?? null;
 }

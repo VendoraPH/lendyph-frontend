@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { buildDisclosureDoc } from "./disclosure";
 import {
   allFields,
@@ -55,12 +55,17 @@ const PAYLOAD = {
     total_deductions: 3500,
     net_proceeds: 96500,
   },
+  // The server's totals for the whole six-period schedule: deliberately not
+  // the three rows below added up, so a test can tell the two apart.
   totals: {
     total_principal: 100000,
     total_interest: 7000,
     total_obligation: 107000,
+    total_amortization: 107000,
     total_deductions: 3500,
     net_proceeds: 96500,
+    total_finance_charges: 10500,
+    unitemised_deductions: 0,
   },
   amortization_schedule: [
     { period_number: 1, due_date: "2026-09-01", principal_due: 16666.67, interest_due: 2000, total_due: 18666.67, remaining_balance: 83333.33 },
@@ -182,22 +187,18 @@ test("disclosure: an unknown rate frequency leaves the annual rate to be filled 
   assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)");
 });
 
-test("disclosure: finance charges add up to their own total", () => {
-  // `total_deductions` outranks the items array, so anything the items do not
-  // account for is disclosed as a lettered charge rather than left as a gap
-  // between the lines and the total under them.
+test("disclosure: what the items leave out is the server's own lettered line", () => {
+  // The letters must add up to "2. Total Finance Charges", so whatever the
+  // items do not account for is disclosed as a charge of its own: the server's
+  // `unitemised_deductions`, never the items subtracted from the total here.
   const doc = buildDisclosureDoc({
     ...PAYLOAD,
     deductions: { items: [], total_deductions: 3500, net_proceeds: 96500 },
+    totals: { ...PAYLOAD.totals, unitemised_deductions: 3500 },
   });
-
   assert.equal(chargeAmount(doc, "b. Other Charges"), formatCurrency(3500));
-  assert.equal(
-    chargeAmount(doc, "2. Total Finance Charges"),
-    formatCurrency(7000 + 3500)
-  );
+  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), formatCurrency(10500));
 
-  // Partially itemised: the letters sum to the total, to the centavo.
   const partial = buildDisclosureDoc({
     ...PAYLOAD,
     deductions: {
@@ -205,16 +206,34 @@ test("disclosure: finance charges add up to their own total", () => {
       total_deductions: 3500,
       net_proceeds: 96500,
     },
+    totals: { ...PAYLOAD.totals, unitemised_deductions: 1500 },
   });
   assert.equal(chargeAmount(partial, "b. Processing Fee"), formatCurrency(2000));
   assert.equal(chargeAmount(partial, "c. Other Charges"), formatCurrency(1500));
-  assert.equal(
-    chargeAmount(partial, "2. Total Finance Charges"),
-    formatCurrency(7000 + 2000 + 1500)
-  );
 
-  // A fully itemised payload gains no phantom line.
+  // A fully itemised payload (0) gains no phantom line.
   assert.ok(!hasChargeLine(buildDisclosureDoc(PAYLOAD), "e. Other Charges"));
+  assert.ok(!hasChargeLine(buildDisclosureDoc(PAYLOAD), "e. Adjustment"));
+});
+
+test("disclosure: items above the total are corrected by a negative Adjustment", () => {
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    totals: { ...PAYLOAD.totals, unitemised_deductions: -500 },
+  });
+  assert.equal(chargeAmount(doc, "e. Adjustment"), formatCurrency(-500));
+});
+
+test("disclosure: no unitemised figure from the server adds no line, whatever the items sum to", () => {
+  const { unitemised_deductions: _omitted, ...withoutUnitemised } = PAYLOAD.totals;
+  void _omitted;
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    deductions: { items: [], total_deductions: 3500, net_proceeds: 96500 },
+    totals: withoutUnitemised,
+  });
+  assert.ok(!hasChargeLine(doc, "b. Other Charges"));
+  assert.ok(!hasChargeLine(doc, "b. Adjustment"));
 });
 
 test("disclosure: every deduction is disclosed on its own lettered line", () => {
@@ -226,23 +245,42 @@ test("disclosure: every deduction is disclosed on its own lettered line", () => 
   assert.equal(chargeAmount(doc, "d. Notarial Fee"), formatCurrency(500));
 });
 
-test("disclosure: finance charges and net proceeds reconcile to the principal", () => {
+test("disclosure: finance charges, deductions and net proceeds are the server's", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
 
-  // Total finance charges = interest + every upfront deduction.
-  assert.equal(
-    chargeAmount(doc, "2. Total Finance Charges"),
-    formatCurrency(7000 + 2000 + 1000 + 500)
-  );
-  // Net proceeds = principal less those deductions (interest is not withheld).
-  assert.equal(
-    chargeAmount(doc, "Less: Upfront Deductions"),
-    `(${formatCurrency(3500)})`
-  );
+  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), formatCurrency(10500));
+  assert.equal(chargeAmount(doc, "Less: Upfront Deductions"), `(${formatCurrency(3500)})`);
   assert.equal(
     chargeAmount(doc, "3. Net Proceeds of Loan (Amount Received by Borrower)"),
-    formatCurrency(100000 - 3500)
+    formatCurrency(96500)
   );
+
+  // A figure unlike interest + deductions is printed as sent: the server's.
+  const sent = buildDisclosureDoc({
+    ...PAYLOAD,
+    totals: { ...PAYLOAD.totals, total_finance_charges: 10499.99 },
+  });
+  assert.equal(chargeAmount(sent, "2. Total Finance Charges"), formatCurrency(10499.99));
+});
+
+test("disclosure: a total the server did not send is a dash, never worked out", () => {
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    deductions: { items: PAYLOAD.deductions.items },
+    totals: {},
+  });
+
+  assert.equal(chargeAmount(doc, "a. Interest"), DASH);
+  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), DASH);
+  assert.equal(chargeAmount(doc, "Less: Upfront Deductions"), DASH);
+  assert.equal(
+    chargeAmount(doc, "3. Net Proceeds of Loan (Amount Received by Borrower)"),
+    DASH
+  );
+  const table = tableBlock(doc, "VI. Amortization Schedule");
+  assert.equal(table.totals?.principal, DASH);
+  assert.equal(table.totals?.interest, DASH);
+  assert.equal(table.totals?.amount_due, DASH);
 });
 
 test("disclosure: co-makers and the borrower's address are deliberately absent", () => {
@@ -269,7 +307,7 @@ test("disclosure: co-makers and the borrower's address are deliberately absent",
   ]);
 });
 
-test("disclosure: the schedule table totals its own columns", () => {
+test("disclosure: the schedule table carries the server's column totals", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
   const table = tableBlock(doc, "VI. Amortization Schedule");
 
@@ -277,12 +315,11 @@ test("disclosure: the schedule table totals its own columns", () => {
   // Six columns, six keys per row — the old markup declared seven headers for
   // six cells, which shifted every figure one column left.
   assert.equal(table.columns.length, 6);
-  assert.equal(table.totals?.principal, formatCurrency(16666.67 + 16666.67 + 16666.66));
-  assert.equal(table.totals?.interest, formatCurrency(2000 + 1666.67 + 1333.33));
-  assert.equal(
-    table.totals?.amount_due,
-    formatCurrency(18666.67 + 18333.34 + 17999.99)
-  );
+  // `totals.total_principal`, `total_interest` and `total_amortization`, not
+  // the three rows shown added up.
+  assert.equal(table.totals?.principal, formatCurrency(100000));
+  assert.equal(table.totals?.interest, formatCurrency(7000));
+  assert.equal(table.totals?.amount_due, formatCurrency(107000));
 });
 
 test("disclosure: a long schedule breaks to its own page", () => {
@@ -333,9 +370,11 @@ test("disclosure: a null payload still prints a signable blank form", () => {
   assert.ok(isBlankField(doc, "Loan Account No."));
   assert.ok(isBlankField(doc, "Date Granted"));
 
-  // Zero principal is still a printable computation, and the statutory
-  // acknowledgment and sign-off must be on the page regardless.
-  assert.equal(chargeAmount(doc, "1. Principal Loan Amount"), formatCurrency(0));
+  // No figures were sent, so none is printed — a dash, never a ₱0.00 the
+  // server did not state — but the statutory acknowledgment and sign-off must
+  // be on the page regardless.
+  assert.equal(chargeAmount(doc, "1. Principal Loan Amount"), DASH);
+  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), DASH);
   assert.ok(hasChargeLine(doc, "2. Total Finance Charges"));
   assert.match(prose(doc), /Truth in Lending Act/);
   assert.deepEqual(signatureLabels(doc), [
@@ -371,8 +410,9 @@ test("disclosure: the legacy flat payload still renders", () => {
   assert.equal(fieldValue(doc, "Name of Borrower"), "Pedro Santos");
   assert.equal(fieldValue(doc, "Term of Loan"), "12 month(s)");
   assert.equal(fieldValue(doc, "Mode of Payment"), "Bi weekly");
-  // Interest derived from total payable less principal when totals are absent.
-  assert.equal(chargeAmount(doc, "a. Interest"), formatCurrency(6000));
+  // No totals block: interest is a dash, never total payable less principal.
+  assert.equal(chargeAmount(doc, "a. Interest"), DASH);
+  assert.equal(fieldValue(doc, "Total Amount Payable"), formatCurrency(56000));
   assert.equal(chargeAmount(doc, "b. Processing / Service Fee"), formatCurrency(1000));
   assert.equal(chargeAmount(doc, "c. Service Fee"), formatCurrency(500));
   assert.equal(

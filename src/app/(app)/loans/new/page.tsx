@@ -23,7 +23,6 @@ import {
   collateralService,
   collateralTypeService,
   documentService,
-  feeService,
   loanProductService,
   loanService,
 } from "@/services";
@@ -43,7 +42,6 @@ import { securityStatusLabel } from "@/types/collateral";
 import type {
   Borrower,
   CollateralType,
-  Fee,
   Loan,
   StaffMember,
 } from "@/types";
@@ -95,16 +93,14 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { formatDateISO, formatRate } from "@/lib/format";
+import { formatCurrency, formatDateISO, formatRate } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
 import {
   decimalInputValue,
   PESO_DECIMALS,
-  percentOf,
-  roundCentavos,
   sanitizeDecimalInput,
 } from "@/lib/percent";
 import {
-  maturityDate as loanMaturityDate,
   ratePeriodWord,
   readRateFrequency,
   readTermUnit,
@@ -113,16 +109,18 @@ import {
 import { editedAccountOfficer } from "@/lib/loan-account-officer";
 import {
   applicationDeductions,
-  deductionAmount,
   feePercent,
   productDeductionFields,
   storedDeductionFields,
 } from "@/lib/loan-application-deductions";
-import type { LoanDeduction } from "@/lib/loan-restructure";
+import {
+  PROCESSING_FEE_LABEL,
+  SERVICE_FEE_LABEL,
+  type LoanDeduction,
+} from "@/lib/loan-restructure";
 
 import type { LoanProduct } from "@/types/loan";
 import {
-  INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
@@ -139,23 +137,15 @@ import {
 } from "./_lib/edit-collaterals";
 import { memberPicker } from "./_lib/member-picker";
 import {
+  formInterestMethod,
   interestMethodLabel,
   loanPreviewRequest,
+  previewDeductionAmount,
   showsShortBy,
 } from "./_lib/loan-preview";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
-
-// ── Currency Formatter ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
 
 // ── Helpers ──
 
@@ -169,7 +159,7 @@ function formatDate(date: Date): string {
 
 /**
  * A 403 from a list this form only reads for reference. The edit mode below is
- * open to `loans:update`, which `loan_processor` holds without `fees:view` or
+ * open to `loans:update`, which `loan_processor` holds without
  * `collaterals:view`. Those reads are skipped for a user without the
  * permission, so a 403 here means it was withdrawn since sign-in. Expected,
  * and nothing a retry fixes, so it is not announced; any other failure is.
@@ -198,7 +188,6 @@ function NewLoanApplicationInner() {
   const { can } = usePermission();
   const canListMembers = can("borrowers:view");
   const canListProducts = can("loans:view");
-  const canListFees = can("fees:view");
   const canListCollaterals = can("collaterals:view");
   // Changing a loan's collaterals. Edit mode states them on the loan update,
   // which the server refuses outright without this.
@@ -209,11 +198,10 @@ function NewLoanApplicationInner() {
       missingLoanFormAccess({
         members: canListMembers,
         products: canListProducts,
-        fees: canListFees,
         collaterals: canListCollaterals,
         shareCapital: canReadShareCapital,
       }),
-    [canListMembers, canListProducts, canListFees, canListCollaterals, canReadShareCapital],
+    [canListMembers, canListProducts, canListCollaterals, canReadShareCapital],
   );
   // Said in the picker itself too: "No member found" reads as an empty
   // member list, which is not what is wrong.
@@ -239,7 +227,6 @@ function NewLoanApplicationInner() {
   const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
-  const [interestType, setInterestType] = useState<string | null>(null);
   // Share Capital Build-Up amount (only required when the selected
   // product has scb_required === true; must fall within product min/max)
   const [scbAmount, setScbAmount] = useState<string>("");
@@ -273,7 +260,7 @@ function NewLoanApplicationInner() {
 
   // ── Deductions State ──
   // Fee rates are editable percentages constrained to the selected product's
-  // min/max range. The peso amount is computed from rate × principal.
+  // min/max range. The peso amounts are the server's (`POST /loans/preview`).
   const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
@@ -281,9 +268,6 @@ function NewLoanApplicationInner() {
   // Deductions the form shows but does not edit — the product's notarial fee,
   // or one stored on the loan being edited — sent back unchanged.
   const [carriedDeductions, setCarriedDeductions] = useState<LoanDeduction[]>([]);
-  // Configured fees (Settings → Fees) that auto-apply to the selected product,
-  // e.g. a percentage "Insurance Premium" scoped to Cash Advance + Salary Loan.
-  const [fees, setFees] = useState<Fee[]>([]);
   // Set only when the member drain gave up with pages outstanding, i.e. the
   // member picker is knowingly missing people. Null means complete.
   const [memberShortfall, setMemberShortfall] = useState<{
@@ -299,7 +283,7 @@ function NewLoanApplicationInner() {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, feesResult, loanResult] =
+      const [borrowersResult, productsResult, loanResult] =
         await Promise.allSettled([
           // members_only: pending and rejected applicants are not loan-eligible,
           // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
@@ -309,18 +293,9 @@ function NewLoanApplicationInner() {
           // be picked and could not be lent to from this screen at all.
           canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
           canListProducts ? loanProductService.listAll().then(completeRows) : [],
-          canListFees ? feeService.listAll().then(completeRows) : [],
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
       if (cancelled) return;
-
-      if (feesResult.status === "fulfilled") {
-        setFees(feesResult.value);
-      } else if (!isRoleWithoutAccess(feesResult.reason)) {
-        // A preview only — the server applies configured fees itself — but a
-        // preview that silently drops them understates every deduction.
-        toast.error("We couldn't load the configured fees, so the deductions shown leave them out. Please try again.");
-      }
 
       if (borrowersResult.status === "fulfilled") {
         const memberDrain = borrowersResult.value;
@@ -362,8 +337,6 @@ function NewLoanApplicationInner() {
           setTermValue(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
           setInterestRate(decimalInputValue(loan.interest_rate));
-          const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
-          setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
           if (loan.start_date) setReleaseDate(new Date(loan.start_date));
           if (loan.policy_exception) {
@@ -397,7 +370,7 @@ function NewLoanApplicationInner() {
       cancelled = true;
     };
     // Re-fetch if user switches between create and edit in the same tab
-  }, [editLoanId, router, canListMembers, canListProducts, canListFees]);
+  }, [editLoanId, router, canListMembers, canListProducts]);
 
   // ── Collateral types: load once on mount ──
   useEffect(() => {
@@ -622,8 +595,6 @@ function NewLoanApplicationInner() {
   // A blank field stands for the product's rate; "0" waives the fee.
   const processingFeePercent = feePercent(processingFeeRate, selectedProduct?.processing_fee);
   const serviceFeePercent = feePercent(serviceFeeRate, selectedProduct?.service_fee);
-  const processingFee = percentOf(principal, processingFeePercent);
-  const serviceFee = percentOf(principal, serviceFeePercent);
 
   const processingFeePercentError = useMemo(() => {
     if (!selectedProduct || processingFeeRange.max <= 0) return null;
@@ -641,8 +612,8 @@ function NewLoanApplicationInner() {
     return null;
   }, [selectedProduct, serviceFeePercent, serviceFeeRange]);
 
-  // The deductions the application states, exactly as sent, and what the
-  // server will book for them.
+  // The deductions the application states, exactly as sent. What they come to
+  // in pesos is the server's preview, below.
   const deductions = useMemo(
     () =>
       applicationDeductions({
@@ -653,39 +624,22 @@ function NewLoanApplicationInner() {
       }),
     [processingFeePercent, serviceFeePercent, otherDeductions, carriedDeductions],
   );
-  const statedDeductionsTotal = deductions.reduce(
-    (sum, d) => sum + deductionAmount(principal, d),
-    0,
+  // The two fee fields' own items in that list; carried items are matched on
+  // their own, so a carried fee sharing a name is never read as the field's.
+  const processingFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === PROCESSING_FEE_LABEL && !carriedDeductions.includes(d),
+  );
+  const serviceFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === SERVICE_FEE_LABEL && !carriedDeductions.includes(d),
   );
 
-  // Configured fees scoped to the selected product. Percentage fees are
-  // computed off the principal; fixed fees use their flat value. These are a
-  // preview only: the server appends them at release (LoanReleaseFeeService),
-  // so they are never part of the `deductions` an application sends.
-  const applicableFees = useMemo(() => {
-    const pid = Number(productId);
-    if (!pid) return [];
-    return fees
-      .filter((f) => Array.isArray(f.applicable_product_ids) && f.applicable_product_ids.includes(pid))
-      .map((f) => ({
-        name: f.name,
-        amount:
-          f.type === "percentage"
-            ? percentOf(principal, Number(f.value))
-            : roundCentavos(Number(f.value)),
-      }))
-      .filter((f) => f.amount > 0);
-  }, [fees, productId, principal]);
-  const configuredFeesTotal = applicableFees.reduce((sum, f) => sum + f.amount, 0);
-
-  const totalDeductions = statedDeductionsTotal + configuredFeesTotal;
-  const netProceeds = principal - totalDeductions;
-
-  // Maturity date
-  const maturityDate = useMemo(() => {
-    if (!releaseDate || !term) return null;
-    return loanMaturityDate(releaseDate, term, termUnit, paymentFrequency ?? "monthly");
-  }, [releaseDate, term, termUnit, paymentFrequency]);
+  // Shown read-only: the server builds the loan with its product's method.
+  const interestMethod = formInterestMethod({
+    product: selectedProduct,
+    storedMethod: existingLoan
+      ? (existingLoan.interest_method ?? existingLoan.interest_type ?? null)
+      : null,
+  });
 
   // Amortization preview — shown as soon as the core loan terms are valid.
   // SCB errors do NOT block the preview (we want the user to see the SCB
@@ -695,15 +649,16 @@ function NewLoanApplicationInner() {
     term > 0 &&
     rate > 0 &&
     paymentFrequency !== null &&
-    interestType !== null &&
+    interestMethod !== null &&
     releaseDate !== undefined &&
     !principalError &&
     !termError;
 
-  // The collateral total, security status, shortfall and amortization
-  // schedule are the server's (`POST /loans/preview`), asked for whenever the
-  // terms or the attached collaterals change. The form works none of them out:
-  // while a preview is on its way, or after one failed, it shows no figures.
+  // The collateral total, security status, shortfall, maturity date,
+  // deductions, net proceeds and amortization schedule are the server's
+  // (`POST /loans/preview`), asked for whenever the terms, the deductions or
+  // the attached collaterals change. The form works none of them out: while a
+  // preview is on its way, or after one failed, it shows no figures.
   const { view: preview, retry: retryPreview } = useLoanPreview(
     loanPreviewRequest({
       productId,
@@ -714,10 +669,14 @@ function NewLoanApplicationInner() {
       releaseDate,
       scbAmount,
       collaterals: selectedCollaterals,
+      // As the save states them: only once the product is known.
+      deductions: selectedProduct ? deductions : null,
     }),
   );
   const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
+  const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
+  const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
 
   // Picker rows: show all of the borrower's collaterals, but disable the
   // ones already selected here or locked to a different active loan.
@@ -745,9 +704,6 @@ function NewLoanApplicationInner() {
         const apiProduct = product as unknown as Record<string, unknown>;
         const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
         setInterestRate(decimalInputValue(rawRate));
-        // Map API field names: interest_method/interest_type, "fixed" -> "straight"
-        const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
-        setInterestType(rawType === "fixed" ? "straight" : rawType);
         // Auto-select payment frequency from the product's frequencies array
         const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
         const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
@@ -808,7 +764,6 @@ function NewLoanApplicationInner() {
     if (!(principal > 0) || principalError) missing.push("Principal amount");
     if (!(term > 0) || termError) missing.push("Term");
     if (paymentFrequency === null) missing.push("Payment frequency");
-    if (interestType === null) missing.push("Interest type");
     if (!(rate > 0)) missing.push("Interest rate");
     if (releaseDate === undefined) missing.push("Release date");
     if (scbError) missing.push("Share Capital Build-Up");
@@ -823,7 +778,6 @@ function NewLoanApplicationInner() {
       borrowerId === null ||
       productId === null ||
       paymentFrequency === null ||
-      interestType === null ||
       releaseDate === undefined
     )
       return;
@@ -836,14 +790,13 @@ function NewLoanApplicationInner() {
         principal_amount: principal,
         // Loan terms chosen on the form. These were previously omitted from
         // the payload, so the backend fell back to product defaults (e.g. the
-        // product's max term) — making the saved term/frequency/method, and
-        // the backend-computed maturity date and total payable, differ from
-        // what the user entered. The backend stores interest_method verbatim
-        // ("straight"/"diminishing"), so send the form value as-is.
+        // product's max term) — making the saved term/frequency, and the
+        // backend-computed maturity date and total payable, differ from what
+        // the user entered. No `interest_method`: the server snapshots it from
+        // the product and ignores one sent.
         term,
         frequency: paymentFrequency,
         interest_rate: rate,
-        interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
         // Stated whenever the product is known. Sent none, the server charged
@@ -1412,30 +1365,21 @@ function NewLoanApplicationInner() {
               />
             </div>
 
-            {/* Interest Type */}
+            {/* Interest Type — read-only: the server snapshots it from the product */}
             <div className="space-y-2">
-              <Label>Interest Type</Label>
-              <Select
-                value={interestType ?? null}
-                onValueChange={(value) => setInterestType(value ?? null)}
+              <Label htmlFor="interest-type">Interest Type</Label>
+              {/* <output> is labelable, so the read-only value keeps its label */}
+              <output
+                id="interest-type"
+                className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type">
-                    {(value: string | null) =>
-                      value
-                        ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                        : "Select type"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {INTEREST_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {interestMethod ? (
+                  interestMethodLabel(interestMethod)
+                ) : (
+                  <span className="text-muted-foreground">Select a product first</span>
+                )}
+              </output>
+              <p className="text-xs text-muted-foreground">Set by loan product</p>
             </div>
           </div>
 
@@ -1738,7 +1682,9 @@ function NewLoanApplicationInner() {
             <div className="space-y-2">
               <Label>Maturity Date</Label>
               <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
-                {maturityDate ? formatDate(maturityDate) : "Auto-computed"}
+                {previewMaturity
+                  ? formatDate(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                  : "—"}
               </div>
             </div>
           </div>
@@ -1781,7 +1727,9 @@ function NewLoanApplicationInner() {
               <Input
                 type="text"
                 readOnly
-                value={formatCurrency(processingFee)}
+                value={currencyOrDash(
+                  previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
+                )}
                 className="bg-muted/40 cursor-default font-medium tabular-nums"
               />
               {processingFeeRange.max > 0 && (
@@ -1820,7 +1768,9 @@ function NewLoanApplicationInner() {
               <Input
                 type="text"
                 readOnly
-                value={formatCurrency(serviceFee)}
+                value={currencyOrDash(
+                  previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
+                )}
                 className="bg-muted/40 cursor-default font-medium tabular-nums"
               />
               {serviceFeeRange.max > 0 && (
@@ -1842,7 +1792,7 @@ function NewLoanApplicationInner() {
                 <Input
                   type="text"
                   readOnly
-                  value={formatCurrency(deductionAmount(principal, d))}
+                  value={currencyOrDash(previewDeductionAmount(previewDeductions?.items, deductions, d))}
                   className="bg-muted/40 cursor-default font-medium tabular-nums"
                 />
                 <p className="text-[10px] text-muted-foreground">Set by loan product</p>
@@ -1850,11 +1800,11 @@ function NewLoanApplicationInner() {
             ))}
           </div>
 
-            {/* Configured fees that auto-apply to the selected product */}
-            {applicableFees.length > 0 && (
+            {/* Configured fees the release would add for this loan, from the server */}
+            {previewDeductions && previewDeductions.configured_fees.length > 0 && (
               <div className="space-y-2">
-                {applicableFees.map((f) => (
-                  <div key={f.name} className="flex items-center justify-between">
+                {previewDeductions.configured_fees.map((f) => (
+                  <div key={f.fee_id} className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">{f.name}</span>
                     <span className="text-sm font-medium">{formatCurrency(f.amount)}</span>
                   </div>
@@ -1920,23 +1870,46 @@ function NewLoanApplicationInner() {
 
           <Separator />
 
-          {/* Summary */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Summary — the server's totals; a dash until it has sent them */}
+          <div
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+            aria-live="polite"
+            aria-busy={preview.status === "loading"}
+          >
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
               <span className="text-sm text-muted-foreground">
                 Total Deductions
               </span>
               <span className="text-sm font-semibold">
-                {formatCurrency(totalDeductions)}
+                {currencyOrDash(previewDeductions?.total_deductions)}
               </span>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3">
               <span className="text-sm font-medium">Net Proceeds</span>
               <span className="text-lg font-bold text-brand-orange">
-                {formatCurrency(netProceeds)}
+                {currencyOrDash(previewDeductions?.net_proceeds)}
               </span>
             </div>
           </div>
+          {previewDeductions?.error && (
+            <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              {previewDeductions.error}
+            </p>
+          )}
+          {preview.status === "error" && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+              <p className="flex items-center gap-1.5 text-destructive">
+                <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                We couldn&rsquo;t load the deductions preview.
+              </p>
+              <span className="text-xs text-muted-foreground">{preview.message}</span>
+              <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                <RefreshCw className="mr-2 size-4" />
+                Retry
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

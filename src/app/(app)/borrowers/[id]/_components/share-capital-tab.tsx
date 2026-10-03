@@ -11,11 +11,8 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { shareCapitalService } from "@/services";
 import { usePermission } from "@/hooks";
 import { ledgerAmounts } from "@/utils/share-capital";
+import { formatCurrency } from "@/lib/format";
 import type { ShareCapitalLedgerEntry } from "@/types";
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(isNaN(amount) ? 0 : amount);
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

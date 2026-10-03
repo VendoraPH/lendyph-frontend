@@ -1,5 +1,5 @@
-// Rate and fee percentages, and the pesos they come to: typed, prefilled and
-// applied exactly.
+// Rate and fee percentages: typed and prefilled exactly. What a percentage
+// comes to in pesos is always the server's figure.
 //
 // Rates and fees may carry decimals, and a value is never rounded on display or
 // on save. The API stores loan and product rates and fees as `decimal(8,4)`,
@@ -41,33 +41,4 @@ export function decimalInputValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const n = Number(value);
   return Number.isFinite(n) ? formatRate(n) : "";
-}
-
-/**
- * Pesos to the centavo, exactly as the API's PHP 8.4 `round($amount, 2)` rounds
- * them (`_php_math_round`): take the whole centavos below the amount, then
- * round away from zero only when the halfway point between them, computed as
- * a double, is not above the amount. That is why PHP rounds 150.015 (stored as
- * 150.01499999…) up to 150.02, where `Math.round(x * 100) / 100` gives 150.01,
- * yet rounds 34095.554999999993 down to 34095.55, where settling to 15 digits
- * first would give .56. Either way the preview would disagree with the saved
- * loan.
- */
-export function roundCentavos(amount: number): number {
-  const abs = Math.abs(amount);
-  let whole = Math.floor(abs * 100);
-  // `abs * 100` can land one unit short (0.285 * 100 = 28.499…); PHP checks
-  // the next whole number against the amount the same way.
-  if ((whole + 1) / 100 === abs) whole += 1;
-  const rounded = (whole + 0.5) / 100 <= abs ? whole + 1 : whole;
-  return (Math.sign(amount) * rounded) / 100;
-}
-
-/**
- * `percent`% of `amount`, to the centavo: what the API books for a percentage
- * fee (`LoanService::computeDeductions`, `LoanReleaseFeeService`), worked in
- * the same order as its `round($principal * $rate / 100, 2)`.
- */
-export function percentOf(amount: number, percent: number): number {
-  return roundCentavos((amount * percent) / 100);
 }

@@ -11,10 +11,8 @@ import {
   parseApiDate,
   periodsPerYear,
   rateLabel,
-  startOfLocalDay,
   termLabel,
   termLabelFrom,
-  unitemisedRemainder,
 } from "./shared";
 
 /**
@@ -140,11 +138,6 @@ test("dates: timestamps, Date objects and junk all round-trip sensibly", () => {
   assert.equal(parseApiDate(new Date("nope")), null);
 });
 
-test("dates: startOfLocalDay drops the time and nothing else", () => {
-  const floored = startOfLocalDay(new Date(2026, 7, 26, 23, 59, 59, 999));
-  assert.equal(floored.getTime(), new Date(2026, 7, 26).getTime());
-});
-
 test("dates: a fields row formats the date instead of printing the API string", () => {
   // The bug: `field()` stringifies, so one receipt carried "Date: 2026-08-26"
   // in its fields block and "Date: Aug 26, 2026" in the signature detail
@@ -174,18 +167,4 @@ test("dates: dateTimeField keeps the minute a void happened at", () => {
     "2026-08-27 10:02:00"
   );
   assert.equal(dateOrBlank(null), BLANK_LINE);
-});
-
-// ---------------------------------------------------------------------------
-// Reconciliation
-// ---------------------------------------------------------------------------
-
-test("reconciliation: the unitemised remainder is exact to the centavo", () => {
-  assert.equal(unitemisedRemainder(5000, 0), 5000);
-  assert.equal(unitemisedRemainder(5000, 5000), 0);
-  assert.equal(unitemisedRemainder(1500, 2000), -500);
-  // Float subtraction would leave 0.009999999999990905 here, which is not zero
-  // and would print a balancing line for a rounding artefact.
-  assert.equal(unitemisedRemainder(1000.01, 1000), 0.01);
-  assert.equal(unitemisedRemainder(16666.67, 6666.67 + 10000), 0);
 });

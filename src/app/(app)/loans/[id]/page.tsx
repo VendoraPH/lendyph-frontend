@@ -25,7 +25,7 @@ import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-l
 import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { readScheduleRows, toDisplaySchedule } from "./_lib/server-schedule";
-import { ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
+import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -39,10 +39,11 @@ import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
-import { releaseFigures, releaseInsurancePayload } from "./_lib/release-figures";
+import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-figures";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { extensionDueDate } from "./_lib/extension-due-date";
 import { useReleasePreview } from "./_hooks/use-release-preview";
+import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
 import {
   INSURANCE_PREMIUM_INITIAL,
   type InsurancePremiumValue,
@@ -130,7 +131,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { currencyOrDash } from "@/lib/report-format";
 import {
+  formatCurrency,
   formatCurrencyExact,
   formatDate,
   formatDateISO,
@@ -151,28 +154,6 @@ import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 import { overdueWithPenalty } from "@/lib/loan-dues";
-
-// ── Currency & Date Formatters ──
-
-const formatCurrency = (amount: number | string | undefined | null) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
-
-// Like formatCurrency but keeps centavos — use where the number shown must
-// exactly equal a number being posted (e.g. the interest collected on extend),
-// so the display never rounds away centavos that are actually charged.
-const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(parseFloat(String(amount ?? 0)) || 0);
-
 
 // One row of the Ledger table — either a Repayment or a LoanLedgerEntry
 // (interest a loan extension accrues or collects), flattened to a common
@@ -994,6 +975,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
     loanId,
     loan?.status === "approved" && (canReleaseLoan || releaseOpen),
   );
+  // The same preview with the insurance typed in the Release dialog: the
+  // premium, what is left to collect, and the deductions and net after it, all
+  // the server's. Asked only while the dialog is open and a percentage is set.
+  const releaseInsurance = releaseInsuranceQuery(insurancePremium);
+  const {
+    view: insurancePreview,
+    premiumAmount: insurancePremiumAmount,
+    retry: retryInsurancePreview,
+  } = useReleaseInsurancePreview(
+    loanId,
+    releaseInsurance,
+    releaseOpen && loan?.status === "approved",
+  );
 
   // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
   // step goes to the API and is followed by a refetch; nothing on this page is
@@ -1245,7 +1239,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       scheduleScbTotal: storedScheduleTotals.shareCapitalBuildUp,
       interestDebits: interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0),
       interestCredits: interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0),
-      interestPaid: keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0),
+      interestPaid: ledgerInterestPaid(keptRepayments),
     });
     return walkLedgerBalances(sorted, opening);
   }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedSchedule.length, storedScheduleTotals.shareCapitalBuildUp]);
@@ -1445,30 +1439,33 @@ function LoanDetail({ loanId }: { loanId: number }) {
     );
   }
 
-  // The insurance the release sends, and what the release will then store: the
-  // server's preview with that insurance applied the way the server applies
-  // it. Null until the preview is in, and Confirm Release stays off until then.
-  const releaseInsurance = releaseInsurancePayload(
-    Number(loan.principal_amount) || 0,
-    insurancePremium,
-  );
-  const releaseAmounts =
-    releasePreview.status === "loaded"
-      ? releaseFigures(releasePreview.preview, releaseInsurance)
-      : null;
+  // What the release will store, from the server: with no insurance, the
+  // release preview as it stands; with insurance, the preview asked about that
+  // insurance. Null until the right one is in for what is typed now, and
+  // Confirm Release stays off until then.
+  const releaseAnswer =
+    releaseInsurance === null
+      ? releasePreview.status === "loaded"
+        ? releasePreview.preview
+        : null
+      : insurancePreview.status === "ready"
+        ? insurancePreview.preview
+        : null;
+  const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
   const canConfirmRelease =
-    releaseAmounts !== null && !releaseAmounts.exceedsNetProceeds && !actionLoading;
+    releasePreview.status === "loaded" && releaseAnswer !== null && !releaseExceedsNet && !actionLoading;
 
   const handleRelease = async () => {
-    if (releasePreview.status !== "loaded" || !canConfirmRelease) return;
+    if (releaseAnswer === null || !canConfirmRelease) return;
     setActionLoading(true);
     try {
       // The fingerprint of the fees quoted on screen: if they have changed
       // since, the server refuses the release (409) rather than pay out a
-      // different amount from the one the cashier just read.
+      // different amount from the one the cashier just read. The premium sent
+      // is the server's own from the same answer; it refuses any other (422).
       await loanService.release(loan.id, {
-        ...releaseInsurance,
-        fee_fingerprint: releasePreview.preview.fee_fingerprint,
+        ...releaseInsurancePayload(releaseInsurance, releaseAnswer.insurance),
+        fee_fingerprint: releaseAnswer.fee_fingerprint,
       });
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
@@ -2205,7 +2202,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
       <LoanCollateralsCard
         loanId={loan.id}
-        loanPrincipal={Number(loan.principal_amount ?? 0)}
+        summary={loan.collateral_summary ?? null}
       />
 
       {/* The chain is over for `rejected` and `void` loans — a voided draft used
@@ -3762,9 +3759,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <div className="flex flex-col items-center py-6">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Outstanding Balance</p>
             <p className="text-5xl font-bold text-brand-orange">
-              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
-                Math.round(loanSummary?.outstanding_balance ?? loan?.outstanding_balance ?? 0)
-              )}
+              {formatCurrency(loanSummary?.outstanding_balance ?? loan?.outstanding_balance ?? 0)}
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               {loan?.borrower?.full_name ?? loan?.borrower?.name ?? "Member"}
@@ -3867,8 +3862,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div>
                   <p className="text-xs text-muted-foreground">Net Proceeds</p>
                   <p className="text-sm font-semibold text-green-600">
-                    {releaseAmounts && !releaseAmounts.exceedsNetProceeds
-                      ? formatCurrencyExact(releaseAmounts.netProceeds)
+                    {releaseAnswer && !releaseExceedsNet
+                      ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
                       : "—"}
                   </p>
                 </div>
@@ -3909,9 +3904,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </div>
 
             <InsurancePremiumSection
-              principalAmount={Number(loan.principal_amount) || 0}
               value={insurancePremium}
               onChange={setInsurancePremium}
+              view={insurancePreview}
+              premiumAmount={insurancePremiumAmount}
+              onRetry={retryInsurancePreview}
               disabled={actionLoading}
             />
 
@@ -3973,7 +3970,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </div>
 
             {/* Warning */}
-            {releaseAmounts?.exceedsNetProceeds ? (
+            {releaseExceedsNet ? (
               <div
                 role="alert"
                 className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2"
@@ -3989,16 +3986,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-700">
                   Releasing this loan will lock the principal, interest rate, and term.
-                  {releaseAmounts && (
+                  {releaseAnswer && (
                     <>
                       {" "}The borrower will receive{" "}
                       <span className="font-semibold">
-                        {formatCurrencyExact(releaseAmounts.netProceeds)}
+                        {currencyOrDash(releaseAnswer.net_proceeds_after_insurance)}
                       </span>{" "}
                       as net proceeds
-                      {releaseAmounts.insuranceCollected > 0 && (
+                      {releaseAnswer.insurance && Number(releaseAnswer.insurance.collected) > 0 && (
                         <>
-                          {" "}(after {formatCurrencyExact(releaseAmounts.insuranceCollected)} insurance premium)
+                          {" "}(after {formatCurrencyExact(releaseAnswer.insurance.collected)} insurance premium)
                         </>
                       )}
                       .
@@ -4799,7 +4796,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 : "Interest Due — carried into the new period"}
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {currentInterestDue === null ? "—" : formatCurrencyPrecise(currentInterestDue)}
+              {currentInterestDue === null ? "—" : formatCurrency(currentInterestDue)}
             </p>
             {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
               // Spells out the stacking the team described: ₱50 already due
@@ -4807,7 +4804,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
                 Stays unpaid — the new period will owe{" "}
                 <span className="font-semibold tabular-nums">
-                  {formatCurrencyPrecise(extendDeferredInterestTotal)}
+                  {formatCurrency(extendDeferredInterestTotal)}
                 </span>{" "}
                 once this cycle&apos;s interest is added.
               </p>

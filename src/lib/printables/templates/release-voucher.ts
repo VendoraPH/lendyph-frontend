@@ -6,10 +6,10 @@
  * left the drawer with someone's name on it. New — there was no printable for
  * this before, which is why release deductions were only ever visible on screen.
  *
- * Source: `loanService.detail(id)` (`LoanResource`). No backend work was needed
- * — `deductions`, `total_deductions`, `net_proceeds`, `released_by_user`,
- * `approved_by_user`, `account_officer`, `borrower` and `branch` are all
- * already serialised.
+ * Source: `loanService.detail(id)` (`LoanResource`): `deductions`,
+ * `total_deductions`, `unitemised_deductions`, `net_proceeds`,
+ * `released_by_user`, `approved_by_user`, `account_officer`, `borrower` and
+ * `branch`. Every figure is the server's; one it did not send prints as a dash.
  */
 
 import { amountInWords } from "../amount-in-words";
@@ -17,6 +17,7 @@ import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_LINE,
   BLANK_ORG,
+  DASH,
   asArray,
   asRecord,
   dateField,
@@ -30,7 +31,6 @@ import {
   presentFields,
   termLabelFrom,
   toNumber,
-  unitemisedRemainder,
   type PrintableBuildOptions,
 } from "./shared";
 
@@ -48,23 +48,20 @@ export function buildReleaseVoucherDoc(
   const accountNumber =
     pick(loan, ["loan_account_number", "application_number"]) ?? null;
 
-  const principal = pickNumber(loan, ["principal_amount", "principal"]) ?? 0;
+  const principal = pickNumber(loan, ["principal_amount", "principal"]);
 
   // `deductions` is an array of { name, amount, type, original_value } —
   // despite `Loan.deductions` in src/types/loan.ts declaring a
   // Record<string, number>, which no response has ever matched.
   const deductions = asArray(pick(loan, ["deductions"])).map((item) => ({
     name: String(pick(item, ["name", "label", "description"]) ?? "Deduction"),
-    amount: toNumber(pick(item, ["amount", "value"])) ?? 0,
+    amount: toNumber(pick(item, ["amount", "value"])),
   }));
 
-  const itemisedTotal = deductions.reduce((acc, d) => acc + d.amount, 0);
-  const totalDeductions =
-    pickNumber(loan, ["total_deductions"]) ?? itemisedTotal;
-  // Never derived when the API sent it: the server is the authority on what
-  // was handed over, and a voucher that disagrees with the cash is worthless.
-  const netProceeds =
-    pickNumber(loan, ["net_proceeds"]) ?? principal - totalDeductions;
+  // Never derived: the server is the authority on what was handed over, and a
+  // voucher that disagrees with the cash is worthless.
+  const totalDeductions = pickNumber(loan, ["total_deductions"]);
+  const netProceeds = pickNumber(loan, ["net_proceeds"]);
 
   // A voucher IS a form, so an unreadable loan still prints one to complete by
   // hand — but a form carries blanks, not figures. Falling through to
@@ -72,22 +69,24 @@ export function buildReleaseVoucherDoc(
   // "Received from the cooperative the sum stated above", which states a sum
   // that was never released.
   const incomplete = loan === null;
-  const money = (value: number) =>
-    incomplete ? BLANK_LINE : formatCurrency(value);
+  const money = (value: number | null) =>
+    incomplete ? BLANK_LINE : value === null ? DASH : formatCurrency(value);
+  const withheld = (value: number | null) =>
+    incomplete ? BLANK_LINE : value === null ? DASH : `(${formatCurrency(value)})`;
 
   const deductionLines: PrintChargeLine[] = deductions.map((item) => ({
     label: item.name,
-    amount: `(${formatCurrency(item.amount)})`,
+    amount: withheld(item.amount),
     indent: true,
   }));
 
   // Whatever `total_deductions` covers that the itemised array does not, as a
-  // line of its own. `deductions: []` with `total_deductions: 5000` used to
-  // print "No deductions applied  P0.00" immediately above
-  // "Total Deductions  (P5,000.00)" — the total is the one the cashier paid
-  // against, so the itemisation is what has to be made whole, not the total.
-  const unitemised = unitemisedRemainder(totalDeductions, itemisedTotal);
-  if (unitemised !== 0) {
+  // line of its own: the server's `unitemised_deductions`. `deductions: []`
+  // with `total_deductions: 5000` used to print "No deductions applied  P0.00"
+  // immediately above "Total Deductions  (P5,000.00)" — the total is the one
+  // the cashier paid against, so the itemisation is what has to be made whole.
+  const unitemised = pickNumber(loan, ["unitemised_deductions"]);
+  if (unitemised !== null && unitemised !== 0) {
     deductionLines.push({
       // Negative when the items sum past the server's total; the total governs.
       label: unitemised > 0 ? "Other deductions" : "Adjustment",
@@ -99,7 +98,9 @@ export function buildReleaseVoucherDoc(
     });
   }
 
-  if (deductionLines.length === 0) {
+  // Only when the server says nothing was withheld; a voucher never states a
+  // zero the server did not send.
+  if (deductionLines.length === 0 && totalDeductions === 0) {
     deductionLines.push({
       label: "No deductions applied",
       amount: formatCurrency(0),
@@ -156,7 +157,7 @@ export function buildReleaseVoucherDoc(
         ...deductionLines,
         {
           label: "Total Deductions",
-          amount: incomplete ? BLANK_LINE : `(${formatCurrency(totalDeductions)})`,
+          amount: withheld(totalDeductions),
           rule: "total",
         },
         {
@@ -171,7 +172,7 @@ export function buildReleaseVoucherDoc(
       items: [
         {
           label: "Net proceeds in words",
-          value: incomplete ? BLANK_LINE : amountInWords(netProceeds),
+          value: incomplete ? BLANK_LINE : netProceeds === null ? DASH : amountInWords(netProceeds),
         },
       ],
     },

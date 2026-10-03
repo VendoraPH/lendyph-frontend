@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { amountInWords } from "../amount-in-words";
 import {
   buildShareCapitalCertificateDoc,
@@ -27,7 +27,8 @@ const NOW = new Date(2026, 7, 26);
  *
  * `ReportService::shareCapitalStatement()` orders `->orderBy('date')
  * ->orderBy('id')` and accumulates as it maps, so entries arrive oldest-first
- * with a `running_balance` already on each one, under a `totals` block.
+ * with a `running_balance` already on each one, with the period totals
+ * (`totals`, and `total_credit` / `total_debit` beside `closing_balance`).
  */
 const STATEMENT = {
   borrower: {
@@ -45,6 +46,8 @@ const STATEMENT = {
   ],
   totals: { entry_count: 3, credits: 2000, debits: 500, net_movement: 1500 },
   closing_balance: 6500,
+  total_credit: 2000,
+  total_debit: 500,
   pledge: null,
   generated_at: "2026-08-26 09:15:00",
 };
@@ -58,10 +61,9 @@ const STATEMENT = {
  *  - `ShareCapitalLedgerController::index()` orders
  *    `->orderByDesc('date')->orderByDesc('id')`, so the newest entry is FIRST;
  *  - `ShareCapitalLedgerResource` sends `debit` and `credit` and no
- *    `running_balance` at all, so every balance has to be derived.
+ *    `running_balance`, totals or closing balance at all.
  *
- * Fixturing it oldest-first hid a reverse-cumulative balance in every row of a
- * document a member signs.
+ * With no balance from the server, it can only print as a ledger extract.
  */
 const LEDGER_LIST = {
   data: [
@@ -126,29 +128,62 @@ test("share capital: the ledger carries a running balance per entry", () => {
   assert.equal(table.rows[0]?.reference, "SC-0001");
 });
 
-test("share capital: closing balance = opening + contributions − withdrawals", () => {
+test("share capital: opening, contributions, withdrawals and closing are the statement's", () => {
   const doc = buildShareCapitalCertificateDoc(STATEMENT, { now: NOW });
 
   assert.equal(chargeAmount(doc, "Opening Balance"), formatCurrency(5000));
   assert.equal(chargeAmount(doc, "Add: Contributions"), formatCurrency(2000));
   assert.equal(chargeAmount(doc, "Less: Withdrawals"), `(${formatCurrency(500)})`);
-  assert.equal(
-    chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"),
-    formatCurrency(5000 + 2000 - 500)
-  );
+  assert.equal(chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"), formatCurrency(6500));
 
-  // The ledger's last running balance is the closing balance — the two views
-  // of the same number must agree or the certificate contradicts its own table.
   const table = tableBlock(doc);
+  assert.equal(table.totals?.credit, formatCurrency(2000));
+  assert.equal(table.totals?.debit, formatCurrency(500));
   assert.equal(table.totals?.balance, formatCurrency(6500));
-  assert.equal(table.rows[table.rows.length - 1]?.balance, 6500);
+
+  // A server figure unlike opening + credits − debits is printed as sent.
+  const sent = buildShareCapitalCertificateDoc({ ...STATEMENT, closing_balance: 6500.01 }, { now: NOW });
+  assert.equal(chargeAmount(sent, "CLOSING SHARE CAPITAL BALANCE"), formatCurrency(6500.01));
 });
 
-test("share capital: a newest-first ledger is re-sorted before it is accumulated", () => {
-  // The failure this pins: accumulating the controller's descending order from
-  // an opening balance of zero gave 500 / 1500 / 2500 reading down the page —
-  // a reverse-cumulative in every cell, under a footer total that was still
-  // right, so the table looked plausible and no line reconciled.
+test("share capital: a total or balance the statement did not send is a dash, never accumulated", () => {
+  const doc = buildShareCapitalCertificateDoc(
+    {
+      ...STATEMENT,
+      opening_balance: undefined,
+      totals: undefined,
+      total_credit: undefined,
+      total_debit: undefined,
+      entries: STATEMENT.entries.map(({ running_balance: _balance, ...entry }) => {
+        void _balance;
+        return entry;
+      }),
+    },
+    { now: NOW }
+  );
+
+  assert.equal(chargeAmount(doc, "Opening Balance"), DASH);
+  assert.equal(chargeAmount(doc, "Add: Contributions"), DASH);
+  assert.equal(chargeAmount(doc, "Less: Withdrawals"), DASH);
+  assert.deepEqual(tableBlock(doc).rows.map((r) => r.balance), [null, null, null]);
+  // The closing balance was sent, so the certificate still stands on it.
+  assert.equal(chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"), formatCurrency(6500));
+});
+
+test("share capital: a statement with no closing balance certifies nothing", () => {
+  const doc = buildShareCapitalCertificateDoc({ ...STATEMENT, closing_balance: undefined }, { now: NOW });
+
+  assert.equal(doc.incomplete, true);
+  assert.equal(titleBlock(doc).subtitle, "LEDGER EXTRACT — NOT A CERTIFICATION OF BALANCE");
+  assert.doesNotMatch(prose(doc), /This is to certify/);
+  assert.ok(!hasChargeLine(doc, "CLOSING SHARE CAPITAL BALANCE"));
+  assert.deepEqual(signatureLabels(doc), ["Prepared by", "Checked by"]);
+});
+
+test("share capital: a newest-first ledger is printed oldest-first, with no balance derived", () => {
+  // Accumulating the controller's descending order gave a reverse-cumulative
+  // in every cell. Nothing is accumulated now: the list sends no balance, so
+  // there is no balance column and no total to print.
   const doc = buildShareCapitalCertificateDoc(
     toShareCapitalLedgerFallback(LEDGER_LIST, PRINT_PAGE_SIZE),
     { now: NOW }
@@ -159,32 +194,33 @@ test("share capital: a newest-first ledger is re-sorted before it is accumulated
     table.rows.map((r) => r.date),
     ["2026-01-15", "2026-02-15", "2026-03-10"]
   );
-  assert.deepEqual(
-    table.rows.map((r) => r.balance),
-    [1000, 2000, 1500]
-  );
-
-  // Every line reconciles with the one above it, and the last one with the
-  // footer — which is the only reason a balance column may be printed at all.
-  assert.equal(table.rows[table.rows.length - 1]?.balance, 1500);
-  assert.equal(table.totals?.balance, formatCurrency(1500));
-  assert.equal(
-    chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"),
-    formatCurrency(1500)
-  );
+  assert.deepEqual(table.rows.map((r) => r.balance), [null, null, null]);
+  assert.ok(!table.columns.some((c) => c.key === "balance"));
+  assert.equal(table.totals?.credit, DASH);
+  assert.equal(table.totals?.debit, DASH);
+  assert.equal(chargeAmount(doc, "Contributions (entries shown)"), DASH);
+  assert.equal(chargeAmount(doc, "Withdrawals (entries shown)"), DASH);
 });
 
-test("share capital: a whole fallback ledger still certifies", () => {
+test("share capital: a whole fallback ledger is an extract, not a certificate", () => {
   const payload = toShareCapitalLedgerFallback(LEDGER_LIST, PRINT_PAGE_SIZE);
   assert.equal(payload.partial_ledger, false);
 
   const doc = buildShareCapitalCertificateDoc(payload, { now: NOW });
-  assert.equal(doc.incomplete, undefined);
+  // Every entry, but no closing balance from the server: nothing to certify.
+  assert.equal(doc.incomplete, true);
+  assert.equal(titleBlock(doc).subtitle, "LEDGER EXTRACT — NOT A CERTIFICATION OF BALANCE");
   assert.equal(fieldValue(doc, "Member"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Member No."), "MBR-0001");
-  assert.equal(chargeAmount(doc, "Opening Balance"), formatCurrency(0));
-  assert.match(prose(doc), /This is to certify that/);
-  assert.deepEqual(signatureLabels(doc), ["Certified correct by", "Approved by"]);
+  assert.doesNotMatch(prose(doc), /This is to certify/);
+  assert.match(prose(doc), /extract of the share capital ledger/);
+  // Not the truncation wording: no entries are missing.
+  assert.doesNotMatch(prose(doc), /earlier entries exist/);
+  assert.throws(() => fieldValue(doc, "Ledger coverage"));
+  assert.ok(!hasChargeLine(doc, "Opening Balance"));
+  assert.throws(() => fieldValue(doc, "Balance in words"));
+  assert.match(doc.footerNote ?? "", /LEDGER EXTRACT — not a Share Capital Certificate/);
+  assert.deepEqual(signatureLabels(doc), ["Prepared by", "Checked by"]);
 });
 
 test("share capital: a capped page is detected as partial, by meta or by count", () => {
@@ -248,11 +284,9 @@ test("share capital: a truncated ledger certifies nothing", () => {
   assert.ok(!hasChargeLine(doc, "Opening Balance"));
   assert.throws(() => fieldValue(doc, "Balance in words"));
 
-  // What IS true of the rows shown is still stated, and labelled as such.
-  assert.equal(
-    chargeAmount(doc, "Contributions (entries shown)"),
-    formatCurrency(100 * 100)
-  );
+  // The rows shown are listed, but their totals are the server's to send and
+  // the list sends none: a dash, never the page added up.
+  assert.equal(chargeAmount(doc, "Contributions (entries shown)"), DASH);
   assert.equal(fieldValue(doc, "Ledger coverage"), "Partial — earlier entries not shown");
   assert.match(doc.footerNote ?? "", /not a Share Capital Certificate/);
 
@@ -266,11 +300,14 @@ test("share capital: a withdrawal is read from its debit column, under any total
   // `period` alias.
   const doc = buildShareCapitalCertificateDoc(
     {
-      data: [
-        { id: 1, borrower_name: "Pedro Santos", date: "2026-01-15", description: "Contribution", debit: 0, credit: 1200 },
-        { id: 2, borrower_name: "Pedro Santos", date: "2026-02-15", description: "Withdrawal", debit: 200, credit: 0 },
+      borrower: { borrower_code: "MBR-0003", full_name: "Pedro Santos" },
+      opening_balance: 0,
+      entries: [
+        { id: 1, date: "2026-01-15", description: "Contribution", debit: 0, credit: 1200, running_balance: 1200 },
+        { id: 2, date: "2026-02-15", description: "Withdrawal", debit: 200, credit: 0, running_balance: 1000 },
       ],
       period: { credits: 1200, debits: 200 },
+      closing_balance: 1000,
     },
     { now: NOW }
   );
@@ -283,20 +320,21 @@ test("share capital: a withdrawal is read from its debit column, under any total
       [0, 200, 1000],
     ]
   );
-  assert.equal(
-    chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"),
-    formatCurrency(1000)
-  );
+  assert.equal(chargeAmount(doc, "Add: Contributions"), formatCurrency(1200));
+  assert.equal(chargeAmount(doc, "Less: Withdrawals"), `(${formatCurrency(200)})`);
+  assert.equal(chargeAmount(doc, "CLOSING SHARE CAPITAL BALANCE"), formatCurrency(1000));
 });
 
 test("share capital: undated entries sort last instead of poisoning the order", () => {
   const doc = buildShareCapitalCertificateDoc(
     {
+      opening_balance: 0,
       entries: [
-        { id: 9, date: null, description: "Unposted adjustment", debit: 0, credit: 50 },
-        { id: 2, date: "2026-02-15", description: "Contribution", debit: 0, credit: 1000 },
-        { id: 1, date: "2026-01-15", description: "Contribution", debit: 0, credit: 1000 },
+        { id: 9, date: null, description: "Unposted adjustment", debit: 0, credit: 50, running_balance: 2050 },
+        { id: 2, date: "2026-02-15", description: "Contribution", debit: 0, credit: 1000, running_balance: 2000 },
+        { id: 1, date: "2026-01-15", description: "Contribution", debit: 0, credit: 1000, running_balance: 1000 },
       ],
+      closing_balance: 2050,
     },
     { now: NOW }
   );
@@ -306,6 +344,7 @@ test("share capital: undated entries sort last instead of poisoning the order", 
     table.rows.map((r) => r.date),
     ["2026-01-15", "2026-02-15", null]
   );
+  // Each row keeps the server's own running balance.
   assert.deepEqual(
     table.rows.map((r) => r.balance),
     [1000, 2000, 2050]

@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowLeft,
   CalendarIcon,
   ChevronsUpDown,
   Check,
   Plus,
+  RefreshCw,
   X,
 } from "lucide-react";
 
@@ -86,18 +88,25 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { computeSecurityStatus, securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO, formatDate } from "@/lib/format";
+import { securityStatusLabel } from "@/types/collateral";
+import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
+import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
-import { buildLoanDeductions, calcRestructureShortfall } from "@/lib/loan-restructure";
 import {
-  decimalInputValue,
-  percentOf,
-  roundCentavos,
-  sanitizeDecimalInput,
-} from "@/lib/percent";
+  buildLoanDeductions,
+  calcRestructureShortfall,
+  PROCESSING_FEE_LABEL,
+  SERVICE_FEE_LABEL,
+} from "@/lib/loan-restructure";
+import { decimalInputValue, sanitizeDecimalInput } from "@/lib/percent";
 import {
-  INTEREST_TYPE_OPTIONS,
+  interestMethodLabel,
+  loanPreviewRequest,
+  previewDeductionAmount,
+} from "@/app/(app)/loans/new/_lib/loan-preview";
+import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
+import {
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
   LOAN_STATUS_LABELS,
@@ -106,38 +115,13 @@ import {
 import type { Borrower, CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import type { LoanProduct } from "@/types/loan";
 import {
-  DAYS_PER_MONTH,
-  instalments,
-  maturityDate as loanMaturityDate,
-  rateForDays,
   ratePeriodWord,
   readRateFrequency,
   readTermUnit,
   termUnitNoun,
-  type RateFrequency,
-  type TermUnit,
 } from "@/lib/loan-terms";
 
 // ── Local types ──────────────────────────────────────────────────────────────
-
-type PaymentFrequency =
-  | "daily"
-  | "weekly"
-  | "bi_weekly"
-  | "semi_monthly"
-  | "monthly"
-  | "upon_maturity";
-
-type InterestType = "straight" | "fixed" | "diminishing";
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-}
 
 /**
  * A collateral on the form. `carried` marks one the source loan holds:
@@ -148,71 +132,6 @@ interface SelectedCollateral {
   collateral: CollateralValueRow;
   snapshot_value: number;
   carried: boolean;
-}
-
-// ── Amortization helpers (mirrors new/page.tsx) ───────────────────────────────
-
-function computeAmortization(
-  principal: number,
-  interestRate: number,
-  interestType: InterestType,
-  term: number,
-  termUnit: TermUnit,
-  rateFrequency: RateFrequency,
-  frequency: PaymentFrequency,
-  startDate: Date,
-  scbAmount = 0,
-): AmortizationRow[] {
-  const scb = Math.round(scbAmount);
-
-  if (frequency === "upon_maturity") {
-    const fraction =
-      termUnit === "months"
-        ? rateForDays(interestRate, DAYS_PER_MONTH, rateFrequency) * term
-        : rateForDays(interestRate, term, rateFrequency);
-    const totalInterest = roundCentavos(principal * fraction);
-    return [{
-      period: 1,
-      dueDate: loanMaturityDate(startDate, term, termUnit, frequency),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: scb,
-      totalPayment: roundCentavos(principal + totalInterest) + scb,
-    }];
-  }
-
-  const plan = instalments(startDate, term, termUnit, frequency);
-  const totalPeriods = plan.length;
-  const rows: AmortizationRow[] = [];
-  let remaining = principal;
-
-  if (interestType === "straight" || interestType === "fixed") {
-    // To the centavo, as the server's schedule rounds each figure.
-    const principalPerPeriod = roundCentavos(principal / totalPeriods);
-    plan.forEach(({ dueDate, days }, index) => {
-      const i = index + 1;
-      const periodPrincipal = i === totalPeriods ? remaining : principalPerPeriod;
-      const interest = roundCentavos(principal * rateForDays(interestRate, days, rateFrequency));
-      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: roundCentavos(periodPrincipal + interest) + scb });
-      remaining = roundCentavos(remaining - periodPrincipal);
-    });
-  } else if (interestType === "diminishing") {
-    const r = rateForDays(interestRate, plan[0]?.days ?? DAYS_PER_MONTH, rateFrequency);
-    const pmt = r > 0 ? principal * r / (1 - Math.pow(1 + r, -totalPeriods)) : principal / totalPeriods;
-    // To the centavo, at the points the server rounds its schedule.
-    const payment = roundCentavos(pmt);
-    plan.forEach(({ dueDate, days }, index) => {
-      const i = index + 1;
-      const isLast = i === totalPeriods;
-      const interest = roundCentavos(remaining * rateForDays(interestRate, days, rateFrequency));
-      const periodPrincipal = isLast ? remaining : roundCentavos(payment - interest);
-      const baseTotal = roundCentavos(periodPrincipal + interest);
-      rows.push({ period: i, dueDate, principal: periodPrincipal, interest, shareCapitalBuildUp: scb, totalPayment: baseTotal + scb });
-      remaining = roundCentavos(remaining - periodPrincipal);
-    });
-  }
-
-  return rows;
 }
 
 // ── Active statuses eligible for restructure ─────────────────────────────────
@@ -597,20 +516,9 @@ function RestructureLoanInner() {
   // Interest type is display-only: the API snapshots `interest_method` from the
   // loan product and ignores anything the request sends, so the form shows the
   // product's actual method instead of letting the user pick one that is dropped.
-  const interestType = useMemo<InterestType | null>(() => {
-    if (!selectedProduct) return null;
-    const ap = selectedProduct as unknown as Record<string, unknown>;
-    const raw = String(ap.interest_method ?? selectedProduct.interest_type ?? "straight");
-    return (raw === "fixed" ? "straight" : raw) as InterestType;
-  }, [selectedProduct]);
-
-  const interestTypeLabel = useMemo(
-    () =>
-      interestType
-        ? INTEREST_TYPE_OPTIONS.find((o) => o.value === interestType)?.label ?? interestType
-        : null,
-    [interestType],
-  );
+  const interestTypeLabel = selectedProduct
+    ? interestMethodLabel(selectedProduct.interest_method)
+    : null;
 
   // `term` is a length in the product's unit — months unless it says days.
   const termUnit = readTermUnit(selectedProduct?.term_unit);
@@ -623,19 +531,18 @@ function RestructureLoanInner() {
   const processingFeePercent = parseFloat(processingFeeRate) || 0;
   const serviceFeePercent = parseFloat(serviceFeeRate) || 0;
 
-  const processingFeeAmount = percentOf(principal, processingFeePercent);
-  const serviceFeeAmount = percentOf(principal, serviceFeePercent);
-  const otherDeductionsTotal = otherDeductions.reduce(
-    (s, d) => s + (parseFloat(d.amount) || 0), 0,
-  );
-  const totalDeductions = processingFeeAmount + serviceFeeAmount + otherDeductionsTotal;
-  const netProceeds = principal - totalDeductions;
-
   // Deductions travel with the payload so the new loan matches this preview
-  // instead of falling back to the loan product's configured fees.
+  // instead of falling back to the loan product's configured fees. Every fee
+  // waived is `[]`, which the server takes as none.
   const deductions = useMemo(
     () => buildLoanDeductions({ processingFeePercent, serviceFeePercent, otherDeductions }),
     [processingFeePercent, serviceFeePercent, otherDeductions],
+  );
+  const processingFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === PROCESSING_FEE_LABEL,
+  );
+  const serviceFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === SERVICE_FEE_LABEL,
   );
 
   // Restructuring for less than the outstanding balance writes the difference
@@ -643,14 +550,30 @@ function RestructureLoanInner() {
   const shortfall = calcRestructureShortfall(principal, sourceOutstanding);
   const remarksRequired = shortfall > 0;
 
-  const totalCollateralValue = useMemo(
-    () => selectedCollaterals.reduce((s, c) => s + c.snapshot_value, 0),
-    [selectedCollaterals],
+  // The collateral total and security status, the maturity date, the
+  // deductions and net proceeds, and the amortization schedule are the
+  // server's (`POST /loans/preview`, the loan form's preview), built by the
+  // code the real loan uses. While a preview is on its way, or after one
+  // failed, no figures are shown.
+  const { view: preview, retry: retryPreview } = useLoanPreview(
+    formVisible
+      ? loanPreviewRequest({
+          productId,
+          principalAmount,
+          interestRate,
+          termValue,
+          paymentFrequency,
+          releaseDate: restructureDate,
+          scbAmount,
+          collaterals: selectedCollaterals,
+          deductions,
+        })
+      : null,
   );
-  const securityStatus = useMemo(
-    () => principal > 0 ? computeSecurityStatus(principal, totalCollateralValue) : "unsecured",
-    [principal, totalCollateralValue],
-  );
+  const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;
+  const amortization = preview.status === "ready" ? preview.preview.amortization : null;
+  const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
+  const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
 
   const productFrequencies = useMemo<string[]>(() => {
     if (!selectedProduct) return [];
@@ -675,44 +598,6 @@ function RestructureLoanInner() {
       isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
-
-  // Amortization preview
-  const amortizationRows = useMemo<AmortizationRow[]>(() => {
-    if (
-      principal <= 0 ||
-      term <= 0 ||
-      rate <= 0 ||
-      !paymentFrequency ||
-      !interestType ||
-      !restructureDate
-    )
-      return [];
-    return computeAmortization(
-      principal,
-      rate,
-      interestType as InterestType,
-      term,
-      termUnit,
-      rateFrequency,
-      paymentFrequency as PaymentFrequency,
-      restructureDate,
-      scb,
-    );
-  }, [principal, rate, term, termUnit, rateFrequency, paymentFrequency, interestType, restructureDate, scb]);
-
-  const amortTotals = useMemo(
-    () =>
-      amortizationRows.reduce(
-        (acc, r) => ({
-          principal: acc.principal + r.principal,
-          interest: acc.interest + r.interest,
-          scb: acc.scb + r.shareCapitalBuildUp,
-          total: acc.total + r.totalPayment,
-        }),
-        { principal: 0, interest: 0, scb: 0, total: 0 },
-      ),
-    [amortizationRows],
-  );
 
   // ── Validation ──
   const principalError = useMemo(() => {
@@ -1310,7 +1195,9 @@ function RestructureLoanInner() {
                   <CardTitle className="text-base">
                     Collaterals
                     <Badge variant="outline" className="ml-2 text-xs">
-                      {securityStatusLabel(securityStatus)}
+                      {previewCollateral
+                        ? securityStatusLabel(previewCollateral.security_status)
+                        : "—"}
                     </Badge>
                   </CardTitle>
                   {/* The source loan's security carries over to the replacement
@@ -1375,7 +1262,7 @@ function RestructureLoanInner() {
                       </div>
                     ))}
                     <div className="flex justify-end pt-1 text-sm font-medium">
-                      Total: {formatCurrency(totalCollateralValue)}
+                      Total: {currencyOrDash(previewCollateral?.total_value)}
                     </div>
                   </div>
                 )}
@@ -1502,7 +1389,9 @@ function RestructureLoanInner() {
                   <div className="space-y-1.5">
                     <Label>Projected Maturity Date</Label>
                     <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                      {formatDateObj(loanMaturityDate(restructureDate, term, termUnit, paymentFrequency ?? "monthly"))}
+                      {previewMaturity
+                        ? formatDateObj(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                        : "—"}
                     </div>
                   </div>
                 )}
@@ -1531,7 +1420,9 @@ function RestructureLoanInner() {
                         className="w-24"
                       />
                       <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                        {formatCurrency(processingFeeAmount)}
+                        {currencyOrDash(
+                          previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1551,7 +1442,9 @@ function RestructureLoanInner() {
                         className="w-24"
                       />
                       <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                        {formatCurrency(serviceFeeAmount)}
+                        {currencyOrDash(
+                          previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1608,22 +1501,59 @@ function RestructureLoanInner() {
 
                 <Separator />
 
-                {/* Totals */}
-                <div className="space-y-1 text-sm">
+                {/* Configured fees the release would add for this loan, from the server */}
+                {previewDeductions && previewDeductions.configured_fees.length > 0 && (
+                  <div className="space-y-1 text-sm">
+                    {previewDeductions.configured_fees.map((f) => (
+                      <div key={f.fee_id} className="flex justify-between">
+                        <span className="text-muted-foreground">{f.name}</span>
+                        <span>{formatCurrency(f.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Totals — the server's; a dash until it has sent them */}
+                <div
+                  className="space-y-1 text-sm"
+                  aria-live="polite"
+                  aria-busy={preview.status === "loading"}
+                >
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Loan Amount</span>
                     <span>{formatCurrency(principal)}</span>
                   </div>
                   <div className="flex justify-between text-red-600 dark:text-red-400">
                     <span>Total Deductions</span>
-                    <span>- {formatCurrency(totalDeductions)}</span>
+                    <span>
+                      {previewDeductions ? `- ${formatCurrency(previewDeductions.total_deductions)}` : "—"}
+                    </span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-semibold">
                     <span>Net Proceeds</span>
-                    <span>{formatCurrency(netProceeds)}</span>
+                    <span>{currencyOrDash(previewDeductions?.net_proceeds)}</span>
                   </div>
                 </div>
+                {previewDeductions?.error && (
+                  <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                    {previewDeductions.error}
+                  </p>
+                )}
+                {preview.status === "error" && (
+                  <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                    <p className="flex items-center gap-1.5 text-destructive">
+                      <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                      We couldn&rsquo;t load the preview.
+                    </p>
+                    <span className="text-xs text-muted-foreground">{preview.message}</span>
+                    <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                      <RefreshCw className="mr-2 size-4" />
+                      Retry
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1706,14 +1636,14 @@ function RestructureLoanInner() {
               </CardContent>
             </Card>
 
-            {/* Amortization Preview */}
-            {amortizationRows.length > 0 && (
+            {/* Amortization Preview — the server's schedule for these terms */}
+            {amortization && amortization.rows.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
                     Amortization Preview
                     <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      ({amortizationRows.length} periods)
+                      ({amortization.rows.length} periods)
                     </span>
                   </CardTitle>
                 </CardHeader>
@@ -1731,24 +1661,24 @@ function RestructureLoanInner() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {amortizationRows.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-muted-foreground">{row.period}</TableCell>
-                            <TableCell>{formatDate(row.dueDate.toISOString())}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
-                            {scb > 0 && <TableCell className="text-right">{formatCurrency(row.shareCapitalBuildUp)}</TableCell>}
-                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                        {amortization.rows.map((row) => (
+                          <TableRow key={row.period_number}>
+                            <TableCell className="text-muted-foreground">{row.period_number}</TableCell>
+                            <TableCell>{formatDateObj(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
+                            {scb > 0 && <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>}
+                            <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                       <TableFooter>
                         <TableRow>
                           <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.interest)}</TableCell>
-                          {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.scb)}</TableCell>}
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortTotals.total)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.principal_due)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.interest_due)}</TableCell>
+                          {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.share_capital_build_up)}</TableCell>}
+                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.total_payment)}</TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>

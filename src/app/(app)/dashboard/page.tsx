@@ -25,7 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
-import { formatDateFull } from "@/lib/format";
+import { formatCurrency, formatDateFull } from "@/lib/format";
 import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
@@ -192,10 +192,12 @@ const SHOW_DAILY_COLLECTION_VS_ACTUAL = false;
 // Page
 // ---------------------------------------------------------------------------
 
+// KPI tiles abbreviate on purpose ("₱130K"); below ₱1,000 there is nothing to
+// abbreviate, so the figure is shown in full, to the centavo.
 function formatCompactCurrency(amount: number): string {
   if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(1)}M`;
   if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(0)}K`;
-  return `₱${Math.round(amount).toLocaleString()}`;
+  return formatCurrency(amount);
 }
 
 function DashboardContent() {
@@ -418,7 +420,7 @@ function DashboardContent() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value) => `₱${Number(value).toLocaleString("en-PH")}`}
+                        formatter={(value) => formatCurrency(Number(value))}
                         contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
                       />
                     </PieChart>
@@ -476,9 +478,9 @@ function DashboardContent() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">₱{item.amountDue.toLocaleString("en-PH")}</TableCell>
+                    <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amountDue)}</TableCell>
                     <TableCell className="text-right text-sm font-medium">
-                      {item.amountPaid > 0 ? `₱${item.amountPaid.toLocaleString("en-PH")}` : "—"}
+                      {item.amountPaid > 0 ? formatCurrency(item.amountPaid) : "—"}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       <Badge
@@ -546,7 +548,7 @@ function DashboardContent() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
                       <TableCell className="text-right text-sm font-medium">
-                        ₱{tx.amount.toLocaleString("en-PH")}
+                        {formatCurrency(tx.amount)}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground pr-6">
                         {tx.date}

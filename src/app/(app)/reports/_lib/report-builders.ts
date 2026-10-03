@@ -689,8 +689,9 @@ const AGING_COLUMNS: ReportColumn[] = [
 /**
  * The aging schedule proper. Four KPI cards state the buckets but cannot show
  * concentration — which bucket holds the arrears is the entire question an
- * aging report exists to answer, so each bucket's share of the total is
- * computed here from the amounts the API already sent.
+ * aging report exists to answer — so each row carries its share of the total:
+ * the server's `share_percent`, worked out from centavos. A share it did not
+ * send is "—"; none is divided out here.
  */
 function agingScheduleSection(
   buckets: Record<string, unknown> | null,
@@ -702,32 +703,26 @@ function agingScheduleSection(
     return {
       bucket: label,
       amount: toNumber(bucket ? bucket.amount : value),
+      // Null from the server when the total is 0, and absent from an older
+      // payload: "—" either way.
+      share: toNumber(bucket?.share_percent),
       count: toNumber(bucket?.count),
     };
   }).filter((r) => r.amount !== null);
 
   if (rows.length === 0) return null;
 
-  // The server's total is the denominator. Without it the total and every
-  // share are "—": the buckets are never added up here.
-  const totalAmount = toNumber(total?.amount);
-  const hasTotal = totalAmount !== null && totalAmount > 0;
-  const withShare = rows.map((r) => ({
-    ...r,
-    // A zero total would make every share NaN — report no share instead.
-    share: hasTotal ? ((r.amount ?? 0) / totalAmount) * 100 : null,
-  }));
-
   return {
     kind: "table",
     title: "Aging Schedule",
     columns: AGING_COLUMNS,
-    rows: withShare,
+    rows,
     totals: [
-      { column: "amount", label: "Total", value: currencyOrDash(totalAmount) },
+      // The server's total; the buckets are never added up here.
+      { column: "amount", label: "Total", value: currencyOrDash(total?.amount) },
       // Deliberately no total for `count`: bucket counts double-count a loan
       // that is late in two buckets, so a column sum would be wrong.
-      { column: "share", value: hasTotal ? formatPercent(100) : DASH },
+      { column: "share", value: percentOrDash(total?.share_percent) },
     ],
   };
 }

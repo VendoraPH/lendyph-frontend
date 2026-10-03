@@ -17,6 +17,16 @@ import { httpStatusOf } from "@/lib/api-error";
 import type { LoanFormPreview } from "@/types";
 
 const PREVIEW: LoanFormPreview = {
+  maturity_date: "2027-10-03",
+  deductions: {
+    items: [{ name: "Processing Fee", amount: 750, type: "percentage", original_value: 1.5 }],
+    stated_total: 750,
+    configured_fees: [{ fee_id: 3, name: "CI Fee", amount: 100, type: "fixed", original_value: 100 }],
+    configured_total: 100,
+    total_deductions: 850,
+    net_proceeds: 49150,
+    error: null,
+  },
   collateral: { total_value: 25000.5, security_status: "partially_secured", short_by: 24999.5 },
   amortization: {
     maturity_date: "2027-10-03",
@@ -84,6 +94,10 @@ describe("loanService.preview", () => {
     start_date: "2026-10-03",
     scb_amount: 100,
     collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }],
+    deductions: [
+      { name: "Processing Fee", amount: 1.5, type: "percentage" as const },
+      { name: "Notarial", amount: 250.5, type: "fixed" as const },
+    ],
   };
 
   test("POSTs the form's inputs to /loans/preview", async () => {
@@ -95,10 +109,22 @@ describe("loanService.preview", () => {
     assert.deepEqual(await loanService.preview(body), PREVIEW);
   });
 
-  test("passes a null amortization through", async () => {
-    reply = [200, { data: { ...PREVIEW, amortization: null } }];
+  test("passes a null amortization, maturity date and deductions through", async () => {
+    reply = [200, { data: { ...PREVIEW, amortization: null, maturity_date: null, deductions: null } }];
     const preview = await loanService.preview({ collaterals: [] });
     assert.equal(preview.amortization, null);
+    assert.equal(preview.maturity_date, null);
+    assert.equal(preview.deductions, null);
+  });
+
+  test("passes the deductions guard through in the 200 body, with no net proceeds", async () => {
+    const deductions = {
+      ...PREVIEW.deductions!,
+      net_proceeds: null,
+      error: "Total deductions exceed the principal amount.",
+    };
+    reply = [200, { data: { ...PREVIEW, deductions } }];
+    assert.deepEqual((await loanService.preview(body)).deductions, deductions);
   });
 
   test("lets a 403 and a 422 reach the caller", async () => {

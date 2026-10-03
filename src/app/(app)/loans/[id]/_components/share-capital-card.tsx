@@ -17,6 +17,7 @@ import {
   shareCapitalUnavailableReason,
   type ShareCapitalBalance,
 } from "@/utils/share-capital";
+import { formatCurrency } from "@/lib/format";
 
 interface ShareCapitalCardProps {
   borrowerId: number | null | undefined;
@@ -27,15 +28,6 @@ interface ShareCapitalCardProps {
    */
   version?: number;
   defaultOpen?: boolean;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(isNaN(amount) ? 0 : amount);
 }
 
 export function ShareCapitalCard({ borrowerId, version = 0, defaultOpen = true }: ShareCapitalCardProps) {

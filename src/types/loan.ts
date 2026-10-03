@@ -77,6 +77,23 @@ export interface LoanReleasePreview {
   net_proceeds: string;
   fee_fingerprint: string;
   overlap_warnings?: { fee_id: number; fee_name: string; message: string }[];
+  /**
+   * The premium for the insurance asked about, as 2-decimal strings: the
+   * premium off the principal, what the release withholds (all of it, or the
+   * partial amount), and what is left to collect. Null with no insurance.
+   */
+  insurance: {
+    premium_amount: string;
+    collected: string;
+    partial_amount: string | null;
+    remaining_balance: string;
+  } | null;
+  /** `total_deductions` plus the premium withheld. */
+  total_deductions_after_insurance: string;
+  /** `net_proceeds` less the premium withheld: what the borrower is paid out. */
+  net_proceeds_after_insurance: string;
+  /** The premium withheld is more than the fees leave; the release refuses it. */
+  exceeds_net_proceeds: boolean;
 }
 
 /**
@@ -93,6 +110,38 @@ export interface LoanFormPreviewRequest {
   start_date?: string;
   scb_amount?: number;
   collaterals?: { collateral_id: number; snapshot_value: number }[];
+  /**
+   * The deduction inputs exactly as the create, update or restructure payload
+   * states them: a percentage's rate, a fixed item's pesos. Absent, the server
+   * charges the product's own fees, as `POST /loans` does; `[]` is none.
+   */
+  deductions?: { name: string; amount: number; type: "percentage" | "fixed" }[];
+}
+
+/** One previewed deduction as the server books it: `amount` is pesos, to the centavo. */
+export interface LoanFormPreviewDeduction {
+  name: string;
+  amount: number;
+  type: "percentage" | "fixed";
+  /** The rate for a percentage item, the pesos for a fixed one. */
+  original_value: number;
+}
+
+/**
+ * What the loan would withhold, from the server: the stated deductions, the
+ * configured fees (Settings → Fees) the release would add for this loan, with
+ * their conditions evaluated, and the totals.
+ */
+export interface LoanFormPreviewDeductions {
+  items: LoanFormPreviewDeduction[];
+  stated_total: number;
+  configured_fees: (LoanFormPreviewDeduction & { fee_id: number })[];
+  configured_total: number;
+  total_deductions: number;
+  /** Null when `error` is set. */
+  net_proceeds: number | null;
+  /** The guard a save would fail on (deductions above the principal), else null. */
+  error: string | null;
 }
 
 /** One period of the previewed schedule, to the centavo. */
@@ -117,6 +166,13 @@ export interface LoanFormPreviewRow {
  * (`interest_method` says which).
  */
 export interface LoanFormPreview {
+  /**
+   * Known once the product, a term in its range, the frequency and the start
+   * date are; principal and rate are not needed. Null until then.
+   */
+  maturity_date: string | null;
+  /** Null until a product and a principal above zero are known. */
+  deductions: LoanFormPreviewDeductions | null;
   collateral: {
     total_value: number;
     security_status: SecurityStatus;
@@ -288,6 +344,31 @@ export interface Loan {
   other_deductions?: number;
   total_payable?: number;
   outstanding_balance?: number;
+  /**
+   * `total_deductions` less the itemised `deductions`, signed: the release
+   * voucher prints it as its own line when not 0.
+   */
+  unitemised_deductions?: number;
+  /**
+   * Each column of `amortization_schedules` added up by the server; present
+   * only when the schedule is loaded.
+   */
+  amortization_schedule_totals?: {
+    principal: number;
+    interest: number;
+    penalty: number;
+    total_due: number;
+    amount_paid: number;
+  };
+  /**
+   * The loan's pledged collateral against its principal, from the server
+   * (`GET /loans/{id}`). Null when the relation isn't loaded, as on lists.
+   */
+  collateral_summary?: {
+    total_value: number;
+    security_status: SecurityStatus;
+    short_by: number;
+  } | null;
   purpose?: string;
   collateral?: string;
   approved_by?: string;
@@ -385,6 +466,8 @@ export interface LoanProduct {
   max_amount: number;
   interest_rate: number;
   interest_type: InterestType;
+  /** The method every loan on this product is built with; the server snapshots it. */
+  interest_method: "straight" | "diminishing" | "upon_maturity";
   // Period the interest rate figure is quoted per (e.g. "3% per month").
   // Absent on products created before this field existed — callers should
   // default to "monthly", the rate's long-standing implicit basis.

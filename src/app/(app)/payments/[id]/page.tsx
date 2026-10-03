@@ -299,7 +299,7 @@ function PaymentReceiptContent({
             <CardContent className="p-4 space-y-3">
               <p className="text-sm font-semibold text-destructive">Void this payment?</p>
               <p className="text-xs text-muted-foreground">
-                This action cannot be undone. The payment of ₱{formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
+                This action cannot be undone. The payment of {formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
               </p>
               <textarea
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -428,22 +428,22 @@ function PaymentReceiptContent({
                 <div className="space-y-1.5">
                   <ReceiptRow
                     label="Penalty"
-                    value={`₱ ${formatCurrency(receipt.penalty)}`}
+                    value={formatCurrency(receipt.penalty)}
                   />
                   <ReceiptRow
                     label="Interest"
-                    value={`₱ ${formatCurrency(receipt.interest)}`}
+                    value={formatCurrency(receipt.interest)}
                   />
                   <ReceiptRow
                     label="Principal"
-                    value={`₱ ${formatCurrency(receipt.principal)}`}
+                    value={formatCurrency(receipt.principal)}
                   />
                 </div>
                 <Separator className="my-1" />
                 <div className="flex justify-between text-sm font-bold">
                   <span>Total Paid</span>
                   <span className="font-mono text-base">
-                    ₱ {formatCurrency(receipt.total)}
+                    {formatCurrency(receipt.total)}
                   </span>
                 </div>
               </div>
@@ -456,15 +456,15 @@ function PaymentReceiptContent({
                 <div className="space-y-1.5">
                   <ReceiptRow
                     label="Previous Balance"
-                    value={`₱ ${formatCurrency(receipt.previous_balance)}`}
+                    value={formatCurrency(receipt.previous_balance)}
                   />
                   <ReceiptRow
                     label="Amount Paid"
-                    value={`₱ ${formatCurrency(receipt.total)}`}
+                    value={formatCurrency(receipt.total)}
                   />
                   <ReceiptRow
                     label="New Balance"
-                    value={`₱ ${formatCurrency(receipt.new_balance)}`}
+                    value={formatCurrency(receipt.new_balance)}
                     bold
                   />
                   {receipt.next_due_date !== "—" && (

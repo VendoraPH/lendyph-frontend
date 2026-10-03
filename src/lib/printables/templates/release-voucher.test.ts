@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { amountInWords } from "../amount-in-words";
 import { buildReleaseVoucherDoc } from "./release-voucher";
 import { BLANK_LINE } from "./shared";
@@ -43,6 +43,7 @@ const LOAN = {
     { name: "Notarial Fee", amount: 500, type: "fixed", original_value: 500 },
   ],
   total_deductions: 3500,
+  unitemised_deductions: 0,
   net_proceeds: 96500,
   status: "released",
   borrower: {
@@ -78,21 +79,18 @@ test("release voucher: deductions are itemised and sum to the total", () => {
   assert.equal(chargeAmount(doc, "Service Fee"), `(${formatCurrency(1000)})`);
   assert.equal(chargeAmount(doc, "Notarial Fee"), `(${formatCurrency(500)})`);
 
-  // The itemised lines must add up to the printed total, or the member is
-  // being handed a voucher that argues with itself.
-  assert.equal(
-    chargeAmount(doc, "Total Deductions"),
-    `(${formatCurrency(2000 + 1000 + 500)})`
-  );
+  // The server's total, which the itemised lines (with the server's
+  // unitemised line, here 0) add up to.
+  assert.equal(chargeAmount(doc, "Total Deductions"), `(${formatCurrency(3500)})`);
 });
 
-test("release voucher: net proceeds equal principal less deductions", () => {
+test("release voucher: net proceeds are the server's", () => {
   const doc = buildReleaseVoucherDoc(LOAN);
 
   assert.equal(chargeAmount(doc, "Principal Loan Amount"), formatCurrency(100000));
   assert.equal(
     chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
-    formatCurrency(100000 - 3500)
+    formatCurrency(96500)
   );
   assert.equal(
     fieldValue(doc, "Net proceeds in words"),
@@ -114,6 +112,19 @@ test("release voucher: the server's net proceeds win over a local subtraction", 
     chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
     formatCurrency(96000)
   );
+});
+
+test("release voucher: a total or net the server did not send is a dash, never worked out", () => {
+  const { total_deductions: _total, net_proceeds: _net, ...rest } = LOAN;
+  void _total;
+  void _net;
+  const doc = buildReleaseVoucherDoc(rest);
+
+  assert.equal(chargeAmount(doc, "Total Deductions"), DASH);
+  assert.equal(chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"), DASH);
+  assert.equal(fieldValue(doc, "Net proceeds in words"), DASH);
+  // The items themselves are still listed as sent.
+  assert.equal(chargeAmount(doc, "Processing Fee"), `(${formatCurrency(2000)})`);
 });
 
 test("release voucher: four signatures, in the order money moves", () => {
@@ -149,15 +160,17 @@ test("release voucher: a loan with no deductions still balances", () => {
   );
 });
 
-test("release voucher: an unitemised total is disclosed as a line, not a gap", () => {
+test("release voucher: an unitemised total is the server's own line, not a gap", () => {
   // The server's `total_deductions` outranks the array it came with — but the
   // reader must not be left to find the difference. This printed
   // "No deductions applied  P0.00" directly above
-  // "Total Deductions  (P5,000.00)".
+  // "Total Deductions  (P5,000.00)". The difference is the server's
+  // `unitemised_deductions`.
   const doc = buildReleaseVoucherDoc({
     ...LOAN,
     deductions: [],
     total_deductions: 5000,
+    unitemised_deductions: 5000,
     net_proceeds: 95000,
   });
 
@@ -173,6 +186,7 @@ test("release voucher: an unitemised total is disclosed as a line, not a gap", (
     ...LOAN,
     deductions: [{ name: "Processing Fee", amount: 2000 }],
     total_deductions: 3500,
+    unitemised_deductions: 1500,
   });
   assert.equal(
     chargeAmount(partial, "Other deductions"),
@@ -183,8 +197,23 @@ test("release voucher: an unitemised total is disclosed as a line, not a gap", (
     `(${formatCurrency(3500)})`
   );
 
-  // And when they already agree, no phantom line appears.
+  // And when they already agree (0), no phantom line appears.
   assert.ok(!hasChargeLine(buildReleaseVoucherDoc(LOAN), "Other deductions"));
+  assert.ok(!hasChargeLine(buildReleaseVoucherDoc(LOAN), "Adjustment"));
+});
+
+test("release voucher: items above the total are corrected by the server's negative figure", () => {
+  const doc = buildReleaseVoucherDoc({ ...LOAN, unitemised_deductions: -500 });
+  assert.equal(chargeAmount(doc, "Adjustment"), formatCurrency(500));
+});
+
+test("release voucher: no unitemised figure from the server adds no line, whatever the items sum to", () => {
+  const { unitemised_deductions: _omitted, ...rest } = LOAN;
+  void _omitted;
+  const doc = buildReleaseVoucherDoc({ ...rest, deductions: [], total_deductions: 5000 });
+  assert.ok(!hasChargeLine(doc, "Other deductions"));
+  assert.ok(!hasChargeLine(doc, "Adjustment"));
+  assert.equal(chargeAmount(doc, "Total Deductions"), `(${formatCurrency(5000)})`);
 });
 
 test("release voucher: dates are formatted and the term carries its unit", () => {

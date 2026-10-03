@@ -8,9 +8,11 @@
  * hand-written documents drifted precisely because they each carried their own
  * `fmt()`.
  *
- * Deliberately NOT merged into `src/lib/format.ts`, which is whole-peso and
- * says so; see the note on `currencyFmt` for why a report cannot round.
+ * Money goes through `src/lib/format.ts`'s `formatCurrency`, so a report, a
+ * printable and a screen all show the same two decimals.
  */
+
+import { formatCurrency as formatPeso } from "./format";
 
 /** Shown wherever the API did not send a figure we can display. */
 export const DASH = "—";
@@ -43,18 +45,6 @@ export interface FormattableColumn {
   format?: ColumnFormat;
   formatter?: (value: unknown, row: Record<string, unknown>) => string;
 }
-
-// Report money is accurate to the centavo. Rounding to whole pesos made a
-// column of values disagree with its own total — and the Excel export
-// inherited the drift — so every currency figure inside a report carries two
-// decimals. This is deliberately report-scoped: `@/lib/format` keeps the
-// whole-peso `formatCurrency` the rest of the app renders.
-const currencyFmt = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const numberFmt = new Intl.NumberFormat("en-PH", {
   maximumFractionDigits: 2,
@@ -103,8 +93,12 @@ export function toNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Report money is accurate to the centavo. Rounding to whole pesos made a
+// column of values disagree with its own total — and the Excel export
+// inherited the drift — so every currency figure inside a report carries two
+// decimals, exactly as every other screen does.
 export function formatCurrency(value: number): string {
-  return currencyFmt.format(value);
+  return formatPeso(value);
 }
 
 export function formatCount(value: number): string {

@@ -16,7 +16,7 @@ import {
   type LoanDeduction,
   type OtherDeductionInput,
 } from "@/lib/loan-restructure";
-import { decimalInputValue, percentOf, roundCentavos } from "@/lib/percent";
+import { decimalInputValue } from "@/lib/percent";
 import type { LoanDeduction as StoredDeduction } from "@/types/loan";
 
 /** The product fee columns the server charges when a loan states no deductions. */
@@ -100,13 +100,6 @@ export function storedDeductionFields(
 /** The rate a fee field stands for: what it says, or the product's while it is blank. */
 export function feePercent(field: string, productRate: unknown): number {
   return field.trim() === "" ? toRate(productRate) : parseFloat(field) || 0;
-}
-
-/** The pesos a stated deduction comes to, as `LoanService::computeDeductions` books it. */
-export function deductionAmount(principal: number, deduction: LoanDeduction): number {
-  return deduction.type === "percentage"
-    ? percentOf(principal, deduction.amount)
-    : roundCentavos(deduction.amount);
 }
 
 /**

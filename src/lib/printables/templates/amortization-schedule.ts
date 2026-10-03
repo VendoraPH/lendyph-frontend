@@ -2,7 +2,8 @@
  * Amortization Schedule — standalone printable.
  *
  * Source: `loanService.detail(id)`, reading the `amortization_schedules`
- * relation (`AmortizationScheduleResource`).
+ * relation (`AmortizationScheduleResource`) and its column totals,
+ * `amortization_schedule_totals`, added up by the server.
  *
  * The disclosure statement already prints a schedule, but only as its section
  * VI and only with what the statute requires. Branches hand members a schedule
@@ -29,7 +30,6 @@ import {
   presentFields,
   rateFrequencyFrom,
   rateLabel,
-  sum,
   termLabelFrom,
   type PrintableBuildOptions,
 } from "./shared";
@@ -94,6 +94,7 @@ export function buildAmortizationScheduleDoc(
   const accountNumber =
     pick(loan, ["loan_account_number", "application_number"]) ?? null;
   const rate = pickNumber(loan, ["interest_rate", "rate"]);
+  const scheduleTotals = asRecord(pick(loan, ["amortization_schedule_totals"]));
   // This document used to print "% per month" beside a term counted in
   // "period(s)" — two different units for one loan, on one page. Both now come
   // from the loan's own frequency.
@@ -146,16 +147,17 @@ export function buildAmortizationScheduleDoc(
       ],
       rows,
       // A column of figures with no total is the fastest way to have a member
-      // and a bookkeeper disagree, so every money column carries one.
+      // and a bookkeeper disagree, so every money column carries one: the
+      // server's, or a dash where it sent none.
       totals:
         rows.length > 0
           ? {
               due_date: "TOTAL",
-              principal: formatCurrency(sum(rows, "principal")),
-              interest: formatCurrency(sum(rows, "interest")),
-              penalty: formatCurrency(sum(rows, "penalty")),
-              total_due: formatCurrency(sum(rows, "total_due")),
-              amount_paid: formatCurrency(sum(rows, "amount_paid")),
+              principal: currencyOrDash(pick(scheduleTotals, ["principal"])),
+              interest: currencyOrDash(pick(scheduleTotals, ["interest"])),
+              penalty: currencyOrDash(pick(scheduleTotals, ["penalty"])),
+              total_due: currencyOrDash(pick(scheduleTotals, ["total_due"])),
+              amount_paid: currencyOrDash(pick(scheduleTotals, ["amount_paid"])),
             }
           : undefined,
       emptyText: emptyScheduleText(loan),

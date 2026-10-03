@@ -205,38 +205,55 @@ test("en-US and en-PH are interchangeable for these patterns", () => {
   );
 });
 
-// ── formatCurrencyExact ──────────────────────────────────────────────
+// ── formatCurrency / formatCurrencyExact ─────────────────────────────
 //
-// Written for the fee-condition rows on Settings › Fees, where the number IS
-// the rule. Rounding one of those does not just look imprecise, it states a
-// different threshold than the one the API will apply.
+// Every money amount shows two decimals. Rounding to whole pesos stated a
+// different figure from the one the server holds — on Settings › Fees, where
+// the number IS the rule, it advertised a threshold the API never applies.
 
-test("formatCurrencyExact keeps centavos that formatCurrency rounds away", () => {
+test("formatCurrency keeps the centavos instead of rounding to whole pesos", () => {
   // The reported case: a rule of `amount > 9999.50` advertised as ₱10,000.
-  assert.equal(formatCurrency(9999.5), "₱10,000");
-  assert.equal(formatCurrencyExact(9999.5), "₱9,999.50");
+  assert.equal(formatCurrency(9999.5), "₱9,999.50");
+  assert.equal(formatCurrency(10.5), "₱10.50");
+  assert.equal(formatCurrency(1234.99), "₱1,234.99");
 });
 
-test("formatCurrencyExact leaves whole pesos undecorated", () => {
-  assert.equal(formatCurrencyExact(10000), "₱10,000");
-  assert.equal(formatCurrencyExact(0), "₱0");
+test("formatCurrency shows whole pesos with two decimals", () => {
+  assert.equal(formatCurrency(1500), "₱1,500.00");
+  assert.equal(formatCurrency(10000), "₱10,000.00");
+  assert.equal(formatCurrency(1250000), "₱1,250,000.00");
 });
 
-test("formatCurrencyExact pads a single decimal to full centavos", () => {
-  // 9999.5 is five pesos short of nothing if read as "9,999.5".
-  assert.equal(formatCurrencyExact(1234.1), "₱1,234.10");
-  assert.equal(formatCurrencyExact(1234.99), "₱1,234.99");
+test("formatCurrency pads a single decimal to full centavos", () => {
+  assert.equal(formatCurrency(1234.1), "₱1,234.10");
 });
 
-test("formatCurrencyExact accepts the strings the API actually sends", () => {
+test("formatCurrency shows zero as ₱0.00", () => {
+  assert.equal(formatCurrency(0), "₱0.00");
+  assert.equal(formatCurrency("0.00"), "₱0.00");
+});
+
+test("formatCurrency keeps the sign and centavos of a negative amount", () => {
+  assert.equal(formatCurrency(-250.75), "-₱250.75");
+  assert.equal(formatCurrency("-1500"), "-₱1,500.00");
+});
+
+test("formatCurrency accepts the strings the API actually sends", () => {
   // Laravel's `decimal:2` cast serialises to a JSON string, not a number.
-  assert.equal(formatCurrencyExact("9999.50"), "₱9,999.50");
-  assert.equal(formatCurrencyExact("10000"), "₱10,000");
+  assert.equal(formatCurrency("9999.50"), "₱9,999.50");
+  assert.equal(formatCurrency("10000"), "₱10,000.00");
+  assert.equal(formatCurrency("1500.00"), "₱1,500.00");
 });
 
-test("formatCurrencyExact treats absent amounts as zero, never NaN", () => {
+test("formatCurrency treats absent amounts as zero, never NaN", () => {
   for (const empty of [null, undefined, "", "not a number"]) {
-    assert.equal(formatCurrencyExact(empty), "₱0");
+    assert.equal(formatCurrency(empty), "₱0.00");
+  }
+});
+
+test("formatCurrencyExact renders exactly what formatCurrency does", () => {
+  for (const amount of [9999.5, 10000, 0, -250.75, "1500.00", null]) {
+    assert.equal(formatCurrencyExact(amount), formatCurrency(amount));
   }
 });
 

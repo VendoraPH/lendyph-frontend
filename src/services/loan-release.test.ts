@@ -7,7 +7,9 @@
  * so a fee changed while the dialog was open went unnoticed.
  *
  * WHAT THIS PROVES: `loanService.releasePreview` reads the preview and hands it
- * back unwrapped; its 422 (fees over the principal) reaches the caller as the
+ * back unwrapped; asked about insurance, it sends the insurance as query
+ * params and hands back the server's premium and after-insurance figures
+ * untouched; its 422 (fees over the principal) reaches the caller as the
  * server's message; `loanService.release` sends the fingerprint with the
  * insurance; and a 409 (fees changed since the preview) reaches the caller as
  * a 409 carrying the server's message.
@@ -31,6 +33,7 @@ type Reply = [status: number, body: unknown];
 let server: Server;
 let routes: Record<string, Reply> = {};
 const seen: Seen[] = [];
+const queries: string[] = [];
 let loanService: typeof import("./loan.service").loanService;
 
 before(async () => {
@@ -38,8 +41,10 @@ before(async () => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
-      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname.replace(/^\/api/, "");
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const path = url.pathname.replace(/^\/api/, "");
       seen.push({ method: req.method ?? "", path, body: raw ? JSON.parse(raw) : null });
+      queries.push(url.search);
       const [status, body] = routes[`${req.method} ${path}`] ?? [404, { message: "not stubbed" }];
       res.statusCode = status;
       res.setHeader("Content-Type", "application/json");
@@ -60,6 +65,7 @@ after(() => {
 beforeEach(() => {
   routes = {};
   seen.length = 0;
+  queries.length = 0;
 });
 
 /** LoanReleaseFeeService::preview(), as the controller wraps it. */
@@ -84,6 +90,55 @@ describe("loanService.releasePreview", () => {
 
     assert.deepEqual(seen.map((r) => `${r.method} ${r.path}`), ["GET /loans/7/release-preview"]);
     assert.deepEqual(preview, PREVIEW);
+  });
+
+  test("without insurance it sends no query", async () => {
+    routes["GET /loans/7/release-preview"] = [200, { data: PREVIEW }];
+
+    await loanService.releasePreview(7, null);
+
+    assert.deepEqual(queries, [""]);
+  });
+
+  test("asked about insurance, it sends it as query params and returns the server's figures", async () => {
+    const answer = {
+      ...PREVIEW,
+      insurance: { premium_amount: "300.00", collected: "120.00", partial_amount: "120.00", remaining_balance: "180.00" },
+      total_deductions_after_insurance: "1370.00",
+      net_proceeds_after_insurance: "13630.00",
+      exceeds_net_proceeds: false,
+    };
+    routes["GET /loans/7/release-preview"] = [200, { data: answer }];
+
+    const preview = await loanService.releasePreview(7, {
+      insurance_premium_percentage: 2,
+      insurance_payment_type: "partial",
+      insurance_partial_amount: 120.5,
+    });
+
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(queries[0])),
+      { insurance_premium_percentage: "2", insurance_payment_type: "partial", insurance_partial_amount: "120.5" },
+    );
+    assert.deepEqual(preview, answer);
+  });
+
+  test("a partial amount above the premium is refused in the server's words", async () => {
+    const message = "The insurance partial amount may not be greater than the premium.";
+    routes["GET /loans/7/release-preview"] = [422, { message, errors: { insurance_partial_amount: [message] } }];
+
+    await assert.rejects(
+      loanService.releasePreview(7, {
+        insurance_premium_percentage: 2,
+        insurance_payment_type: "partial",
+        insurance_partial_amount: 500,
+      }),
+      (err: unknown) => {
+        assert.equal(httpStatusOf(err), 422);
+        assert.equal(getErrorMessage(err, "fallback"), message);
+        return true;
+      },
+    );
   });
 
   test("fees over the principal are refused in the server's words", async () => {
