@@ -997,9 +997,10 @@ test("a truncated page is flagged, and server totals are described as complete",
   );
   const note = noteText(doc);
 
-  assert.ok(note, "expected a truncation note");
-  assert.match(note!, /Showing the first 200 of 1,432 schedules/);
-  assert.match(note!, /server's figures for the whole period/);
+  assert.equal(
+    note,
+    "Showing the first 200 of 1,432 schedules. The table totals are the server's figures for the whole period, not a sum of the schedules listed."
+  );
 });
 
 test("a truncated page without server totals shows dashes, never a sum of the rows listed", () => {
@@ -1012,8 +1013,12 @@ test("a truncated page without server totals shows dashes, never a sum of the ro
   );
   const note = noteText(doc);
 
-  assert.ok(note, "expected a truncation note");
-  assert.doesNotMatch(note!, /cover only the rows listed/);
+  // No totals came back, so the note must not claim the footers are the
+  // server's figures: they are dashes.
+  assert.equal(
+    note,
+    "Showing the first 200 of 1,432 schedules. The server did not provide totals for the period, so the table totals show \"—\" rather than a sum of the schedules listed."
+  );
   assert.equal(kpiValue(doc, "Total Balance"), DASH);
 });
 

@@ -280,12 +280,15 @@ function breakdownHint(parts: [string, unknown][]): string | undefined {
  * `noun` names what one row is ("repayments", "loans", "borrowers") because the
  * count comes from the server's `meta.total`, which counts those. There is no
  * "Export to CSV" pointer: these reports export the document, which holds only
- * the rows listed.
+ * the rows listed. `totals` is the block the server sent, if any: without one
+ * the footers are dashes, so the note says so instead of calling them the
+ * server's figures.
  */
 function serverTotalsTruncationNote(
   shown: number,
   totalRows: number | null,
-  noun: string
+  noun: string,
+  totals: Record<string, unknown> | null
 ): ReportSection | null {
   const truncated =
     totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
@@ -296,10 +299,11 @@ function serverTotalsTruncationNote(
       ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
       : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
 
-  return {
-    kind: "note",
-    text: `${scope} The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`,
-  };
+  const totalsScope = totals
+    ? `The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`
+    : `The server did not provide totals for the period, so the table totals show "—" rather than a sum of the ${noun} listed.`;
+
+  return { kind: "note", text: `${scope} ${totalsScope}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +343,7 @@ export function buildDailyCollectionDoc(
     const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
     const rows = rawRows.map(normalizeRepaymentRow);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -584,7 +588,7 @@ export function buildIncomeDoc(
   if (byLoanRaw != null) {
     const { rows, totals, totalRows } = readListEnvelope(byLoanRaw);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -836,7 +840,7 @@ export function buildBorrowerDoc(
     const { rows: rawRows, totals, totalRows } = readListEnvelope(releasedRaw);
     const rows = rawRows.map(normalizeBorrowerReleasedRow);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -922,7 +926,7 @@ export function buildDisbursementDoc(
       net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
     }));
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
     if (note) sections.push(note);
 
     // Footer figures come only from the server's period-wide `totals`; a
@@ -988,7 +992,7 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  const note = serverTotalsTruncationNote(rows.length, totalRows, "loans");
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -1039,7 +1043,7 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
     },
   ];
 
-  const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments");
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -1440,7 +1444,7 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
     },
   ];
 
-  const note = serverTotalsTruncationNote(rows.length, totalRows, "schedules");
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "schedules", totals);
   if (note) sections.push(note);
 
   sections.push({
