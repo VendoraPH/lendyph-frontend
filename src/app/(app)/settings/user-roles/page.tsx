@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import type { Action, Permission } from "@/types";
 import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
+import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
 import {
   roleItemFromApi,
   setModulePermissions,
@@ -63,6 +64,7 @@ import {
   Receipt,
   Wallet,
   Gauge,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -121,6 +123,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Update loan details and amortization",
       "Approve, reject, or release loans",
       "Void draft loans",
+    ],
+  },
+  loan_products: {
+    label: "Loan Products",
+    description: "The products, rates, terms and fees loan applications are built from.",
+    icon: Package,
+    features: [
+      "Create new loan products",
+      "Edit, activate and deactivate products",
+      "Delete loan products",
     ],
   },
   payments: {
@@ -320,6 +332,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
   send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */
@@ -346,17 +359,6 @@ const ROLE_BADGE: Record<string, string> = {
   bod6: "bg-sky-500/10 text-sky-700 border-sky-500/30",
   bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
-
-function groupByModule(permissions: Permission[]): Record<string, Action[]> {
-  const map: Record<string, Action[]> = {};
-  for (const p of permissions) {
-    const [mod, act] = p.split(":") as [string, Action];
-    if (mod === "collections") continue;
-    if (!map[mod]) map[mod] = [];
-    map[mod].push(act);
-  }
-  return map;
-}
 
 function slugify(s: string): string {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -747,7 +749,7 @@ function UserRolesContent() {
     );
   }, [roles, search]);
 
-  const totalModules = Object.keys(MODULE_META).length;
+  const totalModules = OFFERED_MODULE_TOTAL;
   const customCount = roles.filter((r) => !r.isSystem).length;
 
   function openView(role: RoleItem) {
@@ -864,8 +866,7 @@ function UserRolesContent() {
                 )}
                 {!loading &&
                   filtered.map((r) => {
-                    const grouped = groupByModule(r.permissions);
-                    const moduleCount = Object.keys(grouped).length;
+                    const moduleCount = roleModuleCount(r.permissions);
                     return (
                       <TableRow
                         key={r.key}

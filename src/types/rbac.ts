@@ -38,6 +38,10 @@ export type Module =
   // Extensions and other post-release changes to a loan. The API gates their
   // history behind `loan_adjustments:view`, which `loans:view` does not imply.
   | "loan_adjustments"
+  // Creating, editing and deleting loan products. Its own module because a
+  // product sets the terms of every later application; viewing products stays
+  // on `loans:view`.
+  | "loan_products"
   | "payments"
   | "collections"
   | "reports"
@@ -149,7 +153,9 @@ export type Action =
   // Reminders: `send` contacts a borrower on demand, which is a different
   // risk from creating anything; `pause` silences the automated ones.
   | "send"
-  | "pause";
+  | "pause"
+  // Loan products: one verb for create, edit and delete, as the API seeds it.
+  | "manage";
 
 export type Permission = `${Module}:${Action}`;
 

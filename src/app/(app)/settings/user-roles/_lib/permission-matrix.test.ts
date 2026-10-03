@@ -31,3 +31,9 @@ test("every offered permission is a well-formed module:action pair", () => {
 test("the matrix offers no reminders permission", () => {
   assert.deepEqual(offered.filter((p) => p.startsWith("reminders:")), []);
 });
+
+// The API seeds one loan products permission, held by admin and super_admin.
+// Viewing products rides on `loans:view`, so there is nothing else to offer.
+test("the matrix offers loan_products:manage and nothing else for loan products", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("loan_products:")), ["loan_products:manage"]);
+});
