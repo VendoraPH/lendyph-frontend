@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePermission } from "@/hooks";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -32,6 +33,7 @@ import type {
 } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
+import { gcashCanMarkPaid } from "../_lib/row-actions";
 
 // Passed to <Select items>: Base UI resolves the trigger label from `items`,
 // not from the mounted <SelectItem> children — without it the trigger shows
@@ -58,6 +60,7 @@ function statusBadge(s: GCashTransactionStatus) {
 }
 
 export function TransactionsTab() {
+  const { can } = usePermission();
   const [filters, setFilters] = useState<{
     type: GCashTransactionType | "all";
     status: GCashTransactionStatus | "all";
@@ -239,7 +242,7 @@ export function TransactionsTab() {
                   <TableCell>{statusBadge(r.status)}</TableCell>
                   <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>
                   <TableCell className="text-right">
-                    {r.type === "cash_in" && r.status === "pending" && (
+                    {gcashCanMarkPaid(can, r) && (
                       <PaidButton
                         transactionId={r.id}
                         referenceNo={r.reference_no}
