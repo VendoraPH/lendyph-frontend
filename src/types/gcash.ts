@@ -125,5 +125,5 @@ export type GCashNonMemberFilters = {
  * take this instead of a borrower so both tabs can drive the same flow.
  */
 export type GCashParty =
-  | { kind: "member"; id: number; full_name: string; borrower_code?: string }
+  | { kind: "member"; id: number; full_name: string; borrower_code?: string; contact_number?: string | null }
   | { kind: "non_member"; id: number; full_name: string; mobile_number?: string | null };

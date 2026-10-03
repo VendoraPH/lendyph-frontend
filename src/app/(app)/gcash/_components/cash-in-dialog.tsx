@@ -21,6 +21,7 @@ import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
 import { ChargePreviewPanel } from "./charge-preview-panel";
+import { PartyFields } from "./party-fields";
 
 interface Props {
   open: boolean;
@@ -87,6 +88,8 @@ export function CashInDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          <PartyFields party={party} />
+
           <div className="space-y-1.5">
             <Label htmlFor="cashin-amount">Amount (₱)</Label>
             <Input
