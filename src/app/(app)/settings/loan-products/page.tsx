@@ -72,16 +72,9 @@ import {
   INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
+import { formatCurrency } from "@/lib/format";
 
 // ── Helpers ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
 
 // Helper to read API fields (API uses interest_method/frequency/term, our type has interest_type/payment_frequency/min_term)
 function getProductField(product: LoanProduct, field: string): string {

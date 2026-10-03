@@ -36,17 +36,9 @@ import {
   type InterestMethod,
   type PaymentFrequency,
 } from "@/lib/amortization";
+import { formatCurrency } from "@/lib/format";
 
 // ---------- Formatters ----------
-
-function formatPHP(amount: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
@@ -329,15 +321,15 @@ export default function AmortizationPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               <SummaryItem
                 label="Total Principal"
-                value={formatPHP(schedule.summary.totalPrincipal)}
+                value={formatCurrency(schedule.summary.totalPrincipal)}
               />
               <SummaryItem
                 label="Total Interest"
-                value={formatPHP(schedule.summary.totalInterest)}
+                value={formatCurrency(schedule.summary.totalInterest)}
               />
               <SummaryItem
                 label="Total Payable"
-                value={formatPHP(schedule.summary.totalPayable)}
+                value={formatCurrency(schedule.summary.totalPayable)}
                 highlight
               />
               <SummaryItem
@@ -347,7 +339,7 @@ export default function AmortizationPage() {
                     ? "Varies"
                     : interestMethod === "upon_maturity"
                       ? "Single Payment"
-                      : formatPHP(schedule.summary.perPeriodPayment ?? 0)
+                      : formatCurrency(schedule.summary.perPeriodPayment ?? 0)
                 }
               />
               <SummaryItem
@@ -400,23 +392,23 @@ export default function AmortizationPage() {
                           {formatDate(row.dueDate)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatPHP(row.beginningBalance)}
+                          {formatCurrency(row.beginningBalance)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatPHP(row.principal)}
+                          {formatCurrency(row.principal)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatPHP(row.interest)}
+                          {formatCurrency(row.interest)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatPHP(row.totalDue)}
+                          {formatCurrency(row.totalDue)}
                         </TableCell>
                         <TableCell
                           className={`text-right font-medium ${
                             isLast ? "text-green-600" : ""
                           }`}
                         >
-                          {formatPHP(row.endingBalance)}
+                          {formatCurrency(row.endingBalance)}
                         </TableCell>
                         <TableCell className="text-center">
                           <StatusBadge status="scheduled" />
@@ -432,16 +424,16 @@ export default function AmortizationPage() {
                     </TableCell>
                     <TableCell className="text-right" />
                     <TableCell className="text-right font-semibold">
-                      {formatPHP(totals.principal)}
+                      {formatCurrency(totals.principal)}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      {formatPHP(totals.interest)}
+                      {formatCurrency(totals.interest)}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      {formatPHP(totals.totalDue)}
+                      {formatCurrency(totals.totalDue)}
                     </TableCell>
                     <TableCell className="text-right font-semibold text-green-600">
-                      {formatPHP(0)}
+                      {formatCurrency(0)}
                     </TableCell>
                     <TableCell />
                   </TableRow>
@@ -566,20 +558,20 @@ function MethodComparison({
               <div className="space-y-2 text-sm">
                 <ComparisonRow
                   label="Total Interest"
-                  value={formatPHP(s.totalInterest)}
+                  value={formatCurrency(s.totalInterest)}
                 />
                 <ComparisonRow
                   label="Total Payable"
-                  value={formatPHP(s.totalPayable)}
+                  value={formatCurrency(s.totalPayable)}
                 />
                 <ComparisonRow
                   label="Payment"
                   value={
                     method.key === "diminishing"
-                      ? `${formatPHP(s.firstPayment)} - ${formatPHP(s.lastPayment)}`
+                      ? `${formatCurrency(s.firstPayment)} - ${formatCurrency(s.lastPayment)}`
                       : method.key === "upon_maturity"
-                        ? `${formatPHP(s.totalPayable)} (single)`
-                        : formatPHP(s.perPeriodPayment ?? 0)
+                        ? `${formatCurrency(s.totalPayable)} (single)`
+                        : formatCurrency(s.perPeriodPayment ?? 0)
                   }
                 />
                 <ComparisonRow

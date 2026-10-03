@@ -1,125 +1,210 @@
-// The Release dialog's money: the insurance it sends, and what the release
-// will store once that insurance is applied to the server's preview.
-// Dependency-free, so it runs under `tsx --test`.
+// The Release dialog's insurance: what the cashier typed, as the release
+// preview is asked about it and as the release sends it. Every peso figure the
+// dialog shows for it — premium, amount collected, remaining balance, the
+// deductions and net after insurance — is the server's
+// (`GET /loans/{id}/release-preview` with these params); nothing here works
+// one out. Dependency-free, so it runs under `tsx --test`.
 
-import type { ReleaseLoanPayload } from "@/services/loan.service";
+import { getErrorMessage } from "@/lib/api-error";
+import type { ReleaseLoanPayload, ReleasePreviewInsuranceQuery } from "@/services/loan.service";
 import type { LoanReleasePreview } from "@/types/loan";
 import type { InsurancePremiumValue } from "../_components/insurance-premium.types";
-import { percentOf, roundCentavos } from "@/lib/percent";
+
+/** A typed amount as a number of pesos, or null when nothing usable is typed. */
+function typedAmount(raw: string): number | null {
+  const n = Number(raw);
+  return raw.trim() !== "" && Number.isFinite(n) ? n : null;
+}
+
+/** An input amount rounded to the centavo, the precision the server accepts. */
+function toCentavo(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 /**
- * The premium off the principal, and what is left of it after a partial
- * payment. The server takes the premium as sent (it checks only that it is to
- * the centavo), so it is worked out here the way the server rounds every other
- * percentage fee; the remainder is the server's own `round($premium - $partial, 2)`.
+ * The insurance the cashier typed, as release-preview query params, or null
+ * when there is none to ask about (no percentage, or 0%): the server then
+ * charges no premium.
+ *
+ * The percentage goes as typed (the field allows two places); the server
+ * refuses one above 100. A partial payment with nothing typed yet is 0
+ * collected now, which the release has always accepted. The partial amount is
+ * rounded to the centavo as an input; the server checks it against its own
+ * premium.
  */
-export function computeInsurancePremium(
-  principalAmount: number,
-  value: InsurancePremiumValue,
-): {
-  totalPremium: number;
-  upfrontDeduction: number;
-  remainingBalance: number;
-  partialOverflow: boolean;
-} {
-  const principal = Math.max(0, Number(principalAmount) || 0);
-  const pct = Math.max(0, Math.min(100, Number(value.percentage) || 0));
-  const totalPremium = percentOf(principal, pct);
-
+export function releaseInsuranceQuery(value: InsurancePremiumValue): ReleasePreviewInsuranceQuery | null {
+  const percentage = typedAmount(value.percentage);
+  if (percentage === null || percentage <= 0) return null;
   if (value.paymentType === "full") {
-    return {
-      totalPremium,
-      upfrontDeduction: totalPremium,
-      remainingBalance: 0,
-      partialOverflow: false,
-    };
+    return { insurance_premium_percentage: percentage, insurance_payment_type: "full" };
   }
-
-  const rawPartial = Math.max(0, Number(value.partialAmount) || 0);
-  const partialOverflow = rawPartial > totalPremium;
-  const partial = Math.min(rawPartial, totalPremium);
-
+  const partial = typedAmount(value.partialAmount);
   return {
-    totalPremium,
-    upfrontDeduction: partial,
-    remainingBalance: roundCentavos(totalPremium - partial),
-    partialOverflow,
+    insurance_premium_percentage: percentage,
+    insurance_payment_type: "partial",
+    insurance_partial_amount: partial !== null && partial > 0 ? toCentavo(partial) : 0,
   };
 }
 
-/** The insurance fields of `PATCH /loans/{id}/release`, every one present. */
-export type ReleaseInsurancePayload = Required<Omit<ReleaseLoanPayload, "fee_fingerprint">>;
+/** The insurance fields of `PATCH /loans/{id}/release`. */
+export type ReleaseInsurancePayload = Omit<ReleaseLoanPayload, "fee_fingerprint">;
 
-/** The insurance the dialog sends with the release, from what was typed. */
+/**
+ * The insurance the release sends: the inputs that were previewed, plus the
+ * server's own premium and remaining balance from that preview. The server
+ * works the premium out again and refuses (422) one that differs by a
+ * centavo, so the figure sent is always the one the cashier was shown. With
+ * no insurance, nothing is sent.
+ */
 export function releaseInsurancePayload(
-  principalAmount: number,
-  value: InsurancePremiumValue,
+  query: ReleasePreviewInsuranceQuery | null,
+  insurance: LoanReleasePreview["insurance"],
 ): ReleaseInsurancePayload {
-  const { totalPremium, upfrontDeduction, remainingBalance } = computeInsurancePremium(
-    principalAmount,
-    value,
-  );
+  if (query === null || !insurance) return {};
   return {
-    insurance_premium_percentage: Number(value.percentage) || 0,
-    insurance_premium_amount: totalPremium,
-    insurance_payment_type: value.paymentType,
-    insurance_partial_amount: value.paymentType === "partial" ? upfrontDeduction : 0,
-    insurance_remaining_balance: remainingBalance,
+    ...query,
+    insurance_premium_amount: Number(insurance.premium_amount),
+    insurance_remaining_balance: Number(insurance.remaining_balance),
   };
-}
-
-/** Whole centavos, so sums of 2-decimal amounts are exact. */
-function centavos(amount: number | string): number {
-  return Math.round(Number(amount) * 100);
-}
-
-/** What the release will store, in pesos. */
-export interface ReleaseFigures {
-  /** The preview's `total_deductions`: recorded and configured fees. */
-  feeDeductions: number;
-  /** The premium withheld at release: all of it, or the partial amount. */
-  insuranceCollected: number;
-  /** `total_deductions` after release: the fees plus any premium withheld. */
-  totalDeductions: number;
-  /** `net_proceeds` after release: what the borrower is paid out. */
-  netProceeds: number;
-  /**
-   * The premium withheld is more than the fees leave. The release refuses
-   * this with a 422 ("Insurance collected exceeds the loan net proceeds.").
-   */
-  exceedsNetProceeds: boolean;
 }
 
 /**
- * The server's preview with the dialog's insurance applied, exactly as
- * `LoanService::applyInsuranceOnRelease()` applies it after the fees.
- *
- * The release charges the configured fees first; the preview is that step's
- * result. The insurance step then ignores a zero percentage, withholds the
- * whole premium when it is paid in full or only the partial amount otherwise,
- * subtracts that from `net_proceeds`, and adds it to `total_deductions` only
- * when something was withheld. Nothing is clamped: a premium larger than the
- * net is refused, and `exceedsNetProceeds` says so.
- *
- * Every figure is worked in whole centavos. Both sides are 2-decimal amounts,
- * so this is what the server's `round(…, 2)` of their sum or difference gives.
+ * The partial amount field after it loses focus: cleared when nothing usable
+ * is typed, rounded to the centavo, and capped at the server's premium once
+ * that is known. An input tidy, not a figure: what is collected and what is
+ * left are still the server's.
  */
-export function releaseFigures(
-  preview: Pick<LoanReleasePreview, "total_deductions" | "net_proceeds">,
-  insurance: ReleaseInsurancePayload,
-): ReleaseFigures {
-  const fees = centavos(preview.total_deductions);
-  const collected = !insurance.insurance_premium_percentage
-    ? 0
-    : insurance.insurance_payment_type === "full"
-      ? centavos(insurance.insurance_premium_amount)
-      : centavos(insurance.insurance_partial_amount);
-  const net = centavos(preview.net_proceeds) - collected;
+export function partialAmountOnBlur(raw: string, premiumAmount: string | null | undefined): string {
+  const n = typedAmount(raw);
+  if (n === null || n <= 0) return "";
+  const premium = premiumAmount == null ? null : Number(premiumAmount);
+  const capped = premium !== null && Number.isFinite(premium) ? Math.min(premium, n) : n;
+  return String(toCentavo(capped));
+}
+
+/**
+ * The partial amount typed is above the server's premium for this
+ * percentage. A comparison only, to say so beside the field; the server
+ * refuses such an amount (422) and the field caps it on blur.
+ */
+export function partialExceedsPremium(raw: string, premiumAmount: string | null | undefined): boolean {
+  const n = typedAmount(raw);
+  if (n === null || premiumAmount == null) return false;
+  const premium = Number(premiumAmount);
+  return Number.isFinite(premium) && n > premium;
+}
+
+/**
+ * Where the insurance preview stands for what is typed now.
+ * - `idle`: no insurance to ask about (`releaseInsuranceQuery` gave null).
+ * - `loading`: waiting for the answer to exactly these inputs.
+ * - `ready`: the server's release preview with this insurance applied.
+ * - `error`: the server refused these inputs or could not be reached; no
+ *   figures are shown and the release cannot be confirmed.
+ */
+export type ReleaseInsuranceView =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; preview: LoanReleasePreview }
+  | { status: "error"; message: string };
+
+/** How one insurance preview request ended, keyed by the query and attempt. */
+export interface ReleaseInsuranceOutcome {
+  key: string;
+  attempt: number;
+  view: Extract<ReleaseInsuranceView, { status: "ready" | "error" }>;
+}
+
+/** One loan's query as a comparable key: equal loan and query, equal keys. */
+export function releaseInsuranceKey(
+  loanId: number,
+  query: ReleasePreviewInsuranceQuery | null,
+): string | null {
+  return query ? JSON.stringify([loanId, query]) : null;
+}
+
+/**
+ * The view for what is typed now. An answer for any other query or attempt is
+ * stale, so the dialog shows loading rather than figures for an insurance it
+ * no longer has.
+ */
+export function releaseInsuranceView(
+  key: string | null,
+  attempt: number,
+  outcome: ReleaseInsuranceOutcome | null,
+): ReleaseInsuranceView {
+  if (key === null) return { status: "idle" };
+  if (!outcome || outcome.key !== key || outcome.attempt !== attempt) return { status: "loading" };
+  return outcome.view;
+}
+
+/**
+ * The server answer Confirm Release would stand on.
+ * - `ready`: every figure on screen comes from `answer`, and its
+ *   `fee_fingerprint` is the one the fee list above was read with.
+ * - `waiting`: an answer for what is typed now is not in yet, or was refused.
+ * - `stale`: the insurance answer was read against other fees than the fee
+ *   list on screen (the fees changed between the two reads). Both are read
+ *   again; until they agree nothing may be confirmed.
+ * - `no_premium`: insurance is typed but the answer carries no premium, so
+ *   there would be nothing to send for it.
+ */
+export type ReleaseConfirmView =
+  | { status: "ready"; answer: LoanReleasePreview }
+  | { status: "waiting" }
+  | { status: "stale" }
+  | { status: "no_premium" };
+
+/**
+ * Which server answer the release would be confirmed against. With no
+ * insurance it is the release preview itself. With insurance it is the
+ * preview asked about that insurance, and only while it was read against the
+ * same fees (`fee_fingerprint`) as the release preview whose fee list is on
+ * screen: confirming otherwise would send a fingerprint the server refuses
+ * (409), or quote a net that disagrees with the fees listed above it.
+ */
+export function releaseConfirmView(
+  base: LoanReleasePreview | null,
+  query: ReleasePreviewInsuranceQuery | null,
+  insurance: ReleaseInsuranceView,
+): ReleaseConfirmView {
+  if (base === null) return { status: "waiting" };
+  if (query === null) return { status: "ready", answer: base };
+  if (insurance.status !== "ready") return { status: "waiting" };
+  const answer = insurance.preview;
+  if (answer.fee_fingerprint !== base.fee_fingerprint) return { status: "stale" };
+  if (!answer.insurance) return { status: "no_premium" };
+  return { status: "ready", answer };
+}
+
+/**
+ * What to do about a `stale` confirm view, given the mismatched pair of
+ * fingerprints already re-read in this dialog (null for none).
+ *
+ * Which preview is out of date cannot be told, so both are read again — once
+ * per pair. `pair` is the mismatch as a key (null unless the view is stale);
+ * `reread` says to read both again now; `stuck` says the same pair survived a
+ * re-read, so it is left to the cashier's Try again rather than asked about
+ * forever.
+ */
+export function staleReread(
+  view: ReleaseConfirmView,
+  base: LoanReleasePreview | null,
+  insurance: ReleaseInsuranceView,
+  lastReread: string | null,
+): { pair: string | null; reread: boolean; stuck: boolean } {
+  const pair =
+    view.status === "stale" && base !== null && insurance.status === "ready"
+      ? `${base.fee_fingerprint}|${insurance.preview.fee_fingerprint}`
+      : null;
   return {
-    feeDeductions: fees / 100,
-    insuranceCollected: collected / 100,
-    totalDeductions: (collected > 0 ? fees + collected : fees) / 100,
-    netProceeds: net / 100,
-    exceedsNetProceeds: net < 0,
+    pair,
+    reread: pair !== null && pair !== lastReread,
+    stuck: pair !== null && pair === lastReread,
   };
+}
+
+/** Why an insurance preview failed, in the server's words where it gave any. */
+export function releaseInsuranceFailureMessage(err: unknown): string {
+  return getErrorMessage(err, "We couldn't work out the insurance. Please try again.");
 }

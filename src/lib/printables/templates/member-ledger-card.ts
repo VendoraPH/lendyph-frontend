@@ -12,28 +12,28 @@
  * below already accepts `entries` / `transactions` / `payments` / `repayments`).
  * Until then a note points staff at the Statement of Account, which does carry
  * the per-payment ledger for a single loan.
+ *
+ * Every total is the server's: the summary from `totals`, the loan table's
+ * column totals from `loans_totals`. One it did not send prints as a dash.
  */
 
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
+  DASH,
   asArray,
   asRecord,
+  currencyOrDash,
   field,
-  formatCurrency,
   generatedAt,
   humanize,
   pick,
   pickNumber,
   presentFields,
-  sum,
-  toNumber,
   type PrintableBuildOptions,
 } from "./shared";
 
 function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
-  const principal = toNumber(pick(raw, ["principal_amount", "principal"])) ?? 0;
-  const paid = toNumber(pick(raw, ["total_paid", "amount_paid"])) ?? 0;
   return {
     loan_account_number: pick(raw, [
       "loan_account_number",
@@ -43,8 +43,8 @@ function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown>
     product: pick(raw, ["product_name", "loan_product_name"]),
     released_at: pick(raw, ["released_at", "release_date", "start_date"]),
     maturity_date: pick(raw, ["maturity_date", "end_date"]),
-    principal,
-    total_paid: paid,
+    principal: pick(raw, ["principal_amount", "principal"]),
+    total_paid: pick(raw, ["total_paid", "amount_paid"]),
     payments_count: pick(raw, ["payments_count", "repayments_count"]),
     balance: pick(raw, [
       "outstanding_balance",
@@ -75,6 +75,7 @@ export function buildMemberLedgerCardDoc(
   const root = asRecord(raw);
   const borrower = asRecord(pick(root, ["borrower", "member"])) ?? root;
   const totals = asRecord(pick(root, ["totals", "summary"]));
+  const loansTotals = asRecord(pick(root, ["loans_totals"]));
 
   const loanRows = asArray(pick(root, ["loans", "accounts"])).map(normalizeLoanRow);
   const paymentRows = asArray(
@@ -84,17 +85,12 @@ export function buildMemberLedgerCardDoc(
   const memberName = pick(borrower, ["full_name", "name", "borrower_name"]);
   const memberCode = pick(borrower, ["borrower_code", "member_no", "code"]);
 
-  const totalReleased =
-    pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]) ??
-    sum(loanRows, "principal");
-  const totalPaid =
-    pickNumber(totals, ["total_paid", "total_amount_paid"]) ??
-    sum(loanRows, "total_paid");
-  const totalOutstanding =
-    pickNumber(totals, ["total_outstanding", "outstanding_balance"]) ??
-    sum(loanRows, "balance");
+  const totalReleased = pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]);
+  const totalPaid = pickNumber(totals, ["total_paid", "total_amount_paid"]);
+  const totalOutstanding = pickNumber(totals, ["total_outstanding", "outstanding_balance"]);
   const loanCount =
     pickNumber(totals, ["total_loans", "loan_count"]) ?? loanRows.length;
+  const paymentsCount = pickNumber(loansTotals, ["payments_count"]);
 
   const blocks: PrintBlock[] = [
     {
@@ -126,11 +122,11 @@ export function buildMemberLedgerCardDoc(
       title: "Summary",
       lines: [
         { label: "Loan accounts on record", amount: String(loanCount) },
-        { label: "Total released", amount: formatCurrency(totalReleased) },
-        { label: "Total paid", amount: formatCurrency(totalPaid), indent: true },
+        { label: "Total released", amount: currencyOrDash(totalReleased) },
+        { label: "Total paid", amount: currencyOrDash(totalPaid), indent: true },
         {
           label: "TOTAL OUTSTANDING BALANCE",
-          amount: formatCurrency(totalOutstanding),
+          amount: currencyOrDash(totalOutstanding),
           rule: "grand",
         },
       ],
@@ -153,10 +149,10 @@ export function buildMemberLedgerCardDoc(
         loanRows.length > 0
           ? {
               maturity_date: "TOTAL",
-              principal: formatCurrency(sum(loanRows, "principal")),
-              total_paid: formatCurrency(sum(loanRows, "total_paid")),
-              payments_count: String(sum(loanRows, "payments_count")),
-              balance: formatCurrency(sum(loanRows, "balance")),
+              principal: currencyOrDash(pick(loansTotals, ["principal_amount"])),
+              total_paid: currencyOrDash(pick(loansTotals, ["total_paid"])),
+              payments_count: paymentsCount === null ? DASH : String(paymentsCount),
+              balance: currencyOrDash(pick(loansTotals, ["outstanding_balance"])),
             }
           : undefined,
       emptyText: "This member has no released loan accounts on record.",
@@ -177,13 +173,8 @@ export function buildMemberLedgerCardDoc(
         { key: "amount", header: "Amount Paid", format: "currency", align: "right", width: "18%" },
       ],
       rows: paymentRows,
-      totals: {
-        loan_account_number: "TOTAL",
-        principal: formatCurrency(sum(paymentRows, "principal")),
-        interest: formatCurrency(sum(paymentRows, "interest")),
-        penalty: formatCurrency(sum(paymentRows, "penalty")),
-        amount: formatCurrency(sum(paymentRows, "amount")),
-      },
+      // No TOTAL row: the server sends no totals for this table, and none is
+      // added up here.
     });
   } else {
     blocks.push({

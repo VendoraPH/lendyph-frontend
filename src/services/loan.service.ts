@@ -44,6 +44,17 @@ export type ReleaseLoanPayload = {
 };
 
 /**
+ * The insurance `GET /loans/{id}/release-preview` is asked about, as the
+ * release would send it. Validated as the release validates it: a partial
+ * amount above the server's premium is a 422 on `insurance_partial_amount`.
+ */
+export type ReleasePreviewInsuranceQuery = {
+  insurance_premium_percentage: number;
+  insurance_payment_type: "full" | "partial";
+  insurance_partial_amount?: number;
+};
+
+/**
  * `POST /loans/{id}/co-makers`: link one of the borrower's registered
  * co-makers by its co-maker record id, or send a new co-maker's details to
  * create it on the borrower and link it in the same request.
@@ -211,12 +222,18 @@ export const loanService = {
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id), payload),
 
   /**
-   * What releasing the loan would withhold and pay out, before insurance. Needs
-   * `loans:release`, and 422s unless the loan is `approved`, or when the fees
-   * would exceed the principal (with a message naming the figures).
+   * What releasing the loan would withhold and pay out. With `insurance`, the
+   * server also works out the premium and the deductions and net after it.
+   * Needs `loans:release`, and 422s unless the loan is `approved`, when the
+   * fees would exceed the principal (with a message naming the figures), or
+   * when the insurance fails the release's own validation. `signal` lets a
+   * superseded insurance preview be cancelled.
    */
-  releasePreview: (id: number) =>
-    api.get<LoanReleasePreview>(API_ENDPOINTS.LOANS.RELEASE_PREVIEW(id)),
+  releasePreview: (id: number, insurance?: ReleasePreviewInsuranceQuery | null, signal?: AbortSignal) =>
+    api.get<LoanReleasePreview>(API_ENDPOINTS.LOANS.RELEASE_PREVIEW(id), {
+      ...(insurance && { params: insurance }),
+      signal,
+    }),
 
   submit: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.SUBMIT(id)),

@@ -1,38 +1,49 @@
 "use client";
 
-import { useMemo } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { formatCurrency } from "@/lib/format";
+import { Spinner } from "@/components/ui/spinner";
+import { currencyOrDash } from "@/lib/report-format";
 import { INSURANCE_PCT_DECIMALS, sanitizeDecimalInput } from "@/lib/percent";
 import type {
   InsurancePaymentType,
   InsurancePremiumValue,
 } from "./insurance-premium.types";
-import { computeInsurancePremium } from "../_lib/release-figures";
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
+import {
+  partialAmountOnBlur,
+  partialExceedsPremium,
+  type ReleaseInsuranceView,
+} from "../_lib/release-figures";
 
 type Props = {
-  principalAmount: number;
   value: InsurancePremiumValue;
   onChange: (next: InsurancePremiumValue) => void;
+  /** The server's insurance preview for what is typed now. */
+  view: ReleaseInsuranceView;
+  /** The server's premium for the percentage typed now, once it has answered. */
+  premiumAmount: string | null;
+  onRetry: () => void;
   disabled?: boolean;
 };
 
+/**
+ * The insurance the cashier types at release. The premium, the remaining
+ * balance and everything after insurance are the server's release preview
+ * for these inputs; a figure it has not sent yet is a dash.
+ */
 export function InsurancePremiumSection({
-  principalAmount,
   value,
   onChange,
+  view,
+  premiumAmount,
+  onRetry,
   disabled,
 }: Props) {
-  const { totalPremium, remainingBalance, partialOverflow } = useMemo(
-    () => computeInsurancePremium(principalAmount, value),
-    [principalAmount, value],
-  );
+  const insurance = view.status === "ready" ? view.preview.insurance : null;
+  const noInsurance = view.status === "idle";
 
   const setField = <K extends keyof InsurancePremiumValue>(
     key: K,
@@ -51,21 +62,11 @@ export function InsurancePremiumSection({
     setField("percentage", String(clamped));
   };
 
-  const handlePartialBlur = () => {
-    const n = Number(value.partialAmount);
-    if (!Number.isFinite(n) || n <= 0) {
-      setField("partialAmount", "");
-      return;
-    }
-    const clamped = Math.max(0, Math.min(totalPremium, n));
-    setField("partialAmount", String(round2(clamped)));
-  };
-
   return (
     <div className="space-y-3">
       <Label className="text-sm font-semibold">Insurance Premium</Label>
 
-      <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+      <div className="rounded-lg border bg-muted/30 p-4 space-y-4" aria-busy={view.status === "loading"}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="insurance-pct" className="text-xs">
@@ -93,7 +94,7 @@ export function InsurancePremiumSection({
           <div className="space-y-1.5">
             <Label className="text-xs">Insurance Premium Amount</Label>
             <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
-              {formatCurrency(totalPremium)}
+              {currencyOrDash(insurance?.premium_amount ?? premiumAmount)}
             </div>
           </div>
         </div>
@@ -134,14 +135,16 @@ export function InsurancePremiumSection({
                   placeholder="0.00"
                   value={value.partialAmount}
                   onChange={(e) => setField("partialAmount", e.target.value)}
-                  onBlur={handlePartialBlur}
-                  disabled={disabled || totalPremium <= 0}
+                  onBlur={() =>
+                    setField("partialAmount", partialAmountOnBlur(value.partialAmount, premiumAmount))
+                  }
+                  disabled={disabled || noInsurance}
                   className="h-9"
                 />
-                {partialOverflow && (
+                {partialExceedsPremium(value.partialAmount, premiumAmount) && (
                   <p className="text-xs text-amber-600">
                     Partial amount exceeds the total premium. It will be capped
-                    to {formatCurrency(totalPremium)} on confirm.
+                    to {currencyOrDash(premiumAmount)} when you leave the field.
                   </p>
                 )}
               </div>
@@ -149,10 +152,29 @@ export function InsurancePremiumSection({
               <div className="space-y-1.5">
                 <Label className="text-xs">Remaining Balance</Label>
                 <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
-                  {formatCurrency(remainingBalance)}
+                  {currencyOrDash(insurance?.remaining_balance)}
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {view.status === "loading" && (
+          <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="size-3.5" />
+            Working out the insurance…
+          </p>
+        )}
+        {view.status === "error" && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+            <p className="flex items-center gap-1.5 text-destructive">
+              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              {view.message}
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              <RefreshCw className="mr-2 size-4" />
+              Retry
+            </Button>
           </div>
         )}
       </div>

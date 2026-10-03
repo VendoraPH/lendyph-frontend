@@ -72,8 +72,3 @@ export function pickNumber(
 ): number | null {
   return toNumber(pick(obj, keys));
 }
-
-/** Total one column across rows, counting anything unreadable as zero. */
-export function sum(rows: Record<string, unknown>[], key: string): number {
-  return rows.reduce((acc, row) => acc + (toNumber(row[key]) ?? 0), 0);
-}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { buildAmortizationScheduleDoc } from "./amortization-schedule";
 import {
   assertPrintableShape,
@@ -13,7 +13,10 @@ import {
   titleBlock,
 } from "./doc-assertions";
 
-/** `LoanResource` with `amortizationSchedules` eager-loaded. */
+/**
+ * `LoanResource` with `amortizationSchedules` eager-loaded, and the column
+ * totals the server adds up beside it.
+ */
 const LOAN = {
   id: 42,
   application_number: "APP-2026-0042",
@@ -33,6 +36,13 @@ const LOAN = {
     { id: 2, loan_id: 42, period_number: 2, due_date: "2026-10-01", beginning_balance: 33333.33, principal_due: 16666.67, interest_due: 666.67, penalty_amount: 250, total_due: 17333.34, remaining_balance: 16666.66, principal_paid: 0, interest_paid: 0, penalty_paid: 0, status: "overdue", amount_paid: 0 },
     { id: 3, loan_id: 42, period_number: 3, due_date: "2026-11-01", beginning_balance: 16666.66, principal_due: 16666.66, interest_due: 333.33, penalty_amount: 0, total_due: 16999.99, remaining_balance: 0, principal_paid: 0, interest_paid: 0, penalty_paid: 0, status: "pending", amount_paid: 0 },
   ],
+  amortization_schedule_totals: {
+    principal: 50000,
+    interest: 2000,
+    penalty: 250,
+    total_due: 52000,
+    amount_paid: 17666.67,
+  },
 };
 
 test("amortization schedule: the loan's terms head the document", () => {
@@ -86,29 +96,34 @@ test("amortization schedule: every period is rendered with its paid columns", ()
   assert.equal(table.rows[2]?.balance, 0);
 });
 
-test("amortization schedule: column totals reconcile with the rows", () => {
+test("amortization schedule: column totals are the server's", () => {
   const table = tableBlock(buildAmortizationScheduleDoc(LOAN));
 
-  const principal = 16666.67 + 16666.67 + 16666.66;
-  const interest = 1000 + 666.67 + 333.33;
-  const penalty = 250;
-
-  assert.equal(table.totals?.principal, formatCurrency(principal));
-  assert.equal(table.totals?.interest, formatCurrency(interest));
-  assert.equal(table.totals?.penalty, formatCurrency(penalty));
-  assert.equal(
-    table.totals?.total_due,
-    formatCurrency(17666.67 + 17333.34 + 16999.99)
-  );
+  assert.equal(table.totals?.principal, formatCurrency(50000));
+  assert.equal(table.totals?.interest, formatCurrency(2000));
+  assert.equal(table.totals?.penalty, formatCurrency(250));
+  assert.equal(table.totals?.total_due, formatCurrency(52000));
   assert.equal(table.totals?.amount_paid, formatCurrency(17666.67));
 
-  // The two checks a bookkeeper runs. Principal scheduled equals the principal
-  // borrowed; and `total_due` is principal + interest only — penalty accrues
-  // separately on top of the installment and is never folded into it, which is
-  // why it has a column of its own.
-  assert.equal(formatCurrency(principal), formatCurrency(50000));
-  assert.equal(formatCurrency(principal + interest), table.totals?.total_due);
-  assert.equal(table.totals?.penalty, formatCurrency(penalty));
+  // A server figure unlike the rows added up is printed as sent.
+  const sent = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      amortization_schedule_totals: { ...LOAN.amortization_schedule_totals, interest: 2000.01 },
+    })
+  );
+  assert.equal(sent.totals?.interest, formatCurrency(2000.01));
+});
+
+test("amortization schedule: totals the server did not send are dashes, never sums", () => {
+  const { amortization_schedule_totals: _omitted, ...rest } = LOAN;
+  void _omitted;
+  const table = tableBlock(buildAmortizationScheduleDoc(rest));
+
+  assert.equal(table.rows.length, 3);
+  for (const key of ["principal", "interest", "penalty", "total_due", "amount_paid"]) {
+    assert.equal(table.totals?.[key], DASH, key);
+  }
 });
 
 test("amortization schedule: penalties are flagged as provisional", () => {

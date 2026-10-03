@@ -80,10 +80,10 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
  *
  * That does not make the fallback useless — the recent entries are worth
  * printing when a deployment's backend is behind the frontend and the statement
- * route 404s. It makes it a different document, so the response is normalised
- * here with a note of whether it may have been capped, and
- * `share-capital-certificate.ts` prints an extract rather than a certificate
- * when it was.
+ * route 404s. It makes it a different document: the list carries no balances,
+ * so `share-capital-certificate.ts` prints it as an extract rather than a
+ * certificate, and the response is normalised here with a note of whether it
+ * may have been capped.
  */
 async function fetchShareCapitalStatement(borrowerId: number): Promise<unknown> {
   try {

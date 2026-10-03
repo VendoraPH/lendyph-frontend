@@ -1,10 +1,12 @@
 /**
  * Demand Letter — Notice of Past Due Account.
  *
- * Source: `reportService.statementOfAccount(loanId)`. The statement already
- * carries the whole amortization schedule with per-period paid amounts, so the
- * overdue set is derived here rather than asking the API for a second view of
- * the same rows.
+ * Source: `reportService.statementOfAccount(loanId)`. The statement carries
+ * the whole amortization schedule, and the server marks each row's arrears on
+ * it: `remaining` (principal, interest and penalty still owed), `amount_due`,
+ * `days_overdue` (as of today in Manila) and `is_overdue`, with the letter's
+ * totals beside it (`total_demanded`, `demand_totals`). The letter computes
+ * none of them; a figure the server did not send prints as a dash.
  *
  * A demand letter is the step before collection action, so it states only what
  * the ledger supports — and when it cannot read the ledger at all it states
@@ -31,14 +33,10 @@ import {
   dateOrBlank,
   escapeHtml,
   field,
-  formatCurrency,
   generatedAt,
-  parseApiDate,
   pick,
   pickNumber,
   presentFields,
-  startOfLocalDay,
-  sum,
   toNumber,
   type PrintableBuildOptions,
 } from "./shared";
@@ -49,50 +47,6 @@ import {
  * configurable setting it should be read from there rather than edited here.
  */
 export const CURE_PERIOD_DAYS = 15;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * Whole days between a due date and the letter date; null if undatable.
- *
- * Both sides are reduced to a local calendar day before they are subtracted,
- * and that is the whole of the function.
- *
- * `due_date` arrives as `"YYYY-MM-DD"` (`ReportService::statementOfAccount`
- * sends `->toDateString()`), which `new Date()` reads as UTC midnight — 08:00
- * in Manila. Subtracting a local `now` from that instant made every count an
- * hour-of-the-day question: before 08:00 an installment that fell due yesterday
- * measured 23 hours, floored to 0, and the `days_overdue > 0` filter below then
- * dropped it from the arrears table AND from the total demanded. A letter
- * printed at 07:00 demanded less money than the same letter printed at 09:00.
- *
- * Comparing calendar days makes the answer the same all day, which is what
- * "days late" means to the member reading it.
- */
-function daysOverdue(dueDate: unknown, asOf: Date): number | null {
-  const due = parseApiDate(dueDate);
-  if (due === null) return null;
-  const days = Math.round(
-    (startOfLocalDay(asOf).getTime() - startOfLocalDay(due).getTime()) /
-      MS_PER_DAY
-  );
-  return days > 0 ? days : 0;
-}
-
-/**
- * What an installment still owes on one component, to the centavo.
- *
- * Rounded because the subtraction is a float one: 16,666.67 − 6,666.67 lands on
- * 9,999.999999999998, and an unrounded figure like that reaches the table rows
- * raw. It formats to the right peso amount, but it also propagates into the
- * column totals — and a demand letter whose rows do not add up to its own total
- * is one a member can argue with.
- */
-function remaining(row: Record<string, unknown>, dueKey: string, paidKey: string): number {
-  const due = toNumber(row[dueKey]) ?? 0;
-  const paid = toNumber(row[paidKey]) ?? 0;
-  return Math.round(Math.max(0, due - paid) * 100) / 100;
-}
 
 export function buildDemandLetterDoc(
   raw: unknown,
@@ -111,29 +65,28 @@ export function buildDemandLetterDoc(
   const accountNumber =
     pick(loan, ["loan_account_number", "application_number"]) ?? null;
 
-  // Overdue = due before today with something still unpaid. `status` is not
-  // trusted on its own: a schedule only flips to 'overdue' when the nightly
-  // job runs, so an installment that fell due this morning would be missed.
+  // The rows the server marks `is_overdue`: due before today with something
+  // still owed. `status` is not trusted for that (it only turns 'overdue' when
+  // the nightly run reaches a row), and neither is anything worked out here.
   const overdueRows = asArray(
     pick(root, ["amortization_schedule", "schedule", "amortization_schedules"])
   )
+    .filter((row) => row.is_overdue === true)
     .map((row) => {
-      const principal = remaining(row, "principal_due", "principal_paid");
-      const interest = remaining(row, "interest_due", "interest_paid");
-      const penalty = remaining(row, "penalty_amount", "penalty_paid");
+      const owed = asRecord(row.remaining);
       return {
         period: pick(row, ["period_number", "period"]),
         due_date: pick(row, ["due_date"]),
-        days_overdue: daysOverdue(pick(row, ["due_date"]), asOf),
-        principal,
-        interest,
-        penalty,
-        amount_due: Math.round((principal + interest + penalty) * 100) / 100,
+        days_overdue: toNumber(row.days_overdue),
+        principal: toNumber(owed?.principal),
+        interest: toNumber(owed?.interest),
+        penalty: toNumber(owed?.penalty),
+        amount_due: toNumber(row.amount_due),
       };
-    })
-    .filter((row) => row.amount_due > 0 && (row.days_overdue ?? 0) > 0);
+    });
 
-  const totalDemanded = sum(overdueRows, "amount_due");
+  const totalDemanded = pickNumber(root, ["total_demanded"]);
+  const demandTotals = asRecord(pick(root, ["demand_totals"]));
   const outstandingBalance =
     pickNumber(summary, ["outstanding_balance", "total_balance"]) ??
     pickNumber(root, ["outstanding_balance"]);
@@ -208,10 +161,10 @@ export function buildDemandLetterDoc(
         overdueRows.length > 0
           ? {
               days_overdue: "TOTAL",
-              principal: formatCurrency(sum(overdueRows, "principal")),
-              interest: formatCurrency(sum(overdueRows, "interest")),
-              penalty: formatCurrency(sum(overdueRows, "penalty")),
-              amount_due: formatCurrency(totalDemanded),
+              principal: currencyOrDash(pick(demandTotals, ["principal"])),
+              interest: currencyOrDash(pick(demandTotals, ["interest"])),
+              penalty: currencyOrDash(pick(demandTotals, ["penalty"])),
+              amount_due: currencyOrDash(pick(demandTotals, ["amount_due"]) ?? totalDemanded),
             }
           : undefined,
       emptyText: incomplete
@@ -224,8 +177,9 @@ export function buildDemandLetterDoc(
         {
           label: "TOTAL AMOUNT DEMANDED",
           // A blank rule, never P0.00 — a notice that demands zero pesos over
-          // a signatory's name is still a notice.
-          amount: incomplete ? BLANK_LINE : formatCurrency(totalDemanded),
+          // a signatory's name is still a notice. A dash when the server sent
+          // no total: the rows are never added up here.
+          amount: incomplete ? BLANK_LINE : currencyOrDash(totalDemanded),
           rule: "grand",
         },
       ],

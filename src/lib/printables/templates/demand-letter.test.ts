@@ -1,25 +1,17 @@
-// Every assertion in this file is Manila-relative — the hours below (07:00,
-// 08:00, 09:00) are the boundary either side of UTC+8 midnight, and a
-// `due_date` of "2026-08-25" is a calendar day, not an instant. Leave the zone
-// to whoever runs the suite and the file measures something different on every
-// machine: on a UTC runner the 07:00 and 09:00 cases fall on the SAME side of
-// the boundary, so the test that exists to prove printing an hour earlier does
-// not change the amount demanded stops distinguishing them and passes without
-// exercising the bug. CI sets no TZ, so that runner is the CI runner.
+// The days-late count is the server's now (`days_overdue`, as of today in
+// Manila), so nothing here counts days. The pin stays for the dates this file
+// does build — the letter's date and the settle-by date — so they are Manila
+// calendar days on every runner, the CI runner (which sets no TZ) included.
 //
 // How: assigning `process.env.TZ` makes Node re-read the zone (it notifies V8,
 // which drops its cached offset), and `node:test` runs each test file in its
 // own process, so this cannot leak into a sibling suite. The first test asserts
-// the pin actually took — without that guard this file would quietly pass on a
-// UTC CI box while testing nothing. It is deliberately not left to the machine:
-// this repo's dev boxes are already Asia/Manila, which is exactly how the bug
-// survived review the first time. Same pattern, same reason, as
-// `src/lib/format.test.ts`.
+// the pin actually took. Same pattern as `src/lib/format.test.ts`.
 process.env.TZ = "Asia/Manila";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { CURE_PERIOD_DAYS, buildDemandLetterDoc } from "./demand-letter";
 import { BLANK_LINE } from "./shared";
 import {
@@ -33,7 +25,7 @@ import {
   titleBlock,
 } from "./doc-assertions";
 
-/** Fixed "today" so the cure period and days-late figures are deterministic. */
+/** Fixed "today" so the letter date and the cure period are deterministic. */
 const NOW = new Date(2026, 7, 26);
 
 test("the suite is pinned to Manila (UTC+8), not the machine's zone", () => {
@@ -43,11 +35,15 @@ test("the suite is pinned to Manila (UTC+8), not the machine's zone", () => {
   assert.equal(
     NOW.getTimezoneOffset(),
     -480,
-    "TZ pin did not take effect — every hour-of-day assertion below would be vacuous"
+    "TZ pin did not take effect — the date assertions below would depend on the machine"
   );
 });
 
-/** What `ReportService::statementOfAccount()` returns. */
+/**
+ * What `ReportService::statementOfAccount()` returns on NOW: each schedule row
+ * carries the server's arrears (`remaining`, `amount_due`, `days_overdue`,
+ * `is_overdue`), and the letter's totals sit beside the schedule.
+ */
 const PAYLOAD = {
   loan: {
     loan_account_number: "LN-2026-0042",
@@ -79,14 +75,20 @@ const PAYLOAD = {
   ],
   amortization_schedule: [
     // Settled — not demanded.
-    { period_number: 1, due_date: "2026-03-01", principal_due: 16666.67, interest_due: 2000, total_due: 18666.67, principal_paid: 16666.67, interest_paid: 2000, penalty_amount: 0, penalty_paid: 0, status: "paid" },
+    { period_number: 1, due_date: "2026-03-01", principal_due: 16666.67, interest_due: 2000, total_due: 18666.67, principal_paid: 16666.67, interest_paid: 2000, penalty_amount: 0, penalty_paid: 0, status: "paid",
+      remaining: { principal: 0, interest: 0, penalty: 0 }, amount_due: 0, days_overdue: 178, is_overdue: false },
     // Part-paid and past due — demanded for the remainder only.
-    { period_number: 2, due_date: "2026-04-01", principal_due: 16666.67, interest_due: 1666.67, total_due: 18333.34, principal_paid: 6666.67, interest_paid: 0, penalty_amount: 500, penalty_paid: 0, status: "partial" },
+    { period_number: 2, due_date: "2026-04-01", principal_due: 16666.67, interest_due: 1666.67, total_due: 18333.34, principal_paid: 6666.67, interest_paid: 0, penalty_amount: 500, penalty_paid: 0, status: "partial",
+      remaining: { principal: 10000, interest: 1666.67, penalty: 500 }, amount_due: 12166.67, days_overdue: 147, is_overdue: true },
     // Unpaid and past due — demanded in full.
-    { period_number: 3, due_date: "2026-05-01", principal_due: 16666.66, interest_due: 1333.33, total_due: 17999.99, principal_paid: 0, interest_paid: 0, penalty_amount: 750, penalty_paid: 0, status: "overdue" },
-    // Not yet due — never demanded, whatever its status says.
-    { period_number: 4, due_date: "2026-09-01", principal_due: 16666.67, interest_due: 1000, total_due: 17666.67, principal_paid: 0, interest_paid: 0, penalty_amount: 0, penalty_paid: 0, status: "pending" },
+    { period_number: 3, due_date: "2026-05-01", principal_due: 16666.66, interest_due: 1333.33, total_due: 17999.99, principal_paid: 0, interest_paid: 0, penalty_amount: 750, penalty_paid: 0, status: "overdue",
+      remaining: { principal: 16666.66, interest: 1333.33, penalty: 750 }, amount_due: 18749.99, days_overdue: 117, is_overdue: true },
+    // Not yet due — never demanded.
+    { period_number: 4, due_date: "2026-09-01", principal_due: 16666.67, interest_due: 1000, total_due: 17666.67, principal_paid: 0, interest_paid: 0, penalty_amount: 0, penalty_paid: 0, status: "pending",
+      remaining: { principal: 16666.67, interest: 1000, penalty: 0 }, amount_due: 17666.67, days_overdue: 0, is_overdue: false },
   ],
+  total_demanded: 30916.66,
+  demand_totals: { principal: 26666.66, interest: 3000, penalty: 1250, amount_due: 30916.66 },
   summary: {
     total_paid: 18666.67,
     opening_balance: 100000,
@@ -98,9 +100,6 @@ const PAYLOAD = {
   },
   generated_at: "2026-08-26 09:15:00",
 };
-
-const PERIOD_2_DUE = 10000 + 1666.67 + 500;
-const PERIOD_3_DUE = 16666.66 + 1333.33 + 750;
 
 test("demand letter: addresses the member and states the as-of date", () => {
   const doc = buildDemandLetterDoc(PAYLOAD, { now: NOW });
@@ -116,7 +115,7 @@ test("demand letter: addresses the member and states the as-of date", () => {
   assert.match(prose(doc), /Dear Juana Dela Cruz,/);
 });
 
-test("demand letter: only installments actually in arrears are demanded", () => {
+test("demand letter: only the installments the server marks in arrears are demanded", () => {
   const table = tableBlock(buildDemandLetterDoc(PAYLOAD, { now: NOW }), "Installments in Arrears");
 
   // Period 1 is settled; period 4 is not yet due. Neither may be demanded.
@@ -124,22 +123,43 @@ test("demand letter: only installments actually in arrears are demanded", () => 
     table.rows.map((r) => r.period),
     [2, 3]
   );
-  // A part-paid installment is demanded for its remainder, not its face value.
+  // A part-paid installment is demanded for the server's remainder.
   assert.equal(table.rows[0]?.principal, 10000);
   assert.equal(table.rows[0]?.interest, 1666.67);
   assert.equal(table.rows[0]?.penalty, 500);
   assert.equal(table.rows[0]?.amount_due, 12166.67);
+  assert.equal(table.rows[0]?.days_overdue, 147);
 });
 
-test("demand letter: overdue status is derived from the date, not the flag", () => {
-  // Period 4 is dated in the future but flagged 'overdue' by a stale nightly
-  // job. Demanding it would be demanding money that is not yet owed.
+test("demand letter: a row's figures are the server's, a dash when it sent none", () => {
+  // `remaining` deliberately unlike due − paid: whatever the server says is
+  // still owed is what the letter demands.
   const doc = buildDemandLetterDoc(
     {
       ...PAYLOAD,
       amortization_schedule: [
-        { period_number: 4, due_date: "2026-09-01", principal_due: 16666.67, interest_due: 1000, total_due: 17666.67, principal_paid: 0, interest_paid: 0, penalty_amount: 0, penalty_paid: 0, status: "overdue" },
+        { period_number: 2, due_date: "2026-04-01", principal_due: 16666.67, principal_paid: 0, is_overdue: true,
+          remaining: { principal: 9999.99 }, days_overdue: 147 },
       ],
+    },
+    { now: NOW }
+  );
+  const [row] = tableBlock(doc, "Installments in Arrears").rows;
+  assert.equal(row?.principal, 9999.99);
+  assert.equal(row?.interest, null);
+  assert.equal(row?.penalty, null);
+  assert.equal(row?.amount_due, null);
+});
+
+test("demand letter: arrears are the server's flag, not the row's status or date", () => {
+  // Period 4 is flagged 'overdue' by a stale nightly job, and period 1 is long
+  // past due but settled. The server's `is_overdue` says neither is in arrears.
+  const doc = buildDemandLetterDoc(
+    {
+      ...PAYLOAD,
+      amortization_schedule: [PAYLOAD.amortization_schedule[0], { ...PAYLOAD.amortization_schedule[3], status: "overdue" }],
+      total_demanded: 0,
+      demand_totals: { principal: 0, interest: 0, penalty: 0, amount_due: 0 },
     },
     { now: NOW }
   );
@@ -147,93 +167,58 @@ test("demand letter: overdue status is derived from the date, not the flag", () 
   assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(0));
 });
 
-/**
- * Yesterday, today and last week, relative to the fixed NOW above.
- *
- * A one-installment schedule per case so each assertion is about one date.
- */
-function scheduleDue(dueDate: string) {
-  return {
+test("demand letter: days late are the server's, whatever the hour the letter is printed", () => {
+  // The letter used to count days itself and, before 08:00 Manila, dropped an
+  // installment that fell due yesterday. The count is the server's now.
+  const payload = {
     ...PAYLOAD,
     amortization_schedule: [
-      { period_number: 1, due_date: dueDate, principal_due: 10000, interest_due: 0, total_due: 10000, principal_paid: 0, interest_paid: 0, penalty_amount: 0, penalty_paid: 0, status: "pending" },
+      { period_number: 1, due_date: "2026-08-25", principal_due: 10000, principal_paid: 0, status: "pending",
+        remaining: { principal: 10000, interest: 0, penalty: 0 }, amount_due: 10000, days_overdue: 1, is_overdue: true },
     ],
+    total_demanded: 10000,
+    demand_totals: { principal: 10000, interest: 0, penalty: 0, amount_due: 10000 },
   };
-}
 
-test("demand letter: days late do not depend on the hour the letter is printed", () => {
-  // The bug: `due_date` arrives as "YYYY-MM-DD", which `new Date()` reads as
-  // UTC midnight — 08:00 in Manila. Subtracting a local "now" from that made
-  // the count an hour-of-the-day question. Printed at 07:00 an installment that
-  // fell due YESTERDAY measured 23 hours, floored to 0, and the
-  // `days_overdue > 0` filter dropped it from the arrears table AND from the
-  // total demanded. The same letter at 09:00 demanded P10,000 more.
-  //
-  // Under TZ=Asia/Manila these hours are the 07:00 and 09:00 of the review.
-  // The assertion is deliberately made across the whole local day: the count
-  // must be a property of the calendar, not of the clock.
-  const hours = [0, 7, 8, 9, 23];
-  const payload = scheduleDue("2026-08-25"); // yesterday
-
-  for (const hour of hours) {
-    const doc = buildDemandLetterDoc(payload, {
-      now: new Date(2026, 7, 26, hour, 30),
-    });
+  for (const hour of [0, 7, 8, 9, 23]) {
+    const doc = buildDemandLetterDoc(payload, { now: new Date(2026, 7, 26, hour, 30) });
     const rows = tableBlock(doc, "Installments in Arrears").rows;
 
     assert.equal(rows.length, 1, `dropped the arrears row at ${hour}:30`);
     assert.equal(rows[0]?.days_overdue, 1, `wrong days late at ${hour}:30`);
-    assert.equal(
-      chargeAmount(doc, "TOTAL AMOUNT DEMANDED"),
-      formatCurrency(10000),
-      `wrong total demanded at ${hour}:30`
-    );
+    assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(10000));
     assert.equal(fieldValue(doc, "Longest overdue installment"), "1 day(s)");
   }
 });
 
-test("demand letter: an installment due today is not yet late, at any hour", () => {
-  for (const hour of [0, 7, 9, 23]) {
-    const doc = buildDemandLetterDoc(scheduleDue("2026-08-26"), {
-      now: new Date(2026, 7, 26, hour, 30),
-    });
-    assert.equal(tableBlock(doc, "Installments in Arrears").rows.length, 0);
-    assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(0));
-  }
-});
-
-test("demand letter: the count is whole calendar days, not elapsed hours", () => {
-  // 2026-08-20 is six calendar days before 2026-08-26. It was reported as five
-  // before 08:00 Manila and six after.
-  for (const hour of [7, 9]) {
-    const doc = buildDemandLetterDoc(scheduleDue("2026-08-20"), {
-      now: new Date(2026, 7, 26, hour, 0),
-    });
-    assert.equal(
-      tableBlock(doc, "Installments in Arrears").rows[0]?.days_overdue,
-      6
-    );
-  }
-});
-
-test("demand letter: the total demanded is the sum of the rows above it", () => {
+test("demand letter: the total demanded and the column totals are the server's", () => {
   const doc = buildDemandLetterDoc(PAYLOAD, { now: NOW });
   const table = tableBlock(doc, "Installments in Arrears");
-  const expected = formatCurrency(PERIOD_2_DUE + PERIOD_3_DUE);
 
-  assert.equal(table.totals?.amount_due, expected);
-  assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), expected);
-  // Column totals reconcile component by component too.
-  assert.equal(table.totals?.principal, formatCurrency(10000 + 16666.66));
-  assert.equal(table.totals?.interest, formatCurrency(1666.67 + 1333.33));
-  assert.equal(table.totals?.penalty, formatCurrency(500 + 750));
+  assert.equal(table.totals?.amount_due, formatCurrency(30916.66));
+  assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(30916.66));
+  assert.equal(table.totals?.principal, formatCurrency(26666.66));
+  assert.equal(table.totals?.interest, formatCurrency(3000));
+  assert.equal(table.totals?.penalty, formatCurrency(1250));
+  assert.equal(fieldValue(doc, "Total outstanding balance"), formatCurrency(81916.66));
 
-  // The demand is a subset of the balance, never larger than it.
-  assert.equal(
-    fieldValue(doc, "Total outstanding balance"),
-    formatCurrency(81916.66)
-  );
-  assert.ok(PERIOD_2_DUE + PERIOD_3_DUE < 81916.66);
+  // A server total unlike the rows added up is printed as sent.
+  const sent = buildDemandLetterDoc({ ...PAYLOAD, total_demanded: 30916.67 }, { now: NOW });
+  assert.equal(chargeAmount(sent, "TOTAL AMOUNT DEMANDED"), formatCurrency(30916.67));
+});
+
+test("demand letter: totals the server did not send are dashes, never sums of the rows", () => {
+  const { total_demanded: _total, demand_totals: _columns, ...rest } = PAYLOAD;
+  void _total;
+  void _columns;
+  const doc = buildDemandLetterDoc(rest, { now: NOW });
+  const table = tableBlock(doc, "Installments in Arrears");
+
+  assert.equal(table.rows.length, 2);
+  assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), DASH);
+  for (const key of ["principal", "interest", "penalty", "amount_due"]) {
+    assert.equal(table.totals?.[key], DASH, key);
+  }
 });
 
 test("demand letter: the cure period is stated as a date and a count of days", () => {
@@ -251,7 +236,7 @@ test("demand letter: the cure period is stated as a date and a count of days", (
   );
 });
 
-test("demand letter: days late are counted per row and the worst is highlighted", () => {
+test("demand letter: days late are shown per row and the worst is highlighted", () => {
   const doc = buildDemandLetterDoc(PAYLOAD, { now: NOW });
   const rows = tableBlock(doc, "Installments in Arrears").rows;
   const [first, second] = rows as { days_overdue: number }[];
@@ -318,7 +303,12 @@ test("demand letter: an account with nothing overdue is a real notice, not a bla
   // make, and it demands a genuine zero — the distinction from an unreachable
   // endpoint is the whole point of the flag.
   const doc = buildDemandLetterDoc(
-    { ...PAYLOAD, amortization_schedule: [] },
+    {
+      ...PAYLOAD,
+      amortization_schedule: [],
+      total_demanded: 0,
+      demand_totals: { principal: 0, interest: 0, penalty: 0, amount_due: 0 },
+    },
     { now: NOW }
   );
 

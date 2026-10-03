@@ -221,12 +221,12 @@ test("portfolio summary renders the shell when the request failed", () => {
 const AGING_PAYLOAD = {
   as_of_date: "2026-08-06",
   buckets: {
-    "1_30": { amount: 128450.5, count: 12 },
-    "31_60": { amount: 64200.25, count: 5 },
-    "61_90": { amount: 18900, count: 1 },
-    over_90: { amount: 240310.75, count: 9 },
+    "1_30": { amount: 128450.5, count: 12, share_percent: 28.43 },
+    "31_60": { amount: 64200.25, count: 5, share_percent: 14.21 },
+    "61_90": { amount: 18900, count: 1, share_percent: 4.18 },
+    over_90: { amount: 240310.75, count: 9, share_percent: 53.18 },
   },
-  total: { amount: 451861.5, count: 21 },
+  total: { amount: 451861.5, count: 21, share_percent: 100 },
   generated_at: "2026-08-06 09:15:00",
 };
 
@@ -1174,16 +1174,41 @@ test("a component the API omitted on both sides is dropped, not shown as zero", 
   );
 });
 
-test("aging report renders a schedule with each bucket's share of the total", () => {
+test("aging report renders a schedule with the server's share of the total per bucket", () => {
   const doc = buildAgingDoc(AGING_PAYLOAD, RANGE);
   const table = namedTable(doc, "Aging Schedule");
 
   assert.equal(table.rows.length, 4);
   assert.equal(table.rows[0].amount, 128450.5);
-  // 128,450.50 ÷ 451,861.50
-  assert.equal(Math.round((table.rows[0].share as number) * 100) / 100, 28.43);
+  assert.deepEqual(table.rows.map((r) => r.share), [28.43, 14.21, 4.18, 53.18]);
   assert.equal(namedTableTotal(doc, "Aging Schedule", "amount"), "₱451,861.50");
   assert.equal(namedTableTotal(doc, "Aging Schedule", "share"), "100.0%");
+});
+
+test("a share is the server's figure, never divided out of the amounts", () => {
+  // A share deliberately unlike amount ÷ total: whatever the server sends is
+  // what the report shows.
+  const doc = buildAgingDoc(
+    {
+      ...AGING_PAYLOAD,
+      buckets: { ...AGING_PAYLOAD.buckets, "1_30": { amount: 128450.5, count: 12, share_percent: 30 } },
+    },
+    RANGE
+  );
+  assert.equal(namedTable(doc, "Aging Schedule").rows[0].share, 30);
+});
+
+test("a bucket the server sent no share for shows a dash, not a computed one", () => {
+  const doc = buildAgingDoc(
+    {
+      ...AGING_PAYLOAD,
+      buckets: { ...AGING_PAYLOAD.buckets, "31_60": { amount: 64200.25, count: 5 } },
+    },
+    RANGE
+  );
+  const table = namedTable(doc, "Aging Schedule");
+  assert.equal(table.rows[1].share, null);
+  assert.equal(table.rows[0].share, 28.43);
 });
 
 test("the aging schedule never totals the loan counts", () => {
@@ -1199,22 +1224,23 @@ test("aging shows a dash, not a sum of the buckets, when the API omits the total
   const doc = buildAgingDoc(withoutTotal, RANGE);
   const table = namedTable(doc, "Aging Schedule");
 
-  // The buckets are still listed as sent; only the total and the shares of it
-  // need the server's figure.
+  // The buckets and their shares are still listed as sent; only the total row
+  // needs the server's total.
   assert.equal(table.rows[0].amount, 128450.5);
-  assert.equal(table.rows[0].share, null);
+  assert.equal(table.rows[0].share, 28.43);
   assert.equal(namedTableTotal(doc, "Aging Schedule", "amount"), DASH);
   assert.equal(namedTableTotal(doc, "Aging Schedule", "share"), DASH);
 });
 
 test("a zero overdue total reports no share instead of NaN", () => {
+  // The server sends `share_percent: null` for every bucket when the total is 0.
   const doc = buildAgingDoc(
     {
       buckets: {
-        "1_30": { amount: 0, count: 0 },
-        "31_60": { amount: 0, count: 0 },
-        "61_90": { amount: 0, count: 0 },
-        over_90: { amount: 0, count: 0 },
+        "1_30": { amount: 0, count: 0, share_percent: null },
+        "31_60": { amount: 0, count: 0, share_percent: null },
+        "61_90": { amount: 0, count: 0, share_percent: null },
+        over_90: { amount: 0, count: 0, share_percent: null },
       },
       total: { amount: 0, count: 0 },
     },

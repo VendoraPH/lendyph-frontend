@@ -88,6 +88,13 @@ export const INTEREST_TYPE_OPTIONS = [
   { value: "diminishing", label: "Diminishing" },
 ] as const;
 
+/** Every interest method a product or loan can carry, by its API value. */
+export const INTEREST_METHOD_LABELS: Record<string, string> = {
+  straight: "Straight (Fixed)",
+  diminishing: "Diminishing",
+  upon_maturity: "Upon Maturity",
+};
+
 export const PAYMENT_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },

@@ -252,7 +252,7 @@ test("cancelled requests and session errors stay silent", () => {
 });
 
 test("values are formatted by Lendy's rules, not the model's", () => {
-  assert.equal(formatLindaValue({ label: "a", value: 245600, format: "currency" }), "₱245,600");
+  assert.equal(formatLindaValue({ label: "a", value: 245600, format: "currency" }), "₱245,600.00");
   assert.equal(formatLindaValue({ label: "a", value: "125450.5", format: "currency" }), "₱125,450.50");
   assert.equal(formatLindaValue({ label: "a", value: 1340, format: "number" }), "1,340");
   assert.equal(formatLindaValue({ label: "a", value: 87.456, format: "percent" }), "87.456%");

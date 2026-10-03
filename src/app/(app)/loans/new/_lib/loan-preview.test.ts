@@ -6,24 +6,28 @@
  * shortfall, and build the amortization schedule in the browser. It now only
  * describes its inputs to the server and displays what comes back.
  *
- * WHAT THIS PROVES: the body built from the form's fields, when there is
- * nothing to ask, that a stale or failed preview shows no figures, and the
- * "Short by" rule. WHAT IT DOES NOT PROVE: the figures themselves; those are
- * the backend's preview tests.
+ * WHAT THIS PROVES: the body built from the form's fields (deduction inputs
+ * included), when there is nothing to ask, that a stale or failed preview
+ * shows no figures, the "Short by" rule, which server figure each stated
+ * deduction shows, and the read-only Interest Type. WHAT IT DOES NOT PROVE:
+ * the figures themselves; those are the backend's preview tests.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { LoanFormPreview } from "@/types";
 import type { SelectedCollateral } from "./edit-collaterals";
 import {
+  formInterestMethod,
   interestMethodLabel,
   loanPreviewFailureMessage,
   loanPreviewKey,
   loanPreviewRequest,
   loanPreviewView,
+  previewDeductionAmount,
   showsShortBy,
   type LoanPreviewInputs,
   type LoanPreviewOutcome,
+  type StatedDeduction,
 } from "./loan-preview";
 
 function selected(id: number, snapshot: number): SelectedCollateral {
@@ -42,9 +46,26 @@ const COMPLETE: LoanPreviewInputs = {
   releaseDate: new Date(2026, 9, 3),
   scbAmount: "100",
   collaterals: [selected(7, 25000.5)],
+  deductions: [
+    { name: "Processing Fee", amount: 1.5, type: "percentage" },
+    { name: "Notarial", amount: 250.5, type: "fixed" },
+  ],
 };
 
 const PREVIEW: LoanFormPreview = {
+  maturity_date: "2027-10-03",
+  deductions: {
+    items: [
+      { name: "Processing Fee", amount: 750, type: "percentage", original_value: 1.5 },
+      { name: "Notarial", amount: 250.5, type: "fixed", original_value: 250.5 },
+    ],
+    stated_total: 1000.5,
+    configured_fees: [],
+    configured_total: 0,
+    total_deductions: 1000.5,
+    net_proceeds: 48999.5,
+    error: null,
+  },
   collateral: { total_value: 25000.5, security_status: "partially_secured", short_by: 24999.5 },
   amortization: {
     maturity_date: "2027-10-03",
@@ -76,7 +97,26 @@ describe("loanPreviewRequest", () => {
       start_date: "2026-10-03",
       scb_amount: 100,
       collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }],
+      deductions: [
+        { name: "Processing Fee", amount: 1.5, type: "percentage" },
+        { name: "Notarial", amount: 250.5, type: "fixed" },
+      ],
     });
+  });
+
+  test("states the deduction inputs, never peso amounts worked out from them", () => {
+    const request = loanPreviewRequest({
+      ...COMPLETE,
+      deductions: [{ name: "Service Fee", amount: 2.375, type: "percentage" }],
+    });
+    assert.deepEqual(request?.deductions, [{ name: "Service Fee", amount: 2.375, type: "percentage" }]);
+  });
+
+  test("an empty list is sent as none; null leaves the key out for the product's fees", () => {
+    assert.deepEqual(loanPreviewRequest({ ...COMPLETE, deductions: [] })?.deductions, []);
+    const request = loanPreviewRequest({ ...COMPLETE, deductions: null });
+    assert.ok(request);
+    assert.equal("deductions" in request, false);
   });
 
   test("keeps the rate's and the collateral's decimals exactly as entered", () => {
@@ -103,13 +143,14 @@ describe("loanPreviewRequest", () => {
         paymentFrequency: null,
         releaseDate: undefined,
         scbAmount: "",
+        deductions: null,
       }),
       { collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }] },
     );
   });
 
   test("asks for the schedule with no collateral once its inputs are all known", () => {
-    assert.deepEqual(loanPreviewRequest({ ...COMPLETE, scbAmount: "", collaterals: [] }), {
+    assert.deepEqual(loanPreviewRequest({ ...COMPLETE, scbAmount: "", collaterals: [], deductions: null }), {
       loan_product_id: 3,
       principal_amount: 50000,
       interest_rate: 2.5,
@@ -120,16 +161,23 @@ describe("loanPreviewRequest", () => {
     });
   });
 
-  test("asks nothing with no collateral and a schedule input missing", () => {
+  test("asks nothing with no product and no collateral", () => {
+    assert.equal(loanPreviewRequest({ ...COMPLETE, productId: null, collaterals: [] }), null);
+  });
+
+  test("with a product, still asks while other inputs are missing", () => {
+    // The maturity date needs no principal or rate, and the deductions no term,
+    // so a half-filled form still gets whatever the server can work out.
     for (const missing of [
-      { productId: null },
       { principalAmount: "0" },
       { interestRate: "" },
       { termValue: "0" },
       { paymentFrequency: null },
       { releaseDate: undefined },
     ] satisfies Partial<LoanPreviewInputs>[]) {
-      assert.equal(loanPreviewRequest({ ...COMPLETE, ...missing, collaterals: [] }), null);
+      const request = loanPreviewRequest({ ...COMPLETE, ...missing, collaterals: [] });
+      assert.ok(request, JSON.stringify(missing));
+      assert.equal(request.loan_product_id, 3);
     }
   });
 
@@ -207,13 +255,97 @@ describe("showsShortBy", () => {
 });
 
 describe("interestMethodLabel", () => {
-  test("names the server's method as the Interest Type select does", () => {
+  test("names every method a product can carry", () => {
     assert.equal(interestMethodLabel("straight"), "Straight (Fixed)");
     assert.equal(interestMethodLabel("fixed"), "Straight (Fixed)");
     assert.equal(interestMethodLabel("diminishing"), "Diminishing");
+    assert.equal(interestMethodLabel("upon_maturity"), "Upon Maturity");
   });
 
   test("an unknown method is shown as sent", () => {
     assert.equal(interestMethodLabel("add_on"), "add_on");
+  });
+});
+
+describe("formInterestMethod", () => {
+  const STRAIGHT = { interest_method: "straight" as const };
+  const DIMINISHING = { interest_method: "diminishing" as const };
+  const MATURITY = { interest_method: "upon_maturity" as const };
+
+  test("a new application shows the selected product's method", () => {
+    assert.equal(formInterestMethod({ product: DIMINISHING, storedMethod: null }), "diminishing");
+    assert.equal(formInterestMethod({ product: MATURITY, storedMethod: null }), "upon_maturity");
+  });
+
+  test("nothing to show before a product is chosen", () => {
+    assert.equal(formInterestMethod({ product: null, storedMethod: null }), null);
+  });
+
+  test("an edit shows the loan's stored method, whatever the product now says", () => {
+    // The product's method may have been changed since; the loan keeps its own.
+    assert.equal(formInterestMethod({ product: DIMINISHING, storedMethod: "straight" }), "straight");
+  });
+
+  test("an edit keeps the stored method when another product is picked", () => {
+    // PUT /loans/{id} keeps the loan's product, so the method cannot change.
+    assert.equal(formInterestMethod({ product: MATURITY, storedMethod: "straight" }), "straight");
+  });
+
+  test("an edit shows the stored method while the products are still loading", () => {
+    assert.equal(formInterestMethod({ product: null, storedMethod: "diminishing" }), "diminishing");
+  });
+
+  test("the legacy stored spelling \"fixed\" is shown as straight", () => {
+    assert.equal(formInterestMethod({ product: STRAIGHT, storedMethod: "fixed" }), "straight");
+  });
+});
+
+describe("previewDeductionAmount", () => {
+  const PROCESSING: StatedDeduction = { name: "Processing Fee", amount: 1.5, type: "percentage" };
+  const NOTARIAL: StatedDeduction = { name: "Notarial Fee", amount: 0.5, type: "percentage" };
+  const ITEMS = [
+    { name: "Processing Fee", amount: 750, type: "percentage" as const, original_value: 1.5 },
+    { name: "Notarial Fee", amount: 250.25, type: "percentage" as const, original_value: 0.5 },
+  ];
+
+  test("each stated deduction shows the server's peso amount for it", () => {
+    const inputs = [PROCESSING, NOTARIAL];
+    assert.equal(previewDeductionAmount(ITEMS, inputs, PROCESSING), 750);
+    assert.equal(previewDeductionAmount(ITEMS, inputs, NOTARIAL), 250.25);
+  });
+
+  test("no preview, or no item for it, is no figure — never one worked out here", () => {
+    const inputs = [PROCESSING, NOTARIAL];
+    assert.equal(previewDeductionAmount(null, inputs, PROCESSING), null);
+    assert.equal(previewDeductionAmount(undefined, inputs, PROCESSING), null);
+    assert.equal(previewDeductionAmount([ITEMS[0]], inputs, NOTARIAL), null);
+  });
+
+  test("a field with no input (a waived fee) has no figure", () => {
+    assert.equal(previewDeductionAmount(ITEMS, [NOTARIAL], undefined), null);
+  });
+
+  test("a percentage and a fixed item of one name are not confused", () => {
+    const fixed: StatedDeduction = { name: "Processing Fee", amount: 100, type: "fixed" };
+    const items = [
+      { name: "Processing Fee", amount: 100, type: "fixed" as const, original_value: 100 },
+      { name: "Processing Fee", amount: 750, type: "percentage" as const, original_value: 1.5 },
+    ];
+    assert.equal(previewDeductionAmount(items, [PROCESSING, fixed], PROCESSING), 750);
+    assert.equal(previewDeductionAmount(items, [PROCESSING, fixed], fixed), 100);
+  });
+
+  test("two items sharing a name each get their own figure, in order", () => {
+    const second: StatedDeduction = { name: "Processing Fee", amount: 0.25, type: "percentage" };
+    const items = [
+      ITEMS[0],
+      { name: "Processing Fee", amount: 125, type: "percentage" as const, original_value: 0.25 },
+    ];
+    assert.equal(previewDeductionAmount(items, [PROCESSING, second], PROCESSING), 750);
+    assert.equal(previewDeductionAmount(items, [PROCESSING, second], second), 125);
+  });
+
+  test("an input that is not in the stated list has no figure", () => {
+    assert.equal(previewDeductionAmount(ITEMS, [NOTARIAL], { ...PROCESSING }), null);
   });
 });

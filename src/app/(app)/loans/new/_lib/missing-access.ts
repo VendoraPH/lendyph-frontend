@@ -7,7 +7,6 @@
 export interface LoanFormAccess {
   members: boolean;
   products: boolean;
-  fees: boolean;
   collaterals: boolean;
   shareCapital: boolean;
 }
@@ -40,15 +39,6 @@ const RULES: { key: keyof LoanFormAccess; missing: MissingAccess }[] = [
       grant: "Loans → View",
       effect: "No loan product can be chosen.",
       blocking: true,
-    },
-  },
-  {
-    key: "fees",
-    missing: {
-      permission: "fees:view",
-      grant: "Fees → View",
-      effect: "The deductions preview leaves out configured fees. The server still applies them when the loan is saved.",
-      blocking: false,
     },
   },
   {

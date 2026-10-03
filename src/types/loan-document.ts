@@ -70,8 +70,17 @@ export interface LoanDisclosureTotals {
   total_principal: number;
   total_interest: number;
   total_obligation: number;
+  /** The schedule's Total Amortization column, added up by the server. */
+  total_amortization: number;
   total_deductions: number;
   net_proceeds: number;
+  /** Total deductions plus total interest. */
+  total_finance_charges: number;
+  /**
+   * `total_deductions` less the itemised `deductions.items`: printed as its
+   * own line when not 0, negative when the items exceed the total.
+   */
+  unitemised_deductions: number;
 }
 
 /** Co-maker as the disclosure carries it — name and contact only. */

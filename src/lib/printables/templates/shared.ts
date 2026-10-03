@@ -34,7 +34,7 @@ import type { PrintableOrg, PrintField } from "../types";
  * eight template files.
  */
 export { DASH, currencyOrDash, formatCurrency, toNumber };
-export { asArray, asRecord, pick, pickNumber, sum } from "@/lib/api-payload";
+export { asArray, asRecord, pick, pickNumber } from "@/lib/api-payload";
 export { escapeHtml } from "@/lib/html-escape";
 
 /**
@@ -158,11 +158,6 @@ export function parseApiDate(value: unknown): Date | null {
 
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-/** Midnight of the day `date` falls on, locally. The day-counting baseline. */
-export function startOfLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 export function dateOrBlank(value: unknown): string {
@@ -374,25 +369,6 @@ export function annualRateLabel(
   const periods = periodsPerYear(frequency);
   if (periods === null) return null;
   return `${annualRateFmt.format(rate * periods)}% per annum`;
-}
-
-// ---------------------------------------------------------------------------
-// Reconciliation
-// ---------------------------------------------------------------------------
-
-/**
- * What an itemised stack is missing before it adds up to the total.
- *
- * Both the release voucher and the disclosure prefer the server's
- * `total_deductions` over the sum of the `deductions[]` it also sent — the
- * server is the authority on what was withheld, and a voucher that disagrees
- * with the cash is worthless. But when the array is empty or short, the printed
- * lines then visibly fail to add up to the printed total, and the reader is
- * left to do the subtraction. This is the difference, to the centavo, so each
- * document can print it as a line of its own.
- */
-export function unitemisedRemainder(total: number, itemised: number): number {
-  return Math.round((total - itemised) * 100) / 100;
 }
 
 /** Timestamp for a freshly built document. `print-chrome` may restamp it. */

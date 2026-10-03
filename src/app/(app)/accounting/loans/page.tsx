@@ -33,18 +33,17 @@ import {
 /**
  * What Lendy posts for each lending event, in plain language.
  *
- * This is documentation, not data — it mirrors the rules in
- * `@/lib/accounting/posting-rules`, which is what actually runs. It earns its
- * place on this screen because the whole promise of the module is that the
- * books keep themselves, and the fastest way to trust that is to be able to
- * read what it does.
+ * This is documentation, not data — the server writes every journal, and this
+ * describes what it posts. It earns its place on this screen because the
+ * whole promise of the module is that the books keep themselves, and the
+ * fastest way to trust that is to be able to read what it does.
  */
 const POSTING_RULES = [
   {
     event: "Loan released",
     debit: "Loans Receivable",
-    credit: "Cash / Bank / GCash / Maya",
-    note: "The money leaves, and a receivable of the same size takes its place. Releasing a loan is not an expense.",
+    credit: "Cash / Bank / GCash / Maya, and each deduction's own account",
+    note: "The money leaves, and a receivable of the same size takes its place. Releasing a loan is not an expense. Each deduction withheld at release is credited to the account mapped for its type: Processing Fee to 4030 Loan Processing Fee Income, Service Fee to 4040 Service Fee Income, Notarial Fee to 2030 Notarial Fees Payable, Insurance Premium to 2040 Insurance Premium Payable, Share Capital to 3060 Share Capital, and catalog fees to 4080 Other Fee Income. A deduction with no type stays on Loan Processing Fee Income.",
   },
   {
     event: "Payment collected",

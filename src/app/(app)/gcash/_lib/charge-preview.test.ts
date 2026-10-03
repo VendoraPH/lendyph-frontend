@@ -90,10 +90,10 @@ test("a Cash Out total is the server's, to the centavo", () => {
   });
 });
 
-test("whole-peso figures keep their plain form", () => {
+test("whole-peso figures still show two decimals", () => {
   assert.deepEqual(chargePreviewFigures({ status: "ready", preview: PREVIEW }), {
-    charge: "₱15",
-    total: "₱1,515",
+    charge: "₱15.00",
+    total: "₱1,515.00",
   });
 });
 

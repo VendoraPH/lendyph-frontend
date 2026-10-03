@@ -39,6 +39,7 @@
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
+  DASH,
   annualRateLabel,
   asArray,
   asRecord,
@@ -53,10 +54,8 @@ import {
   presentFields,
   rateFrequencyFrom,
   rateLabel,
-  sum,
   termLabelFrom,
   toNumber,
-  unitemisedRemainder,
   type PrintableBuildOptions,
 } from "./shared";
 
@@ -66,7 +65,8 @@ const SCHEDULE_PAGE_BREAK_AT = 12;
 /** Deduction rows the statute wants named individually under finance charges. */
 interface DeductionItem {
   name: string;
-  amount: number;
+  /** The server's pesos; null when it sent none, printed as a dash. */
+  amount: number | null;
 }
 
 function readDeductions(
@@ -78,9 +78,9 @@ function readDeductions(
   const named = items
     .map((item) => ({
       name: String(pick(item, ["name", "label", "description"]) ?? "Deduction"),
-      amount: toNumber(pick(item, ["amount", "value"])) ?? 0,
+      amount: toNumber(pick(item, ["amount", "value"])),
     }))
-    .filter((item) => item.amount !== 0 || item.name !== "Deduction");
+    .filter((item) => (item.amount !== null && item.amount !== 0) || item.name !== "Deduction");
   if (named.length > 0) return named;
 
   // Legacy flat shape — the fixed Processing / Service / Other rows the old
@@ -124,7 +124,7 @@ export function buildDisclosureDoc(
     pick(terms, ["loan_account_number", "application_number"]) ??
     pick(root, ["reference_number", "application_number", "loan_id"]);
 
-  const principal = pickNumber(terms, ["principal_amount", "principal"]) ?? 0;
+  const principal = pickNumber(terms, ["principal_amount", "principal"]);
   const rate = pickNumber(terms, ["interest_rate", "rate"]) ?? 0;
   const interestMethod = humanize(
     pick(terms, ["interest_method", "interest_type"])
@@ -135,32 +135,28 @@ export function buildDisclosureDoc(
   const rawFrequency = pick(terms, ["frequency", "payment_frequency"]);
   const frequency = humanize(rawFrequency);
 
+  // Every figure below is the server's (`DisclosureService`, worked out in
+  // centavos). One it did not send prints as a dash; none is derived here.
   const deductions = readDeductions(deductionsBlock, root);
-  const itemisedTotal = deductions.reduce((acc, d) => acc + d.amount, 0);
   const totalDeductions =
-    pickNumber(deductionsBlock, ["total_deductions", "total"]) ??
     pickNumber(totals, ["total_deductions"]) ??
-    pickNumber(root, ["total_deductions"]) ??
-    itemisedTotal;
+    pickNumber(deductionsBlock, ["total_deductions", "total"]) ??
+    pickNumber(root, ["total_deductions"]);
 
   const totalPayable =
     pickNumber(totals, ["total_obligation", "total_payable"]) ??
     pickNumber(root, ["total_payable"]);
 
-  // Interest is the statement's headline finance charge. Prefer the figure the
-  // API computed from the schedule; only derive it when the payload is the old
-  // flat shape, and never let a rounding artefact print as a negative charge.
-  const totalInterest =
-    pickNumber(totals, ["total_interest"]) ??
-    (totalPayable !== null ? Math.max(0, totalPayable - principal) : null);
+  // Interest is the statement's headline finance charge.
+  const totalInterest = pickNumber(totals, ["total_interest"]);
 
   const netProceeds =
-    pickNumber(deductionsBlock, ["net_proceeds"]) ??
     pickNumber(totals, ["net_proceeds"]) ??
-    pickNumber(root, ["net_proceeds"]) ??
-    principal - totalDeductions;
+    pickNumber(deductionsBlock, ["net_proceeds"]) ??
+    pickNumber(root, ["net_proceeds"]);
 
-  const totalFinanceCharges = totalDeductions + (totalInterest ?? 0);
+  // Total deductions plus total interest, added by the server.
+  const totalFinanceCharges = pickNumber(totals, ["total_finance_charges"]);
 
   const scheduleRows = asArray(
     pick(root, ["amortization_schedule", "amortization_schedules", "schedule"])
@@ -170,19 +166,17 @@ export function buildDisclosureDoc(
    * The lettered finance-charge lines, continuing the statute's enumeration
    * after `a. Interest`.
    *
-   * `totalDeductions` is the server's figure and outranks the sum of the items
-   * it sent alongside — but then the letters below must still add up to
-   * "2. Total Finance Charges", or a borrower reading down the column arrives
-   * at a different number than the one the statement declares. Anything the
-   * items do not account for is disclosed as a charge of its own rather than
-   * left as a discrepancy for the reader to find.
+   * The letters must add up to "2. Total Finance Charges", or a borrower
+   * reading down the column arrives at a different number than the one the
+   * statement declares. Whatever the itemised deductions do not account for is
+   * the server's `unitemised_deductions`, disclosed as a charge of its own.
    */
   const chargeItems: DeductionItem[] = [...deductions];
-  const unitemised = unitemisedRemainder(totalDeductions, itemisedTotal);
-  if (unitemised !== 0) {
+  const unitemised = pickNumber(totals, ["unitemised_deductions"]);
+  if (unitemised !== null && unitemised !== 0) {
     chargeItems.push({
-      // Negative only when the items sum to more than the total the server
-      // sent — one of the two is stale, and the total is the one that governs.
+      // Negative only when the items sum to more than the total — one of the
+      // two is stale, and the total is the one that governs.
       name: unitemised > 0 ? "Other Charges" : "Adjustment",
       amount: unitemised,
     });
@@ -216,7 +210,7 @@ export function buildDisclosureDoc(
       kind: "charges",
       title: "II. Amount of Credit / Loan",
       lines: [
-        { label: "1. Principal Loan Amount", amount: formatCurrency(principal) },
+        { label: "1. Principal Loan Amount", amount: currencyOrDash(principal) },
       ],
     },
     {
@@ -233,13 +227,13 @@ export function buildDisclosureDoc(
             // b., c., d. … continuing the statute's lettered enumeration after
             // interest, so each charge is disclosed on its own line.
             label: `${String.fromCharCode(98 + index)}. ${item.name}`,
-            amount: formatCurrency(item.amount),
+            amount: currencyOrDash(item.amount),
             indent: true,
           })
         ),
         {
           label: "2. Total Finance Charges",
-          amount: formatCurrency(totalFinanceCharges),
+          amount: currencyOrDash(totalFinanceCharges),
           rule: "total",
         },
       ],
@@ -248,14 +242,14 @@ export function buildDisclosureDoc(
       kind: "charges",
       title: "IV. Net Proceeds",
       lines: [
-        { label: "Principal Loan Amount", amount: formatCurrency(principal) },
+        { label: "Principal Loan Amount", amount: currencyOrDash(principal) },
         {
           label: "Less: Upfront Deductions",
-          amount: `(${formatCurrency(totalDeductions)})`,
+          amount: totalDeductions === null ? DASH : `(${formatCurrency(totalDeductions)})`,
         },
         {
           label: "3. Net Proceeds of Loan (Amount Received by Borrower)",
-          amount: formatCurrency(netProceeds),
+          amount: currencyOrDash(netProceeds),
           rule: "grand",
         },
       ],
@@ -297,11 +291,12 @@ export function buildDisclosureDoc(
         { key: "balance", header: "Outstanding Balance", format: "currency", align: "right", width: "19%" },
       ],
       rows: scheduleRows,
+      // The server's column totals; never the rows added up here.
       totals: {
         due_date: "TOTAL",
-        principal: formatCurrency(sum(scheduleRows, "principal")),
-        interest: formatCurrency(sum(scheduleRows, "interest")),
-        amount_due: formatCurrency(sum(scheduleRows, "amount_due")),
+        principal: currencyOrDash(pickNumber(totals, ["total_principal"])),
+        interest: currencyOrDash(totalInterest),
+        amount_due: currencyOrDash(pickNumber(totals, ["total_amortization"])),
       },
     });
   }
