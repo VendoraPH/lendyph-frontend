@@ -80,6 +80,10 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
 
   { code: "2010", name: "Accounts Payable", type: "liability", parent: "2000" },
   { code: "2020", name: "Accrued Expenses", type: "liability", parent: "2000" },
+  // Withheld at release on someone else's behalf (the notary, the insurer)
+  // and owed on until it is paid over: never income.
+  { code: "2030", name: "Notarial Fees Payable", type: "liability", parent: "2000" },
+  { code: "2040", name: "Insurance Premium Payable", type: "liability", parent: "2000" },
 
   { code: "2100", name: "Loans Payable", type: "liability", parent: "2000" },
   { code: "2110", name: "Other Borrowings", type: "liability", parent: "2000" },
@@ -114,6 +118,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // from real earnings forever. NOT 3045 — `statements.ts` already uses that
   // code for its synthetic prior-period line.
   { code: "3050", name: "Opening Balance Equity", type: "equity", parent: "3000" },
+  // Share capital a member pays through a release deduction.
+  { code: "3060", name: "Share Capital", type: "equity", parent: "3000" },
 
   // ── Income ──
   { code: "4000", name: "Income", type: "income", is_group: true },
@@ -124,6 +130,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "4050", name: "Membership Fee Income", type: "income", parent: "4000" },
   { code: "4060", name: "Other Lending Income", type: "income", parent: "4000" },
   { code: "4070", name: "Other Income", type: "income", parent: "4000" },
+  // Configured catalog fees (Settings → Fees) withheld at release.
+  { code: "4080", name: "Other Fee Income", type: "income", parent: "4000" },
 
   // ── Expenses ──
   { code: "5000", name: "Expenses", type: "expense", is_group: true },
@@ -169,6 +177,13 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   interest_income: "4010",
   penalty_income: "4020",
   processing_fee_income: "4030",
+  // Release deductions, credited by type. Anything without a role of its own
+  // stays on processing_fee_income.
+  service_fee_income: "4040",
+  notarial_fees_payable: "2030",
+  insurance_premium_payable: "2040",
+  share_capital: "3060",
+  other_fee_income: "4080",
   credit_loss_expense: "5140",
   allowance_credit_losses: "1200",
   accounts_payable: "2010",
