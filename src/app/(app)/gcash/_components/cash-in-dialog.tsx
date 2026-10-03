@@ -11,17 +11,17 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
-import { ChargePreviewPanel } from "./charge-preview-panel";
 import { PartyFields } from "./party-fields";
+import {
+  EMPTY_TRANSACTION_FIELDS,
+  TransactionFields,
+  type TransactionFieldValues,
+} from "./transaction-fields";
 
 interface Props {
   open: boolean;
@@ -36,20 +36,14 @@ export function CashInDialog({
   party,
   onCreated,
 }: Props) {
-  const [amount, setAmount] = useState("");
-  const [isPending, setIsPending] = useState(false);
-  const [remarks, setRemarks] = useState("");
+  const [values, setValues] = useState<TransactionFieldValues>(EMPTY_TRANSACTION_FIELDS);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setAmount("");
-      setIsPending(false);
-      setRemarks("");
-    }
+    if (open) setValues(EMPTY_TRANSACTION_FIELDS);
   }, [open]);
 
-  const amountNum = Number(amount);
+  const amountNum = Number(values.amount);
   // The charge and total are the server's preview for this exact amount; the
   // browser never works them out. Recording waits until that preview is in.
   const { view: preview, retry: retryPreview } = useGCashChargePreview("cash_in", amountNum);
@@ -63,8 +57,8 @@ export function CashInDialog({
         ...gcashPartyPayload(party),
         type: "cash_in",
         amount: amountNum,
-        is_pending: isPending,
-        remarks: remarks.trim() || undefined,
+        is_pending: values.isPending,
+        remarks: values.remarks.trim() || undefined,
       });
       toast.success(`Cash In recorded. Reference: ${tx?.reference_no ?? "—"}`);
       onCreated?.();
@@ -89,54 +83,13 @@ export function CashInDialog({
 
         <div className="space-y-4">
           <PartyFields party={party} />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="cashin-amount">Amount (₱)</Label>
-            <Input
-              id="cashin-amount"
-              type="number"
-              min={0}
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              autoFocus
-            />
-          </div>
-
-          <ChargePreviewPanel
-            view={preview}
-            action="Cash In"
-            amount={amountNum}
-            onRetry={retryPreview}
+          <TransactionFields
+            type="cash_in"
+            values={values}
+            onChange={setValues}
+            preview={preview}
+            onRetryPreview={retryPreview}
           />
-
-          <div className="flex items-start gap-2">
-            <Checkbox
-              id="cashin-pending"
-              checked={isPending}
-              onCheckedChange={(v) => setIsPending(v === true)}
-            />
-            <div className="space-y-1">
-              <Label htmlFor="cashin-pending" className="font-normal">
-                Pending Payment
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                They received GCash on credit and still owe the cash. Income
-                is deferred until you click Paid.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="cashin-remarks">Remarks (optional)</Label>
-            <Textarea
-              id="cashin-remarks"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={2}
-            />
-          </div>
         </div>
 
         <DialogFooter>

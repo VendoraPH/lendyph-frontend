@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -17,11 +16,14 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { nonMemberParty } from "@/lib/gcash-party";
-import type { GCashParty, GCashTransactionType } from "@/types";
+import type { GCashTransactionType } from "@/types";
+import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
 import { WALK_IN_MAX_LENGTH } from "../_lib/walk-in-form";
-import { CashInDialog } from "./cash-in-dialog";
-import { CashOutDialog } from "./cash-out-dialog";
+import {
+  EMPTY_TRANSACTION_FIELDS,
+  TransactionFields,
+  type TransactionFieldValues,
+} from "./transaction-fields";
 
 interface Props {
   open: boolean;
@@ -31,164 +33,179 @@ interface Props {
 
 /**
  * The single entry point for recording a GCash transaction for someone who is
- * not a member: the teller picks Cash In or Cash Out, then types their name
- * and number. Nothing is searched or picked from a list.
+ * not a member. The teller picks Cash In or Cash Out and the same fields the
+ * row-button dialogs have appear in this one form: a typed Name and Number,
+ * then Amount, Charge, Total, Pending Payment (Cash In) and Remarks. Nothing is
+ * searched or picked from a list.
  *
- * Two steps on purpose. This dialog answers "which way, and for whom", then
- * hands off to the SAME `CashInDialog` / `CashOutDialog` the per-row buttons
- * open, so the amount step cannot diverge between the two entry points.
- *
- * The typed name and number are saved as a walk-in on Continue, because the
- * backend records a transaction against a saved party. Going back and
- * continuing again with the same name and number reuses that walk-in instead of
- * saving a second one.
+ * Submit saves the typed name and number as a walk-in, because the backend
+ * records a transaction against a saved party, then records the transaction.
+ * If recording fails after the walk-in was saved, a retry with the same name
+ * and number reuses it instead of saving a second one.
  */
 export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
   const [type, setType] = useState<GCashTransactionType | null>(null);
-  const [name, setName] = useState("");
-  const [number, setNumber] = useState("");
-  const [step, setStep] = useState<"party" | "amount">("party");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<{ key: string; party: GCashParty } | null>(
-    null,
-  );
-
-  const trimmedName = name.trim();
-  const trimmedNumber = number.trim();
-  const canContinue = !!type && !!trimmedName && !!trimmedNumber && !saving;
 
   /**
    * Closing is the reset point, not an effect keyed on `open`. Reopening must
-   * not inherit the last transaction's party or direction.
+   * not inherit the last transaction's direction or typed values.
    */
   const close = () => {
     setType(null);
-    setName("");
-    setNumber("");
-    setStep("party");
-    setSaved(null);
     onOpenChange(false);
   };
 
-  const finish = () => {
-    onCreated?.();
-    close();
-  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New Transaction</DialogTitle>
+          <DialogDescription>
+            Record a GCash Cash In or Cash Out for a customer who is not a
+            member.
+          </DialogDescription>
+        </DialogHeader>
 
-  const handleContinue = async () => {
-    if (!canContinue) return;
-    const key = `${trimmedName}\u0000${trimmedNumber}`;
-    if (saved?.key === key) {
-      setStep("amount");
-      return;
-    }
-    setSaving(true);
+        <div className="space-y-1.5">
+          <Label>Transaction Type</Label>
+          <RadioGroup
+            value={type ?? ""}
+            onValueChange={(v) => setType(v as GCashTransactionType)}
+            className="flex gap-6"
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <RadioGroupItem value="cash_in" />
+              Cash In
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <RadioGroupItem value="cash_out" />
+              Cash Out
+            </label>
+          </RadioGroup>
+        </div>
+
+        {type ? (
+          // Keyed on the type so switching direction starts the form fresh and
+          // the preview hook always has a type.
+          <NewTransactionForm
+            key={type}
+            type={type}
+            onCancel={close}
+            onCreated={() => {
+              onCreated?.();
+              close();
+            }}
+          />
+        ) : (
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewTransactionForm({
+  type,
+  onCancel,
+  onCreated,
+}: {
+  type: GCashTransactionType;
+  onCancel(): void;
+  onCreated(): void;
+}) {
+  const [name, setName] = useState("");
+  const [number, setNumber] = useState("");
+  const [values, setValues] = useState<TransactionFieldValues>(EMPTY_TRANSACTION_FIELDS);
+  const [submitting, setSubmitting] = useState(false);
+  const savedWalkIn = useRef<{ key: string; id: number } | null>(null);
+
+  const trimmedName = name.trim();
+  const trimmedNumber = number.trim();
+  const amountNum = Number(values.amount);
+  const { view: preview, retry: retryPreview } = useGCashChargePreview(type, amountNum);
+  const canSubmit =
+    !submitting && !!trimmedName && !!trimmedNumber && preview.status === "ready";
+  const action = type === "cash_in" ? "Cash In" : "Cash Out";
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
     try {
-      const walkIn = await gcashService.createNonMember({
-        full_name: trimmedName,
-        mobile_number: trimmedNumber,
+      const key = `${trimmedName}\u0000${trimmedNumber}`;
+      if (savedWalkIn.current?.key !== key) {
+        const walkIn = await gcashService.createNonMember({
+          full_name: trimmedName,
+          mobile_number: trimmedNumber,
+        });
+        savedWalkIn.current = { key, id: walkIn.id };
+      }
+      const tx = await gcashService.createTransaction({
+        gcash_non_member_id: savedWalkIn.current.id,
+        type,
+        amount: amountNum,
+        ...(type === "cash_in" ? { is_pending: values.isPending } : {}),
+        remarks: values.remarks.trim() || undefined,
       });
-      setSaved({ key, party: nonMemberParty(walkIn) });
-      setStep("amount");
+      toast.success(`${action} recorded. Reference: ${tx?.reference_no ?? "—"}`);
+      onCreated();
     } catch (err) {
       toast.error(extractGCashErrorMessage(err));
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
   return (
     <>
-      <Dialog
-        open={open && step === "party"}
-        onOpenChange={(o) => !o && close()}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Transaction</DialogTitle>
-            <DialogDescription>
-              Record a GCash Cash In or Cash Out for a customer who is not a
-              member.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Transaction Type</Label>
-              <RadioGroup
-                value={type ?? ""}
-                onValueChange={(v) => setType(v as GCashTransactionType)}
-                className="flex gap-6"
-              >
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <RadioGroupItem value="cash_in" />
-                  Cash In
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <RadioGroupItem value="cash_out" />
-                  Cash Out
-                </label>
-              </RadioGroup>
-            </div>
-
-            {type && (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newtx-name">Name</Label>
-                  <Input
-                    id="newtx-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    maxLength={WALK_IN_MAX_LENGTH.full_name}
-                    autoComplete="off"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newtx-number">Number</Label>
-                  <Input
-                    id="newtx-number"
-                    type="tel"
-                    inputMode="tel"
-                    value={number}
-                    onChange={(e) => setNumber(e.target.value)}
-                    maxLength={WALK_IN_MAX_LENGTH.mobile_number}
-                    autoComplete="off"
-                    placeholder="09XX XXX XXXX"
-                  />
-                </div>
-              </>
-            )}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="newtx-name">Name</Label>
+            <Input
+              id="newtx-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={WALK_IN_MAX_LENGTH.full_name}
+              autoComplete="off"
+              autoFocus
+            />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="newtx-number">Number</Label>
+            <Input
+              id="newtx-number"
+              type="tel"
+              inputMode="tel"
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              maxLength={WALK_IN_MAX_LENGTH.mobile_number}
+              autoComplete="off"
+              placeholder="09XX XXX XXXX"
+            />
+          </div>
+        </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button onClick={handleContinue} disabled={!canContinue}>
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <TransactionFields
+          type={type}
+          values={values}
+          onChange={setValues}
+          preview={preview}
+          onRetryPreview={retryPreview}
+        />
+      </div>
 
-      {step === "amount" && saved && type === "cash_in" && (
-        <CashInDialog
-          open
-          onOpenChange={(o) => !o && setStep("party")}
-          party={saved.party}
-          onCreated={finish}
-        />
-      )}
-      {step === "amount" && saved && type === "cash_out" && (
-        <CashOutDialog
-          open
-          onOpenChange={(o) => !o && setStep("party")}
-          party={saved.party}
-          onCreated={finish}
-        />
-      )}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit} disabled={!canSubmit}>
+          {submitting ? "Saving…" : `Record ${action}`}
+        </Button>
+      </DialogFooter>
     </>
   );
 }
