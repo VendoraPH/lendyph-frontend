@@ -11,15 +11,17 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
-import { ChargePreviewPanel } from "./charge-preview-panel";
+import { PartyFields } from "./party-fields";
+import {
+  EMPTY_TRANSACTION_FIELDS,
+  TransactionFields,
+  type TransactionFieldValues,
+} from "./transaction-fields";
 
 interface Props {
   open: boolean;
@@ -34,18 +36,14 @@ export function CashOutDialog({
   party,
   onCreated,
 }: Props) {
-  const [amount, setAmount] = useState("");
-  const [remarks, setRemarks] = useState("");
+  const [values, setValues] = useState<TransactionFieldValues>(EMPTY_TRANSACTION_FIELDS);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setAmount("");
-      setRemarks("");
-    }
+    if (open) setValues(EMPTY_TRANSACTION_FIELDS);
   }, [open]);
 
-  const amountNum = Number(amount);
+  const amountNum = Number(values.amount);
   // The charge and total are the server's preview for this exact amount; the
   // browser never works them out. A Cash Out the charge would take all of is
   // the server's 422, shown as it words it. Recording waits for the preview.
@@ -60,7 +58,7 @@ export function CashOutDialog({
         ...gcashPartyPayload(party),
         type: "cash_out",
         amount: amountNum,
-        remarks: remarks.trim() || undefined,
+        remarks: values.remarks.trim() || undefined,
       });
       toast.success(`Cash Out recorded. Reference: ${tx?.reference_no ?? "—"}`);
       onCreated?.();
@@ -84,36 +82,14 @@ export function CashOutDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="cashout-amount">Amount (₱)</Label>
-            <Input
-              id="cashout-amount"
-              type="number"
-              min={0}
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              autoFocus
-            />
-          </div>
-
-          <ChargePreviewPanel
-            view={preview}
-            action="Cash Out"
-            amount={amountNum}
-            onRetry={retryPreview}
+          <PartyFields party={party} />
+          <TransactionFields
+            type="cash_out"
+            values={values}
+            onChange={setValues}
+            preview={preview}
+            onRetryPreview={retryPreview}
           />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="cashout-remarks">Remarks (optional)</Label>
-            <Textarea
-              id="cashout-remarks"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={2}
-            />
-          </div>
         </div>
 
         <DialogFooter>
