@@ -992,8 +992,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // The answer Confirm Release stands on: the release preview with no
   // insurance, else the insurance preview read against the same fees as the
   // fee list on screen. When the two were read against different fees, both
-  // are read again.
-  const { view: releaseConfirm, reread: rereadRelease } = useReleaseConfirm({
+  // are read again, once per mismatch.
+  const {
+    view: releaseConfirm,
+    stuck: releaseFeesStuck,
+    reread: rereadRelease,
+  } = useReleaseConfirm({
+    open: releaseOpen,
     base: releasePreview,
     query: releaseInsurance,
     insurance: insurancePreview,
@@ -3973,14 +3978,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
               )}
             </div>
 
-            {(releaseConfirm.status === "stale" || releaseConfirm.status === "no_premium") && (
+            {(releaseFeesStuck || releaseConfirm.status === "no_premium") && (
               <div
                 role="alert"
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
               >
                 <p className="text-sm text-destructive">
-                  {releaseConfirm.status === "stale"
-                    ? "The fees changed while these figures were being read. They are being read again."
+                  {releaseFeesStuck
+                    ? "The fees changed while these figures were being read, and they still disagree. Use Try again to read them again before confirming."
                     : "The server sent no premium for this insurance, so the release can't be confirmed."}
                 </p>
                 <Button type="button" variant="outline" size="sm" onClick={rereadRelease}>

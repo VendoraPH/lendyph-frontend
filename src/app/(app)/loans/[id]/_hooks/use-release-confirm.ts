@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useState } from "react";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import type { ReleasePreviewInsuranceQuery } from "@/services/loan.service";
 import {
   releaseConfirmView,
+  staleReread,
   type ReleaseConfirmView,
   type ReleaseInsuranceView,
 } from "../_lib/release-figures";
@@ -14,41 +16,46 @@ import type { ReleasePreviewState } from "./use-release-preview";
  *
  * A mismatch means the fees changed between the release preview (the fee list
  * on screen) and the insurance preview (the net and the fingerprint sent).
- * Which one is out of date cannot be told from here, so both are read again,
- * once per mismatched pair of fingerprints: a pair that survives the re-read is
- * left for `reread` (the dialog's Try again) rather than asked about forever.
+ * Both are read again, once per mismatched pair (`staleReread`). `stuck` is a
+ * pair that survived that re-read: the dialog then asks the cashier to use
+ * Try again (`reread`) rather than re-reading forever. The remembered pair is
+ * forgotten each time the dialog opens.
+ *
+ * The re-read is started during render, as `useReleasePreview` starts its own
+ * read: the previews turn to loading in the same pass, so the mismatch is
+ * never painted.
  */
 export function useReleaseConfirm({
+  open,
   base,
   query,
   insurance,
   reloadBase,
   retryInsurance,
 }: {
+  open: boolean;
   base: ReleasePreviewState;
   query: ReleasePreviewInsuranceQuery | null;
   insurance: ReleaseInsuranceView;
   reloadBase: () => void;
   retryInsurance: () => void;
-}): { view: ReleaseConfirmView; reread: () => void } {
+}): { view: ReleaseConfirmView; stuck: boolean; reread: () => void } {
+  const [rereadFor, setRereadFor] = useState<string | null>(null);
+  if (useDialogOpening(open, true) && rereadFor !== null) setRereadFor(null);
+
   const basePreview = base.status === "loaded" ? base.preview : null;
   const view = releaseConfirmView(basePreview, query, insurance);
-  const mismatch =
-    view.status === "stale" && basePreview !== null && insurance.status === "ready"
-      ? `${basePreview.fee_fingerprint}|${insurance.preview.fee_fingerprint}`
-      : null;
+  const stale = staleReread(view, basePreview, insurance, rereadFor);
 
   const reread = useCallback(() => {
     reloadBase();
     retryInsurance();
   }, [reloadBase, retryInsurance]);
 
-  const rereadFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (mismatch === null || mismatch === rereadFor.current) return;
-    rereadFor.current = mismatch;
+  if (stale.reread) {
+    setRereadFor(stale.pair);
     reread();
-  }, [mismatch, reread]);
+  }
 
-  return { view, reread };
+  return { view, stuck: stale.stuck, reread };
 }

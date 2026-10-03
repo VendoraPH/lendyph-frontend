@@ -28,6 +28,7 @@ import {
   releaseInsurancePayload,
   releaseInsuranceQuery,
   releaseInsuranceView,
+  staleReread,
   type ReleaseInsuranceOutcome,
 } from "./release-figures";
 
@@ -251,5 +252,49 @@ describe("releaseConfirmView", () => {
   test("insurance typed but no premium in the answer: nothing to send, so nothing to confirm", () => {
     const noPremium = { status: "ready" as const, preview: { ...PREVIEW, insurance: null } };
     assert.deepEqual(releaseConfirmView(BASE, query, noPremium), { status: "no_premium" });
+  });
+});
+
+describe("staleReread", () => {
+  const BASE: LoanReleasePreview = {
+    ...PREVIEW,
+    insurance: null,
+    total_deductions_after_insurance: "1250.00",
+    net_proceeds_after_insurance: "13750.00",
+  };
+  const query = typed({ percentage: "2" });
+  const newer = { status: "ready" as const, preview: { ...PREVIEW, fee_fingerprint: "a41b07" } };
+  const stale = releaseConfirmView(BASE, query, newer);
+
+  test("a mismatch not yet re-read is read again", () => {
+    assert.deepEqual(staleReread(stale, BASE, newer, null), {
+      pair: "9f2c1e|a41b07",
+      reread: true,
+      stuck: false,
+    });
+  });
+
+  test("the same mismatch after its re-read is stuck, not read again", () => {
+    assert.deepEqual(staleReread(stale, BASE, newer, "9f2c1e|a41b07"), {
+      pair: "9f2c1e|a41b07",
+      reread: false,
+      stuck: true,
+    });
+  });
+
+  test("a different mismatch is read again, whatever was re-read before", () => {
+    assert.deepEqual(staleReread(stale, BASE, newer, "9f2c1e|77d0aa"), {
+      pair: "9f2c1e|a41b07",
+      reread: true,
+      stuck: false,
+    });
+  });
+
+  test("nothing to do unless the view is stale", () => {
+    const ready = { status: "ready" as const, preview: PREVIEW };
+    const none = { pair: null, reread: false, stuck: false };
+    assert.deepEqual(staleReread(releaseConfirmView(BASE, query, ready), BASE, ready, "9f2c1e|a41b07"), none);
+    assert.deepEqual(staleReread({ status: "waiting" }, BASE, { status: "loading" }, null), none);
+    assert.deepEqual(staleReread({ status: "waiting" }, null, newer, null), none);
   });
 });

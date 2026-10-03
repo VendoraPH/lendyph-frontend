@@ -177,6 +177,33 @@ export function releaseConfirmView(
   return { status: "ready", answer };
 }
 
+/**
+ * What to do about a `stale` confirm view, given the mismatched pair of
+ * fingerprints already re-read in this dialog (null for none).
+ *
+ * Which preview is out of date cannot be told, so both are read again — once
+ * per pair. `pair` is the mismatch as a key (null unless the view is stale);
+ * `reread` says to read both again now; `stuck` says the same pair survived a
+ * re-read, so it is left to the cashier's Try again rather than asked about
+ * forever.
+ */
+export function staleReread(
+  view: ReleaseConfirmView,
+  base: LoanReleasePreview | null,
+  insurance: ReleaseInsuranceView,
+  lastReread: string | null,
+): { pair: string | null; reread: boolean; stuck: boolean } {
+  const pair =
+    view.status === "stale" && base !== null && insurance.status === "ready"
+      ? `${base.fee_fingerprint}|${insurance.preview.fee_fingerprint}`
+      : null;
+  return {
+    pair,
+    reread: pair !== null && pair !== lastReread,
+    stuck: pair !== null && pair === lastReread,
+  };
+}
+
 /** Why an insurance preview failed, in the server's words where it gave any. */
 export function releaseInsuranceFailureMessage(err: unknown): string {
   return getErrorMessage(err, "We couldn't work out the insurance. Please try again.");

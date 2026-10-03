@@ -210,6 +210,24 @@ test("the API's padded strings are read as numbers", () => {
   );
 });
 
+test("an item with no original_value falls back to its amount, as deductionInputsFrom does", () => {
+  // `$item['original_value'] ?? $item['amount']`: null and absent alike.
+  assert.deepEqual(
+    storedDeductionInputs([
+      { name: "Processing Fee", amount: 1.5, type: "percentage", original_value: null as unknown as number },
+      { name: "Service Fee", amount: 2.25, type: "percentage" } as StoredDeduction,
+      { name: "Membership Fee", amount: 250.5, type: "fixed", original_value: null as unknown as number },
+      { name: "Notarial Fee", amount: 300, type: "fixed" } as StoredDeduction,
+    ]),
+    [
+      { name: "Processing Fee", amount: 1.5, type: "percentage" },
+      { name: "Service Fee", amount: 2.25, type: "percentage" },
+      { name: "Membership Fee", amount: 250.5, type: "fixed" },
+      { name: "Notarial Fee", amount: 300, type: "fixed" },
+    ],
+  );
+});
+
 test("a saved loan with no deductions states none", () => {
   assert.deepEqual(storedDeductionInputs([]), []);
   assert.deepEqual(storedDeductionInputs(null), []);
