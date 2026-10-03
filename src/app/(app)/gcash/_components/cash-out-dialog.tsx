@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -15,14 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
-import { useGCashTiers } from "@/hooks/use-gcash-tiers";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
-import { cashOutTotalIssue } from "../_lib/cash-out-total";
-import { gcashTierIssue } from "../_lib/tier-issue";
-import { GCashTierNotice } from "./gcash-tier-notice";
+import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
+import { ChargePreviewPanel } from "./charge-preview-panel";
 
 interface Props {
   open: boolean;
@@ -37,13 +34,6 @@ export function CashOutDialog({
   party,
   onCreated,
 }: Props) {
-  const {
-    tiers,
-    resolveCharge,
-    loading: tiersLoading,
-    error: tiersError,
-    refresh: retryTiers,
-  } = useGCashTiers();
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -56,30 +46,11 @@ export function CashOutDialog({
   }, [open]);
 
   const amountNum = Number(amount);
-  const charge = useMemo(
-    () =>
-      Number.isFinite(amountNum) && amountNum > 0
-        ? resolveCharge(amountNum, "cash_out")
-        : null,
-    [amountNum, resolveCharge],
-  );
-  const total = charge === null ? null : amountNum - charge;
-  const tierIssue = gcashTierIssue({
-    loading: tiersLoading,
-    error: tiersError,
-    tierCount: tiers.length,
-    amount: amountNum,
-    charge,
-  });
-  // The one reason Record is disabled that the tier notice doesn't cover.
-  const totalIssue = cashOutTotalIssue(charge, total);
-  const canSubmit =
-    !submitting &&
-    amountNum > 0 &&
-    charge !== null &&
-    total !== null &&
-    totalIssue === null &&
-    !tiersLoading;
+  // The charge and total are the server's preview for this exact amount; the
+  // browser never works them out. A Cash Out the charge would take all of is
+  // the server's 422, shown as it words it. Recording waits for the preview.
+  const { view: preview, retry: retryPreview } = useGCashChargePreview("cash_out", amountNum);
+  const canSubmit = !submitting && preview.status === "ready";
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -127,37 +98,12 @@ export function CashOutDialog({
             />
           </div>
 
-          <GCashTierNotice
-            issue={tierIssue}
+          <ChargePreviewPanel
+            view={preview}
             action="Cash Out"
             amount={amountNum}
-            onRetry={() => void retryTiers()}
+            onRetry={retryPreview}
           />
-
-          {totalIssue && (
-            <p role="alert" className="text-sm text-destructive">
-              {totalIssue}
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-muted-foreground">Charge</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                {charge !== null
-                  ? formatCurrency(charge)
-                  : tierIssue === "out_of_range"
-                    ? "No tier"
-                    : "—"}
-              </div>
-            </div>
-            <div>
-              <Label className="text-muted-foreground">Total</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
-                {total !== null ? formatCurrency(total) : "—"}
-              </div>
-            </div>
-          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="cashout-remarks">Remarks (optional)</Label>

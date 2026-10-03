@@ -29,6 +29,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
   loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
+  // `manage` only: creating, editing and deleting products. Viewing them needs
+  // `loans:view`, so there is no `loan_products:view` to offer.
+  loan_products: ["manage"],
   payments: ["view", "create", "update", "void"],
   share_capital: ["view", "create", "update"],
   collaterals: ["view", "create", "update", "delete"],

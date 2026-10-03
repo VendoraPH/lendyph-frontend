@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargePreviewView, previewFailureView, type ChargePreviewOutcome } from "./charge-preview";
+import {
+  chargePreviewFigures,
+  chargePreviewView,
+  previewFailureView,
+  type ChargePreviewOutcome,
+} from "./charge-preview";
 
 const PREVIEW = { type: "cash_in" as const, amount: 1500, charge_amount: 15, total_amount: 1515 };
 const READY: ChargePreviewOutcome = { amount: 1500, attempt: 0, view: { status: "ready", preview: PREVIEW } };
@@ -57,4 +62,48 @@ test("a 403 says the role can't record GCash, with nothing to retry", () => {
     status: "forbidden",
     message: "You don't have permission to record GCash transactions.",
   });
+});
+
+test("the cash_out 422 shows the server's message, centavos and all", () => {
+  const msg = "Amount must be more than the ₱10.50 charge.";
+  assert.deepEqual(previewFailureView(httpError(422, { message: msg, errors: { amount: [msg] } })), {
+    status: "invalid",
+    message: msg,
+  });
+});
+
+// The dialogs show the server's figures to the centavo: a ₱10.50 charge is
+// ₱10.50, never rounded to ₱11.
+test("the charge and total are shown to the centavo", () => {
+  const preview = { type: "cash_in" as const, amount: 1000, charge_amount: 10.5, total_amount: 1010.5 };
+  assert.deepEqual(chargePreviewFigures({ status: "ready", preview }), {
+    charge: "₱10.50",
+    total: "₱1,010.50",
+  });
+});
+
+test("a Cash Out total is the server's, to the centavo", () => {
+  const preview = { type: "cash_out" as const, amount: 20.25, charge_amount: 10.5, total_amount: 9.75 };
+  assert.deepEqual(chargePreviewFigures({ status: "ready", preview }), {
+    charge: "₱10.50",
+    total: "₱9.75",
+  });
+});
+
+test("whole-peso figures keep their plain form", () => {
+  assert.deepEqual(chargePreviewFigures({ status: "ready", preview: PREVIEW }), {
+    charge: "₱15",
+    total: "₱1,515",
+  });
+});
+
+test("no figures until the preview for this amount is in", () => {
+  assert.deepEqual(chargePreviewFigures({ status: "idle" }), { charge: "—", total: "—" });
+  assert.deepEqual(chargePreviewFigures({ status: "loading" }), {
+    charge: "Calculating…",
+    total: "Calculating…",
+  });
+  assert.deepEqual(chargePreviewFigures({ status: "no_tier" }), { charge: "No tier", total: "—" });
+  assert.deepEqual(chargePreviewFigures({ status: "invalid", message: "x" }), { charge: "—", total: "—" });
+  assert.deepEqual(chargePreviewFigures({ status: "error", message: "x" }), { charge: "—", total: "—" });
 });

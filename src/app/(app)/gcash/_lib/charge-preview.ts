@@ -1,3 +1,4 @@
+import { formatCurrencyExact } from "@/lib/format";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import type { GCashChargePreview } from "@/types";
 
@@ -50,6 +51,32 @@ export function chargePreviewView(
     return { status: "loading" };
   }
   return outcome.view;
+}
+
+/**
+ * The Charge and Total boxes of a Cash In / Cash Out dialog: the server's
+ * figures to the centavo (a ₱10.50 charge is ₱10.50, never ₱11), or why there
+ * are none yet.
+ */
+export interface ChargePreviewFigures {
+  charge: string;
+  total: string;
+}
+
+export function chargePreviewFigures(view: ChargePreviewView): ChargePreviewFigures {
+  switch (view.status) {
+    case "ready":
+      return {
+        charge: formatCurrencyExact(view.preview.charge_amount),
+        total: formatCurrencyExact(view.preview.total_amount),
+      };
+    case "loading":
+      return { charge: "Calculating…", total: "Calculating…" };
+    case "no_tier":
+      return { charge: "No tier", total: "—" };
+    default:
+      return { charge: "—", total: "—" };
+  }
 }
 
 interface ErrorResponse {

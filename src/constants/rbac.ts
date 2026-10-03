@@ -27,6 +27,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "loans:approve",
       "loans:reject",
       "loans:release",
+      // Creating, editing and deleting loan products. Seeded for admin and
+      // super_admin only; viewing products needs just `loans:view`.
+      "loan_products:manage",
       "payments:view",
       "payments:create",
       "payments:update",

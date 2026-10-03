@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useDialogOpening } from "@/hooks";
+import { useDialogOpening, usePermission } from "@/hooks";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
 import { completeRows } from "@/lib/paginate";
 import { decimalInputValue } from "@/lib/percent";
-import { RouteGuard } from "@/components/common";
+import { PermissionGate, RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1330,6 +1330,9 @@ function ProductActionsCell({
 // ── Main Page ──
 
 function LoanProductsContent() {
+  // Creating, editing (activating and deactivating included) and deleting a
+  // product needs `loan_products:manage`; the page itself only `loans:view`.
+  const canManage = usePermission().can("loan_products:manage");
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -1406,13 +1409,15 @@ function LoanProductsContent() {
             Configure loan products and terms for loan applications
           </p>
         </div>
-        <Button
-          onClick={() => setAddDialogOpen(true)}
-          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Loan Product
-        </Button>
+        <PermissionGate permission="loan_products:manage">
+          <Button
+            onClick={() => setAddDialogOpen(true)}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark w-full sm:w-auto"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Loan Product
+          </Button>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}
@@ -1477,6 +1482,7 @@ function LoanProductsContent() {
                     <Switch
                       checked={product.is_active}
                       onCheckedChange={() => handleToggleStatus(product.id)}
+                      disabled={!canManage}
                     />
                   </div>
                   {product.description && (
@@ -1485,12 +1491,14 @@ function LoanProductsContent() {
                     </p>
                   )}
                 </div>
-                <ProductActionsCell
-                  product={product}
-                  onEdit={(form) => handleEdit(product.id, form)}
-                  onToggleStatus={() => handleToggleStatus(product.id)}
-                  onDelete={() => handleDelete(product.id)}
-                />
+                <PermissionGate permission="loan_products:manage">
+                  <ProductActionsCell
+                    product={product}
+                    onEdit={(form) => handleEdit(product.id, form)}
+                    onToggleStatus={() => handleToggleStatus(product.id)}
+                    onDelete={() => handleDelete(product.id)}
+                  />
+                </PermissionGate>
               </div>
               <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
                 <div>
@@ -1610,6 +1618,7 @@ function LoanProductsContent() {
                         <Switch
                           checked={product.is_active}
                           onCheckedChange={() => handleToggleStatus(product.id)}
+                          disabled={!canManage}
                         />
                         <span className={cn("text-xs font-medium", product.is_active ? "text-green-600" : "text-muted-foreground")}>
                           {product.is_active ? "Active" : "Inactive"}
@@ -1617,12 +1626,14 @@ function LoanProductsContent() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <ProductActionsCell
-                        product={product}
-                        onEdit={(form) => handleEdit(product.id, form)}
-                        onToggleStatus={() => handleToggleStatus(product.id)}
-                        onDelete={() => handleDelete(product.id)}
-                      />
+                      <PermissionGate permission="loan_products:manage">
+                        <ProductActionsCell
+                          product={product}
+                          onEdit={(form) => handleEdit(product.id, form)}
+                          onToggleStatus={() => handleToggleStatus(product.id)}
+                          onDelete={() => handleDelete(product.id)}
+                        />
+                      </PermissionGate>
                     </TableCell>
                   </TableRow>
                 ))}
