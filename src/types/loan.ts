@@ -1,5 +1,6 @@
 import type { ApiScheduleRow } from "@/lib/amortization";
 import type { StaffMember } from "./staff";
+import type { SecurityStatus } from "./collateral";
 
 export type LoanStatus =
   | "draft"
@@ -76,6 +77,62 @@ export interface LoanReleasePreview {
   net_proceeds: string;
   fee_fingerprint: string;
   overlap_warnings?: { fee_id: number; fee_name: string; message: string }[];
+}
+
+/**
+ * `POST /loans/preview`: what the loan form shows for the terms and
+ * collaterals entered so far. Every field is optional; the server works out
+ * whatever sections it can and writes nothing.
+ */
+export interface LoanFormPreviewRequest {
+  loan_product_id?: number;
+  principal_amount?: number;
+  interest_rate?: number;
+  term?: number;
+  frequency?: string;
+  start_date?: string;
+  scb_amount?: number;
+  collaterals?: { collateral_id: number; snapshot_value: number }[];
+}
+
+/** One period of the previewed schedule, to the centavo. */
+export interface LoanFormPreviewRow {
+  period_number: number;
+  due_date: string;
+  principal_due: number;
+  interest_due: number;
+  total_due: number;
+  share_capital_build_up: number;
+  total_payment: number;
+  remaining_balance: number;
+}
+
+/**
+ * The `POST /loans/preview` answer. Every figure is the server's: the form
+ * displays them and works none of them out.
+ *
+ * `amortization` is null until the product, a principal, a rate, a term, a
+ * frequency and a start date are all known. It is built by the code that
+ * writes the real schedule at release, with the product's interest method
+ * (`interest_method` says which).
+ */
+export interface LoanFormPreview {
+  collateral: {
+    total_value: number;
+    security_status: SecurityStatus;
+    short_by: number;
+  };
+  amortization: {
+    maturity_date: string;
+    interest_method: string;
+    rows: LoanFormPreviewRow[];
+    totals: {
+      principal_due: number;
+      interest_due: number;
+      share_capital_build_up: number;
+      total_payment: number;
+    };
+  } | null;
 }
 
 /**

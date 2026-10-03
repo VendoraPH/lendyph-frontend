@@ -80,6 +80,7 @@ export const API_ENDPOINTS = {
     LIST: "/loans",
     DETAIL: (id: number) => `/loans/${id}`,
     CREATE: "/loans",
+    PREVIEW: "/loans/preview",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
     RELEASE: (id: number) => `/loans/${id}/release`,
