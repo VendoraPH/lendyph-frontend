@@ -128,16 +128,24 @@ jobs:
       # unseen — 9 of them high. Cleaning that up once only resets the clock;
       # this is what stops it recurring.
       #
-      # Fails on high/critical only. Two moderate advisories are knowingly
-      # accepted (exceljs pins uuid ^8.3.0 and no 4.x can widen it; the
-      # vulnerable uuid path needs a caller-supplied `buf`, and exceljs calls
-      # uuidv4() with no arguments inside a conditional-formatting serializer
-      # this app never triggers). Failing on moderate would red every unrelated
-      # PR over that, and a check that cries wolf is one people learn to ignore.
+      # The first line prints the full report, dev tooling included, so every
+      # advisory stays visible in the log. It never fails the job.
+      #
+      # The second line fails on high/critical advisories in what ships
+      # (--omit=dev). The dev-only highs left are all one chain: braces
+      # (GHSA-vfj7-8cjw-p6xm) has no patched release, and the advisory covers
+      # every version. It reaches us only through dev tooling, via micromatch
+      # and fast-glob from eslint-config-next and shadcn. No override can clear
+      # it, so failing on it would red every unrelated PR, and a check that
+      # cries wolf is one people learn to ignore. If braces ships a fix, this
+      # can audit dev dependencies again.
+      #
+      # The two moderate uuid advisories this step used to accept are gone:
+      # the exceljs -> uuid ^11.1.1 override in package.json clears them.
       - name: Audit npm dependencies
         run: |
           npm audit || true
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
 
       # Every NEXT_PUBLIC_* used in src/ must be documented in .env.example.
       # A deployment cannot set a var it has never been told about, and these
