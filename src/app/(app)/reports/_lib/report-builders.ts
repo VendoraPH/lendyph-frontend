@@ -1199,7 +1199,10 @@ export function buildStatementOfAccountDoc(
     items: [
       kpi("Principal", currencyOrDash(pick(loan, ["principal_amount", "principal"]))),
       kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
-      kpi("Outstanding Balance", currencyOrDash(outstanding), { tone: "negative" }),
+      kpi("Outstanding Balance", currencyOrDash(outstanding), {
+        tone: "negative",
+        hint: "Principal and Interest",
+      }),
       kpi(
         "Past Due",
         currencyOrDash(pick(summary, ["overdue_amount", "past_due_amount", "total_overdue"])),

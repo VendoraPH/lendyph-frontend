@@ -1392,6 +1392,12 @@ const SOA_PAYLOAD = {
   transaction_totals: { debit: 0, credit: 9500 },
 };
 
+test("statement of account captions the outstanding balance as principal and interest", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+
+  assert.equal(kpi(doc, "Outstanding Balance").hint, "Principal and Interest");
+});
+
 test("statement of account opens with the account particulars", () => {
   const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
 

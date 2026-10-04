@@ -125,7 +125,7 @@ function SectionRenderer({ section }: { section: ReportSection }) {
                 {item.value}
               </p>
               {item.hint && (
-                <p className="text-[10px] text-muted-foreground leading-tight">
+                <p className="text-[10px] italic text-muted-foreground leading-tight">
                   {item.hint}
                 </p>
               )}
