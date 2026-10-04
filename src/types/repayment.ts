@@ -1,3 +1,15 @@
+/** One amortization period a payment was applied to. */
+export interface RepaymentAllocation {
+  schedule_id?: number;
+  period?: number;
+  due_date?: string;
+  principal?: number;
+  interest?: number;
+  penalty?: number;
+  amount_applied?: number;
+  remaining_balance?: number;
+}
+
 export interface Repayment {
   id: number;
   loan_id: number;
@@ -18,6 +30,8 @@ export interface Repayment {
   scb_paid?: number;
   penalty_paid?: number;
   excess_amount?: number;
+  /** Per-period application, when the API includes it on the payment. */
+  allocations?: RepaymentAllocation[];
 }
 
 export interface CreateRepaymentData {
