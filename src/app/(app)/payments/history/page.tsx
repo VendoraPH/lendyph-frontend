@@ -43,6 +43,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  paymentAmountFigures,
+  paymentTotalsParams,
+  readPaymentTotals,
+  totalFigure,
+  type PaymentTotals,
+} from "./_lib/payment-history";
+import {
   formatCurrency as formatPHP,
   formatDate,
   formatDateTime,
@@ -219,7 +226,7 @@ function VoidPaymentDialog({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount</span>
               <span className="font-bold text-green-700">
-                {formatPHP(payment.amount + payment.penalty_amount)}
+                {paymentAmountFigures(payment).amount}
               </span>
             </div>
             <div className="flex justify-between">
@@ -371,7 +378,7 @@ function PaymentCard({
                   : "text-green-700"
               )}
             >
-              {formatPHP(payment.amount + payment.penalty_amount)}
+              {paymentAmountFigures(payment).amount}
             </p>
           </div>
           <div>
@@ -431,6 +438,7 @@ function PaymentHistoryContent() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
+  const [totalsReload, setTotalsReload] = useState(0);
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   // Set only when the drain gave up with pages outstanding, i.e. this screen is
@@ -495,21 +503,42 @@ function PaymentHistoryContent() {
     });
   }, [payments, search, statusTab, dateFrom, dateTo]);
 
-  // Summary cards (over the full unfiltered set for totals context, over filtered for display)
-  const totalCollected = useMemo(
-    () =>
-      filtered
-        .filter((p) => p.status === "completed")
-        .reduce((s, p) => s + p.amount + p.penalty_amount, 0),
-    [filtered]
+  // Summary cards: the server's totals over the same search and date range
+  // (`meta.totals`), asked once the filters settle. A dash shows while they
+  // load, until they match the filters on screen, and when the server sent
+  // none; the browser never sums the rows for them.
+  const totalsParams = useMemo(
+    () => paymentTotalsParams({ search, dateFrom, dateTo }),
+    [search, dateFrom, dateTo]
   );
-  const totalVoided = useMemo(
-    () =>
-      filtered
-        .filter((p) => p.status === "voided")
-        .reduce((s, p) => s + p.amount + p.penalty_amount, 0),
-    [filtered]
-  );
+  const totalsKey = `${JSON.stringify(totalsParams)}#${totalsReload}`;
+  const [totalsRequest, setTotalsRequest] = useState(() => ({ key: totalsKey, params: totalsParams }));
+  const [totals, setTotals] = useState<{ key: string; figures: PaymentTotals } | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(
+      () => setTotalsRequest((prev) => (prev.key === totalsKey ? prev : { key: totalsKey, params: totalsParams })),
+      300
+    );
+    return () => clearTimeout(t);
+  }, [totalsKey, totalsParams]);
+
+  useEffect(() => {
+    let current = true;
+    repaymentService
+      .listPage(totalsRequest.params)
+      .then((body) => {
+        if (current) setTotals({ key: totalsRequest.key, figures: readPaymentTotals(body) });
+      })
+      .catch(() => {
+        if (current) setTotals({ key: totalsRequest.key, figures: { collected: null, voided: null } });
+      });
+    return () => {
+      current = false;
+    };
+  }, [totalsRequest]);
+
+  const shownTotals = totals?.key === totalsKey ? totals.figures : null;
   const transactionCount = filtered.length;
 
   const handleVoidClick = (p: MockPayment) => {
@@ -522,6 +551,7 @@ function PaymentHistoryContent() {
       await repaymentService.void(id, { void_reason: reason });
       toast.success("Payment voided");
       fetchPayments();
+      setTotalsReload((n) => n + 1);
     } catch {
       toast.error("We couldn't void the payment. Please try again.");
     }
@@ -542,7 +572,7 @@ function PaymentHistoryContent() {
           shown={shortfall.shown}
           total={shortfall.total}
           noun="payments"
-          consequence="The totals below, the search box and the status tabs all describe only the payments that loaded, and a payment that is missing cannot be voided from this screen."
+          consequence="The search box and the status tabs describe only the payments that loaded, and a payment that is missing cannot be voided from this screen. The Total Collected and Total Voided cards come from the server and cover every payment."
         />
       )}
 
@@ -557,7 +587,7 @@ function PaymentHistoryContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-700">
-              {formatPHP(totalCollected)}
+              {totalFigure(shownTotals?.collected)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               From completed payments
@@ -572,7 +602,7 @@ function PaymentHistoryContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-destructive">
-              {formatPHP(totalVoided)}
+              {totalFigure(shownTotals?.voided)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Reversed transactions
@@ -692,6 +722,7 @@ function PaymentHistoryContent() {
               <TableBody>
                 {filtered.map((payment) => {
                   const isVoided = payment.status === "voided";
+                  const figures = paymentAmountFigures(payment);
                   return (
                     <TableRow
                       key={payment.id}
@@ -729,11 +760,11 @@ function PaymentHistoryContent() {
                               : "text-green-700"
                           )}
                         >
-                          {formatPHP(payment.amount + payment.penalty_amount)}
+                          {figures.amount}
                         </span>
-                        {payment.penalty_amount > 0 && (
+                        {figures.penaltyNote && (
                           <p className="text-xs text-amber-600 text-right">
-                            incl. {formatPHP(payment.penalty_amount)} penalty
+                            {figures.penaltyNote}
                           </p>
                         )}
                       </TableCell>

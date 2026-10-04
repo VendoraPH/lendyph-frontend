@@ -20,6 +20,17 @@ export interface Repayment {
   excess_amount?: number;
 }
 
+/**
+ * `GET /repayments` `meta.totals`: SUM(amount_paid) of posted (`collected`)
+ * and voided (`voided`) repayments over the request's search, loan, member
+ * and date filters (its `status` filter is ignored). Summed in SQL; the
+ * browser shows them as sent.
+ */
+export interface RepaymentListTotals {
+  collected?: number | string | null;
+  voided?: number | string | null;
+}
+
 export interface CreateRepaymentData {
   payment_date: string;
   amount_paid: number;
