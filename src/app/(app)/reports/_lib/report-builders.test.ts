@@ -646,6 +646,27 @@ test("daily collection lists the payments collected beneath the summary", () => 
   assert.equal(noteText(doc), null);
 });
 
+test("daily collection adds penalty to the amount: Amount + Penalty = Total Collected", () => {
+  const doc = buildDailyCollectionDoc(
+    { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
+    RANGE,
+    {
+      data: [
+        { paid_at: "2026-08-06", loan_account_number: "LN-1", borrower_name: "Ana Cruz", amount: 400, penalty_amount: 25, method: "cash", status: "paid" },
+        { paid_at: "2026-08-06", loan_account_number: "LN-2", borrower_name: "Ben Reyes", amount: 300, method: "gcash", status: "paid" },
+      ],
+      meta: { total: 2 },
+      totals: { count: 2, total_amount_paid: 700, total_penalty_applied: 25 },
+    }
+  );
+
+  const table = namedTable(doc, "Payments Collected");
+  assert.equal(table.rows[0].total_collected, 425);
+  assert.equal(table.rows[1].total_collected, 300); // no penalty: the amount alone
+  assert.equal(namedTableTotal(doc, "Payments Collected", "total_collected"), "₱725.00");
+  assert.equal(kpiValue(doc, "Total Collected"), "₱725.00");
+});
+
 test("daily collection shows a dash, not a page sum, when the server sends no totals", () => {
   const doc = buildDailyCollectionDoc(
     { total_due: 1000, total_collected: 700, collection_rate: 70, uncollected: 300 },
