@@ -2061,6 +2061,51 @@ test("the branch rows are loan cash only and say so rather than appearing wrong"
   assert.ok(noteText(doc));
 });
 
+test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
+  // The server leaves a payment's build-up out of the share capital lines (it
+  // is already cash inside the repayment's overpayment) and reports it apart,
+  // so a reader comparing with the Share Capital report needs to be told.
+  const doc = buildCashFlowDoc(
+    {
+      ...CASH_FLOW_PAYLOAD,
+      share_capital: {
+        ...CASH_FLOW_PAYLOAD.share_capital,
+        build_up_from_payments: 1250.5,
+        build_up_credit: 1300.5,
+        build_up_debit: 50,
+      },
+    },
+    RANGE
+  );
+  const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+  const buildUp = notes.find((text) => /build-up/i.test(text));
+
+  assert.ok(buildUp, "expected a share capital build-up note");
+  assert.match(buildUp!, /₱1,250\.50/);
+  assert.match(buildUp!, /Overpayment received/);
+  assert.match(buildUp!, /Share capital contributions/);
+  assert.match(buildUp!, /Share Capital report/);
+  // Text only: the lines and totals are the server's, unchanged.
+  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 5);
+  assert.equal(namedTable(doc, "Cash Inflows").rows[4].amount, 96500);
+  assert.equal(kpiValue(doc, "Total Cash In"), "₱1,110,151.50");
+  assert.equal(kpiValue(doc, "Net Movement"), "₱335,851.10");
+});
+
+test("cash flow adds no build-up note when payments credited no share capital", () => {
+  for (const buildUp of [0, null]) {
+    const doc = buildCashFlowDoc(
+      {
+        ...CASH_FLOW_PAYLOAD,
+        share_capital: { ...CASH_FLOW_PAYLOAD.share_capital, build_up_from_payments: buildUp },
+      },
+      RANGE
+    );
+    const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+    assert.ok(!notes.some((text) => /build-up/i.test(text)), String(buildUp));
+  }
+});
+
 test("cash flow omits the branch table when the API sends no branches", () => {
   const { by_branch, ...withoutBranches } = CASH_FLOW_PAYLOAD;
   void by_branch;
