@@ -29,6 +29,10 @@ export interface RepaymentPreview {
   excess?: number;
   allocated_to_next_interest?: number;
   allocated_to_next_principal?: number;
+  /** Insurance premium owed on the loan that this payment collects first. */
+  allocated_to_insurance?: number;
+  /** Same figure as `allocated_to_insurance`, named like `total_penalty`. */
+  total_insurance?: number;
   /** What the payment will store; anything paid before its due date is `advance`. */
   payment_type?: "exact" | "partial" | "advance";
   /** The payments page's badge, measured against what is owed on the payment date. */

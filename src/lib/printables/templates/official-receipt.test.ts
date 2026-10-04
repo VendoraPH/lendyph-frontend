@@ -108,6 +108,23 @@ test("official receipt: overpayment is only shown when there is one", () => {
   );
 });
 
+test("official receipt: insurance premium collected first is its own line, only when there is one", () => {
+  const doc = buildOfficialReceiptDoc(PAYMENT);
+  assert.throws(() => chargeAmount(doc, "Applied to Insurance Premium"));
+
+  // ₱300 of the premium left unpaid at release, collected first.
+  const withInsurance = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    insurance_applied: 300,
+    amount_paid: 18966.67,
+  });
+  assert.equal(chargeAmount(withInsurance, "Applied to Insurance Premium"), formatCurrency(300));
+  assert.equal(
+    chargeAmount(withInsurance, "TOTAL AMOUNT PAID"),
+    formatCurrency(16666.67 + 1800 + 200 + 300)
+  );
+});
+
 test("official receipt: the balance before and after the payment are both stated", () => {
   const doc = buildOfficialReceiptDoc(PAYMENT);
 

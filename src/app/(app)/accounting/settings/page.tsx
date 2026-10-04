@@ -64,6 +64,12 @@ const GROUPS: { title: string; description: string; fields: MappingField[] }[] =
         hint: "Penalties charged but not yet collected.",
         types: ["asset"],
       },
+      {
+        key: "insurance_premium_receivable",
+        label: "Insurance premium receivable",
+        hint: "Insurance premium left unpaid at release, owed by the member and collected first from their payments.",
+        types: ["asset"],
+      },
     ],
   },
   {

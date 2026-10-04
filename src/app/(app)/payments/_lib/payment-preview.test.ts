@@ -55,5 +55,19 @@ test("the allocation is read from the server preview, not estimated", () => {
     scbApplied: 0,
     nextInterestApplied: 0,
     nextPrincipalApplied: 0,
+    insuranceApplied: 0,
   });
+});
+
+test("insurance owed that the payment collects first is its own part of the allocation", () => {
+  // ₱10,000 with ₱200 of insurance premium owed on the loan: the server
+  // collects the ₱200 first, then the rest goes to the instalment.
+  const withInsurance: RepaymentPreview = {
+    ...partial,
+    total_interest: 1800,
+    total_principal: 8000,
+    allocated_to_insurance: 200,
+    total_insurance: 200,
+  };
+  assert.equal(previewAllocation(withInsurance).insuranceApplied, 200);
 });

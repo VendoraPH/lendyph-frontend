@@ -322,6 +322,11 @@ export interface AccountMapping {
   loans_receivable: number;
   interest_receivable: number;
   penalty_receivable: number;
+  /**
+   * Insurance premium left unpaid at release: debited at release (against
+   * `insurance_premium_payable`), credited as payments collect it first.
+   */
+  insurance_premium_receivable: number;
   interest_income: number;
   penalty_income: number;
   processing_fee_income: number;

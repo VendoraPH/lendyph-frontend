@@ -18,6 +18,8 @@ export interface Repayment {
   scb_paid?: number;
   penalty_paid?: number;
   excess_amount?: number;
+  /** Insurance premium owed on the loan that this payment collected first. */
+  insurance_applied?: number;
 }
 
 /**

@@ -374,8 +374,17 @@ export interface Loan {
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
+  /** The server's total payable; includes `insurance_owed`. */
   total_payable?: number;
   outstanding_balance?: number;
+  /**
+   * Insurance premium left unpaid at release and still owed on the loan:
+   * interest-free, collected first from each payment. 0 unless
+   * `insurance_collected_first` (loans released before round 3 stay 0).
+   */
+  insurance_owed?: number | string;
+  /** The release left premium unpaid, so payments collect it first. */
+  insurance_collected_first?: boolean;
   /**
    * `total_deductions` less the itemised `deductions`, signed: the release
    * voucher prints it as its own line when not 0.

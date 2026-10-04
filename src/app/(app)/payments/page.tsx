@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
+import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
 import { currentDues } from "@/lib/loan-dues";
 import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
@@ -939,8 +940,24 @@ function PaymentsContent() {
                     <Badge variant={paymentBadge.variant}>{paymentBadge.label}</Badge>
                   </div>
 
-                  {/* Component allocation totals */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {/* Component allocation totals. Insurance premium owed on
+                      the loan is collected first, so it leads when there is any. */}
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-2",
+                      displayAllocation.insuranceApplied > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                    )}
+                  >
+                    {displayAllocation.insuranceApplied > 0 && (
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+                          {INSURANCE_PREMIUM_LABEL}
+                        </p>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(displayAllocation.insuranceApplied)}
+                        </p>
+                      </div>
+                    )}
                     <div className="rounded-lg border p-3 text-center">
                       <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
                       <p

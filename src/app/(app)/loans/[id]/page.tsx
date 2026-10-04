@@ -23,6 +23,12 @@ import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
+import {
+  INSURANCE_OWED_LABEL,
+  INSURANCE_PREMIUM_LABEL,
+  loanInsuranceOwed,
+  previewInsuranceApplied,
+} from "@/lib/insurance-premium";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
   NO_SCHEDULE_TOTALS,
@@ -1395,6 +1401,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : storedSchedule.length > 0
         ? storedScheduleTotals.totalPayment
         : null;
+  // Insurance premium left unpaid at release, still owed on the loan (part of
+  // the server's total_payable); null when none is.
+  const insuranceOwed = loanInsuranceOwed(loan);
+  // What the previewed payment will collect of it first; null when none.
+  const paymentPreviewInsurance = previewInsuranceApplied(paymentPreview);
   const loanInterestAmount: number | null =
     storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
@@ -2977,6 +2988,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </p>
                 )}
               </div>
+              {/* Insurance premium left unpaid at release: part of the
+                  server's Total Payable, collected before anything else. */}
+              {insuranceOwed !== null && (
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">{INSURANCE_OWED_LABEL}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(insuranceOwed)}</p>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -4587,8 +4606,24 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </p>
                 </div>
 
-                {/* Component allocation totals */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Component allocation totals. Insurance premium owed on the
+                    loan is collected first, so it leads when there is any. */}
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    paymentPreviewInsurance !== null ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                  )}
+                >
+                  {paymentPreviewInsurance !== null && (
+                    <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+                        {INSURANCE_PREMIUM_LABEL}
+                      </p>
+                      <p className="text-sm font-semibold tabular-nums truncate">
+                        {formatCurrency(paymentPreviewInsurance)}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
                     <p

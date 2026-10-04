@@ -174,6 +174,9 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   loans_receivable: "1110",
   interest_receivable: "1150",
   penalty_receivable: "1160",
+  // Insurance premium left unpaid at release, owed by the member and
+  // collected first from their payments (1170 Other Receivables).
+  insurance_premium_receivable: "1170",
   interest_income: "4010",
   penalty_income: "4020",
   processing_fee_income: "4030",

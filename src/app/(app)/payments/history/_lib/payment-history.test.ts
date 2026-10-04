@@ -28,6 +28,7 @@ describe("paymentAmountFigures", () => {
     assert.deepEqual(paymentAmountFigures({ amount: 1500, penalty_amount: 100 }), {
       amount: "₱1,500.00",
       penaltyNote: "incl. ₱100.00 penalty",
+      insuranceNote: null,
     });
   });
 
@@ -35,6 +36,15 @@ describe("paymentAmountFigures", () => {
     assert.deepEqual(paymentAmountFigures({ amount: 1500.55, penalty_amount: 0 }), {
       amount: "₱1,500.55",
       penaltyNote: null,
+      insuranceNote: null,
+    });
+  });
+
+  test("insurance premium the payment collected is a note inside the amount too", () => {
+    assert.deepEqual(paymentAmountFigures({ amount: 1500, penalty_amount: 0, insurance_applied: 200 }), {
+      amount: "₱1,500.00",
+      penaltyNote: null,
+      insuranceNote: "incl. ₱200.00 insurance premium",
     });
   });
 });

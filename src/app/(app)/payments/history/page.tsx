@@ -75,6 +75,7 @@ interface MockPayment {
   date: string;
   amount: number;
   penalty_amount: number;
+  insurance_applied: number;
   method: PaymentMethod;
   status: PaymentStatus;
   collected_by: string;
@@ -138,6 +139,7 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.penalty_paid as number) ||
       (p.penalty_amount as number) ||
       0,
+    insurance_applied: Number(p.insurance_applied ?? 0) || 0,
     method: ((p.method as PaymentMethod) || "cash"),
     status: (p.status === "voided" ? "voided" : "completed") as PaymentStatus,
     collected_by: (p.collected_by as string) || "—",
@@ -765,6 +767,11 @@ function PaymentHistoryContent() {
                         {figures.penaltyNote && (
                           <p className="text-xs text-amber-600 text-right">
                             {figures.penaltyNote}
+                          </p>
+                        )}
+                        {figures.insuranceNote && (
+                          <p className="text-xs text-muted-foreground text-right">
+                            {figures.insuranceNote}
                           </p>
                         )}
                       </TableCell>

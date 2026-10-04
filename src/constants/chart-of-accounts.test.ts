@@ -136,3 +136,13 @@ test("each release-deduction role defaults to the account the backend seeds, of 
     assert.equal(seed.type, type, role);
   }
 });
+
+test("insurance premium owed on a loan defaults to Other Receivables, as the backend seeds it", () => {
+  // Debited at release for the premium left unpaid, credited as payments
+  // collect it (round 3, contract C).
+  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
+  const code = (DEFAULT_ACCOUNT_MAPPING_CODES as Record<string, string>).insurance_premium_receivable;
+  assert.equal(code, "1170");
+  assert.equal(byCode.get(code)?.name, "Other Receivables");
+  assert.equal(byCode.get(code)?.type, "asset");
+});
