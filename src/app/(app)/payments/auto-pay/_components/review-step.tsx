@@ -8,7 +8,8 @@ import { DueLoansTable } from "./due-loans-table";
 import { LoanIssuesList } from "./loan-issues-list";
 import { formatCurrency } from "@/lib/format";
 import { loanIssues, loansAffected, previewTotals } from "../_lib/auto-pay-view";
-import { useAutoPayRunTotals } from "../_hooks/use-auto-pay-run-totals";
+import { useAutoPaySelection } from "../_hooks/use-auto-pay-selection";
+import { cn } from "@/lib/utils";
 import type { AutoPayFilter, AutoPayPreview } from "@/types";
 
 interface ReviewStepProps {
@@ -30,17 +31,24 @@ export function ReviewStep({
   onConfirm,
   processing,
 }: ReviewStepProps) {
-  // Every figure is the server's. The run's total for the part-paid rows
-  // ticked now comes from the preview asked again with that selection.
-  const totals = previewTotals(preview.summary);
-  const run = useAutoPayRunTotals(filter, includedPartialIds);
-  const loanCount = loansAffected(preview, includedPartialIds);
-  const skips = loanIssues(preview.skips);
+  // Every figure is the server's, from the preview asked again with the
+  // part-paid rows ticked now: selecting a row can bring a skipped loan back
+  // into the cards. The checkbox list stays the first preview's.
+  const view = useAutoPaySelection(filter, preview, includedPartialIds);
+  const shown = view.preview;
+  const totals = previewTotals(shown.summary);
+  const run = view.run;
+  const loanCount = loansAffected(shown, includedPartialIds);
+  const skips = loanIssues(shown.skips);
+  const updating = !view.upToDate && view.error === null;
 
   return (
     <div className="space-y-6">
       {/* Summary Cards: the server's totals for the loans with full dues */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div
+        aria-busy={updating}
+        className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", updating && "opacity-60")}
+      >
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-800 dark:bg-green-950/20">
           <p className="text-xl font-bold text-green-700 dark:text-green-300">
             {formatCurrency(totals.principal)}
@@ -80,23 +88,23 @@ export function ReviewStep({
         aria-live="polite"
         className="rounded-lg border-2 border-brand-orange/40 p-4"
       >
-        {run.loading ? (
-          <p className="text-sm text-muted-foreground">Working out the run total…</p>
-        ) : run.totals === null ? (
-          <p className="text-sm text-destructive">{run.error}</p>
+        {updating ? (
+          <p className="text-sm text-muted-foreground">Updating the preview for this selection…</p>
+        ) : run === null ? (
+          <p className="text-sm text-destructive">{view.error}</p>
         ) : (
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted-foreground">Selected part-paid periods</dt>
-            <dd className="text-right tabular-nums">{formatCurrency(run.totals.partialTotal)}</dd>
+            <dd className="text-right tabular-nums">{formatCurrency(run.partialTotal)}</dd>
             <dt className="text-base font-semibold">Run total</dt>
             <dd className="text-right text-base font-semibold tabular-nums">
-              {formatCurrency(run.totals.grandTotal)}
+              {formatCurrency(run.grandTotal)}
             </dd>
           </dl>
         )}
       </div>
 
-      <DueLoansTable loans={preview.loans ?? []} totals={totals} />
+      <DueLoansTable loans={shown.loans ?? []} totals={totals} />
 
       {/* Partial Rows Review */}
       {preview.partial_rows.length > 0 && (
@@ -135,7 +143,7 @@ export function ReviewStep({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={processing || loanCount === 0 || run.totals === null}
+          disabled={processing || loanCount === 0 || run === null}
           className="flex-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
         >
           {processing && <Spinner className="mr-2 size-4" />}

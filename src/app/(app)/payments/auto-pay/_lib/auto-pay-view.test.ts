@@ -8,6 +8,7 @@ import {
   previewTotals,
   runOutcome,
   runTotals,
+  selectionView,
 } from "./auto-pay-view";
 
 const partial = (loan_id: number, schedule_id: number): AutoPayPartialRow => ({
@@ -131,4 +132,53 @@ test("the totals request is keyed by the filter and the selection, in any order"
     date_to: "2026-10-31",
     include_schedule_ids: [20, 31],
   });
+});
+
+// The preview asked again with the current selection answers everything on
+// the review step: a loan cleared by selecting its part-paid row leaves the
+// skip list and joins the cards.
+const KEY = autoPayTotalsKey(filter, new Set([20]));
+const selected: AutoPayPreview = {
+  ...preview,
+  summary: { ...preview.summary, total_principal: 13_000, partial_total: 650, grand_total: 15_000 },
+  loans: [...(preview.loans ?? []), { loan_id: 9, loan_account_number: "LN-9", borrower_name: "C. Lim", total_principal: 3_000, total_interest: 0, total_penalty: 0, total_amount: 3_000 }],
+  skips: [],
+};
+
+test("the current selection's answer is the source of cards, loans, skips and run total", () => {
+  const view = selectionView(preview, null, { key: KEY, preview: selected, error: null }, KEY);
+  assert.equal(view.preview, selected);
+  assert.equal(view.upToDate, true);
+  assert.deepEqual(view.run, { partialTotal: 650, grandTotal: 15_000 });
+  assert.equal(view.error, null);
+});
+
+test("while the selection's answer is on its way, the last answer is shown and nothing can run", () => {
+  const older = { key: "older", preview: selected, error: null };
+  const view = selectionView(preview, selected, older, KEY);
+  assert.equal(view.preview, selected);
+  assert.equal(view.upToDate, false);
+  assert.equal(view.run, null);
+  assert.equal(view.error, null);
+});
+
+test("before any answer the first preview is shown, and nothing can run", () => {
+  const view = selectionView(preview, null, null, KEY);
+  assert.equal(view.preview, preview);
+  assert.equal(view.upToDate, false);
+  assert.equal(view.run, null);
+});
+
+test("a refused selection keeps the last answer on screen and says why", () => {
+  const view = selectionView(preview, selected, { key: KEY, preview: null, error: "Refused." }, KEY);
+  assert.equal(view.preview, selected);
+  assert.equal(view.upToDate, false);
+  assert.equal(view.run, null);
+  assert.equal(view.error, "Refused.");
+});
+
+test("an answer without the run total cannot be run", () => {
+  const view = selectionView(preview, null, { key: KEY, preview, error: null }, KEY);
+  assert.equal(view.run, null);
+  assert.match(view.error ?? "", /run total/);
 });

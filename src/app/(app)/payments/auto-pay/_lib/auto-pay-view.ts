@@ -100,3 +100,44 @@ export function runOutcome(result: AutoPayResult): RunOutcome {
     failures: loanIssues(result.failures),
   };
 }
+
+/** The server's answer to the preview asked with one selection. */
+export interface SelectionAnswer {
+  key: string;
+  preview: AutoPayPreview | null;
+  error: string | null;
+}
+
+export interface SelectionView {
+  /** What the review step draws: cards, per-loan table, skips. */
+  preview: AutoPayPreview;
+  /** `preview` answers the selection ticked now. */
+  upToDate: boolean;
+  /** The run's total, only when up to date; null means Run waits. */
+  run: RunTotals | null;
+  error: string | null;
+}
+
+/**
+ * The review step's single source: the preview asked with the current
+ * selection (`key`). Until that answer arrives, the last answer (or the first
+ * preview) stays on screen and nothing can run.
+ */
+export function selectionView(
+  initial: AutoPayPreview,
+  lastGood: AutoPayPreview | null,
+  answer: SelectionAnswer | null,
+  key: string,
+): SelectionView {
+  const current = answer?.key === key ? answer : null;
+  if (current?.preview) {
+    const run = runTotals(current.preview.summary);
+    return {
+      preview: current.preview,
+      upToDate: true,
+      run,
+      error: run === null ? "The server's run total could not be read." : null,
+    };
+  }
+  return { preview: lastGood ?? initial, upToDate: false, run: null, error: current?.error ?? null };
+}
