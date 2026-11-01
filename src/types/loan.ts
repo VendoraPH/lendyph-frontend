@@ -426,6 +426,8 @@ export interface LoanSchedule {
   share_capital_build_up?: number | null;
   /** `total_due` plus the build-up, from the server; null when it sent none. */
   total_payment?: number | null;
+  /** The server's period number; it can skip, so it is not the row's position. */
+  period_number?: number | null;
 }
 
 /**

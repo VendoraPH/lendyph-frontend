@@ -26,9 +26,11 @@ import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
   NO_SCHEDULE_TOTALS,
+  allocationMatches,
   openPeriod,
+  openPeriods,
   paymentAgainstDue,
-  periodRow,
+  rowForAllocation,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -4155,8 +4157,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const isPartial = current.status === "partial";
             // If the cashier has already typed an amount, surface what
             // portion of THIS payment lands on the current period.
-            const currentAlloc = (paymentPreview?.allocations ?? []).find(
-              (a) => a.period === current.period
+            // Matched by schedule id or the server's period number, never by
+            // position: period numbers can skip after an extension.
+            const currentAlloc = (paymentPreview?.allocations ?? []).find((a) =>
+              allocationMatches(a, current)
             );
             const currentApplied =
               currentAlloc?.amount_applied ??
@@ -4191,7 +4195,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        Period {current.period} &middot; Due
+                        Period {current.periodNumber ?? "—"} &middot; Due
                       </p>
                       <p className="text-base font-semibold truncate">
                         {formatDateObj(current.dueDate)}
@@ -4314,8 +4318,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
           {/* Advance-mode helpers: quick presets that auto-fill the amount
               with the sum of the next N unpaid scheduled installments. The
               cashier can still edit the amount manually. */}
-          {paymentMode === "advance" && storedSchedule.length > 0 && (() => {
-            const unpaid = storedSchedule.filter((r) => r.status !== "paid");
+          {paymentMode === "advance" && scheduleRows && (() => {
+            // The open periods with their own server figures, never the merged
+            // upon-maturity row (whose totals include what was collected).
+            const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
             // Null when a period in it has no total payment from the server.
             const sumOfNext = (n: number) =>
@@ -4629,12 +4635,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 {Array.isArray(paymentPreview.allocations) && paymentPreview.allocations.length > 0 && (() => {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
                   // A dash with no schedule on screen to read the build-up from.
-                  const periodScb = (period: number | undefined) => {
+                  const periodScb = (allocation: { schedule_id?: number; period?: number }) => {
                     if (storedSchedule.length === 0 || !scheduleRows) return "—";
-                    if (typeof period !== "number") return formatCurrency(0);
-                    // The period's own server row, never the merged
-                    // upon-maturity row.
-                    const row = periodRow(scheduleRows, period);
+                    if (typeof allocation.schedule_id !== "number" && typeof allocation.period !== "number") {
+                      return formatCurrency(0);
+                    }
+                    // The period's own server row (by schedule id, else the
+                    // server's period number), never the merged upon-maturity
+                    // row and never by position.
+                    const row = rowForAllocation(scheduleRows, allocation);
                     return row ? currencyOrDash(row.shareCapitalBuildUp) : formatCurrency(0);
                   };
                   return (
@@ -4688,7 +4697,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
-                                    {periodScb(a.period)}
+                                    {periodScb(a)}
                                   </TableCell>
                                 )}
                                 <TableCell

@@ -6,7 +6,12 @@ import type { LoanSchedule } from "@/types/loan";
  * null is one the server did not send, shown as a dash.
  */
 export interface AmortizationRow {
+  /** Position on screen, 1-based: the "#" column. Not the server's number. */
   period: number;
+  /** The server's `period_number`; null on the merged upon-maturity row. */
+  periodNumber: number | null;
+  /** The server's schedule row id; null on preview and merged rows. */
+  scheduleId: number | null;
   dueDate: Date;
   principal: number | null;
   interest: number | null;
@@ -42,6 +47,12 @@ function serverFigure(raw: unknown): number | null {
   if (typeof raw === "string" && raw.trim() === "") return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
+}
+
+/** A positive whole number as the server sent it, or null. */
+function serverId(raw: unknown): number | null {
+  const value = serverFigure(raw);
+  return value !== null && Number.isInteger(value) && value > 0 ? value : null;
 }
 
 /** The server's `amortization_schedule_totals`, each one null when absent. */
@@ -127,6 +138,7 @@ export function readScheduleRows(
           status: (r.status as LoanSchedule["status"]) ?? "pending",
           share_capital_build_up: serverFigure(r.share_capital_build_up),
           total_payment: serverFigure(r.total_payment),
+          period_number: serverId(r.period_number),
         }) as LoanSchedule)
       : rows as unknown as LoanSchedule[],
   };
@@ -159,6 +171,8 @@ export function toDisplaySchedule(
     const lastRow = schedule[schedule.length - 1];
     return [{
       period: 1,
+      periodNumber: null,
+      scheduleId: null,
       dueDate: new Date(lastRow.due_date),
       principal: totals.principal,
       interest: totals.interest,
@@ -172,6 +186,8 @@ export function toDisplaySchedule(
   // included: after a balance adjustment it is not principal minus principal.
   return schedule.map((row, idx) => ({
     period: idx + 1,
+    periodNumber: serverId(row.period_number),
+    scheduleId: serverId(row.id),
     dueDate: new Date(row.due_date),
     principal: parseFloat(String(row.principal)) || 0,
     interest: parseFloat(String(row.interest)) || 0,
@@ -182,29 +198,52 @@ export function toDisplaySchedule(
   }));
 }
 
-/**
- * The period the borrower pays next: the first server row not yet paid, with
- * its own figures. Never the merged upon-maturity row: after an extension the
- * settled cycle stays as a paid row, and the merged totals include what it
- * already collected. Null when every period is paid.
- */
-export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
-  return periodRows(schedule).find((row) => row.status !== "paid") ?? null;
-}
-
 /** The server's rows one per period, never merged into an upon-maturity row. */
 function periodRows(schedule: readonly LoanSchedule[]): AmortizationRow[] {
   return toDisplaySchedule(schedule, { isUponMaturity: false, totals: NO_SCHEDULE_TOTALS });
 }
 
 /**
- * Period `period` (1-based, as the payment preview numbers its allocations)
- * with its own server figures, or null when the schedule has no such period.
- * Never the merged upon-maturity row, which carries the whole schedule's
- * totals under period 1.
+ * The periods not yet paid (partial, overdue, pending), in order, each with
+ * its own server figures. Never the merged upon-maturity row: after an
+ * extension the settled cycle stays as a paid row, and the merged totals
+ * include what it already collected.
  */
-export function periodRow(schedule: readonly LoanSchedule[], period: number): AmortizationRow | null {
-  return periodRows(schedule).find((row) => row.period === period) ?? null;
+export function openPeriods(schedule: readonly LoanSchedule[]): AmortizationRow[] {
+  return periodRows(schedule).filter((row) => row.status !== "paid");
+}
+
+/** The period the borrower pays next (the first open one), or null when all are paid. */
+export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
+  return openPeriods(schedule)[0] ?? null;
+}
+
+/** What a payment preview allocation names its period by. */
+export interface AllocationRef {
+  schedule_id?: number;
+  /** The server's `period_number`. */
+  period?: number;
+}
+
+/**
+ * Whether `allocation` is for `row`: by schedule id when both carry one,
+ * otherwise by the server's period number. Never by position, since period
+ * numbers can skip (an extension deletes an open row that collected nothing).
+ */
+export function allocationMatches(allocation: AllocationRef, row: AmortizationRow): boolean {
+  if (typeof allocation.schedule_id === "number" && row.scheduleId !== null) {
+    return allocation.schedule_id === row.scheduleId;
+  }
+  return typeof allocation.period === "number" && row.periodNumber !== null && allocation.period === row.periodNumber;
+}
+
+/**
+ * The server's own row for a payment preview allocation, or null when the
+ * schedule has none. Never the merged upon-maturity row, which carries the
+ * whole schedule's totals.
+ */
+export function rowForAllocation(schedule: readonly LoanSchedule[], allocation: AllocationRef): AmortizationRow | null {
+  return periodRows(schedule).find((row) => allocationMatches(allocation, row)) ?? null;
 }
 
 /**

@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NO_SCHEDULE_TOTALS,
+  allocationMatches,
   openPeriod,
+  openPeriods,
   paymentAgainstDue,
-  periodRow,
+  rowForAllocation,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -84,6 +86,7 @@ test("persisted rows map their *_due fields and fold the paid columns", () => {
     status: "partial",
     share_capital_build_up: 50,
     total_payment: 4210,
+    period_number: 2,
   });
   // The raw rows are kept untouched for the figures that need interest_paid.
   assert.equal(read.raw, ZERO_BALANCE_ROWS as unknown);
@@ -239,22 +242,34 @@ const EXTENDED_TOTALS = {
 };
 
 test("an upon-maturity schedule collapses, for display, into one row of the server's totals", () => {
+  // Totals that do not add up to the rows on purpose (the rows give 600,
+  // 200 and 10,800): the merged row repeats the server, it never sums.
   const rows = toDisplaySchedule(readScheduleRows(EXTENDED_ROWS, 42)!.schedule, {
     isUponMaturity: true,
-    totals: readScheduleTotals(EXTENDED_TOTALS),
+    totals: readScheduleTotals({ ...EXTENDED_TOTALS, interest: 900.01, share_capital_build_up: 301.5, total_payment: 11201.52 }),
   });
   assert.deepEqual(rows, [
     {
       period: 1,
+      periodNumber: null,
+      scheduleId: null,
       dueDate: new Date("2026-11-30"),
       principal: 10000,
-      interest: 600,
-      shareCapitalBuildUp: 200,
-      totalPayment: 10800,
+      interest: 900.01,
+      shareCapitalBuildUp: 301.5,
+      totalPayment: 11201.52,
       balance: 0,
       status: "pending",
     },
   ]);
+});
+
+test("the server totals of a real extended schedule are the merged row", () => {
+  const [row] = toDisplaySchedule(readScheduleRows(EXTENDED_ROWS, 42)!.schedule, {
+    isUponMaturity: true,
+    totals: readScheduleTotals(EXTENDED_TOTALS),
+  });
+  assert.deepEqual([row?.interest, row?.shareCapitalBuildUp, row?.totalPayment], [600, 200, 10800]);
 });
 
 // ── what the cashier is asked to pay ──────────────────────────────────────
@@ -265,6 +280,8 @@ test("the amount to pay is the open period's own total payment, never the merged
   const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
   assert.deepEqual(due, {
     period: 2,
+    periodNumber: 2,
+    scheduleId: 502,
     dueDate: new Date("2026-11-30"),
     principal: 10000,
     interest: 300,
@@ -296,12 +313,81 @@ test("each period's build-up comes from its own server row, never the merged row
   // themselves carry ₱100 and ₱100.50.
   const rows = [EXTENDED_ROWS[0], { ...EXTENDED_ROWS[1], share_capital_build_up: 100.5, total_payment: 10400.5 }];
   const schedule = readScheduleRows(rows, 42)!.schedule;
-  assert.equal(periodRow(schedule, 1)?.shareCapitalBuildUp, 100);
-  assert.equal(periodRow(schedule, 2)?.shareCapitalBuildUp, 100.5);
-  assert.equal(periodRow(schedule, 3), null);
+  assert.equal(rowForAllocation(schedule, { period: 1 })?.shareCapitalBuildUp, 100);
+  assert.equal(rowForAllocation(schedule, { period: 2 })?.shareCapitalBuildUp, 100.5);
+  assert.equal(rowForAllocation(schedule, { period: 3 }), null);
   const bare: Record<string, unknown> = { ...EXTENDED_ROWS[1] };
   delete bare.share_capital_build_up;
-  assert.equal(periodRow(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule, 2)?.shareCapitalBuildUp, null);
+  assert.equal(rowForAllocation(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule, { period: 2 })?.shareCapitalBuildUp, null);
+});
+
+test("Pay ahead counts only the open periods, each with its own total payment", () => {
+  // "Pay ahead by 1" on an extended loan is the open period's ₱10,400, not
+  // the merged row's ₱10,800 (whose excess would post as overpayment).
+  const open = openPeriods(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
+  assert.deepEqual(open.map((r) => [r.periodNumber, r.totalPayment]), [[2, 10400]]);
+  assert.deepEqual(openPeriods(readScheduleRows([EXTENDED_ROWS[0]], 42)!.schedule), []);
+});
+
+// ── server period numbers can skip ────────────────────────────────────────
+
+/**
+ * Extended with "defer" collecting nothing, then with "pay": extend reads
+ * max(period_number) before closeOpenSchedules deletes the open row that
+ * collected nothing, so the rows left are periods 2 (paid) and 3 (open).
+ */
+const SKIPPED_ROWS = [
+  persisted(2, { principal_due: 0, interest_due: 600, remaining_balance: 10000, interest_paid: 600, status: "paid", due_date: "2026-11-30", share_capital_build_up: 100, total_payment: 700 }),
+  persisted(3, { principal_due: 10000, interest_due: 300, remaining_balance: 0, status: "pending", due_date: "2026-12-31", share_capital_build_up: 125.5, total_payment: 10425.5 }),
+];
+
+test("the open period carries the server's period number and schedule id, not its position", () => {
+  const due = openPeriod(readScheduleRows(SKIPPED_ROWS, 42)!.schedule);
+  assert.equal(due?.periodNumber, 3);
+  assert.equal(due?.scheduleId, 503);
+});
+
+test("an allocation matches its period by schedule id, else by the server's period number, never by position", () => {
+  const schedule = readScheduleRows(SKIPPED_ROWS, 42)!.schedule;
+  const due = openPeriod(schedule)!;
+  assert.equal(allocationMatches({ schedule_id: 503, period: 3 }, due), true);
+  assert.equal(allocationMatches({ period: 3 }, due), true);
+  // Position 2 is the open row, but the server's period 2 is the paid one.
+  assert.equal(allocationMatches({ period: 2 }, due), false);
+  // A schedule id that differs wins over a matching period number.
+  assert.equal(allocationMatches({ schedule_id: 502, period: 3 }, due), false);
+  assert.equal(allocationMatches({}, due), false);
+
+  assert.equal(rowForAllocation(schedule, { schedule_id: 503, period: 3 })?.shareCapitalBuildUp, 125.5);
+  assert.equal(rowForAllocation(schedule, { period: 3 })?.shareCapitalBuildUp, 125.5);
+  assert.equal(rowForAllocation(schedule, { period: 2 })?.shareCapitalBuildUp, 100);
+  assert.equal(rowForAllocation(schedule, { period: 1 }), null);
+  assert.equal(rowForAllocation(schedule, {}), null);
+});
+
+// ── which period is open ──────────────────────────────────────────────────
+
+const THREE = (second: "partial" | "overdue") => [
+  persisted(1, { principal_due: 3000, interest_due: 270, remaining_balance: 6000, principal_paid: 3000, interest_paid: 270, status: "paid", due_date: "2026-11-15" }),
+  persisted(2, { principal_due: 3000, interest_due: 270, remaining_balance: 3000, principal_paid: 1000, status: second, due_date: "2026-12-15" }),
+  persisted(3, { principal_due: 3000, interest_due: 270, remaining_balance: 0, status: "pending", due_date: "2027-01-15" }),
+];
+
+test("the open period is the first one not paid: a partial or an overdue one before a pending one", () => {
+  assert.equal(openPeriod(readScheduleRows(THREE("partial"), 42)!.schedule)?.periodNumber, 2);
+  assert.equal(openPeriod(readScheduleRows(THREE("overdue"), 42)!.schedule)?.status, "overdue");
+  assert.deepEqual(
+    openPeriods(readScheduleRows(THREE("overdue"), 42)!.schedule).map((r) => r.periodNumber),
+    [2, 3],
+  );
+});
+
+test("for a loan that is not upon-maturity the open period is its drawn row, unchanged", () => {
+  const schedule = readScheduleRows(THREE("partial"), 42)!.schedule;
+  assert.deepEqual(
+    openPeriod(schedule),
+    toDisplaySchedule(schedule, DISPLAY).find((r) => r.status !== "paid"),
+  );
 });
 
 test("with no open period there is nothing to fall short of", () => {
@@ -353,6 +439,7 @@ test("preview rows are read from their *_due fields", () => {
     status: "pending",
     share_capital_build_up: null,
     total_payment: null,
+    period_number: 1,
   });
 });
 
