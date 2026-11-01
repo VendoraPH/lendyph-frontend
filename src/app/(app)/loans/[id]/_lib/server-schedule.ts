@@ -189,11 +189,22 @@ export function toDisplaySchedule(
  * already collected. Null when every period is paid.
  */
 export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
-  return (
-    toDisplaySchedule(schedule, { isUponMaturity: false, totals: NO_SCHEDULE_TOTALS }).find(
-      (row) => row.status !== "paid",
-    ) ?? null
-  );
+  return periodRows(schedule).find((row) => row.status !== "paid") ?? null;
+}
+
+/** The server's rows one per period, never merged into an upon-maturity row. */
+function periodRows(schedule: readonly LoanSchedule[]): AmortizationRow[] {
+  return toDisplaySchedule(schedule, { isUponMaturity: false, totals: NO_SCHEDULE_TOTALS });
+}
+
+/**
+ * Period `period` (1-based, as the payment preview numbers its allocations)
+ * with its own server figures, or null when the schedule has no such period.
+ * Never the merged upon-maturity row, which carries the whole schedule's
+ * totals under period 1.
+ */
+export function periodRow(schedule: readonly LoanSchedule[], period: number): AmortizationRow | null {
+  return periodRows(schedule).find((row) => row.period === period) ?? null;
 }
 
 /**

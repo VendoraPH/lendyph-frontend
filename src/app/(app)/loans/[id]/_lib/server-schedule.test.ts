@@ -4,6 +4,7 @@ import {
   NO_SCHEDULE_TOTALS,
   openPeriod,
   paymentAgainstDue,
+  periodRow,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -288,6 +289,19 @@ test("with no server total payment for the open period, the payment cannot be ju
   const due = openPeriod(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule);
   assert.equal(due?.totalPayment, null);
   assert.equal(paymentAgainstDue(10400, due), "unknown");
+});
+
+test("each period's build-up comes from its own server row, never the merged row", () => {
+  // The merged upon-maturity row reads ₱200.50 for "period 1"; the periods
+  // themselves carry ₱100 and ₱100.50.
+  const rows = [EXTENDED_ROWS[0], { ...EXTENDED_ROWS[1], share_capital_build_up: 100.5, total_payment: 10400.5 }];
+  const schedule = readScheduleRows(rows, 42)!.schedule;
+  assert.equal(periodRow(schedule, 1)?.shareCapitalBuildUp, 100);
+  assert.equal(periodRow(schedule, 2)?.shareCapitalBuildUp, 100.5);
+  assert.equal(periodRow(schedule, 3), null);
+  const bare: Record<string, unknown> = { ...EXTENDED_ROWS[1] };
+  delete bare.share_capital_build_up;
+  assert.equal(periodRow(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule, 2)?.shareCapitalBuildUp, null);
 });
 
 test("with no open period there is nothing to fall short of", () => {

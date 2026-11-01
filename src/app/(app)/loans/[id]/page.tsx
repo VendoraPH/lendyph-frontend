@@ -28,6 +28,7 @@ import {
   NO_SCHEDULE_TOTALS,
   openPeriod,
   paymentAgainstDue,
+  periodRow,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -4629,9 +4630,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
                   // A dash with no schedule on screen to read the build-up from.
                   const periodScb = (period: number | undefined) => {
-                    if (storedSchedule.length === 0) return "—";
+                    if (storedSchedule.length === 0 || !scheduleRows) return "—";
                     if (typeof period !== "number") return formatCurrency(0);
-                    const row = storedSchedule.find((r) => r.period === period);
+                    // The period's own server row, never the merged
+                    // upon-maturity row.
+                    const row = periodRow(scheduleRows, period);
                     return row ? currencyOrDash(row.shareCapitalBuildUp) : formatCurrency(0);
                   };
                   return (
