@@ -39,6 +39,7 @@ export type {
   CreateGCashTransactionData,
   GCashListFilters,
   GCashNonMember,
+  GCashNonMemberCreateInput,
   GCashNonMemberInput,
   GCashNonMemberFilters,
   GCashParty,
