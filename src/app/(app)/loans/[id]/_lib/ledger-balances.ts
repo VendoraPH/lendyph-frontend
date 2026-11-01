@@ -61,7 +61,8 @@ export function ledgerInterestPaid(
  *   opening = currentInterestDue − debits + credits + interest paid
  *
  * (interest paid from `ledgerInterestPaid`, so voided repayments are out) and
- * SCB at the schedule's build-up total.
+ * SCB at the server's build-up total for the schedule, unknown when the server
+ * sent none.
  */
 export function ledgerOpening({
   principalAmount,
@@ -76,7 +77,8 @@ export function ledgerOpening({
   /** Schedule rows on screen: 0 while loading, when unreadable, or when empty. */
   scheduleRowCount: number;
   currentInterestDue: number | null;
-  scheduleScbTotal: number;
+  /** The server's build-up total for the schedule; null when it sent none. */
+  scheduleScbTotal: number | null;
   interestDebits: number;
   interestCredits: number;
   interestPaid: number;
@@ -88,7 +90,7 @@ export function ledgerOpening({
       hasSchedule && currentInterestDue !== null
         ? round2(currentInterestDue - interestDebits + interestCredits + interestPaid)
         : null,
-    scb: hasSchedule ? scheduleScbTotal : null,
+    scb: hasSchedule && scheduleScbTotal !== null ? scheduleScbTotal : null,
   };
 }
 

@@ -24,7 +24,19 @@ import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
-import { readScheduleRows, toDisplaySchedule } from "./_lib/server-schedule";
+import {
+  NO_SCHEDULE_TOTALS,
+  allocationBuildUp,
+  allocationMatches,
+  openPeriod,
+  openPeriods,
+  paymentAgainstDue,
+  readPreviewResponse,
+  readScheduleRows,
+  readScheduleTotals,
+  toDisplaySchedule,
+  type ScheduleTotals,
+} from "./_lib/server-schedule";
 import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
   RestructuredBalanceFigures,
@@ -41,9 +53,9 @@ import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-figures";
 import { releaseConflictOf } from "./_lib/release-conflict";
-import { extensionDueDate } from "./_lib/extension-due-date";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
+import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
 import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
@@ -54,7 +66,7 @@ import {
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
-import type { LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
+import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
@@ -666,6 +678,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // via loanService.amortizationPreview — lets approvers see the same schedule
   // the server will persist on release. Null and `previewFailed` as above.
   const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+  const [previewTotals, setPreviewTotals] = useState<ScheduleTotals>(NO_SCHEDULE_TOTALS);
   const [previewFailed, setPreviewFailed] = useState(false);
   // Bumped by the schedule card's Retry, which re-runs the effects that read it.
   const [scheduleReloadCount, setScheduleReloadCount] = useState(0);
@@ -718,7 +731,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Defaults to "pay", which is how extension behaved before the choice
   // existed. The API performs the collection itself, so there is no longer a
   // client-side payment step to guard against repeating.
-  const [extendInterestOption, setExtendInterestOption] = useState<"pay" | "defer">("pay");
+  const [extendInterestOption, setExtendInterestOption] = useState<ExtensionInterestOption>("pay");
+  // Bumped on every open, so a reopened dialog asks the server again rather
+  // than showing the figures from before the last extension.
+  const [extendPreviewRound, setExtendPreviewRound] = useState(0);
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -737,6 +753,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
       ? targetPrincipalInput(adjTargetPrincipal)
       : null;
   const adjPreview = useBalanceAdjustmentPreview(loanId, adjTarget);
+  // The server's figures for the extension the open Extend dialog describes.
+  const extendPreview = useExtensionPreview(
+    extendOpen ? { loanId, option: extendInterestOption, round: extendPreviewRound } : null,
+  );
 
 
   // Account Officer state
@@ -828,11 +848,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Its rows carry the same `*_due` fields as the persisted schedule.
   const fetchAmortizationPreview = useCallback(async (id: number) => {
     try {
-      const rows = readScheduleRows(await loanService.amortizationPreview(id), id)?.schedule ?? null;
-      setPreviewSchedule(rows);
-      setPreviewFailed(rows === null);
+      const read = readPreviewResponse(await loanService.amortizationPreview(id), id);
+      setPreviewSchedule(read?.schedule ?? null);
+      setPreviewTotals(read?.totals ?? NO_SCHEDULE_TOTALS);
+      setPreviewFailed(read === null);
     } catch {
       setPreviewSchedule(null);
+      setPreviewTotals(NO_SCHEDULE_TOTALS);
       setPreviewFailed(true);
     }
   }, []);
@@ -1079,34 +1101,40 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // every read goes through a listed field, which is why the has-a-loan guard
   // reads `loan?.id`, not `loan`, and every read is written `loan?.` exactly as
   // the deps list it (the React Compiler matches them as written).
+  //
+  // The column totals are the server's `amortization_schedule_totals`, read
+  // with the loan (every action that re-reads the schedule re-reads the loan
+  // too); a preview's are the `totals` its endpoint sends beside the rows. A
+  // total the server did not send is a dash, never the rows added up here.
+  const storedScheduleTotals = useMemo(
+    () =>
+      scheduleSource === "persisted"
+        ? readScheduleTotals(loan?.amortization_schedule_totals)
+        : scheduleSource === "preview"
+          ? previewTotals
+          : NO_SCHEDULE_TOTALS,
+    [scheduleSource, loan?.amortization_schedule_totals, previewTotals],
+  );
   const storedSchedule = useMemo(() => {
     if (!loan?.id || !scheduleRows) return [];
     const freq = loan?.frequency ?? loan?.payment_frequency ?? "monthly";
     return toDisplaySchedule(scheduleRows, {
-      scb: loan?.scb_amount ?? 0,
       isUponMaturity:
         freq === "upon_maturity" || loan?.interest_method === "upon_maturity" || loan?.interest_type === "upon_maturity",
+      totals: storedScheduleTotals,
     });
-  }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
+  }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, storedScheduleTotals, scheduleRows]);
+  // The period the borrower pays next, with its own server figures. Payment
+  // amounts and the partial-payment check read this, never the merged
+  // upon-maturity row, whose totals include what an extension already
+  // collected.
+  const duePeriod = useMemo(() => (scheduleRows ? openPeriod(scheduleRows) : null), [scheduleRows]);
+  // The build-up columns show when the loan carries a build-up or the server
+  // totals one; a figure the server did not send in them is a dash.
+  const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
 
-  // Column totals of the Release dialog's schedule preview.
-  const scheduleTotals = useMemo(
-    () =>
-      storedSchedule.reduce(
-        (acc, row) => ({
-          principal: acc.principal + row.principal,
-          interest: acc.interest + row.interest,
-          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-          totalPayment: acc.totalPayment + row.totalPayment,
-        }),
-        { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-      ),
-    [storedSchedule],
-  );
-
-  // Single source of truth for the interest still OWED on the loan — used both
-  // to decide whether to collect it before extending, and to render the
-  // "Interest Due" amount in the Extend dialog.
+  // The interest still OWED on the loan, which the Ledger's Interest column
+  // opens from. (The Extend dialog shows the server's extension preview.)
   //
   // This must be the OUTSTANDING interest, not the gross interest_due. It is
   // computed from the raw amortization rows as Σ max(0, interest_due −
@@ -1138,41 +1166,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
     const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
     return Math.round(fallback * 100) / 100;
   }, [rawSchedule, storedSchedule, scheduleLoad]);
-
-  /**
-   * What the new period will owe in interest if the outstanding amount is
-   * deferred: today's unpaid interest plus one fresh cycle on the unpaid
-   * principal. Mirrors LoanAdjustmentService::extendLoan, which charges a flat
-   * `principal × rate` per cycle regardless of how many days the cycle spans.
-   *
-   * Display only — the API recomputes it. Null when the figures needed aren't
-   * available, so the dialog omits the line rather than showing a wrong total.
-   */
-  const extendDeferredInterestTotal = useMemo(() => {
-    const rate = parseFloat(String(loan?.interest_rate ?? 0)) || 0;
-    if (!rate || !rawSchedule || rawSchedule.length === 0 || currentInterestDue === null) return null;
-
-    const outstandingPrincipal = rawSchedule.reduce((sum, row) => {
-      const due = parseFloat(String(row.principal_due ?? 0)) || 0;
-      const paid = parseFloat(String(row.principal_paid ?? 0)) || 0;
-      return sum + Math.max(0, due - paid);
-    }, 0);
-
-    const fresh = Math.round(outstandingPrincipal * (rate / 100) * 100) / 100;
-    return Math.round((currentInterestDue + fresh) * 100) / 100;
-  }, [rawSchedule, loan?.interest_rate, currentInterestDue]);
-
-  const storedScheduleTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
 
   // Ledger rows: repayments merged with debit/credit ledger entries (interest
   // a loan extension accrues or collects), sorted by date so the table reads
@@ -1371,13 +1364,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // A term extension adds instalments. Those are months only when the loan
   // steps by calendar month; otherwise they are the loan's own payment periods.
   const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
-  // Extend-dialog preview: the maturity date the extension will store, stepped
-  // from the server's own schedule the way the extend endpoint steps it, on
-  // the start date's day of the month. This is display-only — it does not
-  // drive the actual extend() call.
-  const extendPreviewMaturityDate = rawSchedule
-    ? extensionDueDate(rawSchedule, loanFrequency, loan?.start_date)
-    : null;
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
   // keyed by fee name and silently fell through to 0 for every fee, which
@@ -1395,22 +1381,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
   const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
-  // total_payable from API is computed by summing amortization_schedules. For
-  // unreleased loans (draft/for_review/approved) those rows don't exist yet,
-  // so the API returns 0 and the server's preview schedule is summed instead.
-  // With no server rows at all both figures are unknown and shown as a dash,
-  // never projected from the loan's terms; `expectedInterest` is only the
-  // Interest Amount of a schedule whose rows carry no interest.
+  // total_payable from API is computed by summing amortization_schedules. When
+  // it is 0 the schedule's total payment stands in: the server's column total,
+  // persisted or previewed, and a dash when the server sent none or there are
+  // no server rows at all. Nothing is added up here or
+  // projected from the loan's terms; `expectedInterest` is only the Interest
+  // Amount of a schedule whose server total carries no interest.
   const expectedInterest =
     Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
   const loanTotalPayable: number | null =
     Number(loan?.total_payable ?? 0) > 0
       ? Number(loan!.total_payable)
       : storedSchedule.length > 0
-        ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
+        ? storedScheduleTotals.totalPayment
         : null;
   const loanInterestAmount: number | null =
-    storedSchedule.length === 0
+    storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
       : storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
 
@@ -1839,12 +1825,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
       remarks: composedRemarks,
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the
-    // full amount due for the current period, prompt to extend instead
-    // of silently posting a partial payment.
+    // Upon Maturity loans: if the cashier is recording less than the open
+    // period's total payment, prompt to extend instead of silently posting a
+    // partial payment. Without the server's total for that period the payment
+    // can't be judged, so it is not posted at all.
     if (isUponMaturityLoan && paymentMode === "regular") {
-      const currentDue = storedSchedule.find((row) => row.status !== "paid");
-      if (currentDue && payload.amount_paid < currentDue.totalPayment) {
+      const standing = paymentAgainstDue(payload.amount_paid, duePeriod);
+      if (standing === "unknown") {
+        toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
+        return;
+      }
+      if (standing === "partial") {
         setPendingPayment(payload);
         setPartialExtendOpen(true);
         return;
@@ -1877,8 +1868,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       setExtendRemarks("");
     } catch (err) {
       // Nothing was charged: a failed extension rolls the interest payment
-      // back with it, so retrying is safe.
+      // back with it, so retrying is safe. The dialog stays open, so ask for
+      // a fresh preview: Confirm waits for it rather than offering figures the
+      // refusal may have made stale.
       notifyError(err, "We couldn't extend this loan. Please try again.");
+      setExtendPreviewRound((round) => round + 1);
     } finally {
       try {
         setLoan(await loadLoan(loan.id, loan));
@@ -2213,7 +2207,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
                 <Button
-                  onClick={() => setExtendOpen(true)}
+                  onClick={() => {
+                    setExtendInterestOption("pay");
+                    setExtendPreviewRound((round) => round + 1);
+                    setExtendOpen(true);
+                  }}
                   className="w-full sm:w-auto bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
@@ -2938,7 +2936,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </p>
                   <p className="text-sm font-semibold">
                     {storedSchedule.length > 0
-                      ? formatCurrency(storedScheduleTotals.shareCapitalBuildUp)
+                      ? currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)
                       : "—"}
                   </p>
                 </div>
@@ -3365,7 +3363,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <CardContent className="pt-0">
               {(() => {
                 const isReleased = hasServerLoanData;
-                const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+                const hasScb = scheduleHasScb;
                 // In place of the rows on both tabs when there are none to draw.
                 const scheduleNotice =
                   storedSchedule.length > 0 ? null : (
@@ -3389,16 +3387,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <TableBody>
                         {storedSchedule.map((row) => (
                           <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.period}</TableCell>
+                            <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
                             <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                            <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                            <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
                             {hasScb && (
                               <TableCell className="text-right text-brand-orange">
-                                {formatCurrency(row.shareCapitalBuildUp)}
+                                {currencyOrDash(row.shareCapitalBuildUp)}
                               </TableCell>
                             )}
-                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                            <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
                           </TableRow>
                         ))}
@@ -3406,14 +3404,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <TableFooter>
                         <TableRow>
                           <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
                           {hasScb && (
                             <TableCell className="text-right font-semibold text-brand-orange">
-                              {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                              {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                             </TableCell>
                           )}
-                          <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
+                          <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
                           <TableCell />
                         </TableRow>
                       </TableFooter>
@@ -3594,9 +3592,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(loan.principal_amount)}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{(storedScheduleTotals.interest ?? 0) > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
+                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{(storedScheduleTotals.interest ?? 0) > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
@@ -3951,7 +3949,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         <TableHead className="sticky top-0 bg-background">Due Date</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Principal</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Interest</TableHead>
-                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                        {scheduleHasScb && (
                           <TableHead className="text-right sticky top-0 bg-background">SCB</TableHead>
                         )}
                         <TableHead className="text-right sticky top-0 bg-background">Total</TableHead>
@@ -3961,16 +3959,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <TableBody>
                       {storedSchedule.map((row) => (
                         <TableRow key={row.period}>
-                          <TableCell className="text-center text-xs">{row.period}</TableCell>
+                          <TableCell className="text-center text-xs">{row.periodNumber ?? row.period}</TableCell>
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
-                          <TableCell className="text-right text-xs">{formatCurrency(row.principal)}</TableCell>
-                          <TableCell className="text-right text-xs">{formatCurrency(row.interest)}</TableCell>
-                          {scheduleTotals.shareCapitalBuildUp > 0 && (
+                          <TableCell className="text-right text-xs">{currencyOrDash(row.principal)}</TableCell>
+                          <TableCell className="text-right text-xs">{currencyOrDash(row.interest)}</TableCell>
+                          {scheduleHasScb && (
                             <TableCell className="text-right text-xs text-brand-orange">
-                              {formatCurrency(row.shareCapitalBuildUp)}
+                              {currencyOrDash(row.shareCapitalBuildUp)}
                             </TableCell>
                           )}
-                          <TableCell className="text-right text-xs font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(row.balance)}</TableCell>
                         </TableRow>
                       ))}
@@ -3978,14 +3976,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <TableFooter>
                       <TableRow>
                         <TableCell colSpan={2} className="font-semibold text-xs">Total</TableCell>
-                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.principal)}</TableCell>
-                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.interest)}</TableCell>
-                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                        <TableCell className="text-right font-semibold text-xs">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                        <TableCell className="text-right font-semibold text-xs">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
+                        {scheduleHasScb && (
                           <TableCell className="text-right font-semibold text-xs text-brand-orange">
-                            {formatCurrency(scheduleTotals.shareCapitalBuildUp)}
+                            {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                           </TableCell>
                         )}
-                        <TableCell className="text-right font-bold text-xs">{formatCurrency(scheduleTotals.totalPayment)}</TableCell>
+                        <TableCell className="text-right font-bold text-xs">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
                         <TableCell />
                       </TableRow>
                     </TableFooter>
@@ -4150,16 +4148,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
               installment the borrower currently needs to pay (the earliest
               unpaid period). Gives the cashier a clear "this is what's due
               right now" anchor before they enter an amount. */}
-          {storedSchedule.length > 0 && (() => {
-            const current = storedSchedule.find((row) => row.status !== "paid");
+          {(() => {
+            const current = duePeriod;
             if (!current) return null;
-            const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+            const hasScb = scheduleHasScb;
+            const currentTotal = current.totalPayment;
             const isOverdue = current.status === "overdue";
             const isPartial = current.status === "partial";
             // If the cashier has already typed an amount, surface what
             // portion of THIS payment lands on the current period.
-            const currentAlloc = (paymentPreview?.allocations ?? []).find(
-              (a) => a.period === current.period
+            // Matched by schedule id or the server's period number, never by
+            // position: period numbers can skip after an extension.
+            const currentAlloc = (paymentPreview?.allocations ?? []).find((a) =>
+              allocationMatches(a, current)
             );
             const currentApplied =
               currentAlloc?.amount_applied ??
@@ -4194,7 +4195,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        Period {current.period} &middot; Due
+                        Period {current.periodNumber ?? "—"} &middot; Due
                       </p>
                       <p className="text-base font-semibold truncate">
                         {formatDateObj(current.dueDate)}
@@ -4209,17 +4210,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         Amount to Pay
                       </p>
                       <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-                        {formatCurrency(current.totalPayment)}
+                        {currencyOrDash(currentTotal)}
                       </p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPaymentAmount(current.totalPayment.toFixed(2))
-                        }
-                        className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline"
-                      >
-                        Use this amount →
-                      </button>
+                      {currentTotal !== null && (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(currentTotal.toFixed(2))}
+                          className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline"
+                        >
+                          Use this amount →
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -4227,20 +4228,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <div className="rounded-md border bg-background p-2 text-center min-w-0">
                       <p className="text-[10px] text-muted-foreground">Principal</p>
                       <p className="text-sm font-semibold tabular-nums truncate">
-                        {formatCurrency(current.principal)}
+                        {currencyOrDash(current.principal)}
                       </p>
                     </div>
                     <div className="rounded-md border bg-background p-2 text-center min-w-0">
                       <p className="text-[10px] text-muted-foreground">Interest</p>
                       <p className="text-sm font-semibold tabular-nums truncate">
-                        {formatCurrency(current.interest)}
+                        {currencyOrDash(current.interest)}
                       </p>
                     </div>
                     {hasScb && (
                       <div className="rounded-md border bg-background p-2 text-center min-w-0 col-span-2 sm:col-span-1">
                         <p className="text-[10px] text-muted-foreground">SCB</p>
                         <p className="text-sm font-semibold tabular-nums text-brand-orange truncate">
-                          {formatCurrency(current.shareCapitalBuildUp)}
+                          {currencyOrDash(current.shareCapitalBuildUp)}
                         </p>
                       </div>
                     )}
@@ -4317,16 +4318,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
           {/* Advance-mode helpers: quick presets that auto-fill the amount
               with the sum of the next N unpaid scheduled installments. The
               cashier can still edit the amount manually. */}
-          {paymentMode === "advance" && storedSchedule.length > 0 && (() => {
-            const unpaid = storedSchedule.filter((r) => r.status !== "paid");
+          {paymentMode === "advance" && scheduleRows && (() => {
+            // The open periods with their own server figures, never the merged
+            // upon-maturity row (whose totals include what was collected).
+            const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
+            // Null when a period in it has no total payment from the server.
             const sumOfNext = (n: number) =>
-              unpaid.slice(0, n).reduce((s, r) => s + r.totalPayment, 0);
+              unpaid.slice(0, n).reduce<number | null>(
+                (s, r) => (s === null || r.totalPayment === null ? null : s + r.totalPayment),
+                0,
+              );
             const fillForPeriods = (n: number) => {
               const capped = Math.max(1, Math.min(n, unpaid.length));
               setAdvancePeriods(capped);
               const total = sumOfNext(capped);
-              setPaymentAmount(total > 0 ? String(total.toFixed(2)) : "");
+              setPaymentAmount(total !== null && total > 0 ? String(total.toFixed(2)) : "");
             };
             return (
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20 space-y-2">
@@ -4354,7 +4361,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     >
                       {n} period{n === 1 ? "" : "s"}
                       <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                        ({formatCurrency(sumOfNext(n))})
+                        ({currencyOrDash(sumOfNext(n))})
                       </span>
                     </Button>
                   ))}
@@ -4371,7 +4378,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   >
                     Pay all remaining
                     <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                      ({formatCurrency(sumOfNext(unpaid.length))})
+                      ({currencyOrDash(sumOfNext(unpaid.length))})
                     </span>
                   </Button>
                 </div>
@@ -4417,10 +4424,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Amount <span className="text-red-500">*</span>
                 </Label>
                 {(() => {
-                  const currentDue = storedSchedule.find((r) => r.status !== "paid");
-                  if (!currentDue) return null;
-                  const suggested = currentDue.totalPayment;
-                  if (suggested <= 0) return null;
+                  if (!duePeriod) return null;
+                  const suggested = duePeriod.totalPayment;
+                  if (suggested === null || suggested <= 0) return null;
                   return (
                     <button
                       type="button"
@@ -4629,11 +4635,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 {Array.isArray(paymentPreview.allocations) && paymentPreview.allocations.length > 0 && (() => {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
                   // A dash with no schedule on screen to read the build-up from.
-                  const periodScb = (period: number | undefined) => {
-                    if (storedSchedule.length === 0) return "—";
-                    if (typeof period !== "number") return formatCurrency(0);
-                    const row = storedSchedule.find((r) => r.period === period);
-                    return formatCurrency(row?.shareCapitalBuildUp ?? 0);
+                  const periodScb = (allocation: { schedule_id?: number; period?: number }) => {
+                    if (storedSchedule.length === 0 || !scheduleRows) return "—";
+                    // The period's own server row (by schedule id, else the
+                    // server's period number), never the merged upon-maturity
+                    // row and never by position; a dash when there is none.
+                    return currencyOrDash(allocationBuildUp(scheduleRows, allocation));
                   };
                   return (
                   <div className="rounded-lg border overflow-hidden">
@@ -4686,7 +4693,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
-                                    {periodScb(a.period)}
+                                    {periodScb(a)}
                                   </TableCell>
                                 )}
                                 <TableCell
@@ -4826,36 +4833,71 @@ function LoanDetail({ loanId }: { loanId: number }) {
               This will move the loan&apos;s due date forward by one cycle.
               The principal and any remaining balance are unchanged.{" "}
               {extendInterestOption === "pay"
-                ? "The interest due below will be collected as a payment before the loan extends."
+                ? "The amount below will be collected as a payment before the loan extends."
                 : "The interest due below stays unpaid and is added to the new period's interest."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
-            <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
-              {extendInterestOption === "pay"
-                ? "Interest Due — will be collected to extend"
-                : "Interest Due — carried into the new period"}
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {currentInterestDue === null ? "—" : formatCurrency(currentInterestDue)}
-            </p>
-            {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
-              // Spells out the stacking the team described: ₱50 already due
-              // plus ₱50 fresh becomes ₱100 owed on the new period.
-              <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-                Stays unpaid — the new period will owe{" "}
-                <span className="font-semibold tabular-nums">
-                  {formatCurrency(extendDeferredInterestTotal)}
-                </span>{" "}
-                once this cycle&apos;s interest is added.
+          {/* Every figure here is the server's extension preview for the
+              option chosen; nothing is worked out in the browser. */}
+          <div
+            className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30"
+            aria-live="polite"
+            aria-busy={extendPreview.loading}
+          >
+            {extendPreview.loading ? (
+              <p className="flex items-center gap-2 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Getting the extension figures...
               </p>
+            ) : extendPreview.preview === null ? (
+              <p className="py-2 text-sm text-red-700 dark:text-red-400" role="alert">
+                {extendPreview.error ?? "We couldn't preview this extension. Please try again."}
+              </p>
+            ) : (
+              <>
+                <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
+                  {extendPreview.preview.collectNow
+                    ? "Collected now to extend"
+                    : "Interest Due — carried into the new period"}
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+                  {formatCurrency(
+                    extendPreview.preview.collectNow
+                      ? extendPreview.preview.collectNow.amount
+                      : extendPreview.preview.carryInterest,
+                  )}
+                </p>
+                {extendPreview.preview.collectNow && extendPreview.preview.collectNow.penaltyPart !== null && (
+                  <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                    Includes{" "}
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(extendPreview.preview.collectNow.penaltyPart)}
+                    </span>{" "}
+                    late penalty and{" "}
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(extendPreview.preview.collectNow.interestPart)}
+                    </span>{" "}
+                    interest.
+                  </p>
+                )}
+                <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-emerald-200 pt-2 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">
+                  <dt>Interest carried over</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.carryInterest)}</dd>
+                  <dt>This cycle&apos;s interest</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.freshInterest)}</dd>
+                  <dt>New period&apos;s interest</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.newInterestDue)}</dd>
+                  <dt className="font-semibold">New period&apos;s total due</dt>
+                  <dd className="text-right font-semibold tabular-nums">{formatCurrency(extendPreview.preview.newTotalDue)}</dd>
+                </dl>
+              </>
             )}
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Interest Due Option</Label>
             <Select
               value={extendInterestOption}
-              onValueChange={(v) => setExtendInterestOption(v as "pay" | "defer")}
+              onValueChange={(v) => setExtendInterestOption(v as ExtensionInterestOption)}
             >
               <SelectTrigger className="w-full">
                 {/* Render function, else the trigger shows the raw value */}
@@ -4908,7 +4950,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">New Maturity Date</p>
               <p className="text-sm font-medium">
-                {extendPreviewMaturityDate ? formatDate(extendPreviewMaturityDate) : "—"}
+                {extendPreview.preview ? formatDate(extendPreview.preview.newDueDate) : "—"}
               </p>
             </div>
           </div>
@@ -4928,7 +4970,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleExtendLoan}
-              disabled={actionLoading}
+              disabled={actionLoading || extendPreview.preview === null}
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (

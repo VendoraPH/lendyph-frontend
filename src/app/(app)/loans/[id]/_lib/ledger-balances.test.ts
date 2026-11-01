@@ -190,3 +190,14 @@ test("a voided row keeps its own amounts for the struck-through display", () => 
   assert.equal(row.scbPaid, 50);
   assert.equal(row.status, "voided");
 });
+
+test("with no server build-up total, the SCB balance is unknown, never a sum of the rows", () => {
+  const opening = ledgerOpening({
+    principalAmount: 10000,
+    scheduleRowCount: 3,
+    currentInterestDue: 250,
+    scheduleScbTotal: null,
+    ...MOVEMENTS,
+  });
+  assert.deepEqual(opening, { principal: 10000, interest: 750, scb: null });
+});
