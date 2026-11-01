@@ -85,7 +85,7 @@ export const repaymentService = {
    *
    * This was called `listAll`, which in this codebase means "drained across
    * every page" (`borrowerService.listAll`, `loanService.listAll`,
-   * `shareCapitalService.ledgerListAll`). It was not a drain: it was a single
+   * `shareCapitalService.pledgeListAll`). It was not a drain: it was a single
    * `api.get` whose callers passed `per_page: 100` and `per_page: 200` and
    * believed the name. The 200 was clamped to 100 and the 100 sat exactly on
    * the ceiling with nothing to say more existed, so payment #101 was
