@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DailyDuesSummary } from "@/types";
-import { collectionPieSlices, collectionRateTone } from "./collection-pie";
+import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./collection-pie";
 
 const summary: DailyDuesSummary = {
   total_due: 2500,
@@ -30,4 +30,27 @@ test("the rate badge bands follow the server's rate", () => {
   assert.equal(collectionRateTone(72), "fair");
   assert.equal(collectionRateTone(49.9), "poor");
   assert.equal(collectionRateTone(null), "unknown");
+});
+
+test("the shown rate is the server's rate on a day with dues", () => {
+  assert.equal(shownCollectionRate(summary), 72);
+});
+
+test("a day with nothing due shows no rate, not a red 0%", () => {
+  // The server answers collection_rate 0 when total_due is 0.
+  const emptyDay: DailyDuesSummary = {
+    ...summary,
+    total_due: 0,
+    total_collected: 0,
+    collected_in_full: 0,
+    partially_collected: 0,
+    uncollected: 0,
+    collection_rate: 0,
+    counts: { collected: 0, partial: 0, pending: 0 },
+  };
+  assert.equal(shownCollectionRate(emptyDay), null);
+});
+
+test("no summary shows no rate", () => {
+  assert.equal(shownCollectionRate(null), null);
 });
