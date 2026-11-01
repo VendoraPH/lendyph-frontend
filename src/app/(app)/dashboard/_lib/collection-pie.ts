@@ -15,6 +15,15 @@ export function collectionPieSlices(summary: DailyDuesSummary | null): Collectio
   ];
 }
 
+/**
+ * The server's collection rate, or null when there is nothing to rate: no
+ * summary, or a day with nothing due (the server answers 0 then).
+ */
+export function shownCollectionRate(summary: DailyDuesSummary | null): number | null {
+  if (!summary || !(summary.total_due > 0)) return null;
+  return summary.collection_rate;
+}
+
 /** The rate badge's colour band for the server's collection rate. */
 export function collectionRateTone(rate: number | null): "good" | "fair" | "poor" | "unknown" {
   if (rate === null) return "unknown";

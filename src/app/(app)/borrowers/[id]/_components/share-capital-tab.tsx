@@ -88,12 +88,14 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
     const sorted = [...entries].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id - b.id
     );
+    const rows = [];
     let running = 0;
-    return sorted.map((e) => {
+    for (const e of sorted) {
       const { debit, credit } = ledgerAmounts(e);
       running += credit - debit;
-      return { ...e, debit, credit, runningBalance: running };
-    });
+      rows.push({ ...e, debit, credit, runningBalance: running });
+    }
+    return rows;
   }, [entries]);
 
   if (loading) {
