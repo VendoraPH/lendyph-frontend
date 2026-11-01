@@ -26,6 +26,8 @@ import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
   NO_SCHEDULE_TOTALS,
+  openPeriod,
+  paymentAgainstDue,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -1119,6 +1121,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       totals: storedScheduleTotals,
     });
   }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, storedScheduleTotals, scheduleRows]);
+  // The period the borrower pays next, with its own server figures. Payment
+  // amounts and the partial-payment check read this, never the merged
+  // upon-maturity row, whose totals include what an extension already
+  // collected.
+  const duePeriod = useMemo(() => (scheduleRows ? openPeriod(scheduleRows) : null), [scheduleRows]);
   // The build-up columns show when the loan carries a build-up or the server
   // totals one; a figure the server did not send in them is a dash.
   const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
@@ -1815,12 +1822,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
       remarks: composedRemarks,
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the
-    // full amount due for the current period, prompt to extend instead
-    // of silently posting a partial payment.
+    // Upon Maturity loans: if the cashier is recording less than the open
+    // period's total payment, prompt to extend instead of silently posting a
+    // partial payment. Without the server's total for that period the payment
+    // can't be judged, so it is not posted at all.
     if (isUponMaturityLoan && paymentMode === "regular") {
-      const currentDue = storedSchedule.find((row) => row.status !== "paid");
-      if (currentDue && currentDue.totalPayment !== null && payload.amount_paid < currentDue.totalPayment) {
+      const standing = paymentAgainstDue(payload.amount_paid, duePeriod);
+      if (standing === "unknown") {
+        toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
+        return;
+      }
+      if (standing === "partial") {
         setPendingPayment(payload);
         setPartialExtendOpen(true);
         return;
@@ -1853,8 +1865,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       setExtendRemarks("");
     } catch (err) {
       // Nothing was charged: a failed extension rolls the interest payment
-      // back with it, so retrying is safe.
+      // back with it, so retrying is safe. The dialog stays open, so ask for
+      // a fresh preview: Confirm waits for it rather than offering figures the
+      // refusal may have made stale.
       notifyError(err, "We couldn't extend this loan. Please try again.");
+      setExtendPreviewRound((round) => round + 1);
     } finally {
       try {
         setLoan(await loadLoan(loan.id, loan));
@@ -4130,8 +4145,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
               installment the borrower currently needs to pay (the earliest
               unpaid period). Gives the cashier a clear "this is what's due
               right now" anchor before they enter an amount. */}
-          {storedSchedule.length > 0 && (() => {
-            const current = storedSchedule.find((row) => row.status !== "paid");
+          {(() => {
+            const current = duePeriod;
             if (!current) return null;
             const hasScb = scheduleHasScb;
             const currentTotal = current.totalPayment;
@@ -4402,9 +4417,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Amount <span className="text-red-500">*</span>
                 </Label>
                 {(() => {
-                  const currentDue = storedSchedule.find((r) => r.status !== "paid");
-                  if (!currentDue) return null;
-                  const suggested = currentDue.totalPayment;
+                  if (!duePeriod) return null;
+                  const suggested = duePeriod.totalPayment;
                   if (suggested === null || suggested <= 0) return null;
                   return (
                     <button

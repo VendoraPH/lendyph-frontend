@@ -181,3 +181,31 @@ export function toDisplaySchedule(
     status: row.status,
   }));
 }
+
+/**
+ * The period the borrower pays next: the first server row not yet paid, with
+ * its own figures. Never the merged upon-maturity row: after an extension the
+ * settled cycle stays as a paid row, and the merged totals include what it
+ * already collected. Null when every period is paid.
+ */
+export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
+  return (
+    toDisplaySchedule(schedule, { isUponMaturity: false, totals: NO_SCHEDULE_TOTALS }).find(
+      (row) => row.status !== "paid",
+    ) ?? null
+  );
+}
+
+/**
+ * How a payment stands against the open period's server total payment, to
+ * the centavo: `covers` it (or there is no open period), falls short of it
+ * (`partial`), or `unknown` when the server sent no total for the period.
+ */
+export function paymentAgainstDue(
+  amount: number,
+  due: AmortizationRow | null,
+): "covers" | "partial" | "unknown" {
+  if (due === null) return "covers";
+  if (due.totalPayment === null) return "unknown";
+  return Math.round(amount * 100) < Math.round(due.totalPayment * 100) ? "partial" : "covers";
+}

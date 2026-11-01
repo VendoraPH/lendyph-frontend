@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NO_SCHEDULE_TOTALS,
+  openPeriod,
+  paymentAgainstDue,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -215,32 +217,84 @@ test("a total the server did not send is null (a dash), never a sum of the rows"
   });
 });
 
-test("an upon-maturity schedule collapses into one maturity payment of the server's totals", () => {
-  // Two periods, as an extension leaves it: the settled first cycle's interest
-  // and the open second one. The figures are the server's column totals, not
-  // the rows added up here (they would give 600 interest, not 900.01).
-  const rows = toDisplaySchedule(
-    readScheduleRows(
-      [
-        persisted(1, { principal_due: 0, interest_due: 300, remaining_balance: 10000, interest_paid: 300, status: "paid", due_date: "2026-10-31" }),
-        persisted(2, { principal_due: 10000, interest_due: 300, remaining_balance: 0, status: "pending", due_date: "2026-11-30" }),
-      ],
-      42,
-    )!.schedule,
-    { isUponMaturity: true, totals: readScheduleTotals(SERVER_TOTALS) },
-  );
+/**
+ * A ₱10,000 upon-maturity loan extended once with "pay", as
+ * `closeOpenSchedules` leaves it: the settled first cycle kept as `paid` with
+ * `total_due` equal to what was collected, and the open second cycle.
+ */
+const EXTENDED_ROWS = [
+  persisted(1, { principal_due: 0, interest_due: 300, remaining_balance: 10000, interest_paid: 300, status: "paid", due_date: "2026-10-31", share_capital_build_up: 100, total_payment: 400 }),
+  persisted(2, { principal_due: 10000, interest_due: 300, remaining_balance: 0, status: "pending", due_date: "2026-11-30", share_capital_build_up: 100, total_payment: 10400 }),
+];
+/** `LoanResource::scheduleTotals()` for EXTENDED_ROWS. */
+const EXTENDED_TOTALS = {
+  principal: 10000,
+  interest: 600,
+  penalty: 0,
+  total_due: 10600,
+  amount_paid: 300,
+  share_capital_build_up: 200,
+  total_payment: 10800,
+};
+
+test("an upon-maturity schedule collapses, for display, into one row of the server's totals", () => {
+  const rows = toDisplaySchedule(readScheduleRows(EXTENDED_ROWS, 42)!.schedule, {
+    isUponMaturity: true,
+    totals: readScheduleTotals(EXTENDED_TOTALS),
+  });
   assert.deepEqual(rows, [
     {
       period: 1,
       dueDate: new Date("2026-11-30"),
       principal: 10000,
-      interest: 900.01,
-      shareCapitalBuildUp: 301.5,
-      totalPayment: 11201.52,
+      interest: 600,
+      shareCapitalBuildUp: 200,
+      totalPayment: 10800,
       balance: 0,
       status: "pending",
     },
   ]);
+});
+
+// ── what the cashier is asked to pay ──────────────────────────────────────
+
+test("the amount to pay is the open period's own total payment, never the merged row's", () => {
+  // The merged row's ₱10,800 includes the ₱400 the extension already
+  // collected; the open period owes ₱10,400.
+  const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
+  assert.deepEqual(due, {
+    period: 2,
+    dueDate: new Date("2026-11-30"),
+    principal: 10000,
+    interest: 300,
+    shareCapitalBuildUp: 100,
+    totalPayment: 10400,
+    balance: 0,
+    status: "pending",
+  });
+});
+
+test("paying exactly the open period's total payment is not a partial payment", () => {
+  const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
+  assert.equal(paymentAgainstDue(10400, due), "covers");
+  assert.equal(paymentAgainstDue(10400.004, due), "covers");
+  assert.equal(paymentAgainstDue(12000, due), "covers");
+  assert.equal(paymentAgainstDue(10399.99, due), "partial");
+});
+
+test("with no server total payment for the open period, the payment cannot be judged", () => {
+  const bare: Record<string, unknown> = { ...EXTENDED_ROWS[1] };
+  delete bare.total_payment;
+  const due = openPeriod(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule);
+  assert.equal(due?.totalPayment, null);
+  assert.equal(paymentAgainstDue(10400, due), "unknown");
+});
+
+test("with no open period there is nothing to fall short of", () => {
+  const settled = openPeriod(readScheduleRows([EXTENDED_ROWS[0]], 42)!.schedule);
+  assert.equal(settled, null);
+  assert.equal(paymentAgainstDue(100, settled), "covers");
+  assert.equal(openPeriod([]), null);
 });
 
 test("an upon-maturity collapse with no server totals shows dashes, never a browser sum", () => {

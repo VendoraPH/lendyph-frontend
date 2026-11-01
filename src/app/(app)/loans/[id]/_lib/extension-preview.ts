@@ -1,8 +1,9 @@
 /**
  * The Extend dialog's figures, picked from the server's
  * `GET /loans/{id}/extension-preview` answer. Nothing is calculated here.
- * Dependency-free, so it runs under `tsx --test`.
+ * Pure, so it runs under `tsx --test`.
  */
+import { getErrorMessage } from "@/lib/api-error";
 import type { ExtensionInterestOption } from "@/types/loan";
 
 export interface ExtensionPreviewView {
@@ -72,5 +73,63 @@ export function readExtensionPreview(
     newInterestDue,
     newTotalDue,
     newDueDate,
+  };
+}
+
+/** What a failed preview says when the server gives no usable reason. */
+export const EXTENSION_PREVIEW_FALLBACK = "We couldn't preview this extension. Please try again.";
+
+/** One answer from the server, tagged with the request it answers. */
+export interface ExtensionPreviewAnswer {
+  key: string;
+  preview: ExtensionPreviewView | null;
+  error: string | null;
+  /** True when the request itself failed (worth a toast), not just unreadable. */
+  failed: boolean;
+}
+
+/** The request the open dialog makes now; null while it is closed. */
+export function extensionPreviewKey(
+  request: { loanId: number; option: ExtensionInterestOption; round: number } | null,
+): string | null {
+  return request === null ? null : JSON.stringify([request.loanId, request.option, request.round]);
+}
+
+/**
+ * A settled request as the dialog records it, or null when the request was
+ * aborted (switched away from or closed), so it neither shows nor reports.
+ */
+export function extensionPreviewAnswer(
+  key: string,
+  option: ExtensionInterestOption,
+  outcome: { data: unknown } | { error: unknown },
+  aborted: boolean,
+): ExtensionPreviewAnswer | null {
+  if (aborted) return null;
+  if ("error" in outcome) {
+    return { key, preview: null, error: getErrorMessage(outcome.error, EXTENSION_PREVIEW_FALLBACK), failed: true };
+  }
+  const preview = readExtensionPreview(outcome.data, option);
+  return {
+    key,
+    preview,
+    error: preview === null ? "The server's extension preview could not be read." : null,
+    failed: false,
+  };
+}
+
+/**
+ * What the dialog shows for the request made now: the answer only when it
+ * answers that request (same loan, option and round), loading until then.
+ */
+export function extensionPreviewState(
+  key: string | null,
+  answer: ExtensionPreviewAnswer | null,
+): { loading: boolean; preview: ExtensionPreviewView | null; error: string | null } {
+  const current = key !== null && answer?.key === key ? answer : null;
+  return {
+    loading: key !== null && current === null,
+    preview: current?.preview ?? null,
+    error: current?.error ?? null,
   };
 }
