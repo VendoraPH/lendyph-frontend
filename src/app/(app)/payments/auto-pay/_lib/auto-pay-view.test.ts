@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { AutoPayPartialRow, AutoPayPreview, AutoPayResult } from "@/types";
-import { loanIssues, loansAffected, previewTotals, runOutcome } from "./auto-pay-view";
+import type { AutoPayFilter, AutoPayPartialRow, AutoPayPreview, AutoPayResult } from "@/types";
+import {
+  autoPayTotalsKey,
+  loanIssues,
+  loansAffected,
+  previewTotals,
+  runOutcome,
+  runTotals,
+} from "./auto-pay-view";
 
 const partial = (loan_id: number, schedule_id: number): AutoPayPartialRow => ({
   loan_id,
@@ -98,4 +105,30 @@ test("the run outcome carries the server's counts and both lists", () => {
 test("a run answer without lists still reports its counts", () => {
   const result: AutoPayResult = { processed: 2, skipped: 0, failed: 0, repayments: [] };
   assert.deepEqual(runOutcome(result), { processed: 2, skipped: 0, failed: 0, skips: [], failures: [] });
+});
+
+const filter: AutoPayFilter = { product_ids: [2, 1], date_from: "2026-10-01", date_to: "2026-10-31" };
+
+test("the run total is the server's grand total and part-paid total, as sent", () => {
+  // Not total_amount plus the rows: figures the browser would not get by adding.
+  assert.deepEqual(
+    runTotals({ ...preview.summary, partial_total: 650.01, grand_total: 11_999.99 }),
+    { partialTotal: 650.01, grandTotal: 11_999.99 },
+  );
+});
+
+test("a summary without the run total has none, not a browser stand-in", () => {
+  assert.equal(runTotals(preview.summary), null);
+  assert.equal(runTotals({ ...preview.summary, partial_total: 0 }), null);
+});
+
+test("the totals request is keyed by the filter and the selection, in any order", () => {
+  assert.equal(autoPayTotalsKey(filter, new Set([31, 20])), autoPayTotalsKey(filter, new Set([20, 31])));
+  assert.notEqual(autoPayTotalsKey(filter, new Set([20])), autoPayTotalsKey(filter, new Set([20, 31])));
+  assert.deepEqual(JSON.parse(autoPayTotalsKey(filter, new Set([31, 20]))), {
+    product_ids: [2, 1],
+    date_from: "2026-10-01",
+    date_to: "2026-10-31",
+    include_schedule_ids: [20, 31],
+  });
 });

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { getErrorMessage } from "@/lib/api-error";
 import {
   balanceAdjustmentNewValues,
   readBalanceAdjustmentPreview,
@@ -69,4 +70,18 @@ test("a preview missing a figure is unreadable, not zero", () => {
     }),
     null,
   );
+});
+
+// Guard: a refused adjustment names its field under `new_values.…`; the
+// dialog's create error shows the server's words, whichever key it used.
+test("a refused balance adjustment shows the server's field message", () => {
+  for (const key of ["new_values.adjustment_amount", "new_values", "new_values.target_principal_balance"]) {
+    const err = {
+      response: {
+        status: 422,
+        data: { message: "The given data was invalid.", errors: { [key]: ["Enter the target principal balance."] } },
+      },
+    };
+    assert.equal(getErrorMessage(err, "fallback"), "Enter the target principal balance.", key);
+  }
 });

@@ -1,6 +1,8 @@
 import type {
+  AutoPayFilter,
   AutoPayLoanIssue,
   AutoPayPreview,
+  AutoPayPreviewQuery,
   AutoPayResult,
   AutoPaySummary,
 } from "@/types";
@@ -22,6 +24,35 @@ export function previewTotals(summary: AutoPaySummary): PreviewTotals {
     penalty: summary.total_penalty ?? null,
     amount: summary.total_amount,
   };
+}
+
+export interface RunTotals {
+  /** The selected part-paid rows' remaining amount. */
+  partialTotal: number;
+  /** What the run posts for the selection. */
+  grandTotal: number;
+}
+
+/** The run's total from a preview asked with the selection; null if not sent. */
+export function runTotals(summary: AutoPaySummary): RunTotals | null {
+  const { partial_total: partialTotal, grand_total: grandTotal } = summary;
+  if (typeof partialTotal !== "number" || typeof grandTotal !== "number") return null;
+  return { partialTotal, grandTotal };
+}
+
+/**
+ * The preview query for a filter and a selection, as a key: equal selections
+ * in any order give the same key, so a re-render neither re-asks nor drops an
+ * answer already shown. `JSON.parse` it back to send it.
+ */
+export function autoPayTotalsKey(filter: AutoPayFilter, includedScheduleIds: ReadonlySet<number>): string {
+  const query: AutoPayPreviewQuery = {
+    product_ids: filter.product_ids,
+    date_from: filter.date_from,
+    date_to: filter.date_to,
+    include_schedule_ids: [...includedScheduleIds].sort((a, b) => a - b),
+  };
+  return JSON.stringify(query);
 }
 
 /**

@@ -8,9 +8,11 @@ import { DueLoansTable } from "./due-loans-table";
 import { LoanIssuesList } from "./loan-issues-list";
 import { formatCurrency } from "@/lib/format";
 import { loanIssues, loansAffected, previewTotals } from "../_lib/auto-pay-view";
-import type { AutoPayPreview } from "@/types";
+import { useAutoPayRunTotals } from "../_hooks/use-auto-pay-run-totals";
+import type { AutoPayFilter, AutoPayPreview } from "@/types";
 
 interface ReviewStepProps {
+  filter: AutoPayFilter;
   preview: AutoPayPreview;
   includedPartialIds: Set<number>;
   onTogglePartial: (scheduleId: number, included: boolean) => void;
@@ -20,6 +22,7 @@ interface ReviewStepProps {
 }
 
 export function ReviewStep({
+  filter,
   preview,
   includedPartialIds,
   onTogglePartial,
@@ -27,9 +30,10 @@ export function ReviewStep({
   onConfirm,
   processing,
 }: ReviewStepProps) {
-  // Every figure is the server's. Part-paid rows are not added onto the
-  // summary here; each one shows its own server figure in its table.
+  // Every figure is the server's. The run's total for the part-paid rows
+  // ticked now comes from the preview asked again with that selection.
   const totals = previewTotals(preview.summary);
+  const run = useAutoPayRunTotals(filter, includedPartialIds);
   const loanCount = loansAffected(preview, includedPartialIds);
   const skips = loanIssues(preview.skips);
 
@@ -67,10 +71,30 @@ export function ReviewStep({
         </div>
       </div>
       <p className="-mt-3 text-xs text-muted-foreground">
-        Totals cover the loans with full dues listed below. Each part-paid
-        period you include is collected at the Remaining amount on its row, on
-        top of these totals.
+        Totals cover the loans with full dues listed below. The run total adds
+        the part-paid periods you include.
       </p>
+
+      {/* The run's total for the current selection, from the server */}
+      <div
+        aria-live="polite"
+        className="rounded-lg border-2 border-brand-orange/40 p-4"
+      >
+        {run.loading ? (
+          <p className="text-sm text-muted-foreground">Working out the run total…</p>
+        ) : run.totals === null ? (
+          <p className="text-sm text-destructive">{run.error}</p>
+        ) : (
+          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted-foreground">Selected part-paid periods</dt>
+            <dd className="text-right tabular-nums">{formatCurrency(run.totals.partialTotal)}</dd>
+            <dt className="text-base font-semibold">Run total</dt>
+            <dd className="text-right text-base font-semibold tabular-nums">
+              {formatCurrency(run.totals.grandTotal)}
+            </dd>
+          </dl>
+        )}
+      </div>
 
       <DueLoansTable loans={preview.loans ?? []} totals={totals} />
 
@@ -111,7 +135,7 @@ export function ReviewStep({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={processing || loanCount === 0}
+          disabled={processing || loanCount === 0 || run.totals === null}
           className="flex-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
         >
           {processing && <Spinner className="mr-2 size-4" />}

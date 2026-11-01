@@ -146,8 +146,9 @@ export default function AutoPayPage() {
           <CardContent>
             {step === 1 ? (
               <FiltersStep onPreview={handlePreview} loading={previewing} />
-            ) : preview ? (
+            ) : preview && filter ? (
               <ReviewStep
+                filter={filter}
                 preview={preview}
                 includedPartialIds={includedPartialIds}
                 onTogglePartial={handleTogglePartial}
