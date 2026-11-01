@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  firstLastNameFrom,
   inPaymentDateRange,
   matchesPaymentSearch,
   paymentAmountFigures,
@@ -101,8 +102,6 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
   const borrowerRel = p.borrower as
     | { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string }
     | undefined;
-  const nameParts = loanRel?.borrower ?? borrowerRel;
-  const firstLast = [nameParts?.first_name, nameParts?.last_name].filter(Boolean).join(" ");
   return {
     id: p.id,
     receipt_number: (p.receipt_number as string) || `RCP-${String(p.id).padStart(8, "0")}`,
@@ -127,7 +126,7 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.loan_account as string) ||
       "—",
     loan_account_number: loanRel?.loan_account_number || (p.loan_account_number as string) || null,
-    first_last_name: firstLast || null,
+    first_last_name: firstLastNameFrom(p as Parameters<typeof firstLastNameFrom>[0]),
     loan_id: p.loan_id ?? loanRel?.id ?? 0,
     date: p.payment_date,
     amount:

@@ -21,7 +21,7 @@ import {
   readPaymentTotals,
   totalFigure,
 } from "./payment-history";
-import { inPaymentDateRange, matchesPaymentSearch } from "./payment-history";
+import { firstLastNameFrom, inPaymentDateRange, matchesPaymentSearch } from "./payment-history";
 
 describe("paymentAmountFigures", () => {
   test("shows amount_paid as it is: the penalty is already inside it", () => {
@@ -114,4 +114,13 @@ test("the date range includes both end days and ignores the time part", () => {
   assert.equal(inPaymentDateRange("2026-11-01", "2026-11-01", "2026-11-01"), true);
   assert.equal(inPaymentDateRange("2026-11-01T23:59:00Z", "", "2026-11-01"), true);
   assert.equal(inPaymentDateRange("2026-10-31", "2026-11-01", ""), false);
+});
+
+// GET /repayments sends the name flat (`borrower_first_last`), not a nested
+// borrower: reading only the nested names left every row's name empty, so a
+// member-name search showed no rows while the cards showed their totals.
+test("the first-last name comes from the flat field GET /repayments sends", () => {
+  assert.equal(firstLastNameFrom({ borrower_first_last: "Juan Dela Cruz" }), "Juan Dela Cruz");
+  assert.equal(firstLastNameFrom({ loan: { borrower: { first_name: "Ana", last_name: "Reyes" } } }), "Ana Reyes");
+  assert.equal(firstLastNameFrom({}), null);
 });

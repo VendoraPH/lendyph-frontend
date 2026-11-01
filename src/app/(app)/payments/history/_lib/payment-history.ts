@@ -97,3 +97,21 @@ export function inPaymentDateRange(paymentDate: string, dateFrom: string, dateTo
   const day = paymentDate.slice(0, 10);
   return (!dateFrom || day >= dateFrom) && (!dateTo || day <= dateTo);
 }
+
+type NameParts = { first_name?: string | null; last_name?: string | null } | null | undefined;
+
+/**
+ * The "first last" name the server's search matches, read from a GET
+ * /repayments row: the flat `borrower_first_last` the API sends, else the
+ * nested borrower's names if a payload carries them. Null when neither is there.
+ */
+export function firstLastNameFrom(row: {
+  borrower_first_last?: string | null;
+  loan?: { borrower?: NameParts } | null;
+  borrower?: NameParts;
+}): string | null {
+  if (row.borrower_first_last) return row.borrower_first_last;
+  const parts = row.loan?.borrower ?? row.borrower;
+  const joined = [parts?.first_name, parts?.last_name].filter(Boolean).join(" ");
+  return joined || null;
+}
