@@ -64,6 +64,7 @@ import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { collectNowParts } from "./_lib/extension-preview";
 import {
   dueNowHasOpenPeriod,
+  dueNowIsRange,
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
@@ -4221,10 +4222,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const currentTotal = amountDueOnPaymentDate?.amount ?? null;
             const dueParts = dueNowTiles(amountDueOnPaymentDate);
             const periodLabel = dueNowPeriodLabel(amountDueNow);
-            const isRange =
-              amountDueNow.lastPeriodNumber !== null &&
-              amountDueNow.periodNumber !== null &&
-              amountDueNow.lastPeriodNumber > amountDueNow.periodNumber;
+            // Several periods due: no single due date, status or per-period
+            // verdict, only the server's range and its amounts.
+            const isRange = dueNowIsRange(amountDueNow);
             const current =
               scheduleRows && periodLabel !== null
                 ? rowForAllocation(scheduleRows, {
@@ -4255,9 +4255,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                   <p className="text-xs font-medium flex items-center gap-1.5">
                     <CalendarIcon className="size-3.5 shrink-0" />
-                    {periodLabel === null ? "Insurance Premium Owed" : "Current Scheduled Payment"}
+                    {periodLabel === null
+                      ? "Insurance Premium Owed"
+                      : isRange
+                        ? "Amount Due Now"
+                        : "Current Scheduled Payment"}
                   </p>
-                  {current === null ? null : isOverdue ? (
+                  {current === null || isRange ? null : isOverdue ? (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                       Overdue
                     </span>
@@ -4286,10 +4290,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         )}
                       </div>
                     )}
-                    {/* Prominent "Amount to Pay" callout — gives the cashier
-                        an unmissable reference for what the borrower owes
-                        for the current period, with a one-click fill into
-                        the Amount input. */}
+                    {/* Prominent "Amount to Pay" callout — the server's
+                        amount due now (premium owed plus every period due,
+                        or the next period), with a one-click fill into the
+                        Amount input. */}
                     <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30 sm:text-right">
                       <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
                         Amount to Pay

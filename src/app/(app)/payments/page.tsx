@@ -58,6 +58,7 @@ import { currentDues } from "@/lib/loan-dues";
 import { currencyOrDash } from "@/lib/report-format";
 import {
   dueNowOnDate,
+  dueNowPeriodLabel,
   dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
@@ -699,7 +700,12 @@ function PaymentsContent() {
                   <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.outstanding_balance)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Total Due</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">
+                    Total Due
+                    {dueNowPeriodLabel(dueNow) !== null && (
+                      <span className="normal-case"> · {dueNowPeriodLabel(dueNow)}</span>
+                    )}
+                  </p>
                   <p className="text-sm font-bold tabular-nums">
                     {currencyOrDash(dueNow?.amount)}
                   </p>

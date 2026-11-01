@@ -342,6 +342,33 @@ test("disclosure: insurance unpaid at release is owed on the loan, interest-free
   );
 });
 
+test("disclosure: premium carried from the previous loan is its own non-finance line, all owed", () => {
+  // A restructure moved ₱400 of premium owed onto this loan: a line of its
+  // own, nothing deducted. Its note never says "unpaid at release", which is
+  // about this loan's own premium.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    non_finance_charges: {
+      items: [
+        { name: "Insurance Premium", amount: 600, deducted: 400, owed: 200 },
+        { name: "Insurance premium carried from the previous loan", amount: 400, deducted: 0, owed: 400 },
+      ],
+      total: 1000,
+    },
+  });
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  const index = lines.findIndex((l) => l.label === "b. Insurance premium carried from the previous loan");
+  assert.ok(index > 0);
+  assert.equal(lines[index].amount, formatCurrency(400));
+  const note = lines[index + 1];
+  assert.equal(note.amount, "");
+  assert.match(note.label, /all owed on the loan/);
+  assert.match(note.label, /interest-free, collected first/);
+  assert.doesNotMatch(note.label, /unpaid at release/);
+  // The column total is the server's, never the lines added up.
+  assert.deepEqual(lines[lines.length - 1].amount, formatCurrency(1000));
+});
+
 test("disclosure: net proceeds reconcile from the server's proceeds", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
 

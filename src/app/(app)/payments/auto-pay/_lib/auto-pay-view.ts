@@ -7,6 +7,7 @@ import type {
   AutoPayResult,
   AutoPaySummary,
 } from "@/types";
+import { formatCurrency } from "@/lib/format";
 
 export interface PreviewTotals {
   principal: number;
@@ -36,17 +37,25 @@ export function loanInsurance(loan: AutoPayLoanRow): number | null {
 }
 
 export interface RunTotals {
-  /** The selected part-paid rows' remaining amount. */
+  /** What the run posts for the selected part-paid rows, premium included. */
   partialTotal: number;
+  /** Insurance premium inside `partialTotal`; null when none or not sent. */
+  partialInsurance: number | null;
   /** What the run posts for the selection. */
   grandTotal: number;
 }
 
 /** The run's total from a preview asked with the selection; null if not sent. */
 export function runTotals(summary: AutoPaySummary): RunTotals | null {
-  const { partial_total: partialTotal, grand_total: grandTotal } = summary;
+  const { partial_total: partialTotal, partial_insurance: insurance, grand_total: grandTotal } = summary;
   if (typeof partialTotal !== "number" || typeof grandTotal !== "number") return null;
-  return { partialTotal, grandTotal };
+  const partialInsurance = typeof insurance === "number" && insurance > 0 ? insurance : null;
+  return { partialTotal, partialInsurance, grandTotal };
+}
+
+/** The part-paid line's "incl. ₱X premium", from the server's figure; null when none. */
+export function partialInsuranceNote(run: RunTotals): string | null {
+  return run.partialInsurance === null ? null : `incl. ${formatCurrency(run.partialInsurance)} premium`;
 }
 
 /**

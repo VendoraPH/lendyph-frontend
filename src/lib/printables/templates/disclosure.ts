@@ -79,7 +79,10 @@ interface ChargeItem {
   name: string;
   /** The server's pesos; null when it sent none, printed as a dash. */
   amount: number | null;
-  /** Non-finance only: the part unpaid at release, owed on the loan. */
+  /**
+   * Non-finance only: the part owed on the loan (unpaid at release, or all of
+   * a premium carried over from the loan a restructure closed).
+   */
   owed: number | null;
 }
 
@@ -198,10 +201,15 @@ export function buildDisclosureDoc(
       indent: true,
     };
     if (item.owed === null || item.owed <= 0) return [line];
+    // Nothing of it deducted (premium a restructure carried over from the
+    // loan it closed, or none collected at release): all of it is owed.
+    const allOwed = item.amount !== null && item.owed >= item.amount;
     return [
       line,
       {
-        label: `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free, collected first`,
+        label: allOwed
+          ? "all owed on the loan — interest-free, collected first"
+          : `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free, collected first`,
         amount: "",
         indent: true,
       },

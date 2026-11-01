@@ -3,8 +3,10 @@
  * here.
  *
  * - `amount_due_now` on the loan (LoanResource): what a payment must be today
- *   to clear the insurance premium owed plus the open period(s) in full,
- *   penalty included, with its parts. Null unless the loan takes payments.
+ *   to clear the insurance premium owed plus every open period due on or
+ *   before today (the first open period when none is due yet), penalty
+ *   included, with its parts. Its ids are the first period covered and
+ *   `last_period_number` the last. Null unless the loan takes payments.
  *   It is as of today only: for another payment date it is not shown.
  * - `payment_badge` on the dated payment preview: whether that amount on that
  *   date is partial, premium owed counted.
@@ -22,9 +24,9 @@ export interface AmountDueNow {
   interest: number;
   penalty: number;
   shareCapitalBuildUp: number;
-  /** Null when no period is open (only premium is owed). */
+  /** The first period covered; null when no period is open (only premium is owed). */
   periodNumber: number | null;
-  /** The last period it covers when it spans several; null for one. */
+  /** The last period covered; equal to `periodNumber` for one period. */
   lastPeriodNumber: number | null;
   scheduleId: number | null;
 }
@@ -124,13 +126,20 @@ export function dueNowTiles(due: AmountDueNow | null): { key: string; label: str
   ];
 }
 
+/** Whether the amount due now covers more than one period. */
+export function dueNowIsRange(due: AmountDueNow | null): boolean {
+  return (
+    due !== null &&
+    due.periodNumber !== null &&
+    due.lastPeriodNumber !== null &&
+    due.lastPeriodNumber !== due.periodNumber
+  );
+}
+
 /** "Period 2", "Periods 2–4", or null when no period is open. */
 export function dueNowPeriodLabel(due: AmountDueNow | null): string | null {
   if (due === null || due.periodNumber === null) return null;
-  if (due.lastPeriodNumber !== null && due.lastPeriodNumber > due.periodNumber) {
-    return `Periods ${due.periodNumber}–${due.lastPeriodNumber}`;
-  }
-  return `Period ${due.periodNumber}`;
+  return dueNowIsRange(due) ? `Periods ${due.periodNumber}–${due.lastPeriodNumber}` : `Period ${due.periodNumber}`;
 }
 
 /**

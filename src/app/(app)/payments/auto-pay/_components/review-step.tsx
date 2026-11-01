@@ -7,7 +7,7 @@ import { PartialRowsTable } from "./partial-rows-table";
 import { DueLoansTable } from "./due-loans-table";
 import { LoanIssuesList } from "./loan-issues-list";
 import { formatCurrency } from "@/lib/format";
-import { loanIssues, loansAffected, previewTotals } from "../_lib/auto-pay-view";
+import { loanIssues, loansAffected, partialInsuranceNote, previewTotals } from "../_lib/auto-pay-view";
 import { useAutoPaySelection } from "../_hooks/use-auto-pay-selection";
 import { cn } from "@/lib/utils";
 import type { AutoPayFilter, AutoPayPreview } from "@/types";
@@ -102,7 +102,12 @@ export function ReviewStep({
         ) : (
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted-foreground">Selected part-paid periods</dt>
-            <dd className="text-right tabular-nums">{formatCurrency(run.partialTotal)}</dd>
+            <dd className="text-right tabular-nums">
+              {formatCurrency(run.partialTotal)}
+              {partialInsuranceNote(run) !== null && (
+                <span className="block text-xs text-muted-foreground">{partialInsuranceNote(run)}</span>
+              )}
+            </dd>
             <dt className="text-base font-semibold">Run total</dt>
             <dd className="text-right text-base font-semibold tabular-nums">
               {formatCurrency(run.grandTotal)}

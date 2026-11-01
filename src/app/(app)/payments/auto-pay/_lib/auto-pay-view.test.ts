@@ -6,6 +6,7 @@ import {
   loanIssues,
   loanInsurance,
   loansAffected,
+  partialInsuranceNote,
   previewTotals,
   runOutcome,
   runTotals,
@@ -58,6 +59,24 @@ test("the preview totals are the server's summary, as sent", () => {
 test("a summary without a penalty figure shows none, not zero", () => {
   const older = { ...preview.summary, total_penalty: undefined };
   assert.equal(previewTotals(older).penalty, null);
+});
+
+test("the part-paid line carries the premium inside it, as the server sent it", () => {
+  // partial_total already includes partial_insurance; total_amount carries
+  // total_insurance; the two add up to grand_total on the server.
+  assert.deepEqual(
+    runTotals({ ...preview.summary, partial_total: 1_050.01, partial_insurance: 400, grand_total: 12_762.62 }),
+    { partialTotal: 1_050.01, partialInsurance: 400, grandTotal: 12_762.62 },
+  );
+  assert.equal(
+    runTotals({ ...preview.summary, partial_total: 650, partial_insurance: 0, grand_total: 12_362.61 })?.partialInsurance,
+    null,
+  );
+});
+
+test("the part-paid premium note reads the server's figure", () => {
+  assert.equal(partialInsuranceNote({ partialTotal: 1_050.01, partialInsurance: 400, grandTotal: 1 }), "incl. ₱400.00 premium");
+  assert.equal(partialInsuranceNote({ partialTotal: 650, partialInsurance: null, grandTotal: 1 }), null);
 });
 
 test("a summary without an insurance premium figure shows none, not zero", () => {
@@ -129,12 +148,13 @@ test("the run total is the server's grand total and part-paid total, as sent", (
   // Not total_amount plus the rows: figures the browser would not get by adding.
   assert.deepEqual(
     runTotals({ ...preview.summary, partial_total: 650.01, grand_total: 11_999.99 }),
-    { partialTotal: 650.01, grandTotal: 11_999.99 },
+    { partialTotal: 650.01, partialInsurance: null, grandTotal: 11_999.99 },
   );
 });
 
 test("a summary without the run total has none, not a browser stand-in", () => {
   assert.equal(runTotals(preview.summary), null);
+  assert.equal(runTotals({ ...preview.summary, partial_insurance: 50 }), null);
   assert.equal(runTotals({ ...preview.summary, partial_total: 0 }), null);
 });
 
@@ -164,7 +184,7 @@ test("the current selection's answer is the source of cards, loans, skips and ru
   const view = selectionView(preview, null, { key: KEY, preview: selected, error: null }, KEY);
   assert.equal(view.preview, selected);
   assert.equal(view.upToDate, true);
-  assert.deepEqual(view.run, { partialTotal: 650, grandTotal: 15_000 });
+  assert.deepEqual(view.run, { partialTotal: 650, partialInsurance: null, grandTotal: 15_000 });
   assert.equal(view.error, null);
 });
 

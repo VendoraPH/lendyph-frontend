@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import {
   amountDueNowParts,
   dueNowHasOpenPeriod,
+  dueNowIsRange,
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
@@ -51,6 +52,16 @@ describe("readAmountDueNow", () => {
       lastPeriodNumber: null,
       scheduleId: 501,
     });
+  });
+
+  test("several periods due: the first period's ids and the last period's number, as sent", () => {
+    const due = readAmountDueNow({ ...DUE, amount: 36000, period_number: 2, last_period_number: 4, schedule_id: 502 });
+    assert.equal(due?.periodNumber, 2);
+    assert.equal(due?.lastPeriodNumber, 4);
+    assert.equal(due?.scheduleId, 502);
+    assert.equal(dueNowIsRange(due), true);
+    assert.equal(dueNowIsRange(readAmountDueNow({ ...DUE, last_period_number: 1 })), false);
+    assert.equal(dueNowIsRange(null), false);
   });
 
   test("decimal strings are read as their figures; no open period is null", () => {
