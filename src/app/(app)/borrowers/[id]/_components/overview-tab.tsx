@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
-import type { Borrower, Loan, CoMaker } from "@/types";
+import { borrowerService } from "@/services/borrower.service";
+import type { Borrower, BorrowerLoanSummary, Loan, CoMaker } from "@/types";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { NotificationPreferencesCard } from "./notification-preferences-card";
 // Constants removed — valid_id_type not in API response
@@ -28,15 +30,27 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
-  // "Current" in this count also includes legacy "ongoing" responses, since
-  // older backend versions emit that status for the same lifecycle stage.
-  const currentLoans = loans.filter(
-    (l) => l.status === "current" || l.status === "ongoing"
-  ).length;
-  const completedLoans = loans.filter((l) => l.status === "completed").length;
-  const defaultedLoans = loans.filter((l) => l.status === "defaulted").length;
-  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
-  const totalPrincipal = loans.reduce((sum, l) => sum + l.principal_amount, 0);
+  // Every total and count here is the server's (GET /borrowers/{id}/loan-summary):
+  // adding up `loans` here counted drafts, rejected and void applications as
+  // money borrowed. Re-read whenever the page reloads the member's loans.
+  const [summary, setSummary] = useState<BorrowerLoanSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    borrowerService
+      .loanSummary(borrower.id)
+      .then((res) => {
+        if (!cancelled) setSummary(res ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [borrower.id, loans]);
+
+  const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
+  const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
 
   const totalCoMakers = coMakers.length;
   const loansNeedingCoMaker = loans.filter(loanNeedsCoMaker).length;
@@ -109,20 +123,20 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Borrowed</p>
-              <p className="text-2xl font-bold">{formatCurrency(totalPrincipal)}</p>
+              <p className="text-2xl font-bold">{money(summary?.total_borrowed)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Outstanding</p>
-              <p className="text-2xl font-bold text-brand-orange">{formatCurrency(totalOutstanding)}</p>
+              <p className="text-2xl font-bold text-brand-orange">{money(summary?.total_outstanding)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Current / Completed / Defaulted</p>
               <p className="text-2xl font-bold">
-                <span className="text-green-600">{currentLoans}</span>
+                <span className="text-green-600">{count(summary?.current_loans)}</span>
                 {" / "}
-                <span className="text-gray-600">{completedLoans}</span>
+                <span className="text-gray-600">{count(summary?.counts.completed)}</span>
                 {" / "}
-                <span className="text-red-600">{defaultedLoans}</span>
+                <span className="text-red-600">{count(summary?.counts.defaulted)}</span>
               </p>
             </div>
             <div>

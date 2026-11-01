@@ -32,7 +32,8 @@ import { dashboardService } from "@/services/dashboard.service";
 import { ledgerAmounts } from "@/utils/share-capital";
 import { env } from "@/config/env";
 import { useLindaStore } from "@/store";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import type { DailyDuesSummary, ShareCapitalLedgerEntry } from "@/types";
+import { collectionPieSlices, collectionRateTone } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 
 // ---------------------------------------------------------------------------
@@ -209,6 +210,7 @@ function DashboardContent() {
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
+  const [duesSummary, setDuesSummary] = useState<DailyDuesSummary | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<TransactionView[]>([]);
   // "loading" until the request settles, then "ready" or "error" — so the UI can
   // tell a genuinely empty dataset apart from a request that never came back.
@@ -255,11 +257,9 @@ function DashboardContent() {
 
     // Daily dues
     dashboardService
-      .dailyDues()
+      .dailyDues<DailyDueItem>()
       .then((res) => {
-        const raw = Array.isArray(res)
-          ? (res as DailyDueItem[])
-          : ((res as { data?: DailyDueItem[] })?.data ?? []);
+        const raw = Array.isArray(res?.data) ? res.data : [];
         const statusMap: Record<string, DueItemView["status"]> = {
           paid: "collected",
           collected: "collected",
@@ -277,10 +277,12 @@ function DashboardContent() {
             status: statusMap[item.status ?? "pending"] ?? "pending",
           })),
         );
+        setDuesSummary(res?.summary ?? null);
         setDuesStatus("ready");
       })
       .catch(() => {
         setDailyDues([]);
+        setDuesSummary(null);
         setDuesStatus("error");
       });
 
@@ -327,19 +329,18 @@ function DashboardContent() {
   const dueItems = dailyDues;
   const transactions = recentTransactions;
 
-  const totalDue = dueItems.reduce((sum, item) => sum + item.amountDue, 0);
-  const totalCollected = dueItems.reduce((sum, item) => sum + item.amountPaid, 0);
-  const totalPartial = dueItems
-    .filter((i) => i.status === "partial")
-    .reduce((sum, i) => sum + i.amountPaid, 0);
-  const totalFullyCollected = totalCollected - totalPartial;
-  const totalRemaining = totalDue - totalCollected;
-  const collectionRate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0;
-  const pieData = [
-    { name: "Collected", value: totalFullyCollected, color: "#10b981" },
-    { name: "Partial", value: totalPartial, color: "#f59e0b" },
-    { name: "Pending", value: totalRemaining, color: "#94a3b8" },
-  ];
+  // The pie and the rate are the server's figures (GET /dashboard/daily-dues
+  // `summary`); a row's "Paid" includes penalty, so adding rows up here could
+  // pass 100%.
+  const collectionRate = duesSummary?.collection_rate ?? null;
+  const collectionRateLabel = collectionRate === null ? "—" : `${collectionRate}%`;
+  const pieData = collectionPieSlices(duesSummary);
+  const rateBadgeClass = {
+    good: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
+    fair: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+    poor: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+    unknown: "border-border bg-muted text-muted-foreground",
+  }[collectionRateTone(collectionRate)];
 
   return (
     <div className={kpiClasses.page}>
@@ -391,9 +392,9 @@ function DashboardContent() {
                 {formatDateFull(new Date())}
               </p>
             </div>
-            <Badge variant="outline" className={collectionRate >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : collectionRate >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
+            <Badge variant="outline" className={rateBadgeClass}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              {collectionRate}% collected
+              {collectionRateLabel} collected
             </Badge>
           </div>
 
@@ -428,7 +429,7 @@ function DashboardContent() {
                 ) : null}
                 {/* Center label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-bold">{collectionRate}%</p>
+                  <p className="text-2xl font-bold">{collectionRateLabel}</p>
                   <p className="text-[11px] text-muted-foreground">Collected</p>
                 </div>
               </div>

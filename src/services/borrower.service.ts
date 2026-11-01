@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Borrower, BorrowerLedgerEntry, PaginatedResponse } from "@/types";
+import type { Borrower, BorrowerLedgerEntry, BorrowerLoanSummary, PaginatedResponse } from "@/types";
 
 /** A valid-ID entry as returned grouped (front/back pair) by the API. */
 export interface BorrowerValidId {
@@ -92,4 +92,7 @@ export const borrowerService = {
 
   ledger: (id: number, params?: Record<string, unknown>) =>
     api.get<PaginatedResponse<BorrowerLedgerEntry>>(API_ENDPOINTS.BORROWERS.LEDGER(id), { params }),
+
+  loanSummary: (id: number) =>
+    api.get<BorrowerLoanSummary>(API_ENDPOINTS.BORROWERS.LOAN_SUMMARY(id)),
 };

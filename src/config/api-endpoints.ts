@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
     DELETE_VALID_ID: (id: number, validIdId: number) =>
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
+    LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -81,6 +82,7 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/loans/${id}`,
     CREATE: "/loans",
     PREVIEW: "/loans/preview",
+    AMORTIZATION_CALCULATOR: "/loans/amortization-calculator",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
     RELEASE: (id: number) => `/loans/${id}/release`,
@@ -242,6 +244,7 @@ export const API_ENDPOINTS = {
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
+    MEMBERS: "/share-capital/members",
   },
   PLEDGES: {
     LIST: "/pledges",

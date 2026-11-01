@@ -24,55 +24,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { Calculator, CalendarIcon } from "lucide-react";
+import { Calculator, CalendarIcon, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import {
-  INTEREST_TYPE_OPTIONS,
+  INTEREST_METHOD_LABELS,
+  INTEREST_RATE_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
+  TERM_UNIT_OPTIONS,
 } from "@/constants";
-import {
-  generateSchedule,
-  type AmortizationInput,
-  type GeneratedSchedule,
-  type InterestMethod,
-  type PaymentFrequency,
-} from "@/lib/amortization";
-import { formatCurrency } from "@/lib/format";
-
-// ---------- Formatters ----------
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-// ---------- Status styling infrastructure ----------
-
-type PaymentStatus = "paid" | "partial" | "overdue" | "pending" | "scheduled";
-
-const STATUS_STYLES: Record<PaymentStatus, string> = {
-  paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  partial:
-    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  overdue: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  pending: "",
-  scheduled: "",
-};
-
-function StatusBadge({ status }: { status: PaymentStatus }) {
-  const label = status.charAt(0).toUpperCase() + status.slice(1);
-  const style = STATUS_STYLES[status];
-
-  if (!style) {
-    return <Badge variant="outline">{label}</Badge>;
-  }
-
-  return <Badge className={style}>{label}</Badge>;
-}
+import { formatCurrency, formatDate } from "@/lib/format";
+import { getErrorMessage } from "@/lib/api-error";
+import { loanService } from "@/services/loan.service";
+import type {
+  AmortizationCalculatorResult,
+  AmortizationCalculatorSchedule,
+  AmortizationMethod,
+} from "@/types";
 
 // ---------- Helpers ----------
+
+const METHODS: AmortizationMethod[] = ["straight", "diminishing", "upon_maturity"];
 
 function toDateInputString(date: Date): string {
   const y = date.getFullYear();
@@ -81,75 +52,80 @@ function toDateInputString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function optionLabel(options: readonly { value: string; label: string }[], value: string | null): string {
+  return value ? (options.find((o) => o.value === value)?.label ?? value) : "Select";
+}
+
+/**
+ * The per-period payment as the server scheduled it: one figure when every
+ * period's payment is the same, otherwise the first and last. A comparison of
+ * server figures; nothing is added up.
+ */
+function paymentLabel(schedule: AmortizationCalculatorSchedule): string {
+  const rows = schedule.rows;
+  if (rows.length === 0) return "—";
+  if (rows.length === 1) return `${formatCurrency(rows[0].total_payment)} (single)`;
+  const first = rows[0].total_payment;
+  const last = rows[rows.length - 1].total_payment;
+  const uniform = rows.every((r) => r.total_payment === first);
+  return uniform ? formatCurrency(first) : `${formatCurrency(first)} – ${formatCurrency(last)}`;
+}
+
 // ---------- Component ----------
 
+/**
+ * Every figure on this page comes from POST /loans/amortization-calculator,
+ * built by the code that writes a real loan's schedule. The page only collects
+ * the inputs and displays the answer.
+ */
 export default function AmortizationPage() {
   // Form state
   const [principal, setPrincipal] = useState("");
   const [interestRate, setInterestRate] = useState("");
-  const [termMonths, setTermMonths] = useState("");
-  const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
-  const [interestMethod, setInterestMethod] =
-    useState<InterestMethod>("fixed");
-  const [startDate, setStartDate] = useState<string>(
-    toDateInputString(new Date())
-  );
+  const [rateFrequency, setRateFrequency] = useState("monthly");
+  const [term, setTerm] = useState("");
+  const [termUnit, setTermUnit] = useState("months");
+  const [frequency, setFrequency] = useState("monthly");
+  const [interestMethod, setInterestMethod] = useState<AmortizationMethod>("straight");
+  const [scbAmount, setScbAmount] = useState("");
+  const [startDate, setStartDate] = useState<string>(toDateInputString(new Date()));
 
-  // Generated schedules
-  const [schedule, setSchedule] = useState<GeneratedSchedule | null>(null);
-  const [comparison, setComparison] = useState<{
-    fixed: GeneratedSchedule;
-    diminishing: GeneratedSchedule;
-    upon_maturity: GeneratedSchedule;
-  } | null>(null);
-
-  const isUponMaturity = interestMethod === "upon_maturity";
+  const [result, setResult] = useState<AmortizationCalculatorResult | null>(null);
+  const [calculating, setCalculating] = useState(false);
 
   const isFormValid = useMemo(() => {
     const p = parseFloat(principal);
     const r = parseFloat(interestRate);
-    const t = parseInt(termMonths);
+    const t = parseInt(term);
     return p > 0 && r > 0 && t > 0 && !!startDate;
-  }, [principal, interestRate, termMonths, startDate]);
-
-  function buildInput(
-    method: InterestMethod,
-    freq?: PaymentFrequency
-  ): AmortizationInput {
-    return {
-      principal: parseFloat(principal),
-      monthlyRate: parseFloat(interestRate),
-      termMonths: parseInt(termMonths),
-      frequency: freq ?? frequency,
-      interestMethod: method,
-      startDate: new Date(startDate),
-    };
-  }
+  }, [principal, interestRate, term, startDate]);
 
   function handleGenerate() {
-    const p = parseFloat(principal);
-    const r = parseFloat(interestRate);
-    const t = parseInt(termMonths);
-    if (!p || !r || !t) return;
-
-    const selected = generateSchedule(buildInput(interestMethod, frequency));
-    setSchedule(selected);
-
-    const fixed = generateSchedule(buildInput("fixed", frequency));
-    const diminishing = generateSchedule(buildInput("diminishing", frequency));
-    const upon_maturity = generateSchedule(buildInput("upon_maturity", frequency));
-    setComparison({ fixed, diminishing, upon_maturity });
+    if (!isFormValid) return;
+    setCalculating(true);
+    const scb = parseFloat(scbAmount);
+    loanService
+      .amortizationCalculator({
+        principal_amount: parseFloat(principal),
+        interest_rate: parseFloat(interestRate),
+        interest_rate_frequency: rateFrequency,
+        interest_method: interestMethod,
+        term: parseInt(term),
+        term_unit: termUnit,
+        frequency,
+        start_date: startDate,
+        ...(scb > 0 ? { scb_amount: scb } : {}),
+        compare: true,
+      })
+      .then((res) => setResult(res))
+      .catch((err) => {
+        setResult(null);
+        toast.error(getErrorMessage(err, "We couldn't build the schedule. Please check the inputs and try again."));
+      })
+      .finally(() => setCalculating(false));
   }
 
-  // Totals for footer
-  const totals = useMemo(() => {
-    if (!schedule) return null;
-    return {
-      principal: schedule.rows.reduce((s, r) => s + r.principal, 0),
-      interest: schedule.rows.reduce((s, r) => s + r.interest, 0),
-      totalDue: schedule.rows.reduce((s, r) => s + r.totalDue, 0),
-    };
-  }, [schedule]);
+  const hasScb = (result?.totals.share_capital_build_up ?? 0) > 0;
 
   return (
     <div className="space-y-6">
@@ -187,53 +163,77 @@ export default function AmortizationPage() {
 
             {/* Interest Rate */}
             <div className="space-y-1.5">
-              <Label htmlFor="interestRate">
-                Interest Rate (% per month) *
-              </Label>
+              <Label htmlFor="interestRate">Interest Rate (%) *</Label>
               <Input
                 id="interestRate"
                 type="number"
                 min="0"
-                step="0.01"
+                step="0.0001"
                 placeholder="e.g. 3"
                 value={interestRate}
                 onChange={(e) => setInterestRate(e.target.value)}
               />
             </div>
 
+            {/* Rate Frequency */}
+            <div className="space-y-1.5">
+              <Label>Rate Per *</Label>
+              <Select value={rateFrequency} onValueChange={(val) => setRateFrequency(String(val))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(value: string | null) => optionLabel(INTEREST_RATE_FREQUENCY_OPTIONS, value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Term */}
             <div className="space-y-1.5">
-              <Label htmlFor="termMonths">Term (months) *</Label>
+              <Label htmlFor="term">Term *</Label>
               <Input
-                id="termMonths"
+                id="term"
                 type="number"
                 min="1"
                 step="1"
                 placeholder="e.g. 12"
-                value={termMonths}
-                onChange={(e) => setTermMonths(e.target.value)}
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
               />
+            </div>
+
+            {/* Term Unit */}
+            <div className="space-y-1.5">
+              <Label>Term Unit *</Label>
+              <Select value={termUnit} onValueChange={(val) => setTermUnit(String(val))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(value: string | null) => optionLabel(TERM_UNIT_OPTIONS, value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TERM_UNIT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Payment Frequency */}
             <div className="space-y-1.5">
               <Label>Payment Frequency *</Label>
-              <Select
-                value={frequency}
-                onValueChange={(val) =>
-                  setFrequency(val as PaymentFrequency)
-                }
-                disabled={isUponMaturity}
-              >
+              <Select value={frequency} onValueChange={(val) => setFrequency(String(val))}>
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(value: string | null) =>
-                      isUponMaturity
-                        ? "Upon Maturity"
-                        : value
-                          ? (PAYMENT_FREQUENCY_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select frequency"
-                    }
+                    {(value: string | null) => optionLabel(PAYMENT_FREQUENCY_OPTIONS, value)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -244,7 +244,7 @@ export default function AmortizationPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {isUponMaturity && (
+              {frequency === "upon_maturity" && (
                 <p className="text-xs text-muted-foreground">
                   Single payment at maturity
                 </p>
@@ -266,23 +266,35 @@ export default function AmortizationPage() {
               </div>
             </div>
 
+            {/* Share Capital Build-Up */}
+            <div className="space-y-1.5">
+              <Label htmlFor="scbAmount">Share Capital Build-Up per Period (PHP)</Label>
+              <Input
+                id="scbAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Optional"
+                value={scbAmount}
+                onChange={(e) => setScbAmount(e.target.value)}
+              />
+            </div>
+
             {/* Interest Method */}
             <div className="space-y-1.5">
               <Label>Interest Method *</Label>
               <RadioGroup
                 value={interestMethod}
-                onValueChange={(val) =>
-                  setInterestMethod(val as InterestMethod)
-                }
+                onValueChange={(val) => setInterestMethod(val as AmortizationMethod)}
                 className="flex flex-wrap gap-4 pt-1"
               >
-                {INTEREST_TYPE_OPTIONS.map((opt) => (
+                {METHODS.map((method) => (
                   <label
-                    key={opt.value}
+                    key={method}
                     className="flex cursor-pointer items-center gap-2 text-sm"
                   >
-                    <RadioGroupItem value={opt.value} />
-                    {opt.label}
+                    <RadioGroupItem value={method} />
+                    {INTEREST_METHOD_LABELS[method]}
                   </label>
                 ))}
               </RadioGroup>
@@ -292,10 +304,14 @@ export default function AmortizationPage() {
           <div className="mt-5">
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              disabled={!isFormValid}
+              disabled={!isFormValid || calculating}
               onClick={handleGenerate}
             >
-              <Calculator className="mr-1.5 h-4 w-4" />
+              {calculating ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Calculator className="mr-1.5 h-4 w-4" />
+              )}
               Generate Schedule
             </Button>
           </div>
@@ -303,60 +319,31 @@ export default function AmortizationPage() {
       </Card>
 
       {/* Card 2: Schedule Summary */}
-      {schedule && (
+      {result && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               Schedule Summary
               <Badge className="bg-brand-orange text-brand-orange-foreground">
-                {interestMethod === "fixed"
-                  ? "Fixed"
-                  : interestMethod === "diminishing"
-                    ? "Diminishing"
-                    : "Upon Maturity"}
+                {INTEREST_METHOD_LABELS[result.interest_method] ?? result.interest_method}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-              <SummaryItem
-                label="Total Principal"
-                value={formatCurrency(schedule.summary.totalPrincipal)}
-              />
-              <SummaryItem
-                label="Total Interest"
-                value={formatCurrency(schedule.summary.totalInterest)}
-              />
-              <SummaryItem
-                label="Total Payable"
-                value={formatCurrency(schedule.summary.totalPayable)}
-                highlight
-              />
-              <SummaryItem
-                label="Per-period Payment"
-                value={
-                  interestMethod === "diminishing"
-                    ? "Varies"
-                    : interestMethod === "upon_maturity"
-                      ? "Single Payment"
-                      : formatCurrency(schedule.summary.perPeriodPayment ?? 0)
-                }
-              />
-              <SummaryItem
-                label="No. of Payments"
-                value={schedule.summary.numberOfPayments.toString()}
-              />
-              <SummaryItem
-                label="Maturity Date"
-                value={formatDate(schedule.summary.maturityDate)}
-              />
+              <SummaryItem label="Total Principal" value={formatCurrency(result.totals.principal_due)} />
+              <SummaryItem label="Total Interest" value={formatCurrency(result.totals.interest_due)} />
+              <SummaryItem label="Total Payable" value={formatCurrency(result.totals.total_payment)} highlight />
+              <SummaryItem label="Per-period Payment" value={paymentLabel(result)} />
+              <SummaryItem label="No. of Payments" value={result.rows.length.toString()} />
+              <SummaryItem label="Maturity Date" value={formatDate(result.maturity_date)} />
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Card 3: Amortization Table */}
-      {schedule && totals && (
+      {result && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle>Amortization Table</CardTitle>
@@ -368,73 +355,39 @@ export default function AmortizationPage() {
                   <TableRow>
                     <TableHead className="w-12 text-center">#</TableHead>
                     <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">
-                      Beginning Balance
-                    </TableHead>
                     <TableHead className="text-right">Principal</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
-                    <TableHead className="text-right">Total Due</TableHead>
-                    <TableHead className="text-right">
-                      Remaining Balance
-                    </TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    {hasScb && <TableHead className="text-right">Share Capital</TableHead>}
+                    <TableHead className="text-right">Total Payment</TableHead>
+                    <TableHead className="text-right">Remaining Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {schedule.rows.map((row) => {
-                    const isLast = row.period === schedule.rows.length;
-                    return (
-                      <TableRow key={row.period}>
-                        <TableCell className="text-center font-medium">
-                          {row.period}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {formatDate(row.dueDate)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(row.beginningBalance)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(row.principal)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(row.interest)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(row.totalDue)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-medium ${
-                            isLast ? "text-green-600" : ""
-                          }`}
-                        >
-                          {formatCurrency(row.endingBalance)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <StatusBadge status="scheduled" />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {result.rows.map((row) => (
+                    <TableRow key={row.period_number}>
+                      <TableCell className="text-center font-medium">{row.period_number}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
+                      {hasScb && (
+                        <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>
+                      )}
+                      <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(row.remaining_balance)}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
                 <TableFooter>
                   <TableRow>
-                    <TableCell colSpan={2} className="font-semibold">
-                      Totals
-                    </TableCell>
-                    <TableCell className="text-right" />
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(totals.principal)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(totals.interest)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(totals.totalDue)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold text-green-600">
-                      {formatCurrency(0)}
-                    </TableCell>
+                    <TableCell colSpan={2} className="font-semibold">Totals</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.principal_due)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.interest_due)}</TableCell>
+                    {hasScb && (
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(result.totals.share_capital_build_up)}
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.total_payment)}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableFooter>
@@ -445,18 +398,18 @@ export default function AmortizationPage() {
       )}
 
       {/* Card 4: Method Comparison */}
-      {comparison && (
+      {result?.comparison && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               Method Comparison
               <Badge variant="outline">
-                Fixed vs Diminishing vs Upon Maturity
+                Straight vs Diminishing vs Upon Maturity
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <MethodComparison comparison={comparison} />
+            <MethodComparison comparison={result.comparison} />
           </CardContent>
         </Card>
       )}
@@ -501,88 +454,42 @@ function ComparisonRow({ label, value }: { label: string; value: string }) {
 function MethodComparison({
   comparison,
 }: {
-  comparison: {
-    fixed: GeneratedSchedule;
-    diminishing: GeneratedSchedule;
-    upon_maturity: GeneratedSchedule;
-  };
+  comparison: Record<AmortizationMethod, AmortizationCalculatorSchedule>;
 }) {
-  const methods = [
-    {
-      key: "fixed" as const,
-      label: "Fixed / Straight",
-      data: comparison.fixed,
-    },
-    {
-      key: "diminishing" as const,
-      label: "Diminishing Balance",
-      data: comparison.diminishing,
-    },
-    {
-      key: "upon_maturity" as const,
-      label: "Upon Maturity",
-      data: comparison.upon_maturity,
-    },
-  ];
-
-  // Find method with lowest total interest
-  const lowestInterest = Math.min(
-    ...methods.map((m) => m.data.summary.totalInterest)
-  );
+  // Which server total is lowest: a comparison of the server's figures.
+  const lowestInterest = Math.min(...METHODS.map((m) => comparison[m].totals.interest_due));
 
   return (
-    <>
-      <div className="grid gap-4 md:grid-cols-3">
-        {methods.map((method) => {
-          const s = method.data.summary;
-          const isLowest = s.totalInterest === lowestInterest;
+    <div className="grid gap-4 md:grid-cols-3">
+      {METHODS.map((method) => {
+        const schedule = comparison[method];
+        const isLowest = schedule.totals.interest_due === lowestInterest;
 
-          return (
-            <div
-              key={method.key}
-              className={`rounded-lg border p-4 space-y-3 ${
-                isLowest
-                  ? "border-green-500 ring-1 ring-green-500/20"
-                  : ""
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm">{method.label}</h3>
-                {isLowest && (
-                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    Lowest Interest
-                  </Badge>
-                )}
-              </div>
-              <Separator />
-              <div className="space-y-2 text-sm">
-                <ComparisonRow
-                  label="Total Interest"
-                  value={formatCurrency(s.totalInterest)}
-                />
-                <ComparisonRow
-                  label="Total Payable"
-                  value={formatCurrency(s.totalPayable)}
-                />
-                <ComparisonRow
-                  label="Payment"
-                  value={
-                    method.key === "diminishing"
-                      ? `${formatCurrency(s.firstPayment)} - ${formatCurrency(s.lastPayment)}`
-                      : method.key === "upon_maturity"
-                        ? `${formatCurrency(s.totalPayable)} (single)`
-                        : formatCurrency(s.perPeriodPayment ?? 0)
-                  }
-                />
-                <ComparisonRow
-                  label="No. of Payments"
-                  value={s.numberOfPayments.toString()}
-                />
-              </div>
+        return (
+          <div
+            key={method}
+            className={`rounded-lg border p-4 space-y-3 ${
+              isLowest ? "border-green-500 ring-1 ring-green-500/20" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">{INTEREST_METHOD_LABELS[method]}</h3>
+              {isLowest && (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  Lowest Interest
+                </Badge>
+              )}
             </div>
-          );
-        })}
-      </div>
-    </>
+            <Separator />
+            <div className="space-y-2 text-sm">
+              <ComparisonRow label="Total Interest" value={formatCurrency(schedule.totals.interest_due)} />
+              <ComparisonRow label="Total Payable" value={formatCurrency(schedule.totals.total_payment)} />
+              <ComparisonRow label="Payment" value={paymentLabel(schedule)} />
+              <ComparisonRow label="No. of Payments" value={schedule.rows.length.toString()} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

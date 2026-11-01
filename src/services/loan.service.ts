@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanAmortizationBalances, LoanCoMaker, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -211,6 +211,15 @@ export const loanService = {
    */
   preview: (data: LoanFormPreviewRequest, signal?: AbortSignal) =>
     api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.PREVIEW, data, { signal }),
+
+  /**
+   * `POST /loans/amortization-calculator`: the Amortization Calculator's
+   * schedule for a what-if loan with no product, built by the server with the
+   * code a release writes the real schedule with. `compare: true` adds every
+   * method's schedule. Writes nothing; needs `loans:view`; bad input is a 422.
+   */
+  amortizationCalculator: (data: AmortizationCalculatorRequest) =>
+    api.post<AmortizationCalculatorResult>(API_ENDPOINTS.LOANS.AMORTIZATION_CALCULATOR, data),
 
   update: (id: number, data: LoanApplicationPayload) =>
     api.put<Loan>(API_ENDPOINTS.LOANS.UPDATE(id), data),

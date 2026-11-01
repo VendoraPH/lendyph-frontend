@@ -3,6 +3,8 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   ShareCapitalLedgerEntry,
+  ShareCapitalMemberPeriod,
+  ShareCapitalMembersResponse,
   Pledge,
   AutoCreditStatus,
   AutoCreditProcessResult,
@@ -84,6 +86,35 @@ export const shareCapitalService = {
     fetchAllPages<ShareCapitalLedgerEntry>(({ page, per_page }) =>
       shareCapitalService.ledgerList({ ...params, page, per_page })
     ),
+
+  /**
+   * One member's entries for the Subsidiary Ledger's detail view, drained, each
+   * with the server's `running_balance`, plus the server's period figures
+   * (`meta.summary`: opening balance, credits, debits, ending balance) for the
+   * same date range. The page adds nothing up itself.
+   */
+  memberLedger: async (
+    borrowerId: number,
+    range: { date_from?: string; date_to?: string } = {}
+  ): Promise<DrainResult<ShareCapitalLedgerEntry> & { summary: ShareCapitalMemberPeriod | null }> => {
+    let summary: ShareCapitalMemberPeriod | null = null;
+    const drained = await fetchAllPages<ShareCapitalLedgerEntry>(async ({ page, per_page }) => {
+      const res = await shareCapitalService.ledgerList({ ...range, borrower_id: borrowerId, page, per_page });
+      const meta = (res as { meta?: { summary?: ShareCapitalMemberPeriod } } | undefined)?.meta;
+      if (page === 1) summary = meta?.summary ?? null;
+      return res;
+    });
+    return { ...drained, summary };
+  },
+
+  /**
+   * `GET /share-capital/members`: one page of members with each one's credits,
+   * debits and balance over every entry, plus the book's totals. `getRaw`, so
+   * `meta` (paging and totals) survives. Params: `page`, `per_page` (≤ 100),
+   * `search`, `sort` (`name` | `balance`), `direction` (`asc` | `desc`).
+   */
+  members: (params?: Record<string, unknown>) =>
+    api.getRaw<ShareCapitalMembersResponse>(API_ENDPOINTS.SHARE_CAPITAL.MEMBERS, { params }),
 
   ledgerCreate: (data: CreateLedgerEntryData) =>
     api.post<ShareCapitalLedgerEntry>(
