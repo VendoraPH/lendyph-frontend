@@ -24,7 +24,14 @@ import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
-import { NO_SCHEDULE_TOTALS, readScheduleRows, readScheduleTotals, toDisplaySchedule } from "./_lib/server-schedule";
+import {
+  NO_SCHEDULE_TOTALS,
+  readPreviewResponse,
+  readScheduleRows,
+  readScheduleTotals,
+  toDisplaySchedule,
+  type ScheduleTotals,
+} from "./_lib/server-schedule";
 import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
   RestructuredBalanceFigures,
@@ -666,6 +673,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // via loanService.amortizationPreview — lets approvers see the same schedule
   // the server will persist on release. Null and `previewFailed` as above.
   const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+  const [previewTotals, setPreviewTotals] = useState<ScheduleTotals>(NO_SCHEDULE_TOTALS);
   const [previewFailed, setPreviewFailed] = useState(false);
   // Bumped by the schedule card's Retry, which re-runs the effects that read it.
   const [scheduleReloadCount, setScheduleReloadCount] = useState(0);
@@ -835,11 +843,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Its rows carry the same `*_due` fields as the persisted schedule.
   const fetchAmortizationPreview = useCallback(async (id: number) => {
     try {
-      const rows = readScheduleRows(await loanService.amortizationPreview(id), id)?.schedule ?? null;
-      setPreviewSchedule(rows);
-      setPreviewFailed(rows === null);
+      const read = readPreviewResponse(await loanService.amortizationPreview(id), id);
+      setPreviewSchedule(read?.schedule ?? null);
+      setPreviewTotals(read?.totals ?? NO_SCHEDULE_TOTALS);
+      setPreviewFailed(read === null);
     } catch {
       setPreviewSchedule(null);
+      setPreviewTotals(NO_SCHEDULE_TOTALS);
       setPreviewFailed(true);
     }
   }, []);
@@ -1089,11 +1099,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   //
   // The column totals are the server's `amortization_schedule_totals`, read
   // with the loan (every action that re-reads the schedule re-reads the loan
-  // too). The preview endpoint sends no totals, so a preview's are dashes,
-  // never the rows added up here.
+  // too); a preview's are the `totals` its endpoint sends beside the rows. A
+  // total the server did not send is a dash, never the rows added up here.
   const storedScheduleTotals = useMemo(
-    () => (scheduleSource === "persisted" ? readScheduleTotals(loan?.amortization_schedule_totals) : NO_SCHEDULE_TOTALS),
-    [scheduleSource, loan?.amortization_schedule_totals],
+    () =>
+      scheduleSource === "persisted"
+        ? readScheduleTotals(loan?.amortization_schedule_totals)
+        : scheduleSource === "preview"
+          ? previewTotals
+          : NO_SCHEDULE_TOTALS,
+    [scheduleSource, loan?.amortization_schedule_totals, previewTotals],
   );
   const storedSchedule = useMemo(() => {
     if (!loan?.id || !scheduleRows) return [];
@@ -1357,9 +1372,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
   // total_payable from API is computed by summing amortization_schedules. When
-  // it is 0 the schedule's total payment stands in: the server's column total
-  // for a persisted schedule, a dash for a preview (whose endpoint sends no
-  // totals) or with no server rows at all. Nothing is added up here or
+  // it is 0 the schedule's total payment stands in: the server's column total,
+  // persisted or previewed, and a dash when the server sent none or there are
+  // no server rows at all. Nothing is added up here or
   // projected from the loan's terms; `expectedInterest` is only the Interest
   // Amount of a schedule whose server total carries no interest.
   const expectedInterest =

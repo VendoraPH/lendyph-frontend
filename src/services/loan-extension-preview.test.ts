@@ -38,7 +38,9 @@ before(async () => {
     const path = url.pathname.replace(/^\/api/, "");
     seen.push({ method: req.method ?? "", path, query: url.search });
     const [status, body] =
-      req.method === "GET" && path === "/loans/7/extension-preview" ? reply : [404, { message: "not stubbed" }];
+      req.method === "GET" && (path === "/loans/7/extension-preview" || path === "/loans/8/amortization-preview")
+        ? reply
+        : [404, { message: "not stubbed" }];
     res.statusCode = status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(body));
@@ -80,5 +82,17 @@ describe("loanService.extensionPreview", () => {
       assert.equal(getErrorMessage(err, "fallback"), "This loan cannot be extended.");
       return true;
     });
+  });
+});
+
+describe("loanService.amortizationPreview", () => {
+  test("keeps the totals that sit beside data in the envelope", async () => {
+    const envelope = {
+      data: [{ period_number: 1, due_date: "2026-12-01", principal_due: 5000, interest_due: 450, total_due: 5450, share_capital_build_up: 100, total_payment: 5550, remaining_balance: 0, status: "pending" }],
+      totals: { principal_due: 5000, interest_due: 450, total_due: 5450, share_capital_build_up: 100, total_payment: 5550 },
+    };
+    reply = [200, envelope];
+    assert.deepEqual(await loanService.amortizationPreview(8), envelope);
+    assert.deepEqual(seen, [{ method: "GET", path: "/loans/8/amortization-preview", query: "" }]);
   });
 });

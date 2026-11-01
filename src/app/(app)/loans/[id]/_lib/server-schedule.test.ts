@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NO_SCHEDULE_TOTALS,
+  readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
   toDisplaySchedule,
@@ -313,4 +314,44 @@ test("a single-payment preview stays one row at maturity, with the row's own fig
     rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance]),
     [[1, 5000, 450, 100, 5550, 0]],
   );
+});
+
+// ── the preview's envelope: { data: rows, totals } ────────────────────────
+
+test("a preview with totals gives the server's totals, mapped onto the display shape", () => {
+  // Totals that do not add up on purpose: they are read, never recomputed.
+  const read = readPreviewResponse(
+    {
+      data: PREVIEW_ROWS,
+      totals: { principal_due: 9000, interest_due: 810.01, total_due: 9810.01, share_capital_build_up: 75.5, total_payment: 9885.52 },
+    },
+    42,
+  )!;
+  assert.equal(read.schedule.length, 3);
+  assert.deepEqual(read.totals, {
+    principal: 9000,
+    interest: 810.01,
+    shareCapitalBuildUp: 75.5,
+    totalPayment: 9885.52,
+  });
+});
+
+test("a preview without totals gives dashes, never the rows added up", () => {
+  assert.deepEqual(readPreviewResponse({ data: PREVIEW_ROWS }, 42)!.totals, NO_SCHEDULE_TOTALS);
+  const partial = readPreviewResponse(
+    { data: PREVIEW_ROWS, totals: { principal_due: 9000, interest_due: 810 } },
+    42,
+  )!;
+  assert.deepEqual(partial.totals, {
+    principal: 9000,
+    interest: 810,
+    shareCapitalBuildUp: null,
+    totalPayment: null,
+  });
+});
+
+test("a preview envelope with no row list is unreadable", () => {
+  assert.equal(readPreviewResponse({ totals: {} }, 42), null);
+  assert.equal(readPreviewResponse(undefined, 42), null);
+  assert.equal(readPreviewResponse(PREVIEW_ROWS, 42), null);
 });

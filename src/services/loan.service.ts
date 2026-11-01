@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -250,8 +250,12 @@ export const loanService = {
   void: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.VOID(id)),
 
+  /**
+   * The schedule release would store, read whole: its `totals` sit beside
+   * `data`, which `get` would drop.
+   */
   amortizationPreview: (id: number) =>
-    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
+    api.getRaw<AmortizationPreviewResponse>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
 
   amortizationSchedule: (id: number) =>
     api.get<ApiAmortizationSchedule>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),

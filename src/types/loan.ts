@@ -428,6 +428,22 @@ export interface LoanSchedule {
   total_payment?: number | null;
 }
 
+/**
+ * `GET /loans/{id}/amortization-preview`, read whole: `data` is the rows the
+ * release would store (with `share_capital_build_up` and `total_payment`),
+ * `totals` their column totals, added up by the server beside `data`.
+ */
+export interface AmortizationPreviewResponse {
+  data: unknown[];
+  totals?: {
+    principal_due: number;
+    interest_due: number;
+    total_due: number;
+    share_capital_build_up: number;
+    total_payment: number;
+  };
+}
+
 /** What happens to the interest still owed when a loan extends. */
 export type ExtensionInterestOption = "pay" | "defer";
 

@@ -57,6 +57,34 @@ export function readScheduleTotals(raw: unknown): ScheduleTotals {
 }
 
 /**
+ * `GET /loans/{id}/amortization-preview`'s envelope: its rows, read as
+ * `readScheduleRows` reads them, and its `totals` (`principal_due`,
+ * `interest_due`, `share_capital_build_up`, `total_payment`) in the display
+ * shape, each null when absent. Null when `data` is not a list of rows.
+ */
+export function readPreviewResponse(
+  res: unknown,
+  loanId: number,
+): { schedule: LoanSchedule[]; totals: ScheduleTotals } | null {
+  if (!res || typeof res !== "object" || Array.isArray(res)) return null;
+  const envelope = res as { data?: unknown; totals?: unknown };
+  if (!Array.isArray(envelope.data)) return null;
+  const read = readScheduleRows(envelope.data, loanId);
+  if (read === null) return null;
+  const t = envelope.totals;
+  const totals =
+    t && typeof t === "object" && !Array.isArray(t)
+      ? {
+          principal: serverFigure((t as Record<string, unknown>).principal_due),
+          interest: serverFigure((t as Record<string, unknown>).interest_due),
+          shareCapitalBuildUp: serverFigure((t as Record<string, unknown>).share_capital_build_up),
+          totalPayment: serverFigure((t as Record<string, unknown>).total_payment),
+        }
+      : NO_SCHEDULE_TOTALS;
+  return { schedule: read.schedule, totals };
+}
+
+/**
  * Schedule rows as the server sent them, in `LoanSchedule` shape.
  *
  * Reads both `GET /loans/{id}/amortization-schedule` (the persisted schedule)
