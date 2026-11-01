@@ -1,17 +1,59 @@
 import type { ApiScheduleRow } from "@/lib/amortization";
 import type { LoanSchedule } from "@/types/loan";
 
-/** One row of the schedule the loan page draws. */
+/**
+ * One row of the schedule the loan page draws. Every figure is the server's;
+ * null is one the server did not send, shown as a dash.
+ */
 export interface AmortizationRow {
   period: number;
   dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
+  principal: number | null;
+  interest: number | null;
+  shareCapitalBuildUp: number | null;
+  totalPayment: number | null;
   balance: number;
   status?: "pending" | "paid" | "partial" | "overdue";
-  amountPaid?: number;
+}
+
+/**
+ * The schedule's column totals, as the server added them up
+ * (`GET /loans/{id}` `amortization_schedule_totals`). Null is a total the
+ * server did not send, shown as a dash, never a sum of the rows.
+ */
+export interface ScheduleTotals {
+  principal: number | null;
+  interest: number | null;
+  shareCapitalBuildUp: number | null;
+  totalPayment: number | null;
+}
+
+/** No totals from the server: every one is a dash. */
+export const NO_SCHEDULE_TOTALS: ScheduleTotals = Object.freeze({
+  principal: null,
+  interest: null,
+  shareCapitalBuildUp: null,
+  totalPayment: null,
+});
+
+/** A money figure as the server sent it (number or decimal string), or null. */
+function serverFigure(raw: unknown): number | null {
+  if (typeof raw !== "number" && typeof raw !== "string") return null;
+  if (typeof raw === "string" && raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** The server's `amortization_schedule_totals`, each one null when absent. */
+export function readScheduleTotals(raw: unknown): ScheduleTotals {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return NO_SCHEDULE_TOTALS;
+  const t = raw as Record<string, unknown>;
+  return {
+    principal: serverFigure(t.principal),
+    interest: serverFigure(t.interest),
+    shareCapitalBuildUp: serverFigure(t.share_capital_build_up),
+    totalPayment: serverFigure(t.total_payment),
+  };
 }
 
 /**
@@ -21,7 +63,8 @@ export interface AmortizationRow {
  * and `GET /loans/{id}/amortization-preview` (what release would persist): both
  * carry `principal_due`, `interest_due`, `total_due` and `remaining_balance`,
  * which is what `schedule` is built from. The preview has no paid columns, so
- * its rows read as nothing paid.
+ * its rows read as nothing paid. `share_capital_build_up` and `total_payment`
+ * are taken as sent, and are null on rows that do not carry them.
  *
  * `raw` keeps the persisted rows untouched when they carry that breakdown, for
  * the figures that need `interest_paid` per row. An empty list is an answer —
@@ -54,6 +97,8 @@ export function readScheduleRows(
           amount_paid: parseFloat(String(r.principal_paid ?? 0)) + parseFloat(String(r.interest_paid ?? 0)),
           balance: parseFloat(String(r.remaining_balance ?? 0)),
           status: (r.status as LoanSchedule["status"]) ?? "pending",
+          share_capital_build_up: serverFigure(r.share_capital_build_up),
+          total_payment: serverFigure(r.total_payment),
         }) as LoanSchedule)
       : rows as unknown as LoanSchedule[],
   };
@@ -62,54 +107,49 @@ export function readScheduleRows(
 /**
  * The server's schedule rows as the page draws them.
  *
- * Every row comes from the server; nothing is generated here. No rows in means
- * no rows out, so a loan the server holds no instalments for shows none.
+ * Every row comes from the server; nothing is generated or added up here. No
+ * rows in means no rows out, so a loan the server holds no instalments for
+ * shows none. Each row's build-up and total payment are the server's
+ * `share_capital_build_up` and `total_payment`, null when it sent none.
+ *
+ * An upon-maturity loan is drawn as one maturity payment. With more than one
+ * row (an extension leaves the settled cycle beside the open one) its figures
+ * are the server's column `totals`, a dash for any it did not send.
  */
 export function toDisplaySchedule(
   schedule: readonly LoanSchedule[],
   {
-    scb,
     isUponMaturity,
+    totals,
   }: {
-    scb: number;
     isUponMaturity: boolean;
+    totals: ScheduleTotals;
   },
 ): AmortizationRow[] {
   if (schedule.length === 0) return [];
-  if (isUponMaturity) {
-    // Backend may return one row per period; collapse everything into a single maturity payment
+  if (isUponMaturity && schedule.length > 1) {
     const lastRow = schedule[schedule.length - 1];
-    const totalPrincipal = schedule.reduce((s, r) => s + (parseFloat(String(r.principal)) || 0), 0);
-    const totalInterest = schedule.reduce((s, r) => s + (parseFloat(String(r.interest)) || 0), 0);
-    const totalAmountDue = schedule.reduce((s, r) => s + (parseFloat(String(r.amount_due)) || 0), 0);
-    const totalAmountPaid = schedule.reduce((s, r) => s + (parseFloat(String(r.amount_paid)) || 0), 0);
-    const totalScb = scb * schedule.length;
     return [{
       period: 1,
       dueDate: new Date(lastRow.due_date),
-      principal: totalPrincipal,
-      interest: totalInterest,
-      shareCapitalBuildUp: totalScb,
-      totalPayment: totalAmountDue + totalScb,
+      principal: totals.principal,
+      interest: totals.interest,
+      shareCapitalBuildUp: totals.shareCapitalBuildUp,
+      totalPayment: totals.totalPayment,
       balance: parseFloat(String(lastRow.balance)) || 0,
       status: lastRow.status,
-      amountPaid: totalAmountPaid,
     }];
   }
   // The Balance column is the server's `remaining_balance` on every row, zero
   // included: after a balance adjustment it is not principal minus principal.
-  return schedule.map((row, idx) => {
-    const rowPrincipal = parseFloat(String(row.principal)) || 0;
-    return {
-      period: idx + 1,
-      dueDate: new Date(row.due_date),
-      principal: rowPrincipal,
-      interest: parseFloat(String(row.interest)) || 0,
-      shareCapitalBuildUp: scb,
-      totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-      balance: parseFloat(String(row.balance)) || 0,
-      status: row.status,
-      amountPaid: parseFloat(String(row.amount_paid)) || 0,
-    };
-  });
+  return schedule.map((row, idx) => ({
+    period: idx + 1,
+    dueDate: new Date(row.due_date),
+    principal: parseFloat(String(row.principal)) || 0,
+    interest: parseFloat(String(row.interest)) || 0,
+    shareCapitalBuildUp: serverFigure(row.share_capital_build_up),
+    totalPayment: serverFigure(row.total_payment),
+    balance: parseFloat(String(row.balance)) || 0,
+    status: row.status,
+  }));
 }

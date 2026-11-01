@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -275,8 +275,20 @@ export const loanService = {
    * ("defer"). The API performs the collection itself, in the same
    * transaction as the extension.
    */
-  extend: (id: number, data: { remarks?: string; interest_option: "pay" | "defer" }) =>
+  extend: (id: number, data: { remarks?: string; interest_option: ExtensionInterestOption }) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
+
+  /**
+   * What `extend` would collect now and store for `interestOption`, worked
+   * out by the server. Writes nothing. Needs `loans:extend`, and answers 422
+   * wherever the extension itself would be refused. `signal` lets a preview
+   * for an option since switched away from be cancelled.
+   */
+  extensionPreview: (id: number, interestOption: ExtensionInterestOption, signal?: AbortSignal) =>
+    api.get<LoanExtensionPreview>(API_ENDPOINTS.LOANS.EXTENSION_PREVIEW(id), {
+      params: { interest_option: interestOption },
+      signal,
+    }),
 
   restructure: (id: number, data: Record<string, unknown>) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),

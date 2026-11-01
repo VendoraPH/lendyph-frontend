@@ -94,6 +94,7 @@ export const API_ENDPOINTS = {
     AMORTIZATION_BALANCES: (id: number) => `/loans/${id}/amortization-balances`,
     SUMMARY: (id: number) => `/loans/${id}/summary`,
     EXTEND: (id: number) => `/loans/${id}/extend`,
+    EXTENSION_PREVIEW: (id: number) => `/loans/${id}/extension-preview`,
     TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
     ACCOUNT_OFFICER: (id: number) => `/loans/${id}/account-officer`,
     CO_MAKERS: (id: number) => `/loans/${id}/co-makers`,

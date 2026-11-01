@@ -18,6 +18,8 @@ export interface ApiScheduleRow {
   interest_paid: number;
   penalty_paid: number;
   status: "paid" | "partial" | "overdue" | "pending";
+  share_capital_build_up?: number;
+  total_payment?: number;
 }
 
 export interface ApiAmortizationSchedule {

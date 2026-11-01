@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readScheduleRows, toDisplaySchedule } from "./server-schedule";
+import {
+  NO_SCHEDULE_TOTALS,
+  readScheduleRows,
+  readScheduleTotals,
+  toDisplaySchedule,
+} from "./server-schedule";
 
 /** A persisted row as `AmortizationScheduleResource` serialises it. */
 const persisted = (
@@ -13,6 +18,8 @@ const persisted = (
     interest_paid?: number;
     status: "paid" | "partial" | "overdue" | "pending";
     due_date: string;
+    share_capital_build_up?: number;
+    total_payment?: number;
   },
 ) => ({
   id: 500 + period,
@@ -24,6 +31,8 @@ const persisted = (
   penalty_paid: 0,
   principal_paid: 0,
   interest_paid: 0,
+  share_capital_build_up: 50,
+  total_payment: row.principal_due + row.interest_due + 50,
   ...row,
 });
 
@@ -34,7 +43,7 @@ const ZERO_BALANCE_ROWS = [
   persisted(3, { principal_due: 4000, interest_due: 80, remaining_balance: 0, status: "pending", due_date: "2026-10-31" }),
 ];
 
-const DISPLAY = { scb: 50, isUponMaturity: false };
+const DISPLAY = { isUponMaturity: false, totals: NO_SCHEDULE_TOTALS };
 
 // ── what the server answered ──────────────────────────────────────────────
 
@@ -69,6 +78,8 @@ test("persisted rows map their *_due fields and fold the paid columns", () => {
     amount_paid: 1160,
     balance: 0,
     status: "partial",
+    share_capital_build_up: 50,
+    total_payment: 4210,
   });
   // The raw rows are kept untouched for the figures that need interest_paid.
   assert.equal(read.raw, ZERO_BALANCE_ROWS as unknown);
@@ -81,14 +92,48 @@ test("the legacy { schedule } wrapper is still read", () => {
 
 // ── what the page draws from it ───────────────────────────────────────────
 
+test("each row shows the server's build-up and total payment, never amount due plus build-up", () => {
+  // Figures that do not add up on purpose: the page repeats the server's
+  // total payment, it does not add the build-up to the amount due itself.
+  const rows = toDisplaySchedule(
+    readScheduleRows(
+      [
+        persisted(1, { principal_due: 4000, interest_due: 240, remaining_balance: 8000, status: "paid", due_date: "2026-08-31", share_capital_build_up: 100.5, total_payment: 4340.55 }),
+        persisted(2, { principal_due: 4000, interest_due: 160, remaining_balance: 4000, status: "pending", due_date: "2026-09-30", share_capital_build_up: 0, total_payment: 4160 }),
+      ],
+      42,
+    )!.schedule,
+    DISPLAY,
+  );
+  assert.deepEqual(
+    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance, r.status]),
+    [
+      [1, 4000, 240, 100.5, 4340.55, 8000, "paid"],
+      [2, 4000, 160, 0, 4160, 4000, "pending"],
+    ],
+  );
+});
+
+test("a row the server sent no build-up or total payment for shows neither, never a browser figure", () => {
+  const bare: Record<string, unknown> = { ...ZERO_BALANCE_ROWS[2] };
+  delete bare.share_capital_build_up;
+  delete bare.total_payment;
+  const read = readScheduleRows([bare], 42)!;
+  assert.equal(read.schedule[0]?.share_capital_build_up, null);
+  assert.equal(read.schedule[0]?.total_payment, null);
+  const [row] = toDisplaySchedule(read.schedule, DISPLAY);
+  assert.equal(row?.shareCapitalBuildUp, null);
+  assert.equal(row?.totalPayment, null);
+});
+
 test("a zero server balance is shown as zero, never a browser running balance", () => {
   const rows = toDisplaySchedule(readScheduleRows(ZERO_BALANCE_ROWS, 42)!.schedule, DISPLAY);
   assert.deepEqual(
-    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance, r.status, r.amountPaid]),
+    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance, r.status]),
     [
-      [1, 4000, 240, 50, 4290, 0, "paid", 4240],
-      [2, 4000, 160, 50, 4210, 0, "partial", 1160],
-      [3, 4000, 80, 50, 4130, 0, "pending", 0],
+      [1, 4000, 240, 50, 4290, 0, "paid"],
+      [2, 4000, 160, 50, 4210, 0, "partial"],
+      [3, 4000, 80, 50, 4130, 0, "pending"],
     ],
   );
   assert.deepEqual(rows[2]?.dueDate, new Date("2026-10-31"));
@@ -126,9 +171,53 @@ test("after a balance adjustment the rows show the server's balance, not princip
   assert.deepEqual(rows.map((r) => r.balance), [6000, 0, 0]);
 });
 
-test("an upon-maturity schedule collapses into one maturity payment", () => {
+// ── the server's column totals ────────────────────────────────────────────
+
+/** `LoanResource::scheduleTotals()` with the build-up columns. */
+const SERVER_TOTALS = {
+  principal: 10000,
+  interest: 900.01,
+  penalty: 0,
+  total_due: 10900.01,
+  amount_paid: 300,
+  share_capital_build_up: 301.5,
+  total_payment: 11201.52,
+};
+
+test("the totals are the server's amortization_schedule_totals, as sent", () => {
+  assert.deepEqual(readScheduleTotals(SERVER_TOTALS), {
+    principal: 10000,
+    interest: 900.01,
+    shareCapitalBuildUp: 301.5,
+    totalPayment: 11201.52,
+  });
+});
+
+test("a total the server did not send is null (a dash), never a sum of the rows", () => {
+  const older: Record<string, unknown> = { ...SERVER_TOTALS };
+  delete older.share_capital_build_up;
+  delete older.total_payment;
+  assert.deepEqual(readScheduleTotals(older), {
+    principal: 10000,
+    interest: 900.01,
+    shareCapitalBuildUp: null,
+    totalPayment: null,
+  });
+  for (const absent of [undefined, null, "n/a", []]) {
+    assert.deepEqual(readScheduleTotals(absent), NO_SCHEDULE_TOTALS);
+  }
+  assert.deepEqual(NO_SCHEDULE_TOTALS, {
+    principal: null,
+    interest: null,
+    shareCapitalBuildUp: null,
+    totalPayment: null,
+  });
+});
+
+test("an upon-maturity schedule collapses into one maturity payment of the server's totals", () => {
   // Two periods, as an extension leaves it: the settled first cycle's interest
-  // and the open second one.
+  // and the open second one. The figures are the server's column totals, not
+  // the rows added up here (they would give 600 interest, not 900.01).
   const rows = toDisplaySchedule(
     readScheduleRows(
       [
@@ -137,21 +226,37 @@ test("an upon-maturity schedule collapses into one maturity payment", () => {
       ],
       42,
     )!.schedule,
-    { scb: 100, isUponMaturity: true },
+    { isUponMaturity: true, totals: readScheduleTotals(SERVER_TOTALS) },
   );
   assert.deepEqual(rows, [
     {
       period: 1,
       dueDate: new Date("2026-11-30"),
       principal: 10000,
-      interest: 600,
-      shareCapitalBuildUp: 200,
-      totalPayment: 10800,
+      interest: 900.01,
+      shareCapitalBuildUp: 301.5,
+      totalPayment: 11201.52,
       balance: 0,
       status: "pending",
-      amountPaid: 300,
     },
   ]);
+});
+
+test("an upon-maturity collapse with no server totals shows dashes, never a browser sum", () => {
+  const rows = toDisplaySchedule(
+    readScheduleRows(
+      [
+        persisted(1, { principal_due: 0, interest_due: 300, remaining_balance: 10000, interest_paid: 300, status: "paid", due_date: "2026-10-31" }),
+        persisted(2, { principal_due: 10000, interest_due: 300, remaining_balance: 0, status: "pending", due_date: "2026-11-30" }),
+      ],
+      42,
+    )!.schedule,
+    { isUponMaturity: true, totals: NO_SCHEDULE_TOTALS },
+  );
+  assert.deepEqual(
+    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance, r.status]),
+    [[1, null, null, null, null, 0, "pending"]],
+  );
 });
 
 // ── the pre-release preview ───────────────────────────────────────────────
@@ -177,31 +282,32 @@ test("preview rows are read from their *_due fields", () => {
     amount_paid: 0,
     balance: 6000,
     status: "pending",
+    share_capital_build_up: null,
+    total_payment: null,
   });
 });
 
-test("a preview is drawn with the loan's build-up on every row", () => {
-  const rows = toDisplaySchedule(readScheduleRows(PREVIEW_ROWS, 42)!.schedule, {
-    scb: 25,
-    isUponMaturity: false,
-  });
+test("a preview without the server's build-up shows no build-up and no total payment", () => {
+  // `GET /loans/{id}/amortization-preview` sends neither column; the page
+  // used to put the loan's build-up on every row and add it to the amount due.
+  const rows = toDisplaySchedule(readScheduleRows(PREVIEW_ROWS, 42)!.schedule, DISPLAY);
   assert.deepEqual(
-    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance, r.amountPaid]),
+    rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance]),
     [
-      [1, 3000, 270, 25, 3295, 6000, 0],
-      [2, 3000, 270, 25, 3295, 3000, 0],
-      [3, 3000, 270, 25, 3295, 0, 0],
+      [1, 3000, 270, null, null, 6000],
+      [2, 3000, 270, null, null, 3000],
+      [3, 3000, 270, null, null, 0],
     ],
   );
 });
 
-test("a single-payment preview stays one row at maturity", () => {
+test("a single-payment preview stays one row at maturity, with the row's own figures", () => {
   const rows = toDisplaySchedule(
     readScheduleRows(
-      [{ period_number: 1, due_date: "2026-12-01", principal_due: 5000, interest_due: 450, total_due: 5450, remaining_balance: 0, status: "pending" }],
+      [{ period_number: 1, due_date: "2026-12-01", principal_due: 5000, interest_due: 450, total_due: 5450, share_capital_build_up: 100, total_payment: 5550, remaining_balance: 0, status: "pending" }],
       42,
     )!.schedule,
-    { scb: 100, isUponMaturity: true },
+    { isUponMaturity: true, totals: NO_SCHEDULE_TOTALS },
   );
   assert.deepEqual(
     rows.map((r) => [r.period, r.principal, r.interest, r.shareCapitalBuildUp, r.totalPayment, r.balance]),

@@ -391,6 +391,8 @@ export interface Loan {
     penalty: number;
     total_due: number;
     amount_paid: number;
+    share_capital_build_up?: number;
+    total_payment?: number;
   };
   /**
    * The loan's pledged collateral against its principal, from the server
@@ -420,6 +422,36 @@ export interface LoanSchedule {
   amount_paid: number;
   balance: number;
   status: "pending" | "paid" | "partial" | "overdue";
+  /** The period's share capital build-up, from the server; null when it sent none. */
+  share_capital_build_up?: number | null;
+  /** `total_due` plus the build-up, from the server; null when it sent none. */
+  total_payment?: number | null;
+}
+
+/** What happens to the interest still owed when a loan extends. */
+export type ExtensionInterestOption = "pay" | "defer";
+
+/**
+ * `GET /loans/{id}/extension-preview?interest_option=pay|defer`: what
+ * `POST /loans/{id}/extend` would collect and store for that option, worked
+ * out by the server under the same guards (422 when it would refuse). Money
+ * is to the centavo; the dialog displays it and works none of it out.
+ */
+export interface LoanExtensionPreview {
+  interest_option: ExtensionInterestOption;
+  /** Collected as a payment before the loan extends; zeros for "defer". */
+  collect_now: {
+    amount: number;
+    penalty_part: number;
+    interest_part: number;
+  };
+  carry_principal: number;
+  carry_interest: number;
+  fresh_interest: number;
+  new_interest_due: number;
+  new_total_due: number;
+  /** `Y-m-d`. */
+  new_due_date: string;
 }
 
 /** One component of a period: what was due, what the payments covered, what is left. */
