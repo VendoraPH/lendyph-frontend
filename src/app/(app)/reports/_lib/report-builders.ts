@@ -110,6 +110,26 @@ const REPAYMENT_COLUMNS: ReportColumn[] = [
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
 
+/**
+ * The Daily Collection table: the repayment columns with a Total Collected
+ * after Penalty, so Amount + Penalty = Total Collected reads across each row.
+ */
+const DAILY_COLLECTION_COLUMNS: ReportColumn[] = REPAYMENT_COLUMNS.flatMap((column) =>
+  column.key === "penalty_amount"
+    ? [
+        column,
+        { key: "total_collected", header: "Total Collected", format: "currency", align: "right", width: 150 } satisfies ReportColumn,
+      ]
+    : [column]
+);
+
+/** `a + b` when both are numbers, else null: a missing figure is a dash, never a guess. */
+function sumOrNull(a: unknown, b: unknown): number | null {
+  const x = toNumber(a);
+  const y = toNumber(b);
+  return x === null || y === null ? null : x + y;
+}
+
 // The schedule rows carry a full principal/interest/penalty split and the
 // amounts already paid against them. Only the totals used to be rendered,
 // which left staff unable to see *what* a delinquent installment is made of
@@ -301,11 +321,17 @@ export function buildDailyCollectionDoc(
 ): ReportDocument {
   const obj = asRecord(raw);
 
+  const repayments = repaymentsRaw != null ? readListEnvelope(repaymentsRaw) : null;
+  const penaltyTotal = pick(repayments?.totals ?? null, ["total_penalty_applied"]);
+  const serverCollected = pick(obj, ["total_collected", "collected", "total_amount"]);
+
   const items: KpiItem[] = [
     kpi("Total Due", currencyOrDash(pick(obj, ["total_due", "due", "total_scheduled"]))),
+    // Amount + Penalty: the period's penalty is part of what was collected. With
+    // no repayment totals to take the penalty from, the server's figure stands.
     kpi(
       "Total Collected",
-      currencyOrDash(pick(obj, ["total_collected", "collected", "total_amount"])),
+      currencyOrDash(repayments ? (sumOrNull(serverCollected, penaltyTotal) ?? serverCollected) : serverCollected),
       { tone: "positive" }
     ),
     kpi("Collection Rate", percentOrDash(pick(obj, ["collection_rate", "rate"]))),
@@ -316,9 +342,12 @@ export function buildDailyCollectionDoc(
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  if (repaymentsRaw != null) {
-    const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
-    const rows = rawRows.map(normalizeRepaymentRow);
+  if (repayments) {
+    const { rows: rawRows, totals, totalRows } = repayments;
+    const rows = rawRows.map(normalizeRepaymentRow).map((row) => ({
+      ...row,
+      total_collected: sumOrNull(row.amount, row.penalty_amount ?? 0),
+    }));
 
     const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
     if (note) sections.push(note);
@@ -328,7 +357,7 @@ export function buildDailyCollectionDoc(
     sections.push({
       kind: "table",
       title: "Payments Collected",
-      columns: REPAYMENT_COLUMNS,
+      columns: DAILY_COLLECTION_COLUMNS,
       rows,
       totals:
         rows.length > 0
@@ -341,6 +370,12 @@ export function buildDailyCollectionDoc(
               {
                 column: "penalty_amount",
                 value: currencyOrDash(pick(totals, ["total_penalty_applied"])),
+              },
+              {
+                column: "total_collected",
+                value: currencyOrDash(
+                  sumOrNull(pick(totals, ["total_amount_paid"]), pick(totals, ["total_penalty_applied"]))
+                ),
               },
             ]
           : undefined,
