@@ -432,9 +432,9 @@ function NewLoanApplicationInner() {
             // the user must be able to keep the security it already holds.
             lock: collateralLock(c, { exceptLoanId: editLoanId }),
             // `value_unknown` when this is a share-capital collateral whose
-            // ledger could not be read in full. Attaching such a row would
+            // balance could not be read. Attaching such a row would
             // write its value onto the loan as `snapshot_value` — a permanent
-            // appraisal derived from part of a ledger — so the picker refuses
+            // appraisal nobody computed — so the picker refuses
             // it below rather than booking one.
             ...collateralValue(c, t, scBalance),
           };

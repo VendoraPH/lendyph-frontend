@@ -208,10 +208,10 @@ export function CollateralForm({ initial, mode }: Props) {
     detailValue.trim().length > 0 &&
     !Number.isNaN(numericAmount) &&
     numericAmount > 0 &&
-    // A share-capital collateral cannot be registered against a balance we
-    // could not read in full. Refusing to save is the point: the alternative
-    // is a stored appraisal derived from part of a ledger, which nothing
-    // downstream can tell apart from a real one.
+    // A share-capital collateral cannot be registered against a balance the
+    // server did not give us. Refusing to save is the point: the alternative
+    // is a stored appraisal nobody computed, which nothing downstream can tell
+    // apart from a real one.
     !(isShareCapital && (scBalanceLoading || scBalanceKnown === null));
 
   // Normalize a detail value (cert no., title no., plate, etc.) for duplicate
@@ -484,7 +484,7 @@ export function CollateralForm({ initial, mode }: Props) {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {shareCapitalUnavailableReason(scBalanceProblem)} This
-                        collateral cannot be saved until it can be read in full.
+                        collateral cannot be saved until it can be read.
                       </p>
                     </div>
                   ) : (

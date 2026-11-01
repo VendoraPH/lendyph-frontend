@@ -1,14 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { PartialRowsTable } from "./partial-rows-table";
+import { DueLoansTable } from "./due-loans-table";
+import { LoanIssuesList } from "./loan-issues-list";
 import { formatCurrency } from "@/lib/format";
-import type { AutoPayPreview } from "@/types";
+import { loanIssues, loansAffected, previewTotals } from "../_lib/auto-pay-view";
+import { useAutoPaySelection } from "../_hooks/use-auto-pay-selection";
+import { cn } from "@/lib/utils";
+import type { AutoPayFilter, AutoPayPreview } from "@/types";
 
 interface ReviewStepProps {
+  filter: AutoPayFilter;
   preview: AutoPayPreview;
   includedPartialIds: Set<number>;
   onTogglePartial: (scheduleId: number, included: boolean) => void;
@@ -18,6 +23,7 @@ interface ReviewStepProps {
 }
 
 export function ReviewStep({
+  filter,
   preview,
   includedPartialIds,
   onTogglePartial,
@@ -25,45 +31,80 @@ export function ReviewStep({
   onConfirm,
   processing,
 }: ReviewStepProps) {
-  const derived = useMemo(() => {
-    const included = preview.partial_rows.filter((r) =>
-      includedPartialIds.has(r.schedule_id)
-    );
-    const addPrincipal = included.reduce((s, r) => s + r.principal_remaining, 0);
-    const addInterest = included.reduce((s, r) => s + r.interest_remaining, 0);
-    const addAmount = included.reduce((s, r) => s + r.remaining_balance, 0);
-    const partialLoanIds = new Set(included.map((r) => r.loan_id));
-    return {
-      total_principal: preview.summary.total_principal + addPrincipal,
-      total_interest: preview.summary.total_interest + addInterest,
-      total_amount: preview.summary.total_amount + addAmount,
-      loans_count: preview.summary.loans_count + partialLoanIds.size,
-    };
-  }, [preview, includedPartialIds]);
+  // Every figure is the server's, from the preview asked again with the
+  // part-paid rows ticked now: selecting a row can bring a skipped loan back
+  // into the cards. The checkbox list stays the first preview's.
+  const view = useAutoPaySelection(filter, preview, includedPartialIds);
+  const shown = view.preview;
+  const totals = previewTotals(shown.summary);
+  const run = view.run;
+  const loanCount = loansAffected(shown, includedPartialIds);
+  const skips = loanIssues(shown.skips);
+  const updating = !view.upToDate && view.error === null;
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Summary Cards: the server's totals for the loans with full dues */}
+      <div
+        aria-busy={updating}
+        className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", updating && "opacity-60")}
+      >
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-800 dark:bg-green-950/20">
           <p className="text-xl font-bold text-green-700 dark:text-green-300">
-            {formatCurrency(derived.total_principal)}
+            {formatCurrency(totals.principal)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Total Principal</p>
         </div>
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center dark:border-yellow-800 dark:bg-yellow-950/20">
           <p className="text-xl font-bold text-yellow-700 dark:text-yellow-300">
-            {formatCurrency(derived.total_interest)}
+            {formatCurrency(totals.interest)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Total Interest</p>
         </div>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-800 dark:bg-red-950/20">
+          <p className="text-xl font-bold text-red-700 dark:text-red-300">
+            {totals.penalty === null ? "—" : formatCurrency(totals.penalty)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Penalty</p>
+        </div>
+        <div className="rounded-lg border p-4 text-center sm:col-span-2">
+          <p className="text-xl font-bold">{formatCurrency(totals.amount)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty)</p>
+        </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-800 dark:bg-blue-950/20">
           <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
-            {derived.loans_count}
+            {loanCount}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Loans Affected</p>
         </div>
       </div>
+      <p className="-mt-3 text-xs text-muted-foreground">
+        Totals cover the loans with full dues listed below. The run total adds
+        the part-paid periods you include.
+      </p>
+
+      {/* The run's total for the current selection, from the server */}
+      <div
+        aria-live="polite"
+        className="rounded-lg border-2 border-brand-orange/40 p-4"
+      >
+        {updating ? (
+          <p className="text-sm text-muted-foreground">Updating the preview for this selection…</p>
+        ) : run === null ? (
+          <p className="text-sm text-destructive">{view.error}</p>
+        ) : (
+          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted-foreground">Selected part-paid periods</dt>
+            <dd className="text-right tabular-nums">{formatCurrency(run.partialTotal)}</dd>
+            <dt className="text-base font-semibold">Run total</dt>
+            <dd className="text-right text-base font-semibold tabular-nums">
+              {formatCurrency(run.grandTotal)}
+            </dd>
+          </dl>
+        )}
+      </div>
+
+      <DueLoansTable loans={shown.loans ?? []} totals={totals} />
 
       {/* Partial Rows Review */}
       {preview.partial_rows.length > 0 && (
@@ -73,6 +114,13 @@ export function ReviewStep({
           onToggle={onTogglePartial}
         />
       )}
+
+      <LoanIssuesList
+        title="Skipped loans"
+        description="Left out of this run."
+        issues={skips}
+        tone="amber"
+      />
 
       {/* CBS Note */}
       <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-200">
@@ -95,7 +143,7 @@ export function ReviewStep({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={processing || derived.loans_count === 0}
+          disabled={processing || loanCount === 0 || run === null}
           className="flex-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
         >
           {processing && <Spinner className="mr-2 size-4" />}

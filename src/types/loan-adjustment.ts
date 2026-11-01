@@ -28,6 +28,14 @@ export interface LoanAdjustment {
   updated_at: string;
 }
 
+/** `GET /loans/{loan}/balance-adjustment-preview`: the server's figures for a target. */
+export interface BalanceAdjustmentPreview {
+  outstanding_principal: number | string;
+  target_principal_balance: number | string;
+  adjustment_amount: number | string;
+  resulting_principal_balance: number | string;
+}
+
 export interface CreateLoanAdjustmentData {
   adjustment_type: LoanAdjustmentType;
   new_values: Record<string, unknown>;

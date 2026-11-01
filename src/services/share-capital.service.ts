@@ -54,40 +54,6 @@ export const shareCapitalService = {
     ),
 
   /**
-   * Every ledger entry matching `params`, across as many pages as it takes.
-   *
-   * For the screens that need a WHOLE ledger rather than a page of it, which
-   * here is most of them: every share-capital figure in this app is an
-   * aggregate — a balance, a running balance, a member summary, a grand total —
-   * and an aggregate over a page is not a smaller version of the right answer,
-   * it is a different number.
-   *
-   * They asked for `per_page: 9999`, which the controller clamps to
-   * `min(per_page, 100)` without complaining. Reproduced against a stub with a
-   * 240-entry ledger: the balance came back ₱40,000 against a true ₱180,000.
-   * A second member with the same 100-row cap read ₱100,000 against a true
-   * ₱25,000 — TOO HIGH, because a clamped ledger drops debits as readily as
-   * credits. That is what makes this worse than the usual truncated list: the
-   * error has no direction, so "it will be low, so it will fail safe" is not
-   * available as a consolation.
-   *
-   * Returns a `DrainResult`, NOT a row array, on purpose — the same call
-   * `borrowerService.listAll` makes and for the same reason. `truncated` is
-   * part of the answer and the caller has to decide what to show for it;
-   * handing back a bare array would let a screen go back to summing an
-   * incomplete ledger as if it were the whole thing, which is the bug itself.
-   *
-   * `page` and `per_page` are set by the drain — passing them in `params` has
-   * no effect.
-   */
-  ledgerListAll: (
-    params?: Record<string, unknown>
-  ): Promise<DrainResult<ShareCapitalLedgerEntry>> =>
-    fetchAllPages<ShareCapitalLedgerEntry>(({ page, per_page }) =>
-      shareCapitalService.ledgerList({ ...params, page, per_page })
-    ),
-
-  /**
    * One member's entries for the Subsidiary Ledger's detail view, drained, each
    * with the server's `running_balance`, plus the server's period figures
    * (`meta.summary`: opening balance, credits, debits, ending balance) for the
@@ -149,8 +115,9 @@ export const shareCapitalService = {
    * total — it silently excludes members from a posting run, and the run looks
    * like it completed.
    *
-   * `DrainResult` rather than a row array, for the reason spelled out on
-   * `ledgerListAll` above.
+   * `DrainResult` rather than a row array, the same call
+   * `borrowerService.listAll` makes: `truncated` is part of the answer and the
+   * caller has to decide what to show for it.
    */
   pledgeListAll: (
     params?: Record<string, unknown>

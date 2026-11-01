@@ -66,7 +66,7 @@ export interface LoanRepayments {
  * all of them.
  *
  * Takes the whole `DrainResult`, not `rows`, so it cannot be called in a way
- * that drops `truncated` — the same reason `toShareCapitalBalance()` does.
+ * that drops `truncated`.
  */
 export function toLoanRepayments(drain: DrainResult<Repayment>): LoanRepayments {
   return { rows: drain.rows.map(withBreakdown), shortfall: shortfallOf(drain) };

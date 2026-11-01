@@ -42,8 +42,7 @@ import {
 } from "../_components/accounting-filters";
 import { JournalEntryDialog } from "../_components/journal-entry-dialog";
 import { JournalReferenceCell } from "../_components/journal-source-document";
-
-const ANY_STATUS = "any";
+import { ANY_STATUS, journalStatusItems } from "../_lib/select-items";
 
 const STATUS_STYLES: Record<JournalStatus, string> = {
   draft: "bg-slate-500/10 text-slate-700 border-slate-500/30",
@@ -120,15 +119,20 @@ function JournalEntriesContent() {
         <BranchFilter value={branch} onChange={setBranch} />
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
-          <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
+          <Select
+            value={status}
+            onValueChange={(v) => setStatus(v ?? ANY_STATUS)}
+            items={journalStatusItems}
+          >
             <SelectTrigger className="w-[150px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY_STATUS}>Any status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="posted">Posted</SelectItem>
-              <SelectItem value="reversed">Reversed</SelectItem>
+              {journalStatusItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

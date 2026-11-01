@@ -10,7 +10,7 @@ export type { ApiResponse, PaginatedResponse } from "./api";
 export type { Role, Module, Action, Permission, RoleConfig } from "./rbac";
 export type { AuditLog, AuditAction, AuditModule, AuditChange } from "./audit";
 export type { LoanDisclosure, LoanPromissoryNote } from "./loan-document";
-export type { LoanAdjustment, LoanAdjustmentType, LoanAdjustmentStatus, CreateLoanAdjustmentData } from "./loan-adjustment";
+export type { LoanAdjustment, LoanAdjustmentType, LoanAdjustmentStatus, CreateLoanAdjustmentData, BalanceAdjustmentPreview } from "./loan-adjustment";
 export type {
   ApprovalStepKind,
   ApprovalStepStatus,
@@ -26,7 +26,7 @@ export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "
 export type { ShareCapitalLedgerEntry, ShareCapitalMember, ShareCapitalMemberPeriod, ShareCapitalMembersResponse, ShareCapitalBookTotals, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus, RegisterCollateral, CollateralRegisterGroup, CollateralRegisterSort, CollateralRegisterDirection, CollateralRegisterParams, CollateralRegisterTotals, CollateralRegisterResponse } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";
-export type { AutoPayFilter, AutoPayPartialRow, AutoPaySummary, AutoPayPreview, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";
+export type { AutoPayFilter, AutoPayPartialRow, AutoPayLoanIssue, AutoPayLoanRow, AutoPaySummary, AutoPayPreview, AutoPayPreviewQuery, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";
 export type {
   GCashTransaction,
   GCashTransactionType,

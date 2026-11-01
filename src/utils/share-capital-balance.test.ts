@@ -1,6 +1,7 @@
 /**
- * `getShareCapitalBalance` over REAL HTTP against a stub ledger, for the one
- * thing a pure test cannot show: whether a request goes out at all.
+ * `getShareCapitalBalance` over REAL HTTP against a stub ledger, for what a
+ * pure test cannot show: whether a request goes out at all, what it asks for,
+ * and that the balance is the server's `meta.summary.ending_balance`.
  *
  * Without `share_capital:view` the ledger answers 403, and a refused read and
  * a skipped one both come back `unavailable` — so only the stub's request log
@@ -13,20 +14,31 @@ import { AddressInfo } from "node:net";
 
 let server: Server;
 let requests: string[] = [];
+let queries: Record<string, string>[] = [];
 let getShareCapitalBalance: typeof import("./share-capital").getShareCapitalBalance;
 
 before(async () => {
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     requests.push(url.pathname.replace(/^\/api/, ""));
+    queries.push(Object.fromEntries(url.searchParams));
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
-        data: [
-          { id: 1, borrower_id: 7, debit: 0, credit: 5000 },
-          { id: 2, borrower_id: 7, debit: 1500, credit: 0 },
-        ],
-        meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 },
+        // One row of a long ledger: adding up what is in hand would give 5000.
+        data: [{ id: 240, borrower_id: 7, debit: 0, credit: 5000, running_balance: 3500 }],
+        meta: {
+          current_page: 1,
+          last_page: 240,
+          per_page: 1,
+          total: 240,
+          summary: {
+            opening_balance: 0,
+            total_credits: 9500,
+            total_debits: 6000,
+            ending_balance: 3500,
+          },
+        },
       }),
     );
   });
@@ -43,6 +55,7 @@ after(() => {
 
 beforeEach(() => {
   requests = [];
+  queries = [];
 });
 
 test("without share_capital:view it asks for nothing and reports unavailable", async () => {
@@ -50,11 +63,13 @@ test("without share_capital:view it asks for nothing and reports unavailable", a
   assert.deepEqual(requests, []);
 });
 
-test("with it, the balance is read from the ledger as before", async () => {
+test("with it, the balance is the server's ending balance from one request", async () => {
   const result = await getShareCapitalBalance(7, true);
   assert.equal(result.status, "ok");
   assert.equal(result.status === "ok" ? result.balance : null, 3500);
   assert.deepEqual(requests, ["/share-capital/ledger"]);
+  // The member's whole ledger: no date range, and one row is all it needs.
+  assert.deepEqual(queries, [{ borrower_id: "7", per_page: "1" }]);
 });
 
 test("callers that pass nothing keep reading the ledger", async () => {

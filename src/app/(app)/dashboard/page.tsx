@@ -26,13 +26,12 @@ import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
 import { formatCurrency, formatDateFull } from "@/lib/format";
-import { fetchAllPages } from "@/lib/paginate";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
-import { ledgerAmounts } from "@/utils/share-capital";
 import { env } from "@/config/env";
 import { useLindaStore } from "@/store";
-import type { DailyDuesSummary, ShareCapitalLedgerEntry } from "@/types";
+import type { DailyDuesSummary } from "@/types";
+import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 
@@ -210,27 +209,15 @@ function DashboardContent() {
 
   useEffect(() => {
     // Needs `share_capital:view`, which the dashboard does not; without it the
-    // card keeps its "—" rather than asking for a ledger it would be refused.
+    // card keeps its "—" rather than asking for figures it would be refused.
     if (canViewShareCapital) {
-      // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
-      // the whole ledger. It used to ask for `per_page: 9999`, which the API
-      // silently clamps to 100: the headline figure on the front page of the app
-      // was the sum of the hundred most recent entries, in a response shaped
-      // exactly like a complete one. Drained page by page instead.
-      fetchAllPages<ShareCapitalLedgerEntry>((params) =>
-        shareCapitalService.ledgerList(params)
-      )
-        .then(({ rows, truncated }) => {
-          let total = 0;
-          for (const e of rows) {
-            const { debit, credit } = ledgerAmounts(e);
-            total += credit - debit;
-          }
-          const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
-          // The drain hit its runaway guard, so this is a floor rather than the
-          // total. Say so with a "+" instead of presenting a short sum as final —
-          // quietly rounding down is the bug this whole change is about.
-          setShareCapitalTotal(truncated ? `${compact}+` : compact);
+      // The book's balance as the server states it (`meta.totals`); one row is
+      // asked for because only the totals are read.
+      shareCapitalService
+        .members({ per_page: 1 })
+        .then((res) => {
+          const balance = shareCapitalBookBalance(res);
+          setShareCapitalTotal(balance === null ? "—" : formatCompactCurrency(balance));
         })
         .catch(() => {
           setShareCapitalTotal("—");

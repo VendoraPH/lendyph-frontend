@@ -96,7 +96,7 @@ export function formatCentavos(centavos: number): string {
  * accounts" beside them read ₱0.00. A total that disagrees with the rows above
  * it is worse than no total, and nothing in the types could ever have caught it.
  *
- * Coercion follows the house pattern already proven in `toShareCapitalBalance`:
+ * Coercion follows the house pattern of `ledgerAmounts` (utils/share-capital):
  * `Number()`, then skip anything non-finite rather than let one bad row poison
  * the sum into `NaN` and render "₱NaN".
  *
