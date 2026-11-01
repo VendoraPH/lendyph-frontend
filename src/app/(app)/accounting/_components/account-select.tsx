@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Account } from "@/types";
+import { accountSelectItems } from "../_lib/select-items";
 
 interface AccountSelectProps {
   label?: string;
@@ -35,8 +36,9 @@ export function AccountSelect({
     <div className="space-y-1.5">
       {label && <Label className="text-xs text-muted-foreground">{label}</Label>}
       <Select
-        value={value === null ? "" : String(value)}
+        value={value === null ? null : String(value)}
         onValueChange={(v) => onChange(v ? Number(v) : null)}
+        items={accountSelectItems(accounts)}
       >
         <SelectTrigger className={className}>
           <SelectValue placeholder={placeholder} />

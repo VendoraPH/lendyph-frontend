@@ -34,8 +34,7 @@ import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { ExpenseDialog } from "../_components/expense-dialog";
-
-const ANY_STATUS = "any";
+import { ANY_STATUS, expenseStatusItems } from "../_lib/select-items";
 
 const STATUS_STYLES: Record<ExpenseStatus, string> = {
   unpaid: "bg-slate-500/10 text-slate-700 border-slate-500/30",
@@ -83,16 +82,20 @@ function ExpensesContent() {
       <FilterBar>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
-          <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
+          <Select
+            value={status}
+            onValueChange={(v) => setStatus(v ?? ANY_STATUS)}
+            items={expenseStatusItems}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY_STATUS}>Any status</SelectItem>
-              <SelectItem value="unpaid">Unpaid</SelectItem>
-              <SelectItem value="partially_paid">Partially paid</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
+              {expenseStatusItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
