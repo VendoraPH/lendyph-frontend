@@ -21,7 +21,7 @@ export type {
   SendBackStepPayload,
 } from "./loan-approval";
 export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAChain } from "./loan-approval";
-export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
+export type { Repayment, RepaymentAllocation, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { ShareCapitalLedgerEntry, ShareCapitalMember, ShareCapitalMemberPeriod, ShareCapitalMembersResponse, ShareCapitalBookTotals, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus, RegisterCollateral, CollateralRegisterGroup, CollateralRegisterSort, CollateralRegisterDirection, CollateralRegisterParams, CollateralRegisterTotals, CollateralRegisterResponse } from "./collateral";

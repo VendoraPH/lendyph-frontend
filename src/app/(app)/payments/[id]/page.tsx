@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 import { repaymentService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "sonner";
-import type { Repayment } from "@/types";
+import type { Repayment, RepaymentAllocation } from "@/types";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +32,9 @@ interface ReceiptData {
   penalty: number;
   interest: number;
   principal: number;
+  scb: number;
+  excess: number;
+  allocations: RepaymentAllocation[];
   total: number;
   previous_balance: number;
   new_balance: number;
@@ -111,6 +115,9 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     penalty: (p.penalty_amount as number) || (p.penalty_paid as number) || 0,
     interest: (p.interest_amount as number) || (p.interest_paid as number) || 0,
     principal: (p.principal_amount as number) || (p.principal_paid as number) || 0,
+    scb: (p.scb_paid as number) || 0,
+    excess: (p.excess_amount as number) || 0,
+    allocations: Array.isArray(p.allocations) ? p.allocations : [],
     total: p.amount_paid,
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
@@ -438,7 +445,22 @@ function PaymentReceiptContent({
                     label="Principal"
                     value={formatCurrency(receipt.principal)}
                   />
+                  {receipt.scb > 0 && (
+                    <ReceiptRow
+                      label="Share Capital Build-Up"
+                      value={formatCurrency(receipt.scb)}
+                    />
+                  )}
+                  {receipt.excess > 0 && (
+                    <ReceiptRow
+                      label="Excess / Advance"
+                      value={formatCurrency(receipt.excess)}
+                    />
+                  )}
                 </div>
+                <p className="text-[11px] italic text-muted-foreground">
+                  Principal and Interest
+                </p>
                 <Separator className="my-1" />
                 <div className="flex justify-between text-sm font-bold">
                   <span>Total Paid</span>
@@ -447,6 +469,40 @@ function PaymentReceiptContent({
                   </span>
                 </div>
               </div>
+
+              {receipt.allocations.length > 0 && (
+                <>
+                  <Separator />
+                  {/* Payment application — which periods this payment was applied to */}
+                  <div className="space-y-2">
+                    <SectionHeading>Payment Application</SectionHeading>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10 text-center text-[10px] uppercase">#</TableHead>
+                          <TableHead className="text-[10px] uppercase">Due Date</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Principal</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Interest</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Remaining</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {receipt.allocations.map((a, idx) => (
+                          <TableRow key={`${a.schedule_id ?? idx}-${a.period ?? idx}`}>
+                            <TableCell className="text-center text-xs">{a.period ?? idx + 1}</TableCell>
+                            <TableCell className="text-xs">{a.due_date ? formatDate(a.due_date) : "—"}</TableCell>
+                            <TableCell className="text-right text-xs tabular-nums">{formatCurrency(a.principal ?? 0)}</TableCell>
+                            <TableCell className="text-right text-xs tabular-nums">{formatCurrency(a.interest ?? 0)}</TableCell>
+                            <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                              {(a.remaining_balance ?? 0) <= 0 ? "Settled" : formatCurrency(a.remaining_balance ?? 0)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

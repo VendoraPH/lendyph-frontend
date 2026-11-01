@@ -3,21 +3,13 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   Repayment,
+  RepaymentAllocation,
   CreateRepaymentData,
   VoidRepaymentData,
   PaginatedResponse,
 } from "@/types";
 
-export interface RepaymentPreviewAllocation {
-  schedule_id?: number;
-  period?: number;
-  due_date?: string;
-  principal?: number;
-  interest?: number;
-  penalty?: number;
-  amount_applied?: number;
-  remaining_balance?: number;
-}
+export type RepaymentPreviewAllocation = RepaymentAllocation;
 
 export type PaymentBadgeType = "partial" | "exact" | "advance";
 
