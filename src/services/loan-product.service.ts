@@ -18,8 +18,6 @@ export interface CreateLoanProductData {
   notarial_fee?: number;
   penalty_rate?: number;
   grace_period_days?: number;
-  past_due_transfer_value?: number;
-  past_due_transfer_unit?: "days" | "months" | "amortization_periods";
   min_amount?: number;
   max_amount?: number;
 }

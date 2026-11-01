@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  branchSelectItems,
   primaryBranchId,
   userBranchIds,
   userBranches,
@@ -106,4 +107,24 @@ test("a user already on the new shape is returned by reference", () => {
 test("migrating a signed-out session leaves null alone", () => {
   assert.equal(withUserBranches(null), null);
   assert.equal(withUserBranches(undefined), undefined);
+});
+
+// The member form's branch picker. Base UI 1.8 reads the closed select's label
+// from `items`; without them a user with two branches saw "3", not "Main".
+test("branch select items label each branch by name", () => {
+  assert.deepEqual(
+    branchSelectItems([main, north]).map((i) => i.label),
+    ["Main", "North"],
+  );
+});
+
+test("branch select items carry the id as a string, the value the form holds", () => {
+  assert.deepEqual(
+    branchSelectItems([main, north]).map((i) => i.value),
+    ["3", "9"],
+  );
+});
+
+test("no branches means no select items", () => {
+  assert.deepEqual(branchSelectItems([]), []);
 });

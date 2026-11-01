@@ -13,12 +13,6 @@ export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
   applied: "Applied",
 };
 
-export const PAST_DUE_TRANSFER_UNIT_OPTIONS = [
-  { value: "days", label: "Days" },
-  { value: "months", label: "Months" },
-  { value: "amortization_periods", label: "Amortization Periods" },
-] as const;
-
 export const TERM_UNIT_OPTIONS = [
   { value: "months", label: "Months" },
   { value: "days", label: "Days" },

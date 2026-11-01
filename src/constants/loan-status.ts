@@ -71,18 +71,20 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
 };
 
 /**
- * The label for a loan status pill, with the assigned approving officer next to
- * "For Approval" — "For Approval - Manager". Every other status, and a
- * `for_review` loan whose approver is unknown, reads as plain
- * `LOAN_STATUS_LABELS`.
+ * The label for a loan status pill. A loan under approval reads "For Approval"
+ * followed by the Status set on the step it waits at ("For Approval - Credit
+ * Check", the API's `current_status_label`), or by that step's approver when
+ * the step has no Status ("For Approval - Manager"). Every other status, and a
+ * `for_review` loan with neither, reads as plain `LOAN_STATUS_LABELS`.
  */
 export function loanStatusLabel(
   status: LoanStatus,
   approver?: string | null,
+  stepStatus?: string | null,
 ): string {
   const label = LOAN_STATUS_LABELS[status] ?? status;
-  const officer = approver?.trim();
-  return status === LOAN_STATUS.FOR_REVIEW && officer ? `${label} - ${officer}` : label;
+  const suffix = stepStatus?.trim() || approver?.trim();
+  return status === LOAN_STATUS.FOR_REVIEW && suffix ? `${label} - ${suffix}` : label;
 }
 
 /**

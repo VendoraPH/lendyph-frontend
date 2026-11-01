@@ -82,3 +82,17 @@ export function withUserBranches<T>(user: T): T {
   if (Array.isArray(bearing.branches)) return user;
   return { ...(user as object), branches: userBranches(bearing) } as T;
 }
+
+/** One option of a Base UI `<Select items>` list. */
+export interface BranchSelectItem {
+  value: string;
+  label: string;
+}
+
+/**
+ * The `items` for a branch `<Select>`. Base UI resolves the trigger's label
+ * from `items`, so without them the closed select shows the raw value.
+ */
+export function branchSelectItems(branches: readonly UserBranch[]): BranchSelectItem[] {
+  return branches.map((b) => ({ value: String(b.id), label: b.name }));
+}

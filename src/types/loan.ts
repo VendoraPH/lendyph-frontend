@@ -29,10 +29,6 @@ export type LoanStatus =
   // everywhere instead: the label and colour maps are keyed off this union.
   | "void";
 
-// Unit for Past Due Transfer config on LoanProduct: how the value is
-// interpreted when deciding when a missed payment becomes past_due.
-export type PastDueTransferUnit = "days" | "months" | "amortization_periods";
-
 export type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
 /**
@@ -300,6 +296,12 @@ export interface Loan {
    * ships it, in which case the badge reads plain "For Approval".
    */
   current_approver?: string | null;
+  /**
+   * The Status set on the pending approval step, shown as "For Approval -
+   * <label>" while the loan waits there. Null when that step has no Status,
+   * and the badge falls back to `current_approver`.
+   */
+  current_status_label?: string | null;
   approval_remarks?: string;
   approved_at?: string;
   released_at?: string;
@@ -489,13 +491,6 @@ export interface LoanProduct {
   max_service_fee?: number;
   penalty_rate: number;
   grace_period: number;
-  // Past Due Transfer — determines when a missed payment flips the loan's
-  // status to `past_due`. `past_due_transfer_value` is a positive integer;
-  // `past_due_transfer_unit` says how to interpret it (days, months, or
-  // number of amortization periods). Both are optional — a product with
-  // neither set falls back to the backend's default behavior.
-  past_due_transfer_value?: number;
-  past_due_transfer_unit?: PastDueTransferUnit;
   // Share Capital Build-Up (SCB) — optional required contribution added to
   // every amortization period. When the borrower pays, the SCB portion is
   // credited to their share capital ledger.

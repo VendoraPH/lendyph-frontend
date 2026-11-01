@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
-import { userBranches } from "@/lib/user-branches";
+import { branchSelectItems, userBranches } from "@/lib/user-branches";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -833,7 +833,8 @@ function NewBorrowerContent() {
                   Branch <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  value={form.branch_id}
+                  items={branchSelectItems(assignedBranches)}
+                  value={form.branch_id || null}
                   onValueChange={(v) => update("branch_id", v ?? "")}
                 >
                   <SelectTrigger id="member-branch" className="w-full sm:w-1/2">

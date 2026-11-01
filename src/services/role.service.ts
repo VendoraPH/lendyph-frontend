@@ -5,6 +5,7 @@ import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 export interface ApiRole {
   id: number;
   name: string;
+  display_name?: string | null;
   description?: string;
   permissions: string[];
   is_system?: boolean;
@@ -13,6 +14,7 @@ export interface ApiRole {
 
 export interface RolePayload {
   name?: string;
+  display_name?: string | null;
   description?: string;
   permissions?: string[];
 }
