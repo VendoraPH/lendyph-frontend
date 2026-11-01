@@ -37,7 +37,8 @@ export interface ApprovalChainStep {
   name: string;
   role: string;
   kind: ChainStepKind;
-  status?: string;
+  /** Shown as the loan's status while it waits at this step; null when unset. */
+  status?: string | null;
 }
 
 type ChainType = "normal" | "policy_exception";

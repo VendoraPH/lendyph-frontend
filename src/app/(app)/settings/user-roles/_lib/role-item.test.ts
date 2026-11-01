@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Permission } from "@/types";
-import { roleItemFromApi, setModulePermissions, togglePermission } from "./role-item";
+import {
+  roleItemFromApi,
+  rolePayload,
+  setModulePermissions,
+  togglePermission,
+  type RoleItem,
+} from "./role-item";
 
 // A role holding permissions the matrix shows, the retired collections:* the
 // matrix hides, and grants that simply have no checkbox.
@@ -64,4 +70,89 @@ test("togglePermission flips only the one permission", () => {
   assert.ok(!after.has("fees:view" as Permission));
   assert.equal(after.size, before.size - 1);
   assert.ok(before.has("fees:view" as Permission), "the input set is not mutated");
+});
+
+// ── role names ─────────────────────────────────────────────────────────────
+//
+// The key (`name`) is the identifier permission checks use and never changes on
+// edit. What an admin renames is the role's `display_name`. Until this, Save
+// sent only the pinned key, so a rename saved nothing.
+
+test("a role's label is its saved display name when it has one", () => {
+  assert.equal(roleItemFromApi({ ...apiRole, display_name: "Branch Head" }).label, "Branch Head");
+});
+
+test("a role without a display name keeps the catalog label, then the title-cased key", () => {
+  assert.equal(roleItemFromApi({ ...apiRole, display_name: null }).label, "Admin");
+  assert.equal(roleItemFromApi({ ...apiRole, display_name: "  " }).label, "Admin");
+  assert.equal(
+    roleItemFromApi({ ...apiRole, name: "branch_auditor", display_name: null }).label,
+    "Branch Auditor",
+  );
+});
+
+const editedAdmin: RoleItem = {
+  id: 2,
+  key: "admin",
+  label: "Branch Head",
+  description: "Client-side administrator",
+  permissions: ["fees:view"] as Permission[],
+  isSystem: true,
+  isActive: true,
+};
+
+test("saving an edited role sends the new label as display_name", () => {
+  assert.equal(rolePayload(editedAdmin, { isEdit: true }).display_name, "Branch Head");
+});
+
+test("saving an edited role never sends a name, so the key cannot change", () => {
+  assert.ok(!("name" in rolePayload(editedAdmin, { isEdit: true })));
+});
+
+test("an edit still sends the description and the full permission set", () => {
+  const payload = rolePayload(editedAdmin, { isEdit: true });
+  assert.equal(payload.description, "Client-side administrator");
+  assert.deepEqual(payload.permissions, ["fees:view"]);
+});
+
+test("creating a role sends the slugged key as name and the label as display_name", () => {
+  const created: RoleItem = {
+    key: "branch_auditor_north",
+    label: "Branch Auditor (North)",
+    description: "Reviews branch books",
+    permissions: ["fees:view"] as Permission[],
+    isSystem: false,
+    isActive: true,
+  };
+  assert.deepEqual(rolePayload(created, { isEdit: false }), {
+    name: "branch_auditor_north",
+    display_name: "Branch Auditor (North)",
+    description: "Reviews branch books",
+    permissions: ["fees:view"],
+  });
+});
+
+// Review follow-up (L1): saving a role whose label is still its default name
+// must not pin that name as a display_name the UI can never clear.
+test("a label equal to the role's default name is sent as display_name null", () => {
+  assert.equal(rolePayload({ ...editedAdmin, label: "Admin" }, { isEdit: true }).display_name, null);
+  assert.equal(rolePayload({ ...editedAdmin, label: "  Admin " }, { isEdit: true }).display_name, null);
+  assert.equal(
+    rolePayload({ ...editedAdmin, key: "branch_auditor", label: "Branch Auditor" }, { isEdit: true }).display_name,
+    null
+  );
+});
+
+test("creating a role whose label is its title-cased key sends display_name null", () => {
+  const created: RoleItem = {
+    key: "branch_auditor",
+    label: "Branch Auditor",
+    description: "",
+    permissions: [] as Permission[],
+    isSystem: false,
+    isActive: true,
+  };
+  const payload = rolePayload(created, { isEdit: false });
+  assert.equal(payload.name, "branch_auditor");
+  assert.equal(payload.display_name, null);
 });

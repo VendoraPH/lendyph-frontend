@@ -43,6 +43,8 @@ export interface LoanApprovalStep {
   /** The chain-config slug (e.g. `"loan-processor"`). Display/diagnostics only. */
   step_id: number | string;
   name: string;
+  /** The step's Status label, copied when the chain was seeded. Shown as the loan's status while it waits here. */
+  status_label?: string | null;
   role: string;
   kind: ApprovalStepKind;
   status: ApprovalStepStatus;

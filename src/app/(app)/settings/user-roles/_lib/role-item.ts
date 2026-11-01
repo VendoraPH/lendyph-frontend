@@ -1,6 +1,7 @@
 import { ROLES } from "@/constants/rbac";
 import type { Permission } from "@/types";
-import type { ApiRole } from "@/services/role.service";
+import type { ApiRole, RolePayload } from "@/services/role.service";
+import { roleDisplayName } from "@/lib/role-display-name";
 import { MODULE_ACTIONS, type UIModule } from "./permission-matrix";
 
 /** A role as the roles screen holds it. */
@@ -14,17 +15,13 @@ export interface RoleItem {
   isActive: boolean;
 }
 
-function titleCase(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+/** A role name typed by an admin, as the lowercase key the API stores. */
+export function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
 /**
- * An API role in the screen's shape, with a label from the frontend's catalog
- * when it knows the role.
+ * An API role in the screen's shape, labelled by `roleDisplayName()`.
  *
  * Every permission the role holds is kept, including the ones the matrix does
  * not show: the retired `collections:*`, and grants such as
@@ -40,12 +37,35 @@ export function roleItemFromApi(api: ApiRole): RoleItem {
   return {
     id: api.id,
     key,
-    label: known?.label ?? titleCase(key),
+    label: roleDisplayName(api),
     description: api.description ?? known?.description ?? "",
     permissions: api.permissions as Permission[],
     isSystem: api.is_system === true,
     isActive: api.is_active ?? true,
   };
+}
+
+/**
+ * The body `POST /roles` (create) or `PUT /roles/{id}` (edit) is sent.
+ *
+ * An edit never sends `name`: the key is what permission checks use, so a
+ * rename only changes `display_name`. A create sends both, the key slugged
+ * from the label.
+ *
+ * A label that matches the name the role would be shown by anyway (the
+ * catalog label, or the key title-cased) is sent as `display_name: null`, so
+ * saving a role's permissions never pins its default name, and clearing a
+ * rename back to the default name resets it.
+ */
+export function rolePayload(item: RoleItem, { isEdit }: { isEdit: boolean }): RolePayload {
+  const key = isEdit ? item.key : slugify(item.label);
+  const label = item.label.trim();
+  const common = {
+    display_name: label === roleDisplayName({ name: key, display_name: null }) ? null : label,
+    description: item.description,
+    permissions: item.permissions,
+  };
+  return isEdit ? common : { name: key, ...common };
 }
 
 /** Tick or untick one permission. Nothing else in the set changes. */

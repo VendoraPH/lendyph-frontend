@@ -29,8 +29,7 @@ import {
   type ChainStepKind,
 } from "@/services";
 import type { ApiRole } from "@/services/role.service";
-import { ROLES } from "@/constants/rbac";
-import type { Role } from "@/types";
+import { roleDisplayName } from "@/lib/role-display-name";
 import {
   Workflow,
   Plus,
@@ -84,14 +83,6 @@ const KIND_META: Record<
   // loan page already labels its button "Confirm & Forward".
 };
 
-function titleCase(s: string): string {
-  return s.split("_").filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
-
-function roleLabel(roleName: string): string {
-  return ROLES[roleName as Role]?.label ?? titleCase(roleName);
-}
-
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -134,6 +125,7 @@ function StepFormDialog({
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
   const [status, setStatus] = useState<string>("");
+  const activeRoles = roles.filter((r) => r.is_active !== false);
 
   if (useDialogOpening(open, step)) {
     setName(step?.name ?? "");
@@ -151,17 +143,13 @@ function StepFormDialog({
       toast.error("Required role is required");
       return;
     }
-    if (!status.trim()) {
-      toast.error("Status is required");
-      return;
-    }
     const id = isEdit && step ? step.id : generateUniqueId(name, existingIds);
     onSave({
       id,
       name: name.trim(),
       role: role.trim(),
       kind,
-      status: status.trim(),
+      status: status.trim() || null,
     });
     onOpenChange(false);
   }
@@ -195,6 +183,7 @@ function StepFormDialog({
               Required Role <span className="text-destructive">*</span>
             </Label>
             <Select
+              items={activeRoles.map((r) => ({ value: r.name, label: roleDisplayName(r) }))}
               value={role || null}
               onValueChange={(v) => setRole(v ?? "")}
             >
@@ -202,9 +191,9 @@ function StepFormDialog({
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {roles.filter((r) => r.is_active !== false).map((r) => (
+                {activeRoles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
-                    {roleLabel(r.name)}
+                    {roleDisplayName(r)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -240,17 +229,16 @@ function StepFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="step-status">
-              Status <span className="text-destructive">*</span>
+              Status
             </Label>
             <Input
               id="step-status"
-              placeholder="e.g. for_review"
+              placeholder="e.g. Credit Check"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              When a user executes this step, the loan application&apos;s status
-              will be set to this value.
+              Shown as the loan&apos;s status while it waits at this step.
             </p>
           </div>
         </div>
@@ -712,7 +700,7 @@ function ApprovalWorkflowContent() {
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
                     Role:{" "}
                     <span className="font-mono">
-                      {apiRole ? roleLabel(step.role) : step.role}
+                      {apiRole ? roleDisplayName(apiRole) : step.role}
                     </span>
                     {!apiRole && (
                       <span className="ml-1 text-amber-600">

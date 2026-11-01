@@ -191,3 +191,28 @@ test("only For Approval carries an approver suffix", () => {
   assert.equal(loanStatusLabel("approved", "Manager"), "Approved");
   assert.equal(loanStatusLabel("draft", "Manager"), "Draft");
 });
+
+// The approval step's Status is what the loan shows while it waits at that
+// step. The backend sends it as `current_status_label`; a step without one
+// falls back to the step (approver) name, as before.
+test("a loan waiting at a step with a Status shows that Status", () => {
+  assert.equal(
+    loanStatusLabel("for_review", "Manager", "Credit Check"),
+    "For Approval - Credit Check",
+  );
+  assert.equal(
+    loanStatusLabel("for_review", null, "  Credit Check "),
+    "For Approval - Credit Check",
+  );
+});
+
+test("a step without a Status falls back to the step name", () => {
+  assert.equal(loanStatusLabel("for_review", "Manager", null), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", "Manager", "   "), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", null, null), "For Approval");
+});
+
+test("a step Status never relabels a loan that is not under approval", () => {
+  assert.equal(loanStatusLabel("approved", "Manager", "Credit Check"), "Approved");
+  assert.equal(loanStatusLabel("released", null, "Credit Check"), "Released");
+});

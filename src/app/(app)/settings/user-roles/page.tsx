@@ -29,7 +29,9 @@ import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
 import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
 import {
   roleItemFromApi,
+  rolePayload,
   setModulePermissions,
+  slugify,
   togglePermission as togglePermissionIn,
   type RoleItem,
 } from "./_lib/role-item";
@@ -360,10 +362,6 @@ const ROLE_BADGE: Record<string, string> = {
   bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
 
-function slugify(s: string): string {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
-
 // ---------------------------------------------------------------------------
 // Role Form Dialog (Create / Edit)
 // ---------------------------------------------------------------------------
@@ -667,11 +665,7 @@ function UserRolesContent() {
   async function handleSaveRole(item: RoleItem) {
     setActionLoading(true);
     try {
-      const payload = {
-        name: item.key,
-        description: item.description,
-        permissions: item.permissions,
-      };
+      const payload = rolePayload(item, { isEdit: formMode === "edit" });
       if (formMode === "create") {
         await roleService.create(payload);
         toast.success("Role created");

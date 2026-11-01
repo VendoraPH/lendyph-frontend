@@ -75,6 +75,7 @@ import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
+import { roleDisplayName } from "@/lib/role-display-name";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -150,7 +151,8 @@ function RoleSelector({
               >
                 <Users className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xs font-medium leading-tight">{capitalize(role.name)}</p>
+              <p className="text-xs font-medium leading-tight">{roleDisplayName(role)}</p>
+              <p className="font-mono text-[10px] leading-tight text-muted-foreground">{role.name}</p>
             </button>
           );
         })}
@@ -160,7 +162,7 @@ function RoleSelector({
         if (!selected) return null;
         return (
           <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
-            <p className="text-xs font-medium mb-1">{capitalize(selected.name)} can access:</p>
+            <p className="text-xs font-medium mb-1">{roleDisplayName(selected)} can access:</p>
             {selected.permissions.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {selected.permissions.map((p) => (
@@ -1021,7 +1023,7 @@ function RoleSummaryCard({
               roleBadgeColor[role.name] ?? "bg-muted text-muted-foreground"
             }
           >
-            {capitalize(role.name)}
+            {roleDisplayName(role)}
           </Badge>
           <span className="text-2xl font-bold">{count}</span>
         </div>
@@ -1184,7 +1186,9 @@ function UsersContent() {
                             "bg-muted text-muted-foreground"
                           }
                         >
-                          {capitalize(role)}
+                          {roleDisplayName(
+                            roles.find((r) => r.name === role) ?? { name: role },
+                          )}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
