@@ -74,13 +74,70 @@ export interface LoanDisclosureTotals {
   total_amortization: number;
   total_deductions: number;
   net_proceeds: number;
-  /** Total deductions plus total interest. */
-  total_finance_charges: number;
   /**
-   * `total_deductions` less the itemised `deductions.items`: printed as its
-   * own line when not 0, negative when the items exceed the total.
+   * Interest plus the coop's own fees (R.A. 3765 finance charges). Notarial
+   * fee, insurance, taxes and share capital are not in it.
+   */
+  total_finance_charges: number;
+  /** Notarial fee, insurance premium (in full) and taxes. */
+  total_non_finance_charges: number;
+  /**
+   * `total_deductions` less the itemised `deductions.items`. The server
+   * classifies it into `finance_charges.items` ("Other Charges" when > 0,
+   * "Adjustment" when < 0); the document prints no line of its own for it.
    */
   unitemised_deductions: number;
+}
+
+/** A charge line as the server classified it. */
+export interface LoanDisclosureChargeItem {
+  name: string;
+  amount: number;
+}
+
+/** Interest and the coop's own fees; `total` = `totals.total_finance_charges`. */
+export interface LoanDisclosureFinanceCharges {
+  interest: number;
+  items: LoanDisclosureChargeItem[];
+  total: number;
+}
+
+/**
+ * A non-finance charge. For the insurance premium `amount` is the full
+ * premium, `deducted` what was collected at release and `owed` the part
+ * still owed on the loan (interest-free, collected first).
+ */
+export interface LoanDisclosureNonFinanceItem extends LoanDisclosureChargeItem {
+  deducted: number;
+  owed: number;
+}
+
+export interface LoanDisclosureNonFinanceCharges {
+  items: LoanDisclosureNonFinanceItem[];
+  total: number;
+}
+
+/**
+ * Principal less what was deducted of each kind, less share capital, equals
+ * `net_proceeds` exactly (centavos), as the server works it out.
+ */
+export interface LoanDisclosureProceeds {
+  principal: number;
+  finance_charges_deducted: number;
+  non_finance_charges_deducted: number;
+  share_capital: number;
+  net_proceeds: number;
+}
+
+/** Percentages, as the server states and solves them. */
+export interface LoanDisclosureRates {
+  contractual_rate: number;
+  rate_frequency: string;
+  /** Null when the period the rate is quoted per is unknown. */
+  nominal_annual_rate: number | null;
+  /** Effective interest rate (BSP Circular 730); null when it can't be solved. */
+  effective_rate_monthly: number | null;
+  effective_rate_annual: number | null;
 }
 
 /** Co-maker as the disclosure carries it — name and contact only. */
@@ -99,6 +156,10 @@ export interface LoanDisclosure {
   loan_terms: LoanDisclosureTerms;
   deductions: LoanDisclosureDeductions;
   totals: LoanDisclosureTotals;
+  finance_charges: LoanDisclosureFinanceCharges;
+  non_finance_charges: LoanDisclosureNonFinanceCharges;
+  proceeds: LoanDisclosureProceeds;
+  rates: LoanDisclosureRates;
   /**
    * Persisted rows once the loan is released; before that, the server-built
    * preview. Never absent, but may be empty for a loan with no schedule.

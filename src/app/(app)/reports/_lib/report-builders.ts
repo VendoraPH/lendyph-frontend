@@ -1642,6 +1642,24 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
   const branchRows = cashFlowBranchRows(asArray(pick(obj, ["by_branch", "branches"])));
   const branchTotals = asRecord(pick(obj, ["by_branch_totals"]));
 
+  // Share capital credited from loan payments (build-up), net of voids. It is
+  // cash already inside the repayment's overpayment, so the server leaves it
+  // out of the share capital lines and every total; said here so a reader can
+  // reconcile with the Share Capital report, which counts it.
+  const buildUp = toNumber(pick(shareBlock, ["build_up_from_payments"]));
+  const buildUpNote: ReportSection[] =
+    buildUp === null || buildUp === 0
+      ? []
+      : [
+          {
+            kind: "note",
+            text:
+              `Share capital build-up from loan payments (${currencyOrDash(buildUp)}, net of voids) ` +
+              "is cash already counted in Overpayment received, so it is not repeated under " +
+              "Share capital contributions. The Share Capital report includes it in the members' credits.",
+          },
+        ];
+
   const sections: ReportSection[] = [
     {
       kind: "kpi_grid",
@@ -1667,6 +1685,7 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
       totals: [totalCell("amount", totalIn, "Total Cash Inflows")],
       emptyText: "No cash inflows were reported for this period.",
     },
+    ...buildUpNote,
     {
       kind: "table",
       title: "Cash Outflows",

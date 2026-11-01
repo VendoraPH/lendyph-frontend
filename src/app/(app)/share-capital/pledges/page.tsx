@@ -49,6 +49,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { formatCurrency, todayISO } from "@/lib/format";
+import { notifyError } from "@/lib/notify";
+import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
 
 interface LocalPledge {
   id: number;
@@ -250,11 +252,12 @@ function PledgeEntryContent() {
   }
 
   async function saveAmountEdit(id: number) {
-    const newAmount = Math.round(parseFloat(editAmount) || 0);
-    if (newAmount <= 0) {
-      toast.error("Pledge amount must be greater than 0");
+    const parsed = parsePledgeAmount(editAmount, "Pledge amount");
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
+    const newAmount = parsed.amount;
     try {
       const current = pledges.find((p) => p.id === id);
       await shareCapitalService.pledgeUpdate(id, { amount: newAmount, schedule: current?.schedule });
@@ -263,8 +266,8 @@ function PledgeEntryContent() {
       );
       setEditingAmountId(null);
       toast.success("Pledge amount updated");
-    } catch {
-      toast.error("We couldn't update the pledge amount. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't update the pledge amount. Please try again.");
     }
   }
 
@@ -299,11 +302,12 @@ function PledgeEntryContent() {
   }
 
   async function handleManualEntry(id: number) {
-    const amount = Math.round(parseFloat(manualAmount) || 0);
-    if (amount <= 0) {
-      toast.error("Amount must be greater than 0");
+    const parsed = parsePledgeAmount(manualAmount);
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
+    const amount = parsed.amount;
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
     try {
@@ -320,8 +324,8 @@ function PledgeEntryContent() {
       setManualEntryId(null);
       setManualAmount("");
       setManualTransaction("credit");
-    } catch {
-      toast.error("We couldn't create the manual entry. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't create the manual entry. Please try again.");
     }
   }
 
@@ -382,28 +386,40 @@ function PledgeEntryContent() {
     const entries = Object.entries(bulkEntries).filter(
       ([id]) => selectedIds.has(Number(id))
     );
-    const valid = entries.filter(([, e]) => Math.round(parseFloat(e.amount) || 0) > 0);
-    if (valid.length === 0) {
-      toast.error("Enter an amount for at least one member");
+    const parsed = bulkEntryAmounts(
+      entries.map(([id, entry]) => [
+        Number(id),
+        {
+          name: pledges.find((p) => p.id === Number(id))?.borrower ?? `Pledge #${id}`,
+          amount: entry.amount,
+        },
+      ])
+    );
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
+    const valid = entries.flatMap(([id, entry]) => {
+      const amount = parsed.amounts.get(Number(id));
+      return amount === undefined ? [] : [{ pledgeId: Number(id), amount, type: entry.transaction }];
+    });
     // `ShareCapitalBulkEntryRequest` requires a date on every entry; without
     // one the whole batch was refused with a 422.
     const date = todayISO();
     try {
       await shareCapitalService.pledgeBulkEntries({
-        entries: valid.map(([id, entry]) => ({
-          pledge_id: Number(id),
-          amount: Math.round(parseFloat(entry.amount)),
-          type: entry.transaction,
+        entries: valid.map((entry) => ({
+          pledge_id: entry.pledgeId,
+          amount: entry.amount,
+          type: entry.type,
           date,
         })),
       });
       toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
       setSelectedIds(new Set());
       setBulkEntries({});
-    } catch {
-      toast.error("We couldn't create the bulk entries. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't create the bulk entries. Please try again.");
     }
   }
 
@@ -622,8 +638,8 @@ function PledgeEntryContent() {
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
-                              min={1}
-                              step="1"
+                              min="0.01"
+                              step="0.01"
                               autoFocus
                               className="w-28 h-8 text-sm"
                               value={editAmount}
@@ -735,8 +751,8 @@ function PledgeEntryContent() {
                                 <p className="text-xs text-muted-foreground">Amount (PHP)</p>
                                 <Input
                                   type="number"
-                                  min={1}
-                                  step="1"
+                                  min="0.01"
+                                  step="0.01"
                                   placeholder="0"
                                   autoFocus
                                   className="w-40 h-9"
@@ -886,8 +902,8 @@ function PledgeEntryContent() {
                     </span>
                     <Input
                       type="number"
-                      min={1}
-                      step="1"
+                      min="0.01"
+                      step="0.01"
                       placeholder="Amount"
                       className="w-28 h-8 text-sm"
                       value={entry.amount}

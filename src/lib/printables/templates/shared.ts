@@ -368,7 +368,17 @@ export function annualRateLabel(
   if (rate === null) return null;
   const periods = periodsPerYear(frequency);
   if (periods === null) return null;
-  return `${annualRateFmt.format(rate * periods)}% per annum`;
+  return percentLabel(rate * periods, "per annum");
+}
+
+/**
+ * A rate the server stated, e.g. `"41.4804% per annum"` or `"3.50% per
+ * month"`: two to four places, as stored, never rounded further. Null when
+ * there is no rate.
+ */
+export function percentLabel(percent: number | null, phrase: string): string | null {
+  if (percent === null) return null;
+  return `${annualRateFmt.format(percent)}% ${phrase}`;
 }
 
 /** Timestamp for a freshly built document. `print-chrome` may restamp it. */

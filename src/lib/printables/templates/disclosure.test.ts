@@ -7,6 +7,7 @@ import {
   assertPrintableShape,
   blocksOfKind,
   chargeAmount,
+  chargesBlock,
   fieldValue,
   hasChargeLine,
   isBlankField,
@@ -19,8 +20,10 @@ import {
 /**
  * Contract test. The payload below is what
  * `DisclosureService::generateDisclosure()` actually returns — nested under
- * `borrower` / `loan_terms` / `deductions` / `totals` — so a renamed key fails
- * here instead of printing a blank statutory disclosure for a member.
+ * `borrower` / `loan_terms` / `deductions` / `totals`, plus the R.A. 3765
+ * classification of round 3 (`finance_charges`, `non_finance_charges`,
+ * `proceeds`, `rates`) — so a renamed key fails here instead of printing a
+ * blank statutory disclosure for a member.
  */
 const PAYLOAD = {
   document_title: "DISCLOSURE STATEMENT",
@@ -51,9 +54,11 @@ const PAYLOAD = {
       { name: "Processing Fee", amount: 2000, type: "percentage", original_value: 2 },
       { name: "Service Fee", amount: 1000, type: "percentage", original_value: 1 },
       { name: "Notarial Fee", amount: 500, type: "fixed", original_value: 500 },
+      { name: "Insurance Premium", amount: 400, type: "fixed", original_value: 400 },
+      { name: "Share Capital", amount: 1000, type: "fixed", original_value: 1000 },
     ],
-    total_deductions: 3500,
-    net_proceeds: 96500,
+    total_deductions: 4900,
+    net_proceeds: 95100,
   },
   // The server's totals for the whole six-period schedule: deliberately not
   // the three rows below added up, so a test can tell the two apart.
@@ -62,10 +67,42 @@ const PAYLOAD = {
     total_interest: 7000,
     total_obligation: 107000,
     total_amortization: 107000,
-    total_deductions: 3500,
-    net_proceeds: 96500,
-    total_finance_charges: 10500,
+    total_deductions: 4900,
+    net_proceeds: 95100,
+    // Interest and the coop's own fees only: 7,000 + 2,000 + 1,000.
+    total_finance_charges: 10000,
+    total_non_finance_charges: 1100,
     unitemised_deductions: 0,
+  },
+  finance_charges: {
+    interest: 7000,
+    items: [
+      { name: "Processing Fee", amount: 2000 },
+      { name: "Service Fee", amount: 1000 },
+    ],
+    total: 10000,
+  },
+  non_finance_charges: {
+    items: [
+      { name: "Notarial Fee", amount: 500, deducted: 500, owed: 0 },
+      // ₱600 premium: ₱400 collected at release, ₱200 owed on the loan.
+      { name: "Insurance Premium", amount: 600, deducted: 400, owed: 200 },
+    ],
+    total: 1100,
+  },
+  proceeds: {
+    principal: 100000,
+    finance_charges_deducted: 3000,
+    non_finance_charges_deducted: 900,
+    share_capital: 1000,
+    net_proceeds: 95100,
+  },
+  rates: {
+    contractual_rate: 2,
+    rate_frequency: "monthly",
+    nominal_annual_rate: 24,
+    effective_rate_monthly: 2.3456,
+    effective_rate_annual: 28.1472,
   },
   amortization_schedule: [
     { period_number: 1, due_date: "2026-09-01", principal_due: 16666.67, interest_due: 2000, total_due: 18666.67, remaining_balance: 83333.33 },
@@ -75,7 +112,10 @@ const PAYLOAD = {
   co_makers: [],
 };
 
-test("disclosure: a full payload produces the six statutory sections", () => {
+const NET_PROCEEDS_LABEL = "4. Net Proceeds of Loan (Amount Received by Borrower)";
+const SHARE_CAPITAL_LABEL = "Less: Share Capital (deducted from proceeds; not a charge)";
+
+test("disclosure: a full payload produces the seven statutory sections", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
   assertPrintableShape(doc, "disclosure_statement");
 
@@ -85,12 +125,27 @@ test("disclosure: a full payload produces the six statutory sections", () => {
   assert.match(title.legalRef ?? "", /Republic Act No\. 3765/);
   assert.match(title.legalRef ?? "", /BSP Circular No\. 730/);
 
+  assert.deepEqual(
+    doc.blocks.flatMap((b) => (b.kind !== "title" && "title" in b && b.title ? [b.title] : [])),
+    [
+      "I. Borrower & Loan Information",
+      "II. Amount of Credit / Loan",
+      "III. Finance Charges",
+      "IV. Non-Finance Charges",
+      "V. Net Proceeds",
+      "VI. Rate Information",
+      "VII. Amortization Schedule",
+    ]
+  );
+
   assert.equal(fieldValue(doc, "Name of Borrower"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
   assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)");
   assert.equal(fieldValue(doc, "Mode of Payment"), "Monthly");
   assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
   assert.equal(fieldValue(doc, "Nominal Annual Rate"), "24.00% per annum");
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Monthly)"), "2.3456% per month");
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Per Annum)"), "28.1472% per annum");
   assert.equal(fieldValue(doc, "Total Amount Payable"), formatCurrency(107000));
   // Formatted, not the raw "2026-08-01" the API sent.
   assert.equal(
@@ -99,9 +154,16 @@ test("disclosure: a full payload produces the six statutory sections", () => {
   );
 });
 
-test("disclosure: the annual rate is annualised by the period the rate is quoted per", () => {
-  // The statutory point of the document. A fixed "per month" and a fixed × 12
-  // disclosed a 1%-per-day rate — 365% nominal — as 12.00% p.a.
+test("disclosure: the nominal annual rate is the server's, never annualised here", () => {
+  // A 2%-a-month loan whose server figure is not 2 × 12: printed as sent.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    rates: { ...PAYLOAD.rates, nominal_annual_rate: 36 },
+  });
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "36.00% per annum");
+
+  // A 1%-a-day rate: 365% nominal as the server states it, not a fixed × 12.
   const daily = buildDisclosureDoc({
     ...PAYLOAD,
     loan_terms: {
@@ -112,172 +174,225 @@ test("disclosure: the annual rate is annualised by the period the rate is quoted
       term_unit: "days",
       frequency: "daily",
     },
+    rates: { ...PAYLOAD.rates, contractual_rate: 1, rate_frequency: "daily", nominal_annual_rate: 365 },
   });
-
   assert.equal(fieldValue(daily, "Contractual Interest Rate"), "1% per day");
   assert.equal(fieldValue(daily, "Nominal Annual Rate"), "365.00% per annum");
-  assert.notEqual(fieldValue(daily, "Nominal Annual Rate"), "12.00% per annum");
   assert.equal(fieldValue(daily, "Term of Loan"), "30 day(s)");
   assert.equal(fieldValue(daily, "Mode of Payment"), "Daily");
 });
 
-test("disclosure: every rate frequency is disclosed correctly", () => {
+test("disclosure: without the server's rates, no annual or effective rate is worked out", () => {
+  // The loan terms alone (2% a month) used to be multiplied by 12 here.
+  const { rates: _omitted, ...withoutRates } = PAYLOAD;
+  void _omitted;
+  const doc = buildDisclosureDoc(withoutRates);
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), DASH);
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Monthly)"), DASH);
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Per Annum)"), DASH);
+});
+
+test("disclosure: a rate the server could not state is a dash", () => {
+  // An unknown period (nominal) and an effective rate that could not be solved.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    rates: {
+      ...PAYLOAD.rates,
+      nominal_annual_rate: null,
+      effective_rate_monthly: null,
+      effective_rate_annual: null,
+    },
+  });
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), DASH);
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Monthly)"), DASH);
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Per Annum)"), DASH);
+});
+
+test("disclosure: every rate frequency is quoted in its own words", () => {
   const expected = [
-    ["daily", "2% per day", "730.00% per annum"],
-    ["weekly", "2% per week", "104.00% per annum"],
-    ["bi_weekly", "2% per bi-weekly period", "52.00% per annum"],
-    ["semi_monthly", "2% per semi-monthly period", "48.00% per annum"],
-    ["monthly", "2% per month", "24.00% per annum"],
+    ["daily", "2% per day"],
+    ["weekly", "2% per week"],
+    ["bi_weekly", "2% per bi-weekly period"],
+    ["semi_monthly", "2% per semi-monthly period"],
+    ["monthly", "2% per month"],
+    ["quarterly", "2% per period"],
   ] as const;
 
-  for (const [rateFrequency, rate, annual] of expected) {
+  for (const [rateFrequency, rate] of expected) {
     const doc = buildDisclosureDoc({
       ...PAYLOAD,
-      // Paid monthly throughout: the rate follows the period it is quoted
-      // per, not the payment frequency.
-      loan_terms: { ...PAYLOAD.loan_terms, interest_rate_frequency: rateFrequency },
+      rates: { ...PAYLOAD.rates, rate_frequency: rateFrequency },
     });
     assert.equal(fieldValue(doc, "Contractual Interest Rate"), rate, rateFrequency);
-    assert.equal(fieldValue(doc, "Nominal Annual Rate"), annual, rateFrequency);
+    // The annual figure stays the server's whatever the period.
+    assert.equal(fieldValue(doc, "Nominal Annual Rate"), "24.00% per annum", rateFrequency);
     // `term` is labelled by its `term_unit`: 6 months on every row.
     assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)", rateFrequency);
   }
 });
 
-test("disclosure: a fractional rate is disclosed exactly, as the API sends it", () => {
-  // `decimal:4` arrives as a padded string. The rate is stated without the
-  // padding and annualised without rounding.
+test("disclosure: fractional rates are disclosed exactly, as the API sends them", () => {
+  // `decimal:4` arrives as a padded string. Rates are stated without the
+  // padding and without rounding.
   const doc = buildDisclosureDoc({
     ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: "1.5000" },
+    rates: {
+      ...PAYLOAD.rates,
+      contractual_rate: "1.1234",
+      nominal_annual_rate: "13.4808",
+      effective_rate_monthly: 1.5,
+      effective_rate_annual: 18,
+    },
   });
-  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "1.5% per month");
-  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "18.00% per annum");
-
-  const fourPlaces = buildDisclosureDoc({
-    ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, interest_rate: "1.1234" },
-  });
-  assert.equal(fieldValue(fourPlaces, "Contractual Interest Rate"), "1.1234% per month");
-  assert.equal(fieldValue(fourPlaces, "Nominal Annual Rate"), "13.4808% per annum");
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "1.1234% per month");
+  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "13.4808% per annum");
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Monthly)"), "1.50% per month");
+  assert.equal(fieldValue(doc, "Effective Interest Rate (Per Annum)"), "18.00% per annum");
 });
 
-test("disclosure: a payload without a rate frequency is quoted per month", () => {
+test("disclosure: without a rate frequency the contractual rate is quoted per month", () => {
   // The backend's default, and what every rate before the field meant — even
   // on a daily loan.
-  const doc = buildDisclosureDoc({
-    ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, frequency: "daily" },
-  });
-  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
-  assert.equal(fieldValue(doc, "Nominal Annual Rate"), "24.00% per annum");
-});
-
-test("disclosure: an unknown rate frequency leaves the annual rate to be filled in", () => {
-  // A rule the officer completes beats a confidently wrong statutory figure.
-  const doc = buildDisclosureDoc({
-    ...PAYLOAD,
-    loan_terms: { ...PAYLOAD.loan_terms, interest_rate_frequency: "quarterly" },
-  });
-
-  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per period");
-  assert.ok(isBlankField(doc, "Nominal Annual Rate"));
-  // The term is labelled by its own unit, which an unknown frequency cannot
-  // change.
-  assert.equal(fieldValue(doc, "Term of Loan"), "6 month(s)");
-});
-
-test("disclosure: what the items leave out is the server's own lettered line", () => {
-  // The letters must add up to "2. Total Finance Charges", so whatever the
-  // items do not account for is disclosed as a charge of its own: the server's
-  // `unitemised_deductions`, never the items subtracted from the total here.
-  const doc = buildDisclosureDoc({
-    ...PAYLOAD,
-    deductions: { items: [], total_deductions: 3500, net_proceeds: 96500 },
-    totals: { ...PAYLOAD.totals, unitemised_deductions: 3500 },
-  });
-  assert.equal(chargeAmount(doc, "b. Other Charges"), formatCurrency(3500));
-  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), formatCurrency(10500));
-
-  const partial = buildDisclosureDoc({
-    ...PAYLOAD,
-    deductions: {
-      items: [{ name: "Processing Fee", amount: 2000, type: "percentage" }],
-      total_deductions: 3500,
-      net_proceeds: 96500,
-    },
-    totals: { ...PAYLOAD.totals, unitemised_deductions: 1500 },
-  });
-  assert.equal(chargeAmount(partial, "b. Processing Fee"), formatCurrency(2000));
-  assert.equal(chargeAmount(partial, "c. Other Charges"), formatCurrency(1500));
-
-  // A fully itemised payload (0) gains no phantom line.
-  assert.ok(!hasChargeLine(buildDisclosureDoc(PAYLOAD), "e. Other Charges"));
-  assert.ok(!hasChargeLine(buildDisclosureDoc(PAYLOAD), "e. Adjustment"));
-});
-
-test("disclosure: items above the total are corrected by a negative Adjustment", () => {
-  const doc = buildDisclosureDoc({
-    ...PAYLOAD,
-    totals: { ...PAYLOAD.totals, unitemised_deductions: -500 },
-  });
-  assert.equal(chargeAmount(doc, "e. Adjustment"), formatCurrency(-500));
-});
-
-test("disclosure: no unitemised figure from the server adds no line, whatever the items sum to", () => {
-  const { unitemised_deductions: _omitted, ...withoutUnitemised } = PAYLOAD.totals;
+  const { rate_frequency: _omitted, ...ratesWithoutFrequency } = PAYLOAD.rates;
   void _omitted;
   const doc = buildDisclosureDoc({
     ...PAYLOAD,
-    deductions: { items: [], total_deductions: 3500, net_proceeds: 96500 },
-    totals: withoutUnitemised,
+    loan_terms: { ...PAYLOAD.loan_terms, frequency: "daily" },
+    rates: ratesWithoutFrequency,
   });
-  assert.ok(!hasChargeLine(doc, "b. Other Charges"));
-  assert.ok(!hasChargeLine(doc, "b. Adjustment"));
+  assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
 });
 
-test("disclosure: every deduction is disclosed on its own lettered line", () => {
+test("disclosure: finance charges are interest and the coop's own fees, as the server classifies them", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
+  const finance = chargesBlock(doc, "III. Finance Charges").lines.map((l) => [l.label, l.amount]);
 
-  assert.equal(chargeAmount(doc, "a. Interest"), formatCurrency(7000));
-  assert.equal(chargeAmount(doc, "b. Processing Fee"), formatCurrency(2000));
-  assert.equal(chargeAmount(doc, "c. Service Fee"), formatCurrency(1000));
-  assert.equal(chargeAmount(doc, "d. Notarial Fee"), formatCurrency(500));
+  assert.deepEqual(finance, [
+    ["a. Interest", formatCurrency(7000)],
+    ["b. Processing Fee", formatCurrency(2000)],
+    ["c. Service Fee", formatCurrency(1000)],
+    ["2. Total Finance Charges", formatCurrency(10000)],
+  ]);
+  // Notarial fee, insurance and share capital are not finance charges.
+  assert.ok(!finance.some(([label]) => /Notarial|Insurance|Share Capital/.test(label)));
 });
 
-test("disclosure: finance charges, deductions and net proceeds are the server's", () => {
-  const doc = buildDisclosureDoc(PAYLOAD);
+test("disclosure: the server's Other Charges and Adjustment lines are lettered as sent", () => {
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    finance_charges: {
+      ...PAYLOAD.finance_charges,
+      items: [
+        ...PAYLOAD.finance_charges.items,
+        { name: "Other Charges", amount: 1500 },
+        { name: "Adjustment", amount: -500 },
+      ],
+    },
+  });
+  assert.equal(chargeAmount(doc, "d. Other Charges"), formatCurrency(1500));
+  assert.equal(chargeAmount(doc, "e. Adjustment"), formatCurrency(-500));
+});
 
-  assert.equal(chargeAmount(doc, "2. Total Finance Charges"), formatCurrency(10500));
-  assert.equal(chargeAmount(doc, "Less: Upfront Deductions"), `(${formatCurrency(3500)})`);
-  assert.equal(
-    chargeAmount(doc, "3. Net Proceeds of Loan (Amount Received by Borrower)"),
-    formatCurrency(96500)
+test("disclosure: the browser adds no line of its own for unitemised deductions", () => {
+  // The server folds `unitemised_deductions` into its classified items.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    totals: { ...PAYLOAD.totals, unitemised_deductions: 1500 },
+  });
+  assert.ok(
+    !chargesBlock(doc, "III. Finance Charges").lines.some((l) => /Other Charges|Adjustment/.test(l.label))
   );
+});
 
-  // A figure unlike interest + deductions is printed as sent: the server's.
+test("disclosure: non-finance charges have their own section and the server's total", () => {
+  const doc = buildDisclosureDoc(PAYLOAD);
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  const last = lines[lines.length - 1];
+
+  assert.equal(chargeAmount(doc, "a. Notarial Fee"), formatCurrency(500));
+  // The full premium, not the part collected at release.
+  assert.equal(chargeAmount(doc, "b. Insurance Premium"), formatCurrency(600));
+  assert.deepEqual([last.label, last.amount], ["3. Total Non-Finance Charges", formatCurrency(1100)]);
+});
+
+// "Collected first" comes back once the backend collects the unpaid premium
+// ahead of the loan (not built yet); until then the note must not promise it.
+test("disclosure: insurance unpaid at release is owed on the loan, interest-free", () => {
+  const doc = buildDisclosureDoc(PAYLOAD);
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  const note = lines[lines.findIndex((l) => l.label === "b. Insurance Premium") + 1];
+
+  assert.match(note.label, /₱200\.00/);
+  assert.match(note.label, /owed on the loan/);
+  assert.match(note.label, /interest-free/);
+  assert.doesNotMatch(note.label, /collected first/);
+  // A note, not a figure in the column: the column adds up to the total.
+  assert.equal(note.amount, "");
+
+  const paid = buildDisclosureDoc({
+    ...PAYLOAD,
+    non_finance_charges: {
+      items: [{ name: "Insurance Premium", amount: 600, deducted: 600, owed: 0 }],
+      total: 600,
+    },
+  });
+  assert.ok(
+    !chargesBlock(paid, "IV. Non-Finance Charges").lines.some((l) => /owed on the loan/.test(l.label))
+  );
+});
+
+test("disclosure: net proceeds reconcile from the server's proceeds", () => {
+  const doc = buildDisclosureDoc(PAYLOAD);
+
+  assert.deepEqual(
+    chargesBlock(doc, "V. Net Proceeds").lines.map((l) => [l.label, l.amount]),
+    [
+      ["Principal Loan Amount", formatCurrency(100000)],
+      ["Less: Finance Charges Deducted", `(${formatCurrency(3000)})`],
+      ["Less: Non-Finance Charges Deducted", `(${formatCurrency(900)})`],
+      [SHARE_CAPITAL_LABEL, `(${formatCurrency(1000)})`],
+      [NET_PROCEEDS_LABEL, formatCurrency(95100)],
+    ]
+  );
+});
+
+test("disclosure: finance charges and net proceeds are printed as the server sent them", () => {
   const sent = buildDisclosureDoc({
     ...PAYLOAD,
     totals: { ...PAYLOAD.totals, total_finance_charges: 10499.99 },
+    proceeds: { ...PAYLOAD.proceeds, net_proceeds: 95099.99 },
   });
   assert.equal(chargeAmount(sent, "2. Total Finance Charges"), formatCurrency(10499.99));
+  assert.equal(chargeAmount(sent, NET_PROCEEDS_LABEL), formatCurrency(95099.99));
 });
 
 test("disclosure: a total the server did not send is a dash, never worked out", () => {
+  const {
+    finance_charges: _finance,
+    non_finance_charges: _nonFinance,
+    proceeds: _proceeds,
+    rates: _rates,
+    ...bare
+  } = PAYLOAD;
+  void [_finance, _nonFinance, _proceeds, _rates];
   const doc = buildDisclosureDoc({
-    ...PAYLOAD,
+    ...bare,
     deductions: { items: PAYLOAD.deductions.items },
     totals: {},
   });
 
   assert.equal(chargeAmount(doc, "a. Interest"), DASH);
   assert.equal(chargeAmount(doc, "2. Total Finance Charges"), DASH);
-  assert.equal(chargeAmount(doc, "Less: Upfront Deductions"), DASH);
-  assert.equal(
-    chargeAmount(doc, "3. Net Proceeds of Loan (Amount Received by Borrower)"),
-    DASH
-  );
-  const table = tableBlock(doc, "VI. Amortization Schedule");
+  assert.equal(chargeAmount(doc, "3. Total Non-Finance Charges"), DASH);
+  assert.equal(chargeAmount(doc, "Principal Loan Amount"), DASH);
+  assert.equal(chargeAmount(doc, "Less: Finance Charges Deducted"), DASH);
+  assert.equal(chargeAmount(doc, "Less: Non-Finance Charges Deducted"), DASH);
+  assert.equal(chargeAmount(doc, SHARE_CAPITAL_LABEL), DASH);
+  assert.equal(chargeAmount(doc, NET_PROCEEDS_LABEL), DASH);
+  // The deductions list is not reclassified here.
+  assert.ok(!hasChargeLine(doc, "b. Processing Fee"));
+  const table = tableBlock(doc, "VII. Amortization Schedule");
   assert.equal(table.totals?.principal, DASH);
   assert.equal(table.totals?.interest, DASH);
   assert.equal(table.totals?.amount_due, DASH);
@@ -309,7 +424,7 @@ test("disclosure: co-makers and the borrower's address are deliberately absent",
 
 test("disclosure: the schedule table carries the server's column totals", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
-  const table = tableBlock(doc, "VI. Amortization Schedule");
+  const table = tableBlock(doc, "VII. Amortization Schedule");
 
   assert.equal(table.rows.length, 3);
   // Six columns, six keys per row — the old markup declared seven headers for
@@ -376,6 +491,8 @@ test("disclosure: a null payload still prints a signable blank form", () => {
   assert.equal(chargeAmount(doc, "1. Principal Loan Amount"), DASH);
   assert.equal(chargeAmount(doc, "2. Total Finance Charges"), DASH);
   assert.ok(hasChargeLine(doc, "2. Total Finance Charges"));
+  assert.equal(chargeAmount(doc, "3. Total Non-Finance Charges"), DASH);
+  assert.equal(chargeAmount(doc, NET_PROCEEDS_LABEL), DASH);
   assert.match(prose(doc), /Truth in Lending Act/);
   assert.deepEqual(signatureLabels(doc), [
     "Borrower — Signature Over Printed Name",
@@ -387,7 +504,7 @@ test("disclosure: a null payload still prints a signable blank form", () => {
 });
 
 test("disclosure: the legacy flat payload still renders", () => {
-  // The shape `LoanDisclosure` in src/types/loan-document.ts describes.
+  // The shape `LoanDisclosure` in src/types/loan-document.ts once described.
   const doc = buildDisclosureDoc({
     loan_id: 42,
     application_number: "APP-2026-0042",
@@ -413,11 +530,9 @@ test("disclosure: the legacy flat payload still renders", () => {
   // No totals block: interest is a dash, never total payable less principal.
   assert.equal(chargeAmount(doc, "a. Interest"), DASH);
   assert.equal(fieldValue(doc, "Total Amount Payable"), formatCurrency(56000));
-  assert.equal(chargeAmount(doc, "b. Processing / Service Fee"), formatCurrency(1000));
-  assert.equal(chargeAmount(doc, "c. Service Fee"), formatCurrency(500));
-  assert.equal(
-    chargeAmount(doc, "3. Net Proceeds of Loan (Amount Received by Borrower)"),
-    formatCurrency(48500)
-  );
-  assert.equal(tableBlock(doc, "VI. Amortization Schedule").rows.length, 1);
+  // Its flat fees were never classified by the server, so they are not
+  // printed as finance charges, and no net proceeds is reconciled from them.
+  assert.ok(!hasChargeLine(doc, "b. Processing / Service Fee"));
+  assert.equal(chargeAmount(doc, NET_PROCEEDS_LABEL), DASH);
+  assert.equal(tableBlock(doc, "VII. Amortization Schedule").rows.length, 1);
 });
