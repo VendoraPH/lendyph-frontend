@@ -32,7 +32,7 @@ export type CollateralValueRow = CollateralWithMeta & { value_unknown: boolean }
  *    about share capital applies, so `balance` is ignored — pass null.
  *  - A `share_capital`-source collateral is worth the member's CURRENT balance,
  *    which is why it is read live rather than stored. If that balance could not
- *    be read in full, the row has no value: `value_unknown` is true and
+ *    be read, the row has no value: `value_unknown` is true and
  *    `effective_value` is a placeholder that callers must not display.
  *
  * `effective_value` is 0 rather than NaN in the unknown case on purpose — NaN

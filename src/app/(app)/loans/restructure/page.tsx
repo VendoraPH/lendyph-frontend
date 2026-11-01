@@ -439,8 +439,8 @@ function RestructureLoanInner() {
             // The loan being restructured holds its own collateral; that is not
             // a conflict, it is the security carrying over to the replacement.
             lock: collateralLock(c, { exceptLoanId: sourceLoanId }),
-            // `value_unknown` when a share-capital ledger could not be read in
-            // full. The picker refuses those rows rather than carrying an
+            // `value_unknown` when the server's share capital balance could not
+            // be read. The picker refuses those rows rather than carrying an
             // appraisal nobody computed onto the replacement loan.
             ...collateralValue(c, t, scBalance),
           };
