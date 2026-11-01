@@ -1,6 +1,7 @@
 import { ROLES } from "@/constants/rbac";
 import type { Permission } from "@/types";
 import type { ApiRole, RolePayload } from "@/services/role.service";
+import { roleDisplayName } from "@/lib/role-display-name";
 import { MODULE_ACTIONS, type UIModule } from "./permission-matrix";
 
 /** A role as the roles screen holds it. */
@@ -14,17 +15,13 @@ export interface RoleItem {
   isActive: boolean;
 }
 
-function titleCase(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+/** A role name typed by an admin, as the lowercase key the API stores. */
+export function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
 /**
- * An API role in the screen's shape, with a label from the frontend's catalog
- * when it knows the role.
+ * An API role in the screen's shape, labelled by `roleDisplayName()`.
  *
  * Every permission the role holds is kept, including the ones the matrix does
  * not show: the retired `collections:*`, and grants such as
@@ -40,7 +37,7 @@ export function roleItemFromApi(api: ApiRole): RoleItem {
   return {
     id: api.id,
     key,
-    label: known?.label ?? titleCase(key),
+    label: roleDisplayName(api),
     description: api.description ?? known?.description ?? "",
     permissions: api.permissions as Permission[],
     isSystem: api.is_system === true,
@@ -48,13 +45,20 @@ export function roleItemFromApi(api: ApiRole): RoleItem {
   };
 }
 
-/** The body `POST /roles` (create) or `PUT /roles/{id}` (edit) is sent. */
-export function rolePayload(item: RoleItem, _opts: { isEdit: boolean }): RolePayload {
-  return {
-    name: item.key,
+/**
+ * The body `POST /roles` (create) or `PUT /roles/{id}` (edit) is sent.
+ *
+ * An edit never sends `name`: the key is what permission checks use, so a
+ * rename only changes `display_name`. A create sends both, the key slugged
+ * from the label.
+ */
+export function rolePayload(item: RoleItem, { isEdit }: { isEdit: boolean }): RolePayload {
+  const common = {
+    display_name: item.label,
     description: item.description,
     permissions: item.permissions,
   };
+  return isEdit ? common : { name: slugify(item.label), ...common };
 }
 
 /** Tick or untick one permission. Nothing else in the set changes. */

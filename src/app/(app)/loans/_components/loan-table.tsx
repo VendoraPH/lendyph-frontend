@@ -125,8 +125,8 @@ export function LoanTable({
               <TableCell>
                 <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
                   {loan.is_restructure && loan.status !== "restructured"
-                    ? `Restructured — ${loanStatusLabel(loan.status, loan.current_approver)}`
-                    : loanStatusLabel(loan.status, loan.current_approver)}
+                    ? `Restructured — ${loanStatusLabel(loan.status, loan.current_approver, loan.current_status_label)}`
+                    : loanStatusLabel(loan.status, loan.current_approver, loan.current_status_label)}
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">

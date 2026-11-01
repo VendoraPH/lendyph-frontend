@@ -2170,7 +2170,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
+                  {loanStatusLabel(
+                    loan.status,
+                    currentStep?.name ?? loan.current_approver,
+                    loan.current_status_label,
+                  )}
                 </Badge>
               </div>
             )}
@@ -2186,7 +2190,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   variant="outline"
                   className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
                 >
-                  {loanStatusLabel(loan.status, currentStep?.name ?? loan.current_approver)}
+                  {loanStatusLabel(
+                    loan.status,
+                    currentStep?.name ?? loan.current_approver,
+                    loan.current_status_label,
+                  )}
                 </Badge>
               )}
             </div>

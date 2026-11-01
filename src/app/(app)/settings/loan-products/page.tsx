@@ -67,7 +67,6 @@ import {
   INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
-  PAST_DUE_TRANSFER_UNIT_OPTIONS,
   TERM_UNIT_OPTIONS,
   INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
@@ -191,11 +190,6 @@ function productToForm(p: LoanProduct): ProductForm {
     penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
     grace_period_enabled: gracePeriod > 0,
     grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
-    past_due_transfer_value:
-      apiProduct.past_due_transfer_value != null
-        ? String(apiProduct.past_due_transfer_value)
-        : "",
-    past_due_transfer_unit: String(apiProduct.past_due_transfer_unit ?? "days"),
     scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
     min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
     max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
@@ -663,55 +657,6 @@ function ProductFormDialog({
                   />
                 </div>
               )}
-            </div>
-
-            {/* Past Due Transfer — when to flip a missed payment into past_due */}
-            <div className="space-y-2">
-              <Label>Past Due Transfer</Label>
-              <p className="text-xs text-muted-foreground">
-                After the grace period, move a loan with a missed payment to{" "}
-                <span className="font-medium">Past Due</span> once this threshold is reached.
-                Leave blank to use the backend default.
-              </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="past-due-value" className="text-xs text-muted-foreground">
-                    Value
-                  </Label>
-                  <Input
-                    id="past-due-value"
-                    type="number"
-                    min={1}
-                    placeholder="1"
-                    value={form.past_due_transfer_value}
-                    onChange={(e) => update("past_due_transfer_value", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="past-due-unit" className="text-xs text-muted-foreground">
-                    Unit
-                  </Label>
-                  <Select
-                    value={form.past_due_transfer_unit}
-                    onValueChange={(v) => update("past_due_transfer_unit", v ?? "days")}
-                  >
-                    <SelectTrigger id="past-due-unit" className="w-full">
-                      <SelectValue>
-                        {(v: string | null) =>
-                          PAST_DUE_TRANSFER_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? ""
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAST_DUE_TRANSFER_UNIT_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
             </div>
           </div>
 

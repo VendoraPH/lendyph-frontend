@@ -94,5 +94,5 @@ export interface BranchSelectItem {
  * from `items`, so without them the closed select shows the raw value.
  */
 export function branchSelectItems(branches: readonly UserBranch[]): BranchSelectItem[] {
-  return branches.map((b) => ({ value: String(b.id), label: String(b.id) }));
+  return branches.map((b) => ({ value: String(b.id), label: b.name }));
 }

@@ -48,12 +48,6 @@ export interface ProductForm {
   penalty_rate: string;
   grace_period_enabled: boolean;
   grace_period_days: string;
-  // Past Due Transfer — value + unit. When the value is blank, backend
-  // falls back to default behavior; when set, a missed payment flips the
-  // loan to past_due after `value` `unit`s (days / months / amortization
-  // periods).
-  past_due_transfer_value: string;
-  past_due_transfer_unit: string;
   scb_required: boolean;
   min_scb: string;
   max_scb: string;
@@ -81,8 +75,6 @@ export const EMPTY_FORM: ProductForm = {
   penalty_rate: "",
   grace_period_enabled: false,
   grace_period_days: "",
-  past_due_transfer_value: "",
-  past_due_transfer_unit: "days",
   scb_required: false,
   min_scb: "",
   max_scb: "",
@@ -132,15 +124,6 @@ export function formToApiPayload(form: ProductForm) {
     notarial_fee: form.notarial_fee ? Number(form.notarial_fee) : undefined,
     penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
-    ...(form.past_due_transfer_value && Number(form.past_due_transfer_value) > 0
-      ? {
-          past_due_transfer_value: Number(form.past_due_transfer_value),
-          past_due_transfer_unit: form.past_due_transfer_unit as
-            | "days"
-            | "months"
-            | "amortization_periods",
-        }
-      : {}),
     min_amount: form.min_amount ? Number(form.min_amount) : undefined,
     max_amount: form.max_amount ? Number(form.max_amount) : undefined,
     scb_required: form.scb_required,
