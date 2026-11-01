@@ -79,6 +79,7 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
 export function loanStatusLabel(
   status: LoanStatus,
   approver?: string | null,
+  _stepStatus?: string | null,
 ): string {
   const label = LOAN_STATUS_LABELS[status] ?? status;
   const officer = approver?.trim();

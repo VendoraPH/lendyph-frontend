@@ -1,6 +1,6 @@
 import { ROLES } from "@/constants/rbac";
 import type { Permission } from "@/types";
-import type { ApiRole } from "@/services/role.service";
+import type { ApiRole, RolePayload } from "@/services/role.service";
 import { MODULE_ACTIONS, type UIModule } from "./permission-matrix";
 
 /** A role as the roles screen holds it. */
@@ -45,6 +45,15 @@ export function roleItemFromApi(api: ApiRole): RoleItem {
     permissions: api.permissions as Permission[],
     isSystem: api.is_system === true,
     isActive: api.is_active ?? true,
+  };
+}
+
+/** The body `POST /roles` (create) or `PUT /roles/{id}` (edit) is sent. */
+export function rolePayload(item: RoleItem, _opts: { isEdit: boolean }): RolePayload {
+  return {
+    name: item.key,
+    description: item.description,
+    permissions: item.permissions,
   };
 }
 
