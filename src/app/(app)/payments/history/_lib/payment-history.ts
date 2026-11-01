@@ -34,6 +34,8 @@ export function paymentTotalsParams(filters: PaymentHistoryFilters): Record<stri
 export interface PaymentTotals {
   collected: number | null;
   voided: number | null;
+  /** Insurance premium the posted payments collected (part of `collected`). */
+  insurance: number | null;
 }
 
 const DECIMAL = /^-?\d+(?:\.\d+)?$/;
@@ -51,6 +53,7 @@ export function readPaymentTotals(body: unknown): PaymentTotals {
   return {
     collected: serverFigure(totals?.collected),
     voided: serverFigure(totals?.voided),
+    insurance: serverFigure(totals?.total_insurance_applied),
   };
 }
 

@@ -253,21 +253,3 @@ export function rowForAllocation(schedule: readonly LoanSchedule[], allocation: 
 export function allocationBuildUp(schedule: readonly LoanSchedule[], allocation: AllocationRef): number | null {
   return rowForAllocation(schedule, allocation)?.shareCapitalBuildUp ?? null;
 }
-
-/**
- * How a payment stands against the open period's server total payment, to
- * the centavo: `covers` it (or there is no open period), falls short of it
- * (`partial`), or `unknown` when the server sent no total for the period.
- * The server takes any insurance premium owed on the loan (`insuranceOwed`,
- * its `insurance_owed`) first, so only what is left reaches the period.
- */
-export function paymentAgainstDue(
-  amount: number,
-  due: AmortizationRow | null,
-  insuranceOwed: number | null = null,
-): "covers" | "partial" | "unknown" {
-  if (due === null) return "covers";
-  if (due.totalPayment === null) return "unknown";
-  const reachesPeriod = Math.round(amount * 100) - Math.round((insuranceOwed ?? 0) * 100);
-  return reachesPeriod < Math.round(due.totalPayment * 100) ? "partial" : "covers";
-}

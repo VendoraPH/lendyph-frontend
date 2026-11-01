@@ -6,7 +6,6 @@ import {
   allocationMatches,
   openPeriod,
   openPeriods,
-  paymentAgainstDue,
   rowForAllocation,
   readPreviewResponse,
   readScheduleRows,
@@ -293,34 +292,6 @@ test("the amount to pay is the open period's own total payment, never the merged
   });
 });
 
-test("paying exactly the open period's total payment is not a partial payment", () => {
-  const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
-  assert.equal(paymentAgainstDue(10400, due), "covers");
-  assert.equal(paymentAgainstDue(10400.004, due), "covers");
-  assert.equal(paymentAgainstDue(12000, due), "covers");
-  assert.equal(paymentAgainstDue(10399.99, due), "partial");
-});
-
-test("insurance premium owed is taken first, so the open period is covered only after it", () => {
-  // ₱400 premium owed on the loan: the server collects it before the period,
-  // so paying just the period's ₱10,400 leaves the period part-paid.
-  const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
-  assert.equal(paymentAgainstDue(10400, due, 400), "partial");
-  assert.equal(paymentAgainstDue(10799.99, due, 400), "partial");
-  assert.equal(paymentAgainstDue(10800, due, 400), "covers");
-  assert.equal(paymentAgainstDue(10400, due, null), "covers");
-  // Nothing open: premium alone never asks to extend.
-  assert.equal(paymentAgainstDue(100, null, 400), "covers");
-});
-
-test("with no server total payment for the open period, the payment cannot be judged", () => {
-  const bare: Record<string, unknown> = { ...EXTENDED_ROWS[1] };
-  delete bare.total_payment;
-  const due = openPeriod(readScheduleRows([EXTENDED_ROWS[0], bare], 42)!.schedule);
-  assert.equal(due?.totalPayment, null);
-  assert.equal(paymentAgainstDue(10400, due), "unknown");
-});
-
 test("each period's build-up comes from its own server row, never the merged row", () => {
   // The merged upon-maturity row reads ₱200.50 for "period 1"; the periods
   // themselves carry ₱100 and ₱100.50.
@@ -411,10 +382,9 @@ test("for a loan that is not upon-maturity the open period is its drawn row, unc
   );
 });
 
-test("with no open period there is nothing to fall short of", () => {
+test("with no period left unpaid there is no open period", () => {
   const settled = openPeriod(readScheduleRows([EXTENDED_ROWS[0]], 42)!.schedule);
   assert.equal(settled, null);
-  assert.equal(paymentAgainstDue(100, settled), "covers");
   assert.equal(openPeriod([]), null);
 });
 

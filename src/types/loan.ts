@@ -263,6 +263,17 @@ export interface LoanCoMaker {
   added_at?: string | null;
 }
 
+export interface LoanAmountDueNow {
+  amount: number;
+  insurance: number;
+  principal: number;
+  interest: number;
+  penalty: number;
+  share_capital_build_up: number;
+  period_number: number | null;
+  schedule_id: number | null;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -383,6 +394,13 @@ export interface Loan {
    * owes it. Part of `total_payable`.
    */
   insurance_owed?: number | string;
+  /**
+   * What a payment must be today to clear `insurance_owed` plus the first
+   * open period in full, penalty included, with its parts. Null unless the
+   * loan is released or ongoing; `period_number` and `schedule_id` are null
+   * when no period is open.
+   */
+  amount_due_now?: LoanAmountDueNow | null;
   /**
    * `total_deductions` less the itemised `deductions`, signed: the release
    * voucher prints it as its own line when not 0.

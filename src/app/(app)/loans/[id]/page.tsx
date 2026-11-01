@@ -36,7 +36,6 @@ import {
   allocationMatches,
   openPeriod,
   openPeriods,
-  paymentAgainstDue,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -63,6 +62,14 @@ import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { collectNowParts } from "./_lib/extension-preview";
+import {
+  amountDueNowParts,
+  dueNowHasOpenPeriod,
+  paymentAgainstDueNow,
+  previewBalanceAfter,
+  previewBalanceBefore,
+  readAmountDueNow,
+} from "@/lib/payment-figures";
 import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
 import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
@@ -1408,6 +1415,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const insuranceOwed = loanInsuranceOwed(loan);
   // What the previewed payment will collect of it first; null when none.
   const paymentPreviewInsurance = previewInsuranceApplied(paymentPreview);
+  // What a payment must be today to clear the premium owed and the first
+  // open period, with its parts: the server's, null when it sent none.
+  const amountDueNow = readAmountDueNow(loan?.amount_due_now);
   const loanInterestAmount: number | null =
     storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
@@ -1838,13 +1848,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
       remarks: composedRemarks,
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the open
-    // period's total payment, prompt to extend instead of silently posting a
-    // partial payment. Without the server's total for that period the payment
-    // can't be judged, so it is not posted at all. Insurance premium owed is
-    // taken first, so the period gets only what is left after it.
-    if (isUponMaturityLoan && paymentMode === "regular") {
-      const standing = paymentAgainstDue(payload.amount_paid, duePeriod, insuranceOwed);
+    // Upon Maturity loans: if the cashier is recording less than the server's
+    // amount due now (premium owed plus the open period), prompt to extend
+    // instead of silently posting a partial payment. Without that figure the
+    // payment can't be judged, so it is not posted at all. With no period
+    // open there is nothing to extend.
+    if (isUponMaturityLoan && paymentMode === "regular" && (amountDueNow === null || dueNowHasOpenPeriod(amountDueNow))) {
+      const standing = paymentAgainstDueNow(payload.amount_paid, amountDueNow);
       if (standing === "unknown") {
         toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
         return;
@@ -4190,8 +4200,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
           {(() => {
             const current = duePeriod;
             if (!current) return null;
-            const hasScb = scheduleHasScb;
-            const currentTotal = current.totalPayment;
+            // The server's amount due now: premium owed first, then the
+            // period in full. Without it, a dash and no quick fill.
+            const currentTotal = amountDueNow?.amount ?? null;
+            const dueParts: { key: string; label: string; amount: number | null }[] =
+              amountDueNow !== null
+                ? amountDueNowParts(amountDueNow)
+                : [
+                    { key: "interest", label: "Interest", amount: null },
+                    { key: "principal", label: "Principal", amount: null },
+                  ];
             const isOverdue = current.status === "overdue";
             const isPartial = current.status === "partial";
             // If the cashier has already typed an amount, surface what
@@ -4263,27 +4281,27 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </div>
                   </div>
 
-                  <div className={cn("grid gap-2", hasScb ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Principal</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {currencyOrDash(current.principal)}
-                      </p>
-                    </div>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Interest</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {currencyOrDash(current.interest)}
-                      </p>
-                    </div>
-                    {hasScb && (
-                      <div className="rounded-md border bg-background p-2 text-center min-w-0 col-span-2 sm:col-span-1">
-                        <p className="text-[10px] text-muted-foreground">SCB</p>
-                        <p className="text-sm font-semibold tabular-nums text-brand-orange truncate">
-                          {currencyOrDash(current.shareCapitalBuildUp)}
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-2",
+                      dueParts.length >= 5 ? "sm:grid-cols-5" : dueParts.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+                    )}
+                  >
+                    {dueParts.map((part) => (
+                      <div key={part.key} className="rounded-md border bg-background p-2 text-center min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{part.label}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tabular-nums truncate",
+                            part.key === "insurance" && "text-purple-700 dark:text-purple-300",
+                            part.key === "penalty" && (part.amount ?? 0) > 0 && "text-destructive",
+                            part.key === "share_capital_build_up" && "text-brand-orange"
+                          )}
+                        >
+                          {currencyOrDash(part.amount)}
                         </p>
                       </div>
-                    )}
+                    ))}
                   </div>
 
                   {/* When an amount is entered, show the live verdict for
@@ -4464,7 +4482,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </Label>
                 {(() => {
                   if (!duePeriod) return null;
-                  const suggested = duePeriod.totalPayment;
+                  const suggested = amountDueNow?.amount ?? null;
                   if (suggested === null || suggested <= 0) return null;
                   return (
                     <button
@@ -4797,19 +4815,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       New Outstanding Balance
                     </p>
                     <p className="text-lg font-bold tabular-nums break-words">
-                      {formatCurrency(
-                        Math.max(
-                          0,
-                          (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) -
-                            (paymentPreview.total_principal ?? 0)
-                        )
-                      )}
+                      {currencyOrDash(previewBalanceAfter(paymentPreview))}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      was{" "}
-                      {formatCurrency(
-                        loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                      )}
+                      was {currencyOrDash(previewBalanceBefore(paymentPreview))}
                     </p>
                   </div>
 
