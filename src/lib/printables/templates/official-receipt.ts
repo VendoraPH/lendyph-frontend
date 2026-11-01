@@ -88,7 +88,7 @@ export function buildOfficialReceiptDoc(
   ]);
   const overpayment = pickNumber(payment, ["overpayment", "excess_amount"]);
   // Insurance premium owed on the loan, collected before penalty, interest
-  // and principal (round 3). Shown only when this payment collected some.
+  // and principal. Shown only when this payment collected some.
   const insurance = pickNumber(payment, ["insurance_applied"]);
   const balanceAfter = pickNumber(payment, ["balance_after", "new_balance"]);
   const balanceBefore = pickNumber(payment, ["balance_before", "previous_balance"]);

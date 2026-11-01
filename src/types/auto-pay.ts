@@ -34,7 +34,9 @@ export interface AutoPayLoanRow {
   total_principal: number;
   total_interest: number;
   total_penalty: number;
-  /** Includes the penalty. */
+  /** Insurance premium owed on the loan, charged on top of the periods. */
+  total_insurance?: number;
+  /** Includes the penalty and the insurance premium. */
   total_amount: number;
 }
 
@@ -42,11 +44,13 @@ export interface AutoPaySummary {
   total_principal: number;
   total_interest: number;
   total_penalty?: number;
-  /** Includes the penalty. */
+  /** Insurance premium owed on the loans, charged on top of the periods. */
+  total_insurance?: number;
+  /** Includes the penalty and the insurance premium. */
   total_amount: number;
   /** The selected part-paid rows' remaining amount (`include_schedule_ids[]`). */
   partial_total?: number;
-  /** What the run posts for that selection: `total_amount` + `partial_total`. */
+  /** What the run posts for that selection, insurance premium included. */
   grand_total?: number;
   loans_count: number;
 }

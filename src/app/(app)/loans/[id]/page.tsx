@@ -62,6 +62,7 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
+import { collectNowParts } from "./_lib/extension-preview";
 import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
 import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
@@ -151,6 +152,7 @@ import {
   BookOpen,
   Zap,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
@@ -1839,9 +1841,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // Upon Maturity loans: if the cashier is recording less than the open
     // period's total payment, prompt to extend instead of silently posting a
     // partial payment. Without the server's total for that period the payment
-    // can't be judged, so it is not posted at all.
+    // can't be judged, so it is not posted at all. Insurance premium owed is
+    // taken first, so the period gets only what is left after it.
     if (isUponMaturityLoan && paymentMode === "regular") {
-      const standing = paymentAgainstDue(payload.amount_paid, duePeriod);
+      const standing = paymentAgainstDue(payload.amount_paid, duePeriod, insuranceOwed);
       if (standing === "unknown") {
         toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
         return;
@@ -4163,6 +4166,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </div>
           </div>
 
+          {/* Insurance premium owed on the loan: the server takes it out of
+              this payment before any period, so the amounts below are
+              reached only after it. */}
+          {insuranceOwed !== null && (
+            <div
+              role="note"
+              className="flex gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900 dark:border-purple-800 dark:bg-purple-950/20 dark:text-purple-200"
+            >
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="font-semibold tabular-nums">{formatCurrency(insuranceOwed)}</span>{" "}
+                insurance premium is still owed on this loan (interest-free). This payment
+                collects it first, before penalty, interest and principal.
+              </p>
+            </div>
+          )}
+
           {/* Current Scheduled Payment — shows the single amortization
               installment the borrower currently needs to pay (the earliest
               unpaid period). Gives the cashier a clear "this is what's due
@@ -4902,17 +4922,28 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       : extendPreview.preview.carryInterest,
                   )}
                 </p>
-                {extendPreview.preview.collectNow && extendPreview.preview.collectNow.penaltyPart !== null && (
+                {(() => {
+                  // The server's parts, premium owed first, then penalty,
+                  // then interest; only when there is more than interest.
+                  const parts = collectNowParts(extendPreview.preview.collectNow);
+                  if (parts.length === 0) return null;
+                  return (
+                    <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                      Includes{" "}
+                      {parts.map((part, index) => (
+                        <span key={part.label}>
+                          {index > 0 && (index === parts.length - 1 ? " and " : ", ")}
+                          <span className="font-semibold tabular-nums">{formatCurrency(part.amount)}</span>{" "}
+                          {part.label}
+                        </span>
+                      ))}
+                      .
+                    </p>
+                  );
+                })()}
+                {extendPreview.preview.collectNow?.insurancePart != null && (
                   <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-                    Includes{" "}
-                    <span className="font-semibold tabular-nums">
-                      {formatCurrency(extendPreview.preview.collectNow.penaltyPart)}
-                    </span>{" "}
-                    late penalty and{" "}
-                    <span className="font-semibold tabular-nums">
-                      {formatCurrency(extendPreview.preview.collectNow.interestPart)}
-                    </span>{" "}
-                    interest.
+                    The insurance premium still owed on the loan is collected first (interest-free).
                   </p>
                 )}
                 <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-emerald-200 pt-2 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">

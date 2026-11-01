@@ -379,12 +379,10 @@ export interface Loan {
   outstanding_balance?: number;
   /**
    * Insurance premium left unpaid at release and still owed on the loan:
-   * interest-free, collected first from each payment. 0 unless
-   * `insurance_collected_first` (loans released before round 3 stay 0).
+   * interest-free, collected first from each payment, on every loan that
+   * owes it. Part of `total_payable`.
    */
   insurance_owed?: number | string;
-  /** The release left premium unpaid, so payments collect it first. */
-  insurance_collected_first?: boolean;
   /**
    * `total_deductions` less the itemised `deductions`, signed: the release
    * voucher prints it as its own line when not 0.
@@ -468,7 +466,10 @@ export interface LoanExtensionPreview {
   interest_option: ExtensionInterestOption;
   /** Collected as a payment before the loan extends; zeros for "defer". */
   collect_now: {
+    /** Includes the insurance premium owed on "pay". */
     amount: number;
+    /** Insurance premium owed on the loan, collected first on "pay". */
+    insurance_part?: number;
     penalty_part: number;
     interest_part: number;
   };

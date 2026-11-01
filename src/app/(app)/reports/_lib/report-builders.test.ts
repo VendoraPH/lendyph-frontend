@@ -982,6 +982,29 @@ test("repayments list uses the server totals and splits principal from interest"
   );
 });
 
+test("repayments list names the insurance premium collected, from the server's total only", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 200, total: 3 },
+      totals: {
+        count: 3,
+        total_amount_paid: 12600,
+        total_principal_applied: 10000,
+        total_interest_applied: 1800,
+        total_penalty_applied: 200,
+        total_insurance_applied: 400,
+      },
+    },
+    RANGE
+  );
+
+  assert.equal(
+    kpi(doc, "Total Collected").hint,
+    "Insurance premium ₱400.00 · Principal ₱10,000.00 · Interest ₱1,800.00"
+  );
+});
+
 test("an empty list report reports zeroes and no truncation note", () => {
   const doc = buildRepaymentsListDoc(
     { data: [], meta: { total: 0 }, totals: { count: 0, total_amount_paid: 0, total_penalty_applied: 0 } },
@@ -1804,7 +1827,8 @@ const CASH_FLOW_PAYLOAD = {
       principal: 812400.25,
       interest: 184300.5,
       penalty: 12750.75,
-      overpayment: 4200,
+      insurance: 400,
+      overpayment: 3800,
       total: 1013651.5,
       count: 214,
     },
@@ -1898,6 +1922,7 @@ test("cash flow itemises both sides of the statement", () => {
       "Principal collected",
       "Interest collected",
       "Penalty collected",
+      "Insurance premium collected",
       "Overpayment received",
       "Share capital contributions",
     ]
@@ -1936,12 +1961,29 @@ test("cash flow reads the repayment components out of their nested block", () =>
   // The components live under `inflows.repayments`, not flat on `inflows` —
   // reading them flat dashed every line while the totals still looked right.
   assert.equal(inflows.rows[0].amount, 812400.25);
-  assert.equal(inflows.rows[3].amount, 4200);
-  assert.equal(inflows.rows[4].amount, 96500);
+  assert.equal(inflows.rows[3].amount, 400);
+  assert.equal(inflows.rows[4].amount, 3800);
+  assert.equal(inflows.rows[5].amount, 96500);
   // `outflows.total` includes share capital; only `releases.net_proceeds` is
   // the release line, so reading the wrong one double-counts the withdrawal.
   assert.equal(namedTable(doc, "Cash Outflows").rows[0].amount, 742800.4);
   assert.equal(namedTable(doc, "Cash Outflows").rows[1].amount, 31500);
+});
+
+test("cash flow shows the insurance premium collected as its own repayment line, a dash when not sent", () => {
+  // Premium collected from payments is cash in, inside the repayments total;
+  // it is never income and never added to a total here.
+  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
+  const line = namedTable(doc, "Cash Inflows").rows.find((r) => r.particulars === "Insurance premium collected");
+  assert.equal(line?.amount, 400);
+  assert.equal(namedTableTotal(doc, "Cash Inflows", "amount"), "₱1,110,151.50");
+
+  const older = buildCashFlowDoc(
+    { inflows: { repayments: { principal: 100.25, interest: 20.5, total: 120.75 }, total: 120.75 } },
+    RANGE
+  );
+  const missing = namedTable(older, "Cash Inflows").rows.find((r) => r.particulars === "Insurance premium collected");
+  assert.equal(missing?.amount, null);
 });
 
 test("cash flow still reads a flat payload that never nested the components", () => {
@@ -2086,8 +2128,8 @@ test("cash flow says where payments' share capital build-up is counted, without 
   assert.match(buildUp!, /Share capital contributions/);
   assert.match(buildUp!, /Share Capital report/);
   // Text only: the lines and totals are the server's, unchanged.
-  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 5);
-  assert.equal(namedTable(doc, "Cash Inflows").rows[4].amount, 96500);
+  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 6);
+  assert.equal(namedTable(doc, "Cash Inflows").rows[5].amount, 96500);
   assert.equal(kpiValue(doc, "Total Cash In"), "₱1,110,151.50");
   assert.equal(kpiValue(doc, "Net Movement"), "₱335,851.10");
 });
@@ -2123,7 +2165,7 @@ test("a failed cash flow request still renders the statement shell", () => {
   assert.equal(kpiValue(doc, "Net Movement"), DASH);
   // The lines still stand, so the document reads as a statement with unknown
   // figures rather than as an error page.
-  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 5);
+  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 6);
   assert.equal(namedTableTotal(doc, "Cash Inflows", "amount"), DASH);
   assert.equal(fieldValue(doc, "Net Cash Movement", "Net movement for the period"), DASH);
 });

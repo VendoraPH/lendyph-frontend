@@ -1018,6 +1018,7 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
         kpi("Total Collected", currencyOrDash(amount), {
           tone: "positive",
           hint: breakdownHint([
+            ["Insurance premium", pick(totals, ["total_insurance_applied"])],
             ["Principal", pick(totals, ["total_principal_applied"])],
             ["Interest", pick(totals, ["total_interest_applied"])],
           ]),
@@ -1531,6 +1532,9 @@ const CASH_INFLOW_REPAYMENT_LINES: [string, string[]][] = [
   ["Principal collected", ["principal", "principal_applied", "principal_collected"]],
   ["Interest collected", ["interest", "interest_applied", "interest_collected"]],
   ["Penalty collected", ["penalty", "penalty_applied", "penalty_collected"]],
+  // Premium owed on a loan, collected first from its payments: cash in,
+  // inside the repayments total, never income.
+  ["Insurance premium collected", ["insurance", "insurance_applied", "insurance_collected"]],
   ["Overpayment received", ["overpayment", "overpayment_received", "excess"]],
 ];
 

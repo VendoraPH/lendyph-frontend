@@ -10,8 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
 import type { AutoPayLoanRow } from "@/types";
-import type { PreviewTotals } from "../_lib/auto-pay-view";
+import { loanInsurance, type PreviewTotals } from "../_lib/auto-pay-view";
 
 interface DueLoansTableProps {
   loans: AutoPayLoanRow[];
@@ -31,6 +32,7 @@ export function DueLoansTable({ loans, totals }: DueLoansTableProps) {
             <TableHead className="text-right">Principal</TableHead>
             <TableHead className="text-right">Interest</TableHead>
             <TableHead className="text-right">Penalty</TableHead>
+            <TableHead className="text-right">Insurance Premium</TableHead>
             <TableHead className="text-right">Total</TableHead>
           </TableRow>
         </TableHeader>
@@ -44,6 +46,7 @@ export function DueLoansTable({ loans, totals }: DueLoansTableProps) {
               <TableCell className="text-right tabular-nums">{formatCurrency(loan.total_principal)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(loan.total_interest)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(loan.total_penalty)}</TableCell>
+              <TableCell className="text-right tabular-nums">{currencyOrDash(loanInsurance(loan))}</TableCell>
               <TableCell className="text-right font-medium tabular-nums">{formatCurrency(loan.total_amount)}</TableCell>
             </TableRow>
           ))}
@@ -56,6 +59,7 @@ export function DueLoansTable({ loans, totals }: DueLoansTableProps) {
             <TableCell className="text-right tabular-nums">
               {totals.penalty === null ? "—" : formatCurrency(totals.penalty)}
             </TableCell>
+            <TableCell className="text-right tabular-nums">{currencyOrDash(totals.insurance)}</TableCell>
             <TableCell className="text-right tabular-nums">{formatCurrency(totals.amount)}</TableCell>
           </TableRow>
         </TableFooter>

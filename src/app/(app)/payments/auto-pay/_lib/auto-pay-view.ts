@@ -1,6 +1,7 @@
 import type {
   AutoPayFilter,
   AutoPayLoanIssue,
+  AutoPayLoanRow,
   AutoPayPreview,
   AutoPayPreviewQuery,
   AutoPayResult,
@@ -12,7 +13,9 @@ export interface PreviewTotals {
   interest: number;
   /** Null when the server sent no penalty figure. */
   penalty: number | null;
-  /** Includes the penalty. */
+  /** Insurance premium owed, charged first; null when the server sent none. */
+  insurance: number | null;
+  /** Includes the penalty and the insurance premium. */
   amount: number;
 }
 
@@ -22,8 +25,14 @@ export function previewTotals(summary: AutoPaySummary): PreviewTotals {
     principal: summary.total_principal,
     interest: summary.total_interest,
     penalty: summary.total_penalty ?? null,
+    insurance: summary.total_insurance ?? null,
     amount: summary.total_amount,
   };
+}
+
+/** A loan's insurance premium charged by the run, or null when the server sent none. */
+export function loanInsurance(loan: AutoPayLoanRow): number | null {
+  return loan.total_insurance ?? null;
 }
 
 export interface RunTotals {

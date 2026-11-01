@@ -1,10 +1,10 @@
 /**
- * Insurance premium left unpaid at release (round 3, contract C).
+ * Insurance premium left unpaid at release.
  *
- * A release can collect only part of the premium. On loans released since
- * then, the rest is owed on the loan: interest-free, never added to
- * principal, and collected first from each payment, before penalty, interest
- * and principal. The server sends every figure:
+ * A release can collect only part of the premium. On every loan that owes
+ * the rest, it is owed on the loan: interest-free, never added to principal,
+ * and collected first from each payment, before penalty, interest and
+ * principal. The server sends every figure:
  * - `insurance_owed` on the loan: the premium still owed;
  * - `allocated_to_insurance` (alias `total_insurance`) on a payment preview:
  *   what this payment will collect of it;

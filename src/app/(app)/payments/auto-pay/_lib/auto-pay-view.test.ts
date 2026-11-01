@@ -4,6 +4,7 @@ import type { AutoPayFilter, AutoPayPartialRow, AutoPayPreview, AutoPayResult } 
 import {
   autoPayTotalsKey,
   loanIssues,
+  loanInsurance,
   loansAffected,
   previewTotals,
   runOutcome,
@@ -32,7 +33,8 @@ const preview: AutoPayPreview = {
     total_principal: 10_000.1,
     total_interest: 1_234.56,
     total_penalty: 77.7,
-    total_amount: 11_312.36,
+    total_insurance: 400.25,
+    total_amount: 11_712.61,
     loans_count: 2,
   },
   loans: [
@@ -48,13 +50,26 @@ test("the preview totals are the server's summary, as sent", () => {
     principal: 10_000.1,
     interest: 1_234.56,
     penalty: 77.7,
-    amount: 11_312.36,
+    insurance: 400.25,
+    amount: 11_712.61,
   });
 });
 
 test("a summary without a penalty figure shows none, not zero", () => {
   const older = { ...preview.summary, total_penalty: undefined };
   assert.equal(previewTotals(older).penalty, null);
+});
+
+test("a summary without an insurance premium figure shows none, not zero", () => {
+  const older = { ...preview.summary, total_insurance: undefined };
+  assert.equal(previewTotals(older).insurance, null);
+});
+
+test("a loan's insurance premium is the server's, a dash when it sent none", () => {
+  const row = preview.loans![0];
+  assert.equal(loanInsurance({ ...row, total_insurance: 400.25 }), 400.25);
+  assert.equal(loanInsurance({ ...row, total_insurance: 0 }), 0);
+  assert.equal(loanInsurance(row), null);
 });
 
 test("loans affected counts each loan once, full dues and included part-paid rows", () => {

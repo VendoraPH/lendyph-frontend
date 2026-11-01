@@ -137,12 +137,13 @@ test("each release-deduction role defaults to the account the backend seeds, of 
   }
 });
 
-test("insurance premium owed on a loan defaults to Other Receivables, as the backend seeds it", () => {
-  // Debited at release for the premium left unpaid, credited as payments
-  // collect it (round 3, contract C).
-  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
-  const code = (DEFAULT_ACCOUNT_MAPPING_CODES as Record<string, string>).insurance_premium_receivable;
-  assert.equal(code, "1170");
-  assert.equal(byCode.get(code)?.name, "Other Receivables");
-  assert.equal(byCode.get(code)?.type, "asset");
+test("insurance premium collected from payments has no receivable role: it goes to Insurance Premium Payable", () => {
+  // Decision 2 (2026-11-01): the release journal is unchanged, so the owed
+  // part is never booked as a receivable; a payment that collects it credits
+  // 2040, the same account as the part withheld at release.
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(DEFAULT_ACCOUNT_MAPPING_CODES, "insurance_premium_receivable"),
+    false
+  );
+  assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES.insurance_premium_payable, "2040");
 });

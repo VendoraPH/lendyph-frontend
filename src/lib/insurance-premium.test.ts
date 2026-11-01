@@ -1,8 +1,8 @@
 /**
- * Insurance premium left unpaid at release (round 3, contract C).
+ * Insurance premium left unpaid at release.
  *
- * A release can collect only part of the premium. For loans released since,
- * the rest is owed on the loan (`insurance_owed`), interest-free, and each
+ * A release can collect only part of the premium. On every loan that owes
+ * the rest, it is owed on the loan (`insurance_owed`), interest-free, and each
  * payment collects it first (`allocated_to_insurance` in the preview,
  * `insurance_applied` on the repayment).
  *

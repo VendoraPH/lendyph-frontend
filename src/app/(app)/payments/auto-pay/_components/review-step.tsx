@@ -67,9 +67,15 @@ export function ReviewStep({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Total Penalty</p>
         </div>
-        <div className="rounded-lg border p-4 text-center sm:col-span-2">
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 text-center dark:border-purple-800 dark:bg-purple-950/20">
+          <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
+            {totals.insurance === null ? "—" : formatCurrency(totals.insurance)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Insurance Premium</p>
+        </div>
+        <div className="rounded-lg border p-4 text-center">
           <p className="text-xl font-bold">{formatCurrency(totals.amount)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty)</p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty and premium)</p>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-800 dark:bg-blue-950/20">
           <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
@@ -79,8 +85,9 @@ export function ReviewStep({
         </div>
       </div>
       <p className="-mt-3 text-xs text-muted-foreground">
-        Totals cover the loans with full dues listed below. The run total adds
-        the part-paid periods you include.
+        Totals cover the loans with full dues listed below. Insurance premium
+        still owed on a loan is charged first, on top of its periods. The run
+        total adds the part-paid periods you include.
       </p>
 
       {/* The run's total for the current selection, from the server */}

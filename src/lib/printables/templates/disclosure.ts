@@ -187,7 +187,8 @@ export function buildDisclosureDoc(
   /**
    * IV. Non-Finance Charges. The insurance premium is its full amount; when
    * part of it was not collected at release, a note under it says that part
-   * is owed on the loan. The note carries no figure in the column, so the
+   * is owed on the loan and collected first from each payment, from the
+   * server's `owed` figure. The note carries no figure in the column, so the
    * column still adds up to the total.
    */
   const nonFinanceLines: PrintChargeLine[] = readChargeItems(nonFinanceBlock).flatMap((item, index) => {
@@ -200,7 +201,7 @@ export function buildDisclosureDoc(
     return [
       line,
       {
-        label: `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free`,
+        label: `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free, collected first`,
         amount: "",
         indent: true,
       },
