@@ -247,6 +247,14 @@ export function rowForAllocation(schedule: readonly LoanSchedule[], allocation: 
 }
 
 /**
+ * The build-up of an allocation's period, as the server sent it, or null (a
+ * dash) when the schedule has no row for it or the server sent none.
+ */
+export function allocationBuildUp(schedule: readonly LoanSchedule[], allocation: AllocationRef): number | null {
+  return rowForAllocation(schedule, allocation)?.shareCapitalBuildUp ?? null;
+}
+
+/**
  * How a payment stands against the open period's server total payment, to
  * the centavo: `covers` it (or there is no open period), falls short of it
  * (`partial`), or `unknown` when the server sent no total for the period.

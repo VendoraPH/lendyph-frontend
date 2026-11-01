@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NO_SCHEDULE_TOTALS,
+  allocationBuildUp,
   allocationMatches,
   openPeriod,
   openPeriods,
@@ -363,6 +364,14 @@ test("an allocation matches its period by schedule id, else by the server's peri
   assert.equal(rowForAllocation(schedule, { period: 2 })?.shareCapitalBuildUp, 100);
   assert.equal(rowForAllocation(schedule, { period: 1 }), null);
   assert.equal(rowForAllocation(schedule, {}), null);
+});
+
+test("an allocation's build-up is its period's server figure, a dash (null) when there is none", () => {
+  const schedule = readScheduleRows(SKIPPED_ROWS, 42)!.schedule;
+  assert.equal(allocationBuildUp(schedule, { schedule_id: 503, period: 3 }), 125.5);
+  // No such period, or nothing to find it by: a dash, never ₱0.00.
+  assert.equal(allocationBuildUp(schedule, { period: 1 }), null);
+  assert.equal(allocationBuildUp(schedule, {}), null);
 });
 
 // ── which period is open ──────────────────────────────────────────────────

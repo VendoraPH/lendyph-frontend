@@ -26,11 +26,11 @@ import { coMakerName } from "@/lib/co-maker-name";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
   NO_SCHEDULE_TOTALS,
+  allocationBuildUp,
   allocationMatches,
   openPeriod,
   openPeriods,
   paymentAgainstDue,
-  rowForAllocation,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -3387,7 +3387,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <TableBody>
                         {storedSchedule.map((row) => (
                           <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.period}</TableCell>
+                            <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
                             <TableCell>{formatDateObj(row.dueDate)}</TableCell>
                             <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
                             <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
@@ -3959,7 +3959,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <TableBody>
                       {storedSchedule.map((row) => (
                         <TableRow key={row.period}>
-                          <TableCell className="text-center text-xs">{row.period}</TableCell>
+                          <TableCell className="text-center text-xs">{row.periodNumber ?? row.period}</TableCell>
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
                           <TableCell className="text-right text-xs">{currencyOrDash(row.principal)}</TableCell>
                           <TableCell className="text-right text-xs">{currencyOrDash(row.interest)}</TableCell>
@@ -4637,14 +4637,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   // A dash with no schedule on screen to read the build-up from.
                   const periodScb = (allocation: { schedule_id?: number; period?: number }) => {
                     if (storedSchedule.length === 0 || !scheduleRows) return "—";
-                    if (typeof allocation.schedule_id !== "number" && typeof allocation.period !== "number") {
-                      return formatCurrency(0);
-                    }
                     // The period's own server row (by schedule id, else the
                     // server's period number), never the merged upon-maturity
-                    // row and never by position.
-                    const row = rowForAllocation(scheduleRows, allocation);
-                    return row ? currencyOrDash(row.shareCapitalBuildUp) : formatCurrency(0);
+                    // row and never by position; a dash when there is none.
+                    return currencyOrDash(allocationBuildUp(scheduleRows, allocation));
                   };
                   return (
                   <div className="rounded-lg border overflow-hidden">
