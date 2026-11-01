@@ -70,3 +70,30 @@ export function paymentAmountFigures(row: PaymentAmountRow): { amount: string; p
     penaltyNote: row.penalty_amount > 0 ? `incl. ${formatCurrency(row.penalty_amount)} penalty` : null,
   };
 }
+
+/**
+ * The fields the server's `search` matches on GET /repayments: the receipt
+ * number, the loan account number, and the member's first and last name
+ * ("first last"). The table filters on exactly these, so its rows and the
+ * server's totals cards always describe the same payments.
+ */
+export interface PaymentSearchFields {
+  receipt_number: string;
+  loan_account_number: string | null;
+  first_last_name: string | null;
+}
+
+/** Whether a row matches the search box the way the server's `search` does (trimmed, case-insensitive, literal). */
+export function matchesPaymentSearch(row: PaymentSearchFields, search: string): boolean {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  return [row.receipt_number, row.loan_account_number, row.first_last_name].some(
+    (v) => v != null && v.toLowerCase().includes(q)
+  );
+}
+
+/** Whether a payment date (YYYY-MM-DD, or a timestamp starting with it) is inside the range, both ends included, as the server's whereDate does. */
+export function inPaymentDateRange(paymentDate: string, dateFrom: string, dateTo: string): boolean {
+  const day = paymentDate.slice(0, 10);
+  return (!dateFrom || day >= dateFrom) && (!dateTo || day <= dateTo);
+}

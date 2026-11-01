@@ -21,6 +21,7 @@ import {
   readPaymentTotals,
   totalFigure,
 } from "./payment-history";
+import { inPaymentDateRange, matchesPaymentSearch } from "./payment-history";
 
 describe("paymentAmountFigures", () => {
   test("shows amount_paid as it is: the penalty is already inside it", () => {
@@ -90,4 +91,27 @@ describe("totalFigure", () => {
     assert.equal(totalFigure(null), "—");
     assert.equal(totalFigure(undefined), "—");
   });
+});
+
+// The table filters on the same fields as the server's totals (receipt number,
+// loan account number, "first last" name), so searching "Juan M" can't show a
+// member's rows while the cards say ₱0.00.
+const row = { receipt_number: "OR-000123", loan_account_number: "LN-000045", first_last_name: "Juan Dela Cruz" };
+
+test("search matches the receipt, the loan account and the first-last name, trimmed and case-insensitive", () => {
+  assert.equal(matchesPaymentSearch(row, "  or-000123 "), true);
+  assert.equal(matchesPaymentSearch(row, "ln-0000"), true);
+  assert.equal(matchesPaymentSearch(row, "juan dela"), true);
+  assert.equal(matchesPaymentSearch(row, ""), true);
+});
+
+test("search doesn't match a middle name or an application number the server doesn't search", () => {
+  assert.equal(matchesPaymentSearch(row, "Juan M"), false);
+  assert.equal(matchesPaymentSearch({ ...row, loan_account_number: null }, "LA-000045"), false);
+});
+
+test("the date range includes both end days and ignores the time part", () => {
+  assert.equal(inPaymentDateRange("2026-11-01", "2026-11-01", "2026-11-01"), true);
+  assert.equal(inPaymentDateRange("2026-11-01T23:59:00Z", "", "2026-11-01"), true);
+  assert.equal(inPaymentDateRange("2026-10-31", "2026-11-01", ""), false);
 });

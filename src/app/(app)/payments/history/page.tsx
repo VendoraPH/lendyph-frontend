@@ -43,6 +43,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  inPaymentDateRange,
+  matchesPaymentSearch,
   paymentAmountFigures,
   paymentTotalsParams,
   readPaymentTotals,
@@ -66,6 +68,8 @@ interface MockPayment {
   borrower_name: string;
   borrower_id: number;
   loan_account: string;
+  loan_account_number: string | null;
+  first_last_name: string | null;
   loan_id: number;
   date: string;
   amount: number;
@@ -89,14 +93,16 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
         id?: number;
         loan_account_number?: string;
         application_number?: string;
-        borrower?: { id?: number; full_name?: string; name?: string };
+        borrower?: { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string };
         borrower_id?: number;
         borrower_name?: string;
       }
     | undefined;
   const borrowerRel = p.borrower as
-    | { id?: number; full_name?: string; name?: string }
+    | { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string }
     | undefined;
+  const nameParts = loanRel?.borrower ?? borrowerRel;
+  const firstLast = [nameParts?.first_name, nameParts?.last_name].filter(Boolean).join(" ");
   return {
     id: p.id,
     receipt_number: (p.receipt_number as string) || `RCP-${String(p.id).padStart(8, "0")}`,
@@ -120,6 +126,8 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.loan_account_number as string) ||
       (p.loan_account as string) ||
       "—",
+    loan_account_number: loanRel?.loan_account_number || (p.loan_account_number as string) || null,
+    first_last_name: firstLast || null,
     loan_id: p.loan_id ?? loanRel?.id ?? 0,
     date: p.payment_date,
     amount:
@@ -483,23 +491,16 @@ function PaymentHistoryContent() {
   // Filter logic
   const filtered = useMemo(() => {
     return payments.filter((p) => {
-      const q = search.toLowerCase();
-      const matchSearch =
-        !q ||
-        p.receipt_number.toLowerCase().includes(q) ||
-        p.borrower_name.toLowerCase().includes(q) ||
-        p.loan_account.toLowerCase().includes(q);
+      // Same fields and date rule as the server's totals, so the cards and the
+      // table never describe different payments.
+      const matchSearch = matchesPaymentSearch(p, search);
 
       const matchStatus =
         statusTab === "all" ||
         (statusTab === "completed" && p.status === "completed") ||
         (statusTab === "voided" && p.status === "voided");
 
-      const payDate = new Date(p.date);
-      const matchFrom = !dateFrom || payDate >= new Date(dateFrom);
-      const matchTo = !dateTo || payDate <= new Date(dateTo);
-
-      return matchSearch && matchStatus && matchFrom && matchTo;
+      return matchSearch && matchStatus && inPaymentDateRange(p.date, dateFrom, dateTo);
     });
   }, [payments, search, statusTab, dateFrom, dateTo]);
 

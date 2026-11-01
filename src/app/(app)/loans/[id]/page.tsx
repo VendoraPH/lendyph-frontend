@@ -2089,8 +2089,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
         ]);
       }
       fetchAdjustments(loan.id);
-    } catch {
-      toast.error(`We couldn't ${action} the adjustment. Please try again.`);
+    } catch (err) {
+      // The server explains a refusal (e.g. a reduction larger than the unpaid
+      // principal); show it rather than a bare "try again" that can't succeed.
+      toast.error(getErrorMessage(err, `We couldn't ${action} the adjustment. Please try again.`));
     } finally {
       setActionLoading(false);
     }
