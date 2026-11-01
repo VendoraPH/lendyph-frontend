@@ -334,7 +334,7 @@ function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number
 
     if (item.hint) {
       doc.setTextColor(...MUTED);
-      doc.setFont("helvetica", "normal");
+      doc.setFont("helvetica", "italic");
       doc.setFontSize(7);
       // Two lines at most: a card is a headline, not a paragraph.
       const lines = doc.splitTextToSize(item.hint, cardW - 16) as string[];
