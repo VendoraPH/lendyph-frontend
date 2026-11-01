@@ -16,18 +16,42 @@ export interface AutoPayPartialRow {
   remaining_balance: number;
   principal_remaining: number;
   interest_remaining: number;
+  penalty_remaining?: number;
+}
+
+/** A loan the preview or the run left out, with the server's reason. */
+export interface AutoPayLoanIssue {
+  loan_id: number;
+  loan_account_number: string | null;
+  reason: string;
+}
+
+/** One loan with full dues in the preview: the server's figures for it. */
+export interface AutoPayLoanRow {
+  loan_id: number;
+  loan_account_number: string | null;
+  borrower_name: string;
+  total_principal: number;
+  total_interest: number;
+  total_penalty: number;
+  /** Includes the penalty. */
+  total_amount: number;
 }
 
 export interface AutoPaySummary {
   total_principal: number;
   total_interest: number;
+  total_penalty?: number;
+  /** Includes the penalty. */
   total_amount: number;
   loans_count: number;
 }
 
 export interface AutoPayPreview {
   summary: AutoPaySummary;
+  loans?: AutoPayLoanRow[];
   partial_rows: AutoPayPartialRow[];
+  skips?: AutoPayLoanIssue[];
 }
 
 export interface AutoPayProcessData {
@@ -48,6 +72,8 @@ export interface AutoPayResult {
   skipped: number;
   failed: number;
   repayments: AutoPayRepaymentResult[];
+  skips?: AutoPayLoanIssue[];
+  failures?: AutoPayLoanIssue[];
 }
 
 export interface AutoPayToggleData {

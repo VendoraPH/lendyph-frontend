@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { FiltersStep } from "./_components/filters-step";
 import { ReviewStep } from "./_components/review-step";
+import { LoanIssuesList } from "./_components/loan-issues-list";
+import { runOutcome, type RunOutcome } from "./_lib/auto-pay-view";
 import type { AutoPayFilter, AutoPayPreview } from "@/types";
 
 export default function AutoPayPage() {
@@ -20,6 +22,8 @@ export default function AutoPayPage() {
   );
   const [previewing, setPreviewing] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // The last run's answer, kept on screen until the next preview.
+  const [lastRun, setLastRun] = useState<RunOutcome | null>(null);
 
   const handlePreview = useCallback(async (f: AutoPayFilter) => {
     setPreviewing(true);
@@ -27,6 +31,7 @@ export default function AutoPayPage() {
       const result = await autoPayService.preview(f);
       setFilter(f);
       setPreview(result);
+      setLastRun(null);
       setIncludedPartialIds(
         new Set(result.partial_rows.map((r) => r.schedule_id))
       );
@@ -61,6 +66,7 @@ export default function AutoPayPage() {
       toast.success(
         `Auto-Pay complete — ${result.processed} loan${result.processed !== 1 ? "s" : ""} processed.`
       );
+      setLastRun(runOutcome(result));
       setStep(1);
       setFilter(null);
       setPreview(null);
@@ -104,6 +110,32 @@ export default function AutoPayPage() {
             2. Review &amp; Confirm
           </span>
         </div>
+
+        {step === 1 && lastRun && (
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle className="text-base">Last run</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm">
+                {lastRun.processed} processed · {lastRun.skipped} skipped ·{" "}
+                {lastRun.failed} failed
+              </p>
+              <LoanIssuesList
+                title="Failed loans"
+                description="No payment was posted for these loans."
+                issues={lastRun.failures}
+                tone="red"
+              />
+              <LoanIssuesList
+                title="Skipped loans"
+                description="Left out of the run."
+                issues={lastRun.skips}
+                tone="amber"
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="max-w-2xl">
           <CardHeader>
