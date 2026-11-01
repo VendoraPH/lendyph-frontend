@@ -152,6 +152,7 @@ function RoleSelector({
                 <Users className="h-3.5 w-3.5" />
               </div>
               <p className="text-xs font-medium leading-tight">{roleDisplayName(role)}</p>
+              <p className="font-mono text-[10px] leading-tight text-muted-foreground">{role.name}</p>
             </button>
           );
         })}

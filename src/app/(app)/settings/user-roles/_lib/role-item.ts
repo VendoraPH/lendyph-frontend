@@ -51,14 +51,21 @@ export function roleItemFromApi(api: ApiRole): RoleItem {
  * An edit never sends `name`: the key is what permission checks use, so a
  * rename only changes `display_name`. A create sends both, the key slugged
  * from the label.
+ *
+ * A label that matches the name the role would be shown by anyway (the
+ * catalog label, or the key title-cased) is sent as `display_name: null`, so
+ * saving a role's permissions never pins its default name, and clearing a
+ * rename back to the default name resets it.
  */
 export function rolePayload(item: RoleItem, { isEdit }: { isEdit: boolean }): RolePayload {
+  const key = isEdit ? item.key : slugify(item.label);
+  const label = item.label.trim();
   const common = {
-    display_name: item.label,
+    display_name: label === roleDisplayName({ name: key, display_name: null }) ? null : label,
     description: item.description,
     permissions: item.permissions,
   };
-  return isEdit ? common : { name: slugify(item.label), ...common };
+  return isEdit ? common : { name: key, ...common };
 }
 
 /** Tick or untick one permission. Nothing else in the set changes. */

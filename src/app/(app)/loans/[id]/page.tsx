@@ -2173,7 +2173,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   {loanStatusLabel(
                     loan.status,
                     currentStep?.name ?? loan.current_approver,
-                    loan.current_status_label,
+                    currentStep ? currentStep.status_label : loan.current_status_label,
                   )}
                 </Badge>
               </div>
@@ -2193,7 +2193,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   {loanStatusLabel(
                     loan.status,
                     currentStep?.name ?? loan.current_approver,
-                    loan.current_status_label,
+                    currentStep ? currentStep.status_label : loan.current_status_label,
                   )}
                 </Badge>
               )}

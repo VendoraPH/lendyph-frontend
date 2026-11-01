@@ -117,17 +117,42 @@ test("an edit still sends the description and the full permission set", () => {
 
 test("creating a role sends the slugged key as name and the label as display_name", () => {
   const created: RoleItem = {
-    key: "branch_auditor",
-    label: "Branch Auditor",
+    key: "branch_auditor_north",
+    label: "Branch Auditor (North)",
     description: "Reviews branch books",
     permissions: ["fees:view"] as Permission[],
     isSystem: false,
     isActive: true,
   };
   assert.deepEqual(rolePayload(created, { isEdit: false }), {
-    name: "branch_auditor",
-    display_name: "Branch Auditor",
+    name: "branch_auditor_north",
+    display_name: "Branch Auditor (North)",
     description: "Reviews branch books",
     permissions: ["fees:view"],
   });
+});
+
+// Review follow-up (L1): saving a role whose label is still its default name
+// must not pin that name as a display_name the UI can never clear.
+test("a label equal to the role's default name is sent as display_name null", () => {
+  assert.equal(rolePayload({ ...editedAdmin, label: "Admin" }, { isEdit: true }).display_name, null);
+  assert.equal(rolePayload({ ...editedAdmin, label: "  Admin " }, { isEdit: true }).display_name, null);
+  assert.equal(
+    rolePayload({ ...editedAdmin, key: "branch_auditor", label: "Branch Auditor" }, { isEdit: true }).display_name,
+    null
+  );
+});
+
+test("creating a role whose label is its title-cased key sends display_name null", () => {
+  const created: RoleItem = {
+    key: "branch_auditor",
+    label: "Branch Auditor",
+    description: "",
+    permissions: [] as Permission[],
+    isSystem: false,
+    isActive: true,
+  };
+  const payload = rolePayload(created, { isEdit: false });
+  assert.equal(payload.name, "branch_auditor");
+  assert.equal(payload.display_name, null);
 });
