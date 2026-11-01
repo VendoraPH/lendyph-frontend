@@ -607,7 +607,7 @@ function SubsidiaryLedgerContent() {
                 <CardContent className="py-4">
                   <p className="text-xs text-muted-foreground mb-1">Total Debits</p>
                   <p className="text-2xl font-bold text-red-600 tabular-nums">
-                    {detailTotalDebits ? formatCurrency(detailTotalDebits) : "—"}
+                    {money(detailTotalDebits)}
                   </p>
                 </CardContent>
               </Card>
@@ -763,7 +763,7 @@ function SubsidiaryLedgerContent() {
                           Period Total
                         </TableCell>
                         <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                          {detailTotalDebits ? formatCurrency(detailTotalDebits) : ""}
+                          {money(detailTotalDebits)}
                         </TableCell>
                         <TableCell className="text-right text-sm text-green-600 tabular-nums">
                           {money(detailTotalCredits)}
