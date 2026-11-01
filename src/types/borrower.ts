@@ -19,6 +19,21 @@ export interface BorrowerBranch {
   code: string;
 }
 
+/**
+ * GET /borrowers/{id}/loan-summary: the Member Overview's loan totals, all
+ * from the server. `total_borrowed` counts released loans only and leaves out
+ * restructured ones (their successor carries the rolled-over balance);
+ * `total_outstanding` counts released, ongoing and defaulted loans.
+ * `current_loans` is released plus ongoing; `counts` has every status.
+ */
+export interface BorrowerLoanSummary {
+  total_borrowed: number;
+  total_outstanding: number;
+  total_paid: number;
+  current_loans: number;
+  counts: Record<string, number>;
+}
+
 export interface BorrowerLedgerEntry {
   id: number;
   date: string;

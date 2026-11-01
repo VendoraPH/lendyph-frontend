@@ -188,6 +188,36 @@ export interface LoanFormPreview {
 }
 
 /**
+ * `POST /loans/amortization-calculator` input: a what-if loan with no product.
+ */
+export interface AmortizationCalculatorRequest {
+  principal_amount: number;
+  interest_rate: number;
+  interest_rate_frequency: string;
+  interest_method: AmortizationMethod;
+  term: number;
+  term_unit: string;
+  frequency: string;
+  start_date: string;
+  scb_amount?: number;
+  compare?: boolean;
+}
+
+export type AmortizationMethod = "straight" | "diminishing" | "upon_maturity";
+
+/** One method's schedule, in the shape of `LoanFormPreview["amortization"]`. */
+export type AmortizationCalculatorSchedule = NonNullable<LoanFormPreview["amortization"]>;
+
+/**
+ * The calculator's answer: the schedule for the chosen method and, with
+ * `compare`, the schedule under every method. All server figures, built by
+ * the code that writes a real loan's schedule.
+ */
+export interface AmortizationCalculatorResult extends AmortizationCalculatorSchedule {
+  comparison?: Record<AmortizationMethod, AmortizationCalculatorSchedule>;
+}
+
+/**
  * A loan in a restructure chain, as `LoanResource` flattens it. Flat rather
  * than a nested `Loan` so a chain of restructures cannot recurse.
  */

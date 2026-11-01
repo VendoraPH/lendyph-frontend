@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
@@ -41,44 +41,41 @@ import {
   ArrowDown,
   Download,
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, isWithinInterval, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { shareCapitalService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ledgerAmounts } from "@/utils/share-capital";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import type {
+  ShareCapitalBookTotals,
+  ShareCapitalLedgerEntry,
+  ShareCapitalMember,
+  ShareCapitalMemberPeriod,
+} from "@/types";
 import { toast } from "sonner";
 
 // ── Types ──
 
 interface LedgerEntry {
   id: number;
-  // Stable grouping/filtering key — always present on every entry, unlike
-  // the display code, which falls back to the id whenever `borrower_code` is
-  // missing. Grouping by the display code split a single borrower's entries
-  // across two different keys whenever it was missing on some rows,
-  // understating their Total Share on the ledger.
-  borrowerId: string;
-  memberCode: string;
-  member: string;
   date: string;
   description: string;
   reference: string;
   debit: number;
   credit: number;
+  /** The server's balance after this entry (GET /share-capital/ledger). */
+  runningBalance: number | null;
 }
 
 /** Transform an API row into the shape the UI expects */
 function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
   return {
     id: raw.id,
-    borrowerId: String(raw.borrower_id),
-    memberCode: raw.borrower_code ?? String(raw.borrower_id),
-    member: raw.borrower_name ?? `Borrower #${raw.borrower_id}`,
     date: raw.date,
     description: raw.description,
     reference: raw.reference,
     ...ledgerAmounts(raw),
+    runningBalance: raw.running_balance ?? null,
   };
 }
 
@@ -93,60 +90,12 @@ const DATE_PRESETS = [
 
 const PAGE_SIZES = [10, 25, 50];
 
-// ── Helpers ──
-
-function computeMemberSummaries(entries: LedgerEntry[]) {
-  const map = new Map<string, {
-    borrowerId: string;
-    memberCode: string;
-    name: string;
-    totalDebits: number;
-    totalCredits: number;
-    entryCount: number;
-    lastTransactionDate: string | null;
-  }>();
-
-  for (const e of entries) {
-    const key = e.borrowerId;
-    const existing = map.get(key);
-    if (existing) {
-      existing.totalDebits += e.debit;
-      existing.totalCredits += e.credit;
-      existing.entryCount++;
-      if (!existing.lastTransactionDate || e.date > existing.lastTransactionDate) {
-        existing.lastTransactionDate = e.date;
-      }
-    } else {
-      map.set(key, {
-        borrowerId: key,
-        memberCode: e.memberCode,
-        name: e.member,
-        totalDebits: e.debit,
-        totalCredits: e.credit,
-        entryCount: 1,
-        lastTransactionDate: e.date ?? null,
-      });
-    }
-  }
-
-  return Array.from(map.values()).map((m) => ({
-    ...m,
-    balance: m.totalCredits - m.totalDebits,
-  }));
-}
-
-function computeRunningBalance(entries: LedgerEntry[], openingBalance: number) {
-  let balance = openingBalance;
-  return entries.map((e) => {
-    balance = balance + e.credit - e.debit;
-    return { ...e, runningBalance: balance };
-  });
-}
+const SEARCH_DEBOUNCE_MS = 300;
 
 // ── Sort ──
 
 type MasterSortField = "name" | "balance";
-type DetailSortField = "date" | "description" | "debit" | "credit" | "runningBalance";
+type DetailSortField = "date";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -156,160 +105,159 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
     : <ArrowDown className="h-3.5 w-3.5 ml-1 text-brand-orange" />;
 }
 
+/** "—" while a server figure has not arrived, never a browser stand-in. */
+function money(amount: number | null | undefined): string {
+  return amount === null || amount === undefined ? "—" : formatCurrency(amount);
+}
+
 // ══════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════
 
+/**
+ * Every figure on this screen is the server's: each member's credits, debits
+ * and balance and the book's totals come from GET /share-capital/members, and
+ * the detail view's running balances and period figures from
+ * GET /share-capital/ledger?borrower_id=. Nothing is added up here.
+ */
 function SubsidiaryLedgerContent() {
-  // ── Data state ──
-  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  // Set only when the drain gave up with pages outstanding. Everything on this
-  // screen is an aggregate over the whole book — per-member balances, the grand
-  // totals, and a running balance per entry — so a short read moves every one
-  // of them without changing how the screen looks.
-  const [shortfall, setShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-  // Distinct from "the ledger is empty". The toast below is transient, so
-  // without this the screen settles into an empty subsidiary ledger that reads
-  // as "this co-op holds no share capital" — the same failure-looks-like-zero
-  // shape as the balance bug.
-  const [failed, setFailed] = useState(false);
-
-  // ── View state ──
-  const [selectedMember, setSelectedMember] = useState<string | null>(null);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-
   // ── Master list state ──
+  // The last answer and the request it belongs to: the list is loading while
+  // the current request has no answer yet.
+  const [membersPage, setMembersPage] = useState<{
+    key: string;
+    members: ShareCapitalMember[];
+    total: number;
+    totals: ShareCapitalBookTotals | null;
+    matchingTotals: ShareCapitalBookTotals | null;
+    // Distinct from "the ledger is empty". The toast is transient, so without
+    // this the screen settles into an empty subsidiary ledger that reads as
+    // "this co-op holds no share capital".
+    failed: boolean;
+  } | null>(null);
+
   const [search, setSearch] = useState("");
-  const [masterSort, setMasterSort] = useState<MasterSortField | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [masterSort, setMasterSort] = useState<MasterSortField>("name");
   const [masterSortDir, setMasterSortDir] = useState<SortDir>("asc");
   const [masterPage, setMasterPage] = useState(1);
   const [masterPageSize, setMasterPageSize] = useState(25);
 
   // ── Detail state ──
+  const [selectedMember, setSelectedMember] = useState<ShareCapitalMember | null>(null);
+  const [detail, setDetail] = useState<{
+    key: string;
+    entries: LedgerEntry[];
+    period: ShareCapitalMemberPeriod | null;
+    // Set only when the drain gave up with pages outstanding: some entries are
+    // missing from the table, though every figure shown is still the server's.
+    shortfall: { shown: number; total: number | null } | null;
+  } | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [detailSort, setDetailSort] = useState<DetailSortField>("date");
   const [detailSortDir, setDetailSortDir] = useState<SortDir>("asc");
 
-  // ── Fetch ledger data ──
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      // Drained across pages. This asked for `per_page: 9999`, which the API
-      // clamps to 100 in silence — so the subsidiary ledger for an entire
-      // co-op was the hundred most recent entries, and every member summary and
-      // grand total on the page was computed from that slice.
-      const { rows, truncated, total } = await shareCapitalService.ledgerListAll();
-      setLedgerData(rows.map(toLedgerEntry));
-      setShortfall(truncated ? { shown: rows.length, total } : null);
-      setFailed(false);
-    } catch {
-      setShortfall(null);
-      setFailed(true);
-      toast.error("We couldn't load the ledger data. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // ── Fetch the member list ──
+  const membersKey = JSON.stringify([masterPage, masterPageSize, masterSort, masterSortDir, debouncedSearch]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // ── Computed: Master ──
-
-  const allMembers = useMemo(() => computeMemberSummaries(ledgerData), [ledgerData]);
-
-  const filteredMembers = useMemo(() => {
-    let result = [...allMembers];
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (m) => m.name.toLowerCase().includes(q) || m.memberCode.toLowerCase().includes(q)
-      );
-    }
-    if (masterSort) {
-      result.sort((a, b) => {
-        let cmp = 0;
-        switch (masterSort) {
-          case "name": cmp = a.name.localeCompare(b.name); break;
-          case "balance": cmp = a.balance - b.balance; break;
-        }
-        return masterSortDir === "asc" ? cmp : -cmp;
+    let cancelled = false;
+    shareCapitalService
+      .members({
+        page: masterPage,
+        per_page: masterPageSize,
+        sort: masterSort,
+        direction: masterSortDir,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      })
+      .then((res) => {
+        if (cancelled) return;
+        setMembersPage({
+          key: membersKey,
+          members: res?.data ?? [],
+          total: res?.meta?.total ?? 0,
+          totals: res?.meta?.totals ?? null,
+          matchingTotals: res?.meta?.matching_totals ?? null,
+          failed: false,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMembersPage({ key: membersKey, members: [], total: 0, totals: null, matchingTotals: null, failed: true });
+        toast.error("We couldn't load the ledger data. Please try again.");
       });
-    }
-    return result;
-  }, [allMembers, search, masterSort, masterSortDir]);
+    return () => {
+      cancelled = true;
+    };
+  }, [membersKey, masterPage, masterPageSize, masterSort, masterSortDir, debouncedSearch]);
 
-  const masterTotalPages = Math.max(1, Math.ceil(filteredMembers.length / masterPageSize));
+  const loading = membersPage?.key !== membersKey;
+  const failed = membersPage?.failed ?? false;
+  const members = membersPage?.members ?? [];
+  const memberTotal = membersPage?.total ?? 0;
+  const bookTotals = membersPage?.totals ?? null;
+  const matchingTotals = membersPage?.matchingTotals ?? null;
+
+  // ── Fetch one member's entries ──
+  const selectedMemberId = selectedMember?.borrower_id ?? null;
+  const rangeFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
+  const rangeTo = dateRange?.from ? format(dateRange.to ?? dateRange.from, "yyyy-MM-dd") : undefined;
+  const detailKey = JSON.stringify([selectedMemberId, rangeFrom, rangeTo]);
+
+  useEffect(() => {
+    if (selectedMemberId === null) return;
+    let cancelled = false;
+    shareCapitalService
+      .memberLedger(selectedMemberId, {
+        ...(rangeFrom ? { date_from: rangeFrom } : {}),
+        ...(rangeTo ? { date_to: rangeTo } : {}),
+      })
+      .then(({ rows, truncated, total, summary }) => {
+        if (cancelled) return;
+        setDetail({
+          key: detailKey,
+          entries: rows.map(toLedgerEntry),
+          period: summary,
+          shortfall: truncated ? { shown: rows.length, total } : null,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetail({ key: detailKey, entries: [], period: null, shortfall: null });
+        toast.error("We couldn't load this member's entries. Please try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailKey, selectedMemberId, rangeFrom, rangeTo]);
+
+  const currentDetail = detail?.key === detailKey ? detail : null;
+  const detailLoading = selectedMemberId !== null && currentDetail === null;
+  const entries = useMemo(() => currentDetail?.entries ?? [], [currentDetail]);
+  const period = currentDetail?.period ?? null;
+  const shortfall = currentDetail?.shortfall ?? null;
+
+  // ── Computed ──
+
+  const masterTotalPages = Math.max(1, Math.ceil(memberTotal / masterPageSize));
   const masterSafePage = Math.min(masterPage, masterTotalPages);
-  const paginatedMembers = filteredMembers.slice(
-    (masterSafePage - 1) * masterPageSize,
-    masterSafePage * masterPageSize
+
+  // The API lists entries newest first (date, then id, descending); oldest
+  // first is the same list reversed. Order only: the balances are the server's.
+  const displayedEntries = useMemo(
+    () => (detailSortDir === "desc" ? entries : [...entries].reverse()),
+    [entries, detailSortDir],
   );
 
-  const grandTotalCredits = allMembers.reduce((s, m) => s + m.totalCredits, 0);
-  const grandTotalDebits = allMembers.reduce((s, m) => s + m.totalDebits, 0);
-  const grandTotalBalance = allMembers.reduce((s, m) => s + m.balance, 0);
-
-  // ── Computed: Detail ──
-
-  const memberAllEntries = useMemo(() => {
-    if (!selectedMemberId) return [];
-    return ledgerData
-      .filter((e) => e.borrowerId === selectedMemberId)
-      .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
-  }, [selectedMemberId, ledgerData]);
-
-  // Entries before the date range (for opening balance)
-  const { openingBalance, filteredEntries } = useMemo(() => {
-    if (!dateRange?.from) {
-      return { openingBalance: 0, filteredEntries: memberAllEntries };
-    }
-
-    let opening = 0;
-    const filtered: LedgerEntry[] = [];
-
-    for (const e of memberAllEntries) {
-      const d = parseISO(e.date);
-      const rangeEnd = dateRange.to ?? dateRange.from;
-      if (d < dateRange.from) {
-        opening += e.credit - e.debit;
-      } else if (isWithinInterval(d, { start: dateRange.from, end: rangeEnd })) {
-        filtered.push(e);
-      }
-    }
-
-    return { openingBalance: opening, filteredEntries: filtered };
-  }, [memberAllEntries, dateRange]);
-
-  const entriesWithBalance = useMemo(() => {
-    const sorted = [...filteredEntries];
-    // Always compute running balance in chronological order first
-    const withBalance = computeRunningBalance(
-      sorted.sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()),
-      openingBalance
-    );
-
-    // Then apply display sort
-    if (detailSort === "date") {
-      withBalance.sort((a, b) => {
-        const cmp = parseISO(a.date).getTime() - parseISO(b.date).getTime();
-        return detailSortDir === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return withBalance;
-  }, [filteredEntries, openingBalance, detailSort, detailSortDir]);
-
-  const detailTotalDebits = filteredEntries.reduce((s, e) => s + e.debit, 0);
-  const detailTotalCredits = filteredEntries.reduce((s, e) => s + e.credit, 0);
-  const endingBalance = openingBalance + detailTotalCredits - detailTotalDebits;
-
-  const selectedSummary = selectedMemberId ? allMembers.find((m) => m.borrowerId === selectedMemberId) : null;
+  const openingBalance = period?.opening_balance ?? null;
+  const detailTotalCredits = period?.total_credits ?? null;
+  const detailTotalDebits = period?.total_debits ?? null;
+  const endingBalance = period?.ending_balance ?? null;
 
   // ── Handlers ──
 
@@ -332,13 +280,18 @@ function SubsidiaryLedgerContent() {
     }
   }
 
-  function openMember(name: string, borrowerId: string) {
-    setSelectedMember(name);
-    setSelectedMemberId(borrowerId);
+  function openMember(member: ShareCapitalMember) {
+    setSelectedMember(member);
     setDateRange(undefined);
     setDetailSort("date");
     setDetailSortDir("asc");
   }
+
+  function closeMember() {
+    setSelectedMember(null);
+  }
+
+  const selectedName = selectedMember ? (selectedMember.full_name ?? `Borrower #${selectedMember.borrower_id}`) : null;
 
   // ══════════════════════════════════════════════════════════
   // Render
@@ -368,12 +321,12 @@ function SubsidiaryLedgerContent() {
         </div>
       )}
 
-      {shortfall && (
+      {selectedMember && shortfall && (
         <IncompleteListNotice
           shown={shortfall.shown}
           total={shortfall.total}
           noun="ledger entries"
-          consequence="Every balance on this page — each member's, the grand totals, and the running balance in the detail view — is computed only from the entries that loaded, so none of them can be relied on."
+          consequence="Some of this member's entries are missing from the table below. The balances and totals shown are the server's and still cover every entry."
         />
       )}
 
@@ -383,7 +336,7 @@ function SubsidiaryLedgerContent() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => { setSelectedMember(null); setSelectedMemberId(null); }}
+            onClick={closeMember}
             className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -391,7 +344,7 @@ function SubsidiaryLedgerContent() {
         )}
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {selectedMember ?? "Subsidiary Ledger"}
+            {selectedName ?? "Subsidiary Ledger"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {selectedMember ? (
@@ -399,15 +352,15 @@ function SubsidiaryLedgerContent() {
                 <button
                   type="button"
                   className="hover:underline hover:text-foreground"
-                  onClick={() => { setSelectedMember(null); setSelectedMemberId(null); }}
+                  onClick={closeMember}
                 >
                   Subsidiary Ledger
                 </button>
                 {" / "}
-                <span>{selectedMember}</span>
-                {selectedSummary && (
-                  <span className="ml-2 text-xs text-muted-foreground">({selectedSummary.memberCode})</span>
-                )}
+                <span>{selectedName}</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({selectedMember.borrower_code ?? selectedMember.borrower_id})
+                </span>
               </>
             ) : (
               "Share capital balances per member"
@@ -419,7 +372,7 @@ function SubsidiaryLedgerContent() {
       {/* ════════════════════════════════════════════
           LOADING STATE
           ════════════════════════════════════════════ */}
-      {loading ? (
+      {(selectedMember ? detailLoading : loading) ? (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
@@ -467,7 +420,7 @@ function SubsidiaryLedgerContent() {
                     <Landmark className="h-4 w-4" />
                     <span className="text-sm font-medium">Total Members</span>
                   </div>
-                  <span className="text-2xl font-bold">{allMembers.length}</span>
+                  <span className="text-2xl font-bold">{bookTotals ? bookTotals.member_count : "—"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -475,7 +428,7 @@ function SubsidiaryLedgerContent() {
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Credits</span>
-                  <span className="text-2xl font-bold text-green-600">{formatCurrency(grandTotalCredits)}</span>
+                  <span className="text-2xl font-bold text-green-600">{money(bookTotals?.total_credits)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -483,7 +436,7 @@ function SubsidiaryLedgerContent() {
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Debits</span>
-                  <span className="text-2xl font-bold text-red-600">{formatCurrency(grandTotalDebits)}</span>
+                  <span className="text-2xl font-bold text-red-600">{money(bookTotals?.total_debits)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -491,7 +444,7 @@ function SubsidiaryLedgerContent() {
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Share Capital</span>
-                  <span className="text-2xl font-bold text-brand-orange">{formatCurrency(grandTotalBalance)}</span>
+                  <span className="text-2xl font-bold text-brand-orange">{money(bookTotals?.balance)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -503,7 +456,7 @@ function SubsidiaryLedgerContent() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-medium">
                   Members
-                  <span className="text-muted-foreground font-normal ml-1">({filteredMembers.length})</span>
+                  <span className="text-muted-foreground font-normal ml-1">({memberTotal})</span>
                 </CardTitle>
                 <div className="relative w-64">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -545,30 +498,32 @@ function SubsidiaryLedgerContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedMembers.map((member) => (
+                    {members.map((member) => (
                       <TableRow
-                        key={member.borrowerId}
+                        key={member.borrower_id}
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => openMember(member.name, member.borrowerId)}
+                        onClick={() => openMember(member)}
                       >
                         <TableCell className="text-xs text-muted-foreground font-mono">
-                          {member.memberCode}
+                          {member.borrower_code ?? member.borrower_id}
                         </TableCell>
-                        <TableCell className="font-medium text-sm">{member.name}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {member.full_name ?? `Borrower #${member.borrower_id}`}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {member.lastTransactionDate
-                            ? formatDate(member.lastTransactionDate)
+                          {member.last_transaction_date
+                            ? formatDate(member.last_transaction_date)
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right text-sm font-semibold tabular-nums">
-                          {member.balance > 0 ? formatCurrency(member.balance) : "₱0"}
+                          {formatCurrency(member.balance)}
                         </TableCell>
                         <TableCell>
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </TableCell>
                       </TableRow>
                     ))}
-                    {paginatedMembers.length === 0 && (
+                    {members.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                           No members found.
@@ -577,14 +532,14 @@ function SubsidiaryLedgerContent() {
                     )}
                   </TableBody>
                   {/* Totals footer */}
-                  {paginatedMembers.length > 0 && (
+                  {members.length > 0 && (
                     <TableFooter>
                       <TableRow className="bg-muted/50 font-semibold">
                         <TableCell colSpan={3} className="text-sm">
-                          Total ({filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""})
+                          Total ({memberTotal} member{memberTotal !== 1 ? "s" : ""})
                         </TableCell>
                         <TableCell className="text-right text-sm tabular-nums">
-                          {formatCurrency(filteredMembers.reduce((s, m) => s + m.balance, 0))}
+                          {money(matchingTotals?.balance)}
                         </TableCell>
                         <TableCell />
                       </TableRow>
@@ -613,9 +568,9 @@ function SubsidiaryLedgerContent() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {filteredMembers.length === 0
+                    {memberTotal === 0
                       ? "0 of 0"
-                      : `${(masterSafePage - 1) * masterPageSize + 1}–${Math.min(masterSafePage * masterPageSize, filteredMembers.length)} of ${filteredMembers.length}`}
+                      : `${(masterSafePage - 1) * masterPageSize + 1}–${Math.min(masterSafePage * masterPageSize, memberTotal)} of ${memberTotal}`}
                   </span>
                   <Button variant="outline" size="icon" className="h-8 w-8" disabled={masterSafePage <= 1} onClick={() => setMasterPage((p) => p - 1)}>
                     <ChevronLeft className="h-4 w-4" />
@@ -634,32 +589,32 @@ function SubsidiaryLedgerContent() {
            ════════════════════════════════════════════ */
         <>
           {/* Member Summary Cards */}
-          {selectedSummary && (
+          {period && (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
               <Card>
                 <CardContent className="py-4">
                   <p className="text-xs text-muted-foreground mb-1">Opening Balance</p>
-                  <p className="text-2xl font-bold tabular-nums">{formatCurrency(openingBalance)}</p>
+                  <p className="text-2xl font-bold tabular-nums">{money(openingBalance)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="py-4">
                   <p className="text-xs text-muted-foreground mb-1">Total Credits</p>
-                  <p className="text-2xl font-bold text-green-600 tabular-nums">{formatCurrency(detailTotalCredits)}</p>
+                  <p className="text-2xl font-bold text-green-600 tabular-nums">{money(detailTotalCredits)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="py-4">
                   <p className="text-xs text-muted-foreground mb-1">Total Debits</p>
                   <p className="text-2xl font-bold text-red-600 tabular-nums">
-                    {detailTotalDebits > 0 ? formatCurrency(detailTotalDebits) : "—"}
+                    {money(detailTotalDebits)}
                   </p>
                 </CardContent>
               </Card>
               <Card className="border-brand-orange/30">
                 <CardContent className="py-4">
                   <p className="text-xs text-muted-foreground mb-1">Ending Balance</p>
-                  <p className="text-2xl font-bold text-brand-orange tabular-nums">{formatCurrency(endingBalance)}</p>
+                  <p className="text-2xl font-bold text-brand-orange tabular-nums">{money(endingBalance)}</p>
                 </CardContent>
               </Card>
             </div>
@@ -671,7 +626,7 @@ function SubsidiaryLedgerContent() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-medium">
                   Ledger Entries
-                  <span className="text-muted-foreground font-normal ml-1">({entriesWithBalance.length})</span>
+                  <span className="text-muted-foreground font-normal ml-1">({displayedEntries.length})</span>
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Date Range Picker */}
@@ -755,7 +710,7 @@ function SubsidiaryLedgerContent() {
                   </TableHeader>
                   <TableBody>
                     {/* Opening Balance Row */}
-                    {(dateRange?.from || openingBalance !== 0) && (
+                    {(dateRange?.from || (openingBalance !== null && openingBalance !== 0)) && (
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={3} className="text-sm font-medium italic text-muted-foreground">
                           {dateRange?.from
@@ -765,11 +720,11 @@ function SubsidiaryLedgerContent() {
                         <TableCell />
                         <TableCell />
                         <TableCell className="text-right text-sm font-semibold tabular-nums">
-                          {formatCurrency(openingBalance)}
+                          {money(openingBalance)}
                         </TableCell>
                       </TableRow>
                     )}
-                    {entriesWithBalance.map((entry) => (
+                    {displayedEntries.map((entry) => (
                       <TableRow key={entry.id}>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {formatDate(entry.date)}
@@ -787,11 +742,11 @@ function SubsidiaryLedgerContent() {
                           {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
                         </TableCell>
                         <TableCell className="text-right text-sm font-semibold tabular-nums">
-                          {formatCurrency(entry.runningBalance)}
+                          {money(entry.runningBalance)}
                         </TableCell>
                       </TableRow>
                     ))}
-                    {entriesWithBalance.length === 0 && (
+                    {displayedEntries.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                           <p>No entries found{dateRange?.from ? " for this period" : ""}.</p>
@@ -801,20 +756,20 @@ function SubsidiaryLedgerContent() {
                     )}
                   </TableBody>
                   {/* Totals Footer */}
-                  {entriesWithBalance.length > 0 && (
+                  {displayedEntries.length > 0 && (
                     <TableFooter>
                       <TableRow className="bg-muted/50 font-semibold">
                         <TableCell colSpan={3} className="text-sm">
                           Period Total
                         </TableCell>
                         <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                          {detailTotalDebits > 0 ? formatCurrency(detailTotalDebits) : ""}
+                          {money(detailTotalDebits)}
                         </TableCell>
                         <TableCell className="text-right text-sm text-green-600 tabular-nums">
-                          {formatCurrency(detailTotalCredits)}
+                          {money(detailTotalCredits)}
                         </TableCell>
                         <TableCell className="text-right text-sm tabular-nums">
-                          {formatCurrency(endingBalance)}
+                          {money(endingBalance)}
                         </TableCell>
                       </TableRow>
                     </TableFooter>

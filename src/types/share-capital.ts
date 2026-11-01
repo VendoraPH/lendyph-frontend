@@ -25,6 +25,55 @@ export interface ShareCapitalLedgerEntry {
    */
   created_by_user?: { id: number; name: string } | null;
   created_at: string | null;
+  /**
+   * The member's balance after this entry, over all of the member's entries in
+   * posting order (date, then id), whatever the list's filters. Sent by
+   * `GET /share-capital/ledger`; absent on a just-created entry.
+   */
+  running_balance?: number;
+}
+
+/** `meta.summary` of `GET /share-capital/ledger?borrower_id=`: one member's period figures. */
+export interface ShareCapitalMemberPeriod {
+  opening_balance: number;
+  total_credits: number;
+  total_debits: number;
+  ending_balance: number;
+}
+
+/** One row of `GET /share-capital/members`: a member's totals over every entry. */
+export interface ShareCapitalMember {
+  borrower_id: number;
+  borrower_code: string | null;
+  full_name: string | null;
+  total_credits: number;
+  total_debits: number;
+  balance: number;
+  entry_count: number;
+  last_transaction_date: string | null;
+}
+
+export interface ShareCapitalBookTotals {
+  member_count: number;
+  total_credits: number;
+  total_debits: number;
+  balance: number;
+}
+
+/**
+ * `GET /share-capital/members`: a page of members, `meta.totals` over the
+ * whole book and `meta.matching_totals` over the members matching `search`.
+ */
+export interface ShareCapitalMembersResponse {
+  data: ShareCapitalMember[];
+  meta: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    totals: ShareCapitalBookTotals;
+    matching_totals: ShareCapitalBookTotals;
+  };
 }
 
 export interface Pledge {
