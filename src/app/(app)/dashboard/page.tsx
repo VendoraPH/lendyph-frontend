@@ -33,7 +33,7 @@ import { ledgerAmounts } from "@/utils/share-capital";
 import { env } from "@/config/env";
 import { useLindaStore } from "@/store";
 import type { DailyDuesSummary, ShareCapitalLedgerEntry } from "@/types";
-import { collectionPieSlices, collectionRateTone } from "./_lib/collection-pie";
+import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 
 // ---------------------------------------------------------------------------
@@ -181,15 +181,6 @@ function TableEmptyRow({
 }
 
 // ---------------------------------------------------------------------------
-// Section visibility flags
-// ---------------------------------------------------------------------------
-// These dashboard sections are hidden temporarily — the underlying numbers
-// are placeholder/demo data and we don't want to show them to users until
-// they're driven by real backend metrics. Flip to `true` to bring them back.
-
-const SHOW_DAILY_COLLECTION_VS_ACTUAL = false;
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -332,7 +323,7 @@ function DashboardContent() {
   // The pie and the rate are the server's figures (GET /dashboard/daily-dues
   // `summary`); a row's "Paid" includes penalty, so adding rows up here could
   // pass 100%.
-  const collectionRate = duesSummary?.collection_rate ?? null;
+  const collectionRate = shownCollectionRate(duesSummary);
   const collectionRateLabel = collectionRate === null ? "—" : `${collectionRate}%`;
   const pieData = collectionPieSlices(duesSummary);
   const rateBadgeClass = {
@@ -380,9 +371,7 @@ function DashboardContent() {
 
       {/* ----------------------------------------------------------------- */}
       {/* Row 2: Expected vs Actual Daily Collection                        */}
-      {/* Hidden via SHOW_DAILY_COLLECTION_VS_ACTUAL — flip flag to restore. */}
       {/* ----------------------------------------------------------------- */}
-      {SHOW_DAILY_COLLECTION_VS_ACTUAL && (
       <Card className="rounded-xl border border-border shadow-sm">
         <div className="px-6 pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
@@ -402,7 +391,10 @@ function DashboardContent() {
           <div className="mb-5">
             <div className="flex flex-col items-center justify-center">
               <div className="relative" style={{ width: 200, height: 200 }}>
-                {mounted ? (
+                {collectionRate === null ? (
+                  // Nothing due (or no summary yet): an empty ring, since a pie of zeros draws nothing.
+                  <div aria-hidden="true" className="absolute inset-[10px] rounded-full border-[30px] border-muted" />
+                ) : mounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -504,7 +496,6 @@ function DashboardContent() {
           </div>
         </CardContent>
       </Card>
-      )}
 
 
       {/* ----------------------------------------------------------------- */}

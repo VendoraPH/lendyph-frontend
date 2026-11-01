@@ -96,3 +96,14 @@ export interface BranchSelectItem {
 export function branchSelectItems(branches: readonly UserBranch[]): BranchSelectItem[] {
   return branches.map((b) => ({ value: String(b.id), label: b.name }));
 }
+
+/**
+ * The `items` for a branch filter `<Select>` whose `allValue` means "every
+ * branch". Without an item for that value the closed select shows it raw.
+ */
+export function branchFilterItems(
+  branches: readonly UserBranch[],
+  allValue: string,
+): BranchSelectItem[] {
+  return [{ value: allValue, label: "All branches" }, ...branchSelectItems(branches)];
+}

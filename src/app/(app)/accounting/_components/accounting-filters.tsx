@@ -1,6 +1,7 @@
 "use client";
 
 import { useBranches } from "@/hooks";
+import { branchFilterItems } from "@/lib/user-branches";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,7 +27,11 @@ export function BranchFilter({ value, onChange }: BranchFilterProps) {
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">Branch</Label>
       {/* This Select hands back `string | null`; there is no null option here. */}
-      <Select value={value} onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}>
+      <Select
+        value={value}
+        onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
+        items={branchFilterItems(branches, ALL_BRANCHES)}
+      >
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>

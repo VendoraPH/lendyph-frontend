@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  branchFilterItems,
   branchSelectItems,
   primaryBranchId,
   userBranchIds,
@@ -127,4 +128,26 @@ test("branch select items carry the id as a string, the value the form holds", (
 
 test("no branches means no select items", () => {
   assert.deepEqual(branchSelectItems([]), []);
+});
+
+// The accounting branch filter. Its closed trigger showed "all" or a raw id
+// until the filter passed `items`, including one for the "all" value.
+test("branch filter items label the all value \"All branches\"", () => {
+  assert.deepEqual(branchFilterItems([main, north], "all")[0], {
+    value: "all",
+    label: "All branches",
+  });
+});
+
+test("branch filter items label each branch id by its name", () => {
+  assert.deepEqual(branchFilterItems([main, north], "all").slice(1), [
+    { value: "3", label: "Main" },
+    { value: "9", label: "North" },
+  ]);
+});
+
+test("branch filter items still offer all branches when none loaded", () => {
+  assert.deepEqual(branchFilterItems([], "all"), [
+    { value: "all", label: "All branches" },
+  ]);
 });
