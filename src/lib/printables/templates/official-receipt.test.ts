@@ -125,13 +125,20 @@ test("official receipt: insurance premium collected first is its own line, only 
   );
 });
 
-test("official receipt: the balance before and after the payment are both stated", () => {
+test("official receipt: the principal balance before and after the payment are both stated", () => {
   const doc = buildOfficialReceiptDoc(PAYMENT);
 
-  assert.equal(fieldValue(doc, "Balance before payment"), formatCurrency(100000));
-  assert.equal(fieldValue(doc, "Balance after payment"), formatCurrency(83333.33));
+  // The stored balances are principal only, so the labels say so.
+  assert.equal(fieldValue(doc, "Principal balance before payment"), formatCurrency(100000));
+  assert.equal(fieldValue(doc, "Principal balance after payment"), formatCurrency(83333.33));
   // Principal applied is what moves the balance.
   assert.equal(100000 - 16666.67, 83333.33);
+  assert.throws(() => fieldValue(doc, "Insurance premium collected"));
+});
+
+test("official receipt: the insurance premium collected is stated beside the principal balances", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, insurance_applied: 300, amount_paid: 18966.67 });
+  assert.equal(fieldValue(doc, "Insurance premium collected"), formatCurrency(300));
 });
 
 test("official receipt: it is signed by both sides of the counter", () => {

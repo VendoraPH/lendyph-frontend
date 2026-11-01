@@ -16,10 +16,14 @@ import assert from "node:assert/strict";
 import {
   amountDueNowParts,
   dueNowHasOpenPeriod,
-  paymentAgainstDueNow,
+  dueNowOnDate,
+  dueNowPeriodLabel,
+  dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
+  previewRequestKey,
   readAmountDueNow,
+  shouldPromptExtend,
 } from "./payment-figures";
 
 /** Figures that do not add up on purpose: the screen repeats, it never checks. */
@@ -44,6 +48,7 @@ describe("readAmountDueNow", () => {
       penalty: 0.37,
       shareCapitalBuildUp: 0,
       periodNumber: 1,
+      lastPeriodNumber: null,
       scheduleId: 501,
     });
   });
@@ -88,26 +93,71 @@ describe("amountDueNowParts", () => {
   });
 });
 
-describe("paymentAgainstDueNow", () => {
+describe("the amount due now's date and periods", () => {
   const due = readAmountDueNow(DUE);
 
-  test("covers only at the server's amount due now, to the centavo", () => {
-    assert.equal(paymentAgainstDueNow(12200.37, due), "covers");
-    assert.equal(paymentAgainstDueNow(12200.374, due), "covers");
-    assert.equal(paymentAgainstDueNow(15000, due), "covers");
-    assert.equal(paymentAgainstDueNow(12200.36, due), "partial");
-    // The period's own total is not enough while premium is owed.
-    assert.equal(paymentAgainstDueNow(11800.37, due), "partial");
-  });
-
-  test("without the server's amount due now the payment cannot be judged", () => {
-    assert.equal(paymentAgainstDueNow(12200.37, null), "unknown");
+  test("it is as of today: another payment date shows no amount due", () => {
+    assert.equal(dueNowOnDate(due, "2026-11-02", "2026-11-02"), due);
+    assert.equal(dueNowOnDate(due, "2026-11-05", "2026-11-02"), null);
+    assert.equal(dueNowOnDate(due, "2026-10-30", "2026-11-02"), null);
+    assert.equal(dueNowOnDate(null, "2026-11-02", "2026-11-02"), null);
   });
 
   test("whether a period is open comes from the server's period", () => {
     assert.equal(dueNowHasOpenPeriod(due), true);
     assert.equal(dueNowHasOpenPeriod(readAmountDueNow({ ...DUE, period_number: null, schedule_id: null })), false);
     assert.equal(dueNowHasOpenPeriod(null), false);
+  });
+
+  test("the header names the server's period or range, none when only premium is owed", () => {
+    assert.equal(dueNowPeriodLabel(due), "Period 1");
+    assert.equal(dueNowPeriodLabel(readAmountDueNow({ ...DUE, period_number: 2, last_period_number: 4 })), "Periods 2–4");
+    assert.equal(dueNowPeriodLabel(readAmountDueNow({ ...DUE, period_number: 2, last_period_number: 2 })), "Period 2");
+    assert.equal(dueNowPeriodLabel(readAmountDueNow({ ...DUE, period_number: null, schedule_id: null })), null);
+    assert.equal(dueNowPeriodLabel(null), null);
+  });
+
+  test("without a figure for the date, both screens show the same dashed tiles", () => {
+    assert.deepEqual(dueNowTiles(null), [
+      { key: "penalty", label: "Penalty", amount: null },
+      { key: "interest", label: "Interest", amount: null },
+      { key: "principal", label: "Principal", amount: null },
+    ]);
+    assert.deepEqual(dueNowTiles(due), amountDueNowParts(due));
+  });
+});
+
+describe("shouldPromptExtend", () => {
+  const partial = { payment_badge: { type: "partial", label: "Partial" } };
+  const exact = { payment_badge: { type: "exact", label: "Exact" } };
+
+  test("asks to extend when the dated preview for this amount says partial", () => {
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: true, preview: partial, previewIsCurrent: true }), "prompt");
+  });
+
+  test("posts when the server's badge says the payment is not partial", () => {
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: true, preview: exact, previewIsCurrent: true }), "post");
+    assert.equal(
+      shouldPromptExtend({ hasOpenPeriod: true, preview: { payment_badge: { type: "advance" } }, previewIsCurrent: true }),
+      "post",
+    );
+  });
+
+  test("blocks while the preview is missing, stale, or carries no badge", () => {
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: true, preview: null, previewIsCurrent: false }), "unknown");
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: true, preview: exact, previewIsCurrent: false }), "unknown");
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: true, preview: {}, previewIsCurrent: true }), "unknown");
+  });
+
+  test("a preview is current only for the same amount and date", () => {
+    assert.equal(previewRequestKey(12200.37, "2026-11-02"), previewRequestKey(12200.37, "2026-11-02"));
+    assert.notEqual(previewRequestKey(12200.37, "2026-11-02"), previewRequestKey(12200.37, "2026-11-03"));
+    assert.notEqual(previewRequestKey(12200.37, "2026-11-02"), previewRequestKey(12200.36, "2026-11-02"));
+  });
+
+  test("with no period open there is nothing to extend", () => {
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: false, preview: partial, previewIsCurrent: true }), "post");
+    assert.equal(shouldPromptExtend({ hasOpenPeriod: false, preview: null, previewIsCurrent: false }), "post");
   });
 });
 

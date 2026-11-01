@@ -34,7 +34,7 @@ import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
   allocationMatches,
-  openPeriod,
+  rowForAllocation,
   openPeriods,
   readPreviewResponse,
   readScheduleRows,
@@ -63,12 +63,15 @@ import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-pre
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { collectNowParts } from "./_lib/extension-preview";
 import {
-  amountDueNowParts,
   dueNowHasOpenPeriod,
-  paymentAgainstDueNow,
+  dueNowOnDate,
+  dueNowPeriodLabel,
+  dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
+  previewRequestKey,
   readAmountDueNow,
+  shouldPromptExtend,
 } from "@/lib/payment-figures";
 import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
 import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
@@ -171,6 +174,7 @@ import {
   formatDateObj,
   formatDateTime,
   formatRate,
+  todayISO,
 } from "@/lib/format";
 import {
   LOAN_STATUS_COLORS,
@@ -727,6 +731,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
+  // The amount and date `paymentPreview` answers (previewRequestKey).
+  const [paymentPreviewKey, setPaymentPreviewKey] = useState<string | null>(null);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -1139,11 +1145,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
       totals: storedScheduleTotals,
     });
   }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, storedScheduleTotals, scheduleRows]);
-  // The period the borrower pays next, with its own server figures. Payment
-  // amounts and the partial-payment check read this, never the merged
-  // upon-maturity row, whose totals include what an extension already
-  // collected.
-  const duePeriod = useMemo(() => (scheduleRows ? openPeriod(scheduleRows) : null), [scheduleRows]);
   // The build-up columns show when the loan carries a build-up or the server
   // totals one; a figure the server did not send in them is a dash.
   const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
@@ -1418,6 +1419,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // What a payment must be today to clear the premium owed and the first
   // open period, with its parts: the server's, null when it sent none.
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
+  // The figure is as of today: another payment date shows a dash.
+  const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
   const loanInterestAmount: number | null =
     storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
@@ -1441,14 +1444,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
     let cancelled = false;
     setPaymentPreviewLoading(true);
     const handle = setTimeout(async () => {
+      const paymentDateISO = formatDateISO(paymentDate);
       try {
         const res = await repaymentService.preview(loan.id, {
           amount_paid: amt,
-          payment_date: formatDateISO(paymentDate),
+          payment_date: paymentDateISO,
         });
-        if (!cancelled) setPaymentPreview(res ?? null);
+        if (!cancelled) {
+          setPaymentPreview(res ?? null);
+          setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
+        }
       } catch {
-        if (!cancelled) setPaymentPreview(null);
+        if (!cancelled) {
+          setPaymentPreview(null);
+          setPaymentPreviewKey(null);
+        }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
       }
@@ -1848,18 +1858,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
       remarks: composedRemarks,
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the server's
-    // amount due now (premium owed plus the open period), prompt to extend
-    // instead of silently posting a partial payment. Without that figure the
-    // payment can't be judged, so it is not posted at all. With no period
-    // open there is nothing to extend.
-    if (isUponMaturityLoan && paymentMode === "regular" && (amountDueNow === null || dueNowHasOpenPeriod(amountDueNow))) {
-      const standing = paymentAgainstDueNow(payload.amount_paid, amountDueNow);
-      if (standing === "unknown") {
-        toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
+    // Upon Maturity loans: if the server's preview for this amount and date
+    // calls it partial (premium owed counted), prompt to extend instead of
+    // silently posting a partial payment. Until that preview has answered
+    // for exactly this amount and date, the payment is not posted at all.
+    if (isUponMaturityLoan && paymentMode === "regular") {
+      const decision = shouldPromptExtend({
+        hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
+        preview: paymentPreview,
+        previewIsCurrent:
+          !paymentPreviewLoading &&
+          paymentPreviewKey === previewRequestKey(payload.amount_paid, payload.payment_date),
+      });
+      if (decision === "unknown") {
+        toast.error("We're still checking this payment with the server. Wait for the allocation preview, then try again.");
         return;
       }
-      if (standing === "partial") {
+      if (decision === "prompt") {
         setPendingPayment(payload);
         setPartialExtendOpen(true);
         return;
@@ -4198,27 +4213,35 @@ function LoanDetail({ loanId }: { loanId: number }) {
               unpaid period). Gives the cashier a clear "this is what's due
               right now" anchor before they enter an amount. */}
           {(() => {
-            const current = duePeriod;
-            if (!current) return null;
-            // The server's amount due now: premium owed first, then the
-            // period in full. Without it, a dash and no quick fill.
-            const currentTotal = amountDueNow?.amount ?? null;
-            const dueParts: { key: string; label: string; amount: number | null }[] =
-              amountDueNow !== null
-                ? amountDueNowParts(amountDueNow)
-                : [
-                    { key: "interest", label: "Interest", amount: null },
-                    { key: "principal", label: "Principal", amount: null },
-                  ];
-            const isOverdue = current.status === "overdue";
-            const isPartial = current.status === "partial";
+            // Built on the server's amount due now, which also covers a loan
+            // whose periods are all paid but still owes premium. The period
+            // shown is the server's, matched to its row by schedule id or
+            // period number for the due date and status.
+            if (amountDueNow === null) return null;
+            const currentTotal = amountDueOnPaymentDate?.amount ?? null;
+            const dueParts = dueNowTiles(amountDueOnPaymentDate);
+            const periodLabel = dueNowPeriodLabel(amountDueNow);
+            const isRange =
+              amountDueNow.lastPeriodNumber !== null &&
+              amountDueNow.periodNumber !== null &&
+              amountDueNow.lastPeriodNumber > amountDueNow.periodNumber;
+            const current =
+              scheduleRows && periodLabel !== null
+                ? rowForAllocation(scheduleRows, {
+                    schedule_id: amountDueNow.scheduleId ?? undefined,
+                    period: amountDueNow.periodNumber ?? undefined,
+                  })
+                : null;
+            const isOverdue = current?.status === "overdue";
+            const isPartial = current?.status === "partial";
             // If the cashier has already typed an amount, surface what
             // portion of THIS payment lands on the current period.
             // Matched by schedule id or the server's period number, never by
             // position: period numbers can skip after an extension.
-            const currentAlloc = (paymentPreview?.allocations ?? []).find((a) =>
-              allocationMatches(a, current)
-            );
+            const currentAlloc =
+              current === null || isRange
+                ? undefined
+                : (paymentPreview?.allocations ?? []).find((a) => allocationMatches(a, current));
             const currentApplied =
               currentAlloc?.amount_applied ??
               (currentAlloc?.principal ?? 0) +
@@ -4232,9 +4255,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                   <p className="text-xs font-medium flex items-center gap-1.5">
                     <CalendarIcon className="size-3.5 shrink-0" />
-                    Current Scheduled Payment
+                    {periodLabel === null ? "Insurance Premium Owed" : "Current Scheduled Payment"}
                   </p>
-                  {isOverdue ? (
+                  {current === null ? null : isOverdue ? (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                       Overdue
                     </span>
@@ -4250,14 +4273,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
                 <div className="px-3 sm:px-4 py-3 space-y-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        Period {current.periodNumber ?? "—"} &middot; Due
-                      </p>
-                      <p className="text-base font-semibold truncate">
-                        {formatDateObj(current.dueDate)}
-                      </p>
-                    </div>
+                    {periodLabel !== null && (
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {periodLabel}
+                          {!isRange && current !== null && <> &middot; Due</>}
+                        </p>
+                        {!isRange && current !== null && (
+                          <p className="text-base font-semibold truncate">
+                            {formatDateObj(current.dueDate)}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {/* Prominent "Amount to Pay" callout — gives the cashier
                         an unmissable reference for what the borrower owes
                         for the current period, with a one-click fill into
@@ -4269,6 +4297,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
                         {currencyOrDash(currentTotal)}
                       </p>
+                      {amountDueOnPaymentDate === null && (
+                        <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                          Shown for today&apos;s date only
+                        </p>
+                      )}
                       {currentTotal !== null && (
                         <button
                           type="button"
@@ -4481,8 +4514,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Amount <span className="text-red-500">*</span>
                 </Label>
                 {(() => {
-                  if (!duePeriod) return null;
-                  const suggested = amountDueNow?.amount ?? null;
+                  const suggested = amountDueOnPaymentDate?.amount ?? null;
                   if (suggested === null || suggested <= 0) return null;
                   return (
                     <button

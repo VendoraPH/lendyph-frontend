@@ -57,8 +57,8 @@ import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
 import { currentDues } from "@/lib/loan-dues";
 import { currencyOrDash } from "@/lib/report-format";
 import {
-  amountDueNowParts,
-  paymentAgainstDueNow,
+  dueNowOnDate,
+  dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
   readAmountDueNow,
@@ -328,17 +328,11 @@ function PaymentsContent() {
   // after this payment; a dash when the server sent none.
   const newOutstandingBalance = previewBalanceAfter(serverPreview);
   const previousOutstandingBalance = previewBalanceBefore(serverPreview);
-  // What a payment must be today (premium owed plus the first open period),
-  // with its parts, from the loan; null when the server sent none.
-  const dueNow = selectedLoan?.amount_due_now ?? null;
-  const dueNowParts: { key: string; label: string; amount: number | null }[] =
-    dueNow !== null
-      ? amountDueNowParts(dueNow)
-      : [
-          { key: "penalty", label: "Penalty", amount: null },
-          { key: "interest", label: "Interest", amount: null },
-          { key: "principal", label: "Principal", amount: null },
-        ];
+  // What a payment must be today (premium owed plus the open period), with
+  // its parts, from the loan; null when the server sent none or the payment
+  // is dated another day (the figure is as of today).
+  const dueNow = dueNowOnDate(selectedLoan?.amount_due_now ?? null, paymentDate, todayISO());
+  const dueNowParts = dueNowTiles(dueNow);
 
   const displayAllocation = useMemo(
     () => (serverPreview ? previewAllocation(serverPreview) : null),
@@ -709,6 +703,9 @@ function PaymentsContent() {
                   <p className="text-sm font-bold tabular-nums">
                     {currencyOrDash(dueNow?.amount)}
                   </p>
+                  {dueNow === null && selectedLoan.amount_due_now !== null && (
+                    <p className="text-[10px] text-muted-foreground">Today&apos;s date only</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Next Due Date</p>
@@ -1032,9 +1029,9 @@ function PaymentsContent() {
                     </div>
 
                     {/* No browser shortfall: the server's amount due now,
-                        shown when this payment falls short of it. */}
-                    {typeof amountPaid === "number" &&
-                      paymentAgainstDueNow(amountPaid, dueNow) === "partial" && (
+                        shown when its dated preview calls this payment
+                        partial. */}
+                    {serverPreview?.payment_badge?.type === "partial" && (
                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
                             Amount Due Now

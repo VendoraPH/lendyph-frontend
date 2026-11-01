@@ -978,7 +978,7 @@ test("repayments list uses the server totals and splits principal from interest"
   assert.equal(kpiValue(doc, "Penalty Collected"), "₱244,500.00");
   assert.equal(
     kpi(doc, "Total Collected").hint,
-    "Principal ₱7,120,400.25 · Interest ₱2,480,300.25"
+    "Insurance premium — · Principal ₱7,120,400.25 · Interest ₱2,480,300.25"
   );
 });
 
@@ -1002,6 +1002,22 @@ test("repayments list names the insurance premium collected, from the server's t
   assert.equal(
     kpi(doc, "Total Collected").hint,
     "Insurance premium ₱400.00 · Principal ₱10,000.00 · Interest ₱1,800.00"
+  );
+});
+
+test("repayments list says the insurance premium total is unknown, not absent, when the server sent none", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 200, total: 3 },
+      totals: { count: 3, total_amount_paid: 12200, total_principal_applied: 10000, total_interest_applied: 1800 },
+    },
+    RANGE
+  );
+
+  assert.equal(
+    kpi(doc, "Total Collected").hint,
+    "Insurance premium — · Principal ₱10,000.00 · Interest ₱1,800.00"
   );
 });
 

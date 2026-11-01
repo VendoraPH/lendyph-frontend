@@ -3,8 +3,11 @@
  * here.
  *
  * - `amount_due_now` on the loan (LoanResource): what a payment must be today
- *   to clear the insurance premium owed plus the first open period in full,
+ *   to clear the insurance premium owed plus the open period(s) in full,
  *   penalty included, with its parts. Null unless the loan takes payments.
+ *   It is as of today only: for another payment date it is not shown.
+ * - `payment_badge` on the dated payment preview: whether that amount on that
+ *   date is partial, premium owed counted.
  * - `balance_after` on the payment preview: the loan's outstanding balance,
  *   insurance premium owed included, once the payment posts.
  *
@@ -21,6 +24,8 @@ export interface AmountDueNow {
   shareCapitalBuildUp: number;
   /** Null when no period is open (only premium is owed). */
   periodNumber: number | null;
+  /** The last period it covers when it spans several; null for one. */
+  lastPeriodNumber: number | null;
   scheduleId: number | null;
 }
 
@@ -65,6 +70,7 @@ export function readAmountDueNow(raw: unknown): AmountDueNow | null {
     penalty,
     shareCapitalBuildUp,
     periodNumber: idOrNull(d.period_number),
+    lastPeriodNumber: idOrNull(d.last_period_number),
     scheduleId: idOrNull(d.schedule_id),
   };
 }
@@ -94,16 +100,60 @@ export function amountDueNowParts(due: AmountDueNow | null): AmountDuePart[] {
 }
 
 /**
- * How a payment stands against the server's amount due now, to the centavo:
- * `covers` it, falls short of it (`partial`), or `unknown` when the server
- * sent none.
+ * The amount due now for a payment dated `paymentDateISO`: the server's
+ * figure is as of today, so any other date has none (a dash, no quick fill).
  */
-export function paymentAgainstDueNow(
-  amount: number,
+export function dueNowOnDate(
   due: AmountDueNow | null,
-): "covers" | "partial" | "unknown" {
-  if (due === null) return "unknown";
-  return Math.round(amount * 100) < Math.round(due.amount * 100) ? "partial" : "covers";
+  paymentDateISO: string,
+  todayISO: string,
+): AmountDueNow | null {
+  return paymentDateISO === todayISO ? due : null;
+}
+
+/**
+ * The tiles both Record Payment screens show: the amount due now's parts, or
+ * the same dashed Penalty, Interest and Principal when there is no figure.
+ */
+export function dueNowTiles(due: AmountDueNow | null): { key: string; label: string; amount: number | null }[] {
+  if (due !== null) return amountDueNowParts(due);
+  return [
+    { key: "penalty", label: "Penalty", amount: null },
+    { key: "interest", label: "Interest", amount: null },
+    { key: "principal", label: "Principal", amount: null },
+  ];
+}
+
+/** "Period 2", "Periods 2–4", or null when no period is open. */
+export function dueNowPeriodLabel(due: AmountDueNow | null): string | null {
+  if (due === null || due.periodNumber === null) return null;
+  if (due.lastPeriodNumber !== null && due.lastPeriodNumber > due.periodNumber) {
+    return `Periods ${due.periodNumber}–${due.lastPeriodNumber}`;
+  }
+  return `Period ${due.periodNumber}`;
+}
+
+/**
+ * Whether an upon-maturity payment asks to extend first, from the server's
+ * dated preview for exactly this amount and date: `prompt` when its badge is
+ * partial, `post` otherwise, `unknown` (don't post) while that preview is
+ * missing, stale or has no badge. With no period open there is nothing to
+ * extend.
+ */
+export function shouldPromptExtend(input: {
+  hasOpenPeriod: boolean;
+  preview: { payment_badge?: { type?: unknown } | null } | null;
+  previewIsCurrent: boolean;
+}): "prompt" | "post" | "unknown" {
+  if (!input.hasOpenPeriod) return "post";
+  const type = input.previewIsCurrent ? input.preview?.payment_badge?.type : undefined;
+  if (typeof type !== "string") return "unknown";
+  return type === "partial" ? "prompt" : "post";
+}
+
+/** Which request a payment preview answers: its amount and payment date. */
+export function previewRequestKey(amount: number, paymentDateISO: string): string {
+  return `${amount}|${paymentDateISO}`;
 }
 
 /** Whether the server's amount due now includes an open period. */

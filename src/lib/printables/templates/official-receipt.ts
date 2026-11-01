@@ -204,8 +204,11 @@ export function buildOfficialReceiptDoc(
       title: "Loan Balance",
       columns: 2,
       items: presentFields([
-        field("Balance before payment", currencyOrDash(balanceBefore)),
-        field("Balance after payment", currencyOrDash(balanceAfter)),
+        // The stored balances are principal only; the premium collected is
+        // stated beside them when there is some.
+        field("Principal balance before payment", currencyOrDash(balanceBefore)),
+        field("Principal balance after payment", currencyOrDash(balanceAfter)),
+        (insurance ?? 0) > 0 ? field("Insurance premium collected", formatCurrency(insurance ?? 0)) : null,
         dateField("Next due date", pick(payment, ["next_due_date"])),
         field("Remarks", pick(payment, ["remarks"])),
       ]),

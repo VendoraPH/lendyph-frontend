@@ -464,16 +464,24 @@ function PaymentReceiptContent({
               <div className="space-y-2">
                 <SectionHeading>Balance Summary</SectionHeading>
                 <div className="space-y-1.5">
+                  {/* The stored balances are principal only, so they are
+                      labelled that way; the premium collected is its own row. */}
                   <ReceiptRow
-                    label="Previous Balance"
+                    label="Principal balance before payment"
                     value={formatCurrency(receipt.previous_balance)}
                   />
                   <ReceiptRow
                     label="Amount Paid"
                     value={formatCurrency(receipt.total)}
                   />
+                  {receipt.insurance !== null && (
+                    <ReceiptRow
+                      label="Insurance premium collected"
+                      value={formatCurrency(receipt.insurance)}
+                    />
+                  )}
                   <ReceiptRow
-                    label="New Balance"
+                    label="Principal balance after payment"
                     value={formatCurrency(receipt.new_balance)}
                     bold
                   />

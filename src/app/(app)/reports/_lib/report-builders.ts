@@ -1017,11 +1017,17 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
         kpi("Total Repayments", countOrDash(totalRows ?? rows.length)),
         kpi("Total Collected", currencyOrDash(amount), {
           tone: "positive",
-          hint: breakdownHint([
-            ["Insurance premium", pick(totals, ["total_insurance_applied"])],
-            ["Principal", pick(totals, ["total_principal_applied"])],
-            ["Interest", pick(totals, ["total_interest_applied"])],
-          ]),
+          // The premium total always shows, "—" when the server sent none,
+          // so a missing figure is never read as "no premium collected".
+          hint: [
+            `Insurance premium ${currencyOrDash(pick(totals, ["total_insurance_applied"]))}`,
+            breakdownHint([
+              ["Principal", pick(totals, ["total_principal_applied"])],
+              ["Interest", pick(totals, ["total_interest_applied"])],
+            ]),
+          ]
+            .filter((segment): segment is string => segment !== undefined)
+            .join(" · "),
         }),
         kpi("Penalty Collected", currencyOrDash(penalty)),
       ],
