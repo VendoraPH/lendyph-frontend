@@ -43,6 +43,9 @@ import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-f
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { extensionDueDate } from "./_lib/extension-due-date";
 import { useReleasePreview } from "./_hooks/use-release-preview";
+import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
+import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
+import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
 import { useReleaseConfirm } from "./_hooks/use-release-confirm";
 import {
@@ -725,8 +728,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [adjDescription, setAdjDescription] = useState("");
   const [adjRemarks, setAdjRemarks] = useState("");
   // User-friendly adjustment fields
-  const [adjNewBalance, setAdjNewBalance] = useState("");
+  const [adjTargetPrincipal, setAdjTargetPrincipal] = useState("");
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
+  // The server's figures for the target principal typed now, while the
+  // balance adjustment form is open.
+  const adjTarget =
+    createAdjustmentOpen && adjType === "balance_adjustment"
+      ? targetPrincipalInput(adjTargetPrincipal)
+      : null;
+  const adjPreview = useBalanceAdjustmentPreview(loanId, adjTarget);
 
 
   // Account Officer state
@@ -2011,7 +2021,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   /** Clear only the type-specific value fields — used when the type changes mid-form. */
   const resetAdjustmentValueFields = () => {
-    setAdjNewBalance("");
+    setAdjTargetPrincipal("");
     setAdjAdditionalMonths("");
   };
 
@@ -2019,16 +2029,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // Build new_values from user-friendly fields based on type
     const newValues: Record<string, unknown> = {};
     if (adjType === "balance_adjustment") {
-      if (!adjNewBalance) { toast.error("Please enter the new balance amount"); return; }
-      const target = parseFloat(adjNewBalance);
-      if (!Number.isFinite(target) || target < 0) { toast.error("Enter a valid new balance"); return; }
-      // The API takes a signed delta applied to the principal
-      // (`adjustment_amount`), not the resulting balance. The dialog asks for
-      // the balance the user wants, so convert it here.
-      const current = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
-      const delta = Number((target - current).toFixed(2));
-      if (delta === 0) { toast.error("That is already the outstanding balance"); return; }
-      newValues.adjustment_amount = delta;
+      // The server works out and stores the adjustment from the target
+      // principal; the dialog only repeats its preview.
+      if (adjTarget === null) { toast.error("Enter the target principal balance (up to 2 decimals)"); return; }
+      if (adjPreview.preview === null) { toast.error("Wait for the preview of this adjustment"); return; }
+      if (adjPreview.preview.adjustment === 0) { toast.error("That is already the outstanding principal"); return; }
+      Object.assign(newValues, balanceAdjustmentNewValues(adjTarget));
     } else if (adjType === "penalty_waiver") {
       // The API waives a schedule's penalty in full — there is no partial
       // amount waiver — so it takes `waive_all` or a list of `schedule_ids`,
@@ -5029,14 +5035,28 @@ function LoanDetail({ loanId }: { loanId: number }) {
             {/* Dynamic fields based on adjustment type */}
             {adjType === "balance_adjustment" && (
               <div className="space-y-1.5">
-                <Label htmlFor="adj-new-balance">New Outstanding Balance <span className="text-red-500">*</span></Label>
+                <Label htmlFor="adj-target-principal">
+                  Target Principal Balance <span className="text-red-500">*</span>
+                </Label>
                 <Input
-                  id="adj-new-balance"
+                  id="adj-target-principal"
                   type="number"
+                  inputMode="decimal"
+                  min="0"
                   placeholder="0.00"
                   step="0.01"
-                  value={adjNewBalance}
-                  onChange={(e) => setAdjNewBalance(e.target.value)}
+                  value={adjTargetPrincipal}
+                  onChange={(e) => setAdjTargetPrincipal(e.target.value)}
+                  aria-describedby="adj-target-principal-help adj-target-principal-preview"
+                />
+                <p id="adj-target-principal-help" className="text-xs text-muted-foreground">
+                  The principal the loan should carry after this adjustment. Interest and penalty are not entered here.
+                </p>
+                <BalanceAdjustmentPreviewBox
+                  id="adj-target-principal-preview"
+                  typed={adjTargetPrincipal.trim() !== ""}
+                  valid={adjTarget !== null}
+                  {...adjPreview}
                 />
               </div>
             )}
@@ -5097,7 +5117,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleCreateAdjustment}
-              disabled={actionLoading}
+              disabled={
+                actionLoading ||
+                (adjType === "balance_adjustment" &&
+                  (adjPreview.preview === null || adjPreview.preview.adjustment === 0))
+              }
             >
               <Plus className="mr-2 h-4 w-4" />
               Submit Adjustment
