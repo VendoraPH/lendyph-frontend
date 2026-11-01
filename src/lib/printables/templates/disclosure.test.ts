@@ -316,7 +316,9 @@ test("disclosure: non-finance charges have their own section and the server's to
   assert.deepEqual([last.label, last.amount], ["3. Total Non-Finance Charges", formatCurrency(1100)]);
 });
 
-test("disclosure: insurance unpaid at release is owed on the loan, interest-free, collected first", () => {
+// "Collected first" comes back once the backend collects the unpaid premium
+// ahead of the loan (not built yet); until then the note must not promise it.
+test("disclosure: insurance unpaid at release is owed on the loan, interest-free", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
   const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
   const note = lines[lines.findIndex((l) => l.label === "b. Insurance Premium") + 1];
@@ -324,7 +326,7 @@ test("disclosure: insurance unpaid at release is owed on the loan, interest-free
   assert.match(note.label, /₱200\.00/);
   assert.match(note.label, /owed on the loan/);
   assert.match(note.label, /interest-free/);
-  assert.match(note.label, /collected first/);
+  assert.doesNotMatch(note.label, /collected first/);
   // A note, not a figure in the column: the column adds up to the total.
   assert.equal(note.amount, "");
 

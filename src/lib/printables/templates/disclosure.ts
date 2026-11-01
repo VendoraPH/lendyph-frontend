@@ -200,7 +200,7 @@ export function buildDisclosureDoc(
     return [
       line,
       {
-        label: `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free, collected first`,
+        label: `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free`,
         amount: "",
         indent: true,
       },
