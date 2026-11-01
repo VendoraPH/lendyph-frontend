@@ -1067,15 +1067,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // The memo lists the loan FIELDS it reads rather than `loan`, so a refetch
   // that returns the same terms does not recompute it. That only holds while
   // every read goes through a listed field, which is why the has-a-loan guard
-  // reads `loan?.id`, not `loan`.
+  // reads `loan?.id`, not `loan`, and every read is written `loan?.` exactly as
+  // the deps list it (the React Compiler matches them as written).
   const storedSchedule = useMemo(() => {
     if (!loan?.id || !scheduleRows) return [];
-    const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
+    const freq = loan?.frequency ?? loan?.payment_frequency ?? "monthly";
     return toDisplaySchedule(scheduleRows, {
-      principalAmount: loan.principal_amount,
-      scb: loan.scb_amount ?? 0,
+      principalAmount: loan?.principal_amount,
+      scb: loan?.scb_amount ?? 0,
       isUponMaturity:
-        freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity",
+        freq === "upon_maturity" || loan?.interest_method === "upon_maturity" || loan?.interest_type === "upon_maturity",
     });
   }, [loan?.id, loan?.principal_amount, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
 

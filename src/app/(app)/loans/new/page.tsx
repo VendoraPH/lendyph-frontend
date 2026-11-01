@@ -703,46 +703,43 @@ function NewLoanApplicationInner() {
   }, [availableCollaterals, selectedCollaterals]);
 
   // ── Product Selection Handler ──
-  const handleProductChange = useCallback(
-    (value: string | null) => {
-      setProductId(value);
-      const product = products.find((p) => p.id === Number(value));
-      if (product) {
-        const apiProduct = product as unknown as Record<string, unknown>;
-        const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
-        setInterestRate(decimalInputValue(rawRate));
-        // Auto-select payment frequency from the product's frequencies array
-        const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
-        const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
-        setPaymentFrequency(String(freqArray[0] ?? "monthly"));
-        // Seed the fees with exactly what the server charges from this product
-        // when it adds them itself. Other deductions are the operator's own and
-        // stay.
-        const productFees = productDeductionFields(product);
-        setProcessingFeeRate(productFees.processingFeeRate);
-        setServiceFeeRate(productFees.serviceFeeRate);
-        setCarriedDeductions(productFees.carried);
-        // Seed SCB amount when the product requires it: default to the product's
-        // minimum. The loan officer can adjust up to the product's maximum.
-        if (product.scb_required) {
-          setScbAmount(String(product.min_scb ?? ""));
-        } else {
-          setScbAmount("");
-        }
+  function handleProductChange(value: string | null) {
+    setProductId(value);
+    const product = products.find((p) => p.id === Number(value));
+    if (product) {
+      const apiProduct = product as unknown as Record<string, unknown>;
+      const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
+      setInterestRate(decimalInputValue(rawRate));
+      // Auto-select payment frequency from the product's frequencies array
+      const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
+      const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
+      setPaymentFrequency(String(freqArray[0] ?? "monthly"));
+      // Seed the fees with exactly what the server charges from this product
+      // when it adds them itself. Other deductions are the operator's own and
+      // stay.
+      const productFees = productDeductionFields(product);
+      setProcessingFeeRate(productFees.processingFeeRate);
+      setServiceFeeRate(productFees.serviceFeeRate);
+      setCarriedDeductions(productFees.carried);
+      // Seed SCB amount when the product requires it: default to the product's
+      // minimum. The loan officer can adjust up to the product's maximum.
+      if (product.scb_required) {
+        setScbAmount(String(product.min_scb ?? ""));
+      } else {
+        setScbAmount("");
       }
-    },
-    [products]
-  );
+    }
+  }
 
   // ── Borrower Selection Handler ──
   // A new application only: an edit's member is fixed (`memberPicker`).
-  const handleBorrowerChange = useCallback((id: number | null) => {
+  function handleBorrowerChange(id: number | null) {
     setBorrowerId(id);
     setCoMakerIds([null]);
     // Collaterals are per-borrower — drop any selections from the previous
     // member so they don't get accidentally attached to the new loan.
     setSelectedCollaterals([]);
-  }, []);
+  }
 
   // ── Co-Maker Slot Handlers ──
   function addCoMakerSlot() {
