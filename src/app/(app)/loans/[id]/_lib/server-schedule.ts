@@ -68,11 +68,9 @@ export function readScheduleRows(
 export function toDisplaySchedule(
   schedule: readonly LoanSchedule[],
   {
-    principalAmount,
     scb,
     isUponMaturity,
   }: {
-    principalAmount: number | string | undefined;
     scb: number;
     isUponMaturity: boolean;
   },
@@ -98,14 +96,10 @@ export function toDisplaySchedule(
       amountPaid: totalAmountPaid,
     }];
   }
-  // Compute running principal balance ourselves; backend often returns 0
-  // for `remaining_balance`, which leaves the Balance column blank.
-  // Starts at the full loan principal and decreases by each row's principal portion.
-  let runningBalance = Number(principalAmount ?? 0);
+  // The Balance column is the server's `remaining_balance` on every row, zero
+  // included: after a balance adjustment it is not principal minus principal.
   return schedule.map((row, idx) => {
     const rowPrincipal = parseFloat(String(row.principal)) || 0;
-    const apiBalance = parseFloat(String(row.balance)) || 0;
-    runningBalance = Math.max(0, runningBalance - rowPrincipal);
     return {
       period: idx + 1,
       dueDate: new Date(row.due_date),
@@ -113,7 +107,7 @@ export function toDisplaySchedule(
       interest: parseFloat(String(row.interest)) || 0,
       shareCapitalBuildUp: scb,
       totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-      balance: apiBalance > 0 ? apiBalance : runningBalance,
+      balance: parseFloat(String(row.balance)) || 0,
       status: row.status,
       amountPaid: parseFloat(String(row.amount_paid)) || 0,
     };

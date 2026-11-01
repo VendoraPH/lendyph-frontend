@@ -1073,12 +1073,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (!loan?.id || !scheduleRows) return [];
     const freq = loan?.frequency ?? loan?.payment_frequency ?? "monthly";
     return toDisplaySchedule(scheduleRows, {
-      principalAmount: loan?.principal_amount,
       scb: loan?.scb_amount ?? 0,
       isUponMaturity:
         freq === "upon_maturity" || loan?.interest_method === "upon_maturity" || loan?.interest_type === "upon_maturity",
     });
-  }, [loan?.id, loan?.principal_amount, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
+  }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, scheduleRows]);
 
   // Column totals of the Release dialog's schedule preview.
   const scheduleTotals = useMemo(
