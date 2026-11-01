@@ -674,7 +674,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [soaOpen, setSoaOpen] = useState(false);
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
-  const [scheduleOpen, setScheduleOpen] = useState(true);
+  // Null until the user toggles it: open for released loans, collapsed at
+  // the approval stages to save space.
+  const [scheduleToggled, setScheduleToggled] = useState<boolean | null>(null);
   const [approvalStepsOpen, setApprovalStepsOpen] = useState(true);
   const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(true);
   const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(true);
@@ -2155,6 +2157,167 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   const totalDeductions = loan.total_deductions ?? (loanProcessingFee + loanServiceFee + (loanOtherDeductions > 0 ? loanOtherDeductions : 0));
 
+  const scheduleOpen = scheduleToggled ?? hasServerLoanData;
+
+  // Amortization Schedule — collapsible. Shown for every loan that has a server
+  // schedule to read, rows or not: loading, failed and empty each say so in
+  // place of the rows.
+  const scheduleCard = scheduleSource !== null ? (
+    <Card>
+      <CardHeader
+        className="cursor-pointer select-none"
+        onClick={() => setScheduleToggled(!scheduleOpen)}
+      >
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Amortization Schedule
+            {["draft", "for_review", "approved"].includes(loan.status) && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
+                Preview
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const isUponMaturity =
+                loan.frequency === "upon_maturity" ||
+                loan.interest_method === "upon_maturity" ||
+                loan.interest_type === "upon_maturity";
+              const canAutoPay =
+                isUponMaturity &&
+                ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0;
+              if (!canAutoPay) return null;
+              return (
+                <Button
+                  size="sm"
+                  className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAutoPayConfirmOpen(true);
+                  }}
+                >
+                  <Zap className="h-3.5 w-3.5 mr-1" />
+                  Auto Pay
+                </Button>
+              );
+            })()}
+            {scheduleOpen ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      {scheduleOpen && (
+        <CardContent className="pt-0">
+          {(() => {
+            const isReleased = hasServerLoanData;
+            const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+            // In place of the rows on both tabs when there are none to draw.
+            const scheduleNotice =
+              storedSchedule.length > 0 ? null : (
+                <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+              );
+
+            const scheduleTable = scheduleNotice ?? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 text-center">#</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead className="text-right">Principal Due</TableHead>
+                      <TableHead className="text-right">Interest</TableHead>
+                      {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                      <TableHead className="text-right">Total Payment</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {storedSchedule.map((row) => (
+                      <TableRow key={row.period}>
+                        <TableCell className="text-center">{row.period}</TableCell>
+                        <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
+                        {hasScb && (
+                          <TableCell className="text-right text-brand-orange">
+                            {formatCurrency(row.shareCapitalBuildUp)}
+                          </TableCell>
+                        )}
+                        <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
+                      {hasScb && (
+                        <TableCell className="text-right font-semibold text-brand-orange">
+                          {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            );
+
+            const balancesTable = (
+              <div className="space-y-3">
+                {loanSummary && (
+                  <div className="flex flex-wrap gap-4 px-1">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
+                      <p className="text-base font-bold text-brand-orange tabular-nums">
+                        {formatCurrency(loanSummary.outstanding_balance ?? 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
+                      <p className="text-base font-bold tabular-nums">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
+                    </div>
+                    {(loanSummary.overdue_amount ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
+                        <p className="text-base font-bold text-destructive tabular-nums">
+                          {formatCurrency(loanSummary.overdue_amount ?? 0)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <RestructuredBalanceFigures loan={loan} />
+                <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
+              </div>
+            );
+
+            if (!isReleased) return scheduleTable;
+
+            return (
+              <Tabs defaultValue="schedule" className="gap-3">
+                <TabsList>
+                  <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                  <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
+                </TabsList>
+                <TabsContent value="schedule">{scheduleTable}</TabsContent>
+                <TabsContent value="balances">{balancesTable}</TabsContent>
+              </Tabs>
+            );
+          })()}
+        </CardContent>
+      )}
+    </Card>
+  ) : null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -3309,164 +3472,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
       )}
 
 
-      {/* Amortization Schedule — collapsible, collapsed by default. Shown for
-          every loan that has a server schedule to read, rows or not: loading,
-          failed and empty each say so in place of the rows. */}
-      {scheduleSource !== null && (
-        <Card>
-          <CardHeader
-            className="cursor-pointer select-none"
-            onClick={() => setScheduleOpen((o) => !o)}
-          >
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Amortization Schedule
-                {["draft", "for_review", "approved"].includes(loan.status) && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
-                    Preview
-                  </Badge>
-                )}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const isUponMaturity =
-                    loan.frequency === "upon_maturity" ||
-                    loan.interest_method === "upon_maturity" ||
-                    loan.interest_type === "upon_maturity";
-                  const canAutoPay =
-                    isUponMaturity &&
-                    ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0;
-                  if (!canAutoPay) return null;
-                  return (
-                    <Button
-                      size="sm"
-                      className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoPayConfirmOpen(true);
-                      }}
-                    >
-                      <Zap className="h-3.5 w-3.5 mr-1" />
-                      Auto Pay
-                    </Button>
-                  );
-                })()}
-                {scheduleOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          {scheduleOpen && (
-            <CardContent className="pt-0">
-              {(() => {
-                const isReleased = hasServerLoanData;
-                const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
-                // In place of the rows on both tabs when there are none to draw.
-                const scheduleNotice =
-                  storedSchedule.length > 0 ? null : (
-                    <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
-                  );
-
-                const scheduleTable = scheduleNotice ?? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.period}</TableCell>
-                            <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
-                            {hasScb && (
-                              <TableCell className="text-right text-brand-orange">
-                                {formatCurrency(row.shareCapitalBuildUp)}
-                              </TableCell>
-                            )}
-                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
-                          {hasScb && (
-                            <TableCell className="text-right font-semibold text-brand-orange">
-                              {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
-                  </div>
-                );
-
-                const balancesTable = (
-                  <div className="space-y-3">
-                    {loanSummary && (
-                      <div className="flex flex-wrap gap-4 px-1">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
-                          <p className="text-base font-bold text-brand-orange tabular-nums">
-                            {formatCurrency(loanSummary.outstanding_balance ?? 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
-                          <p className="text-base font-bold tabular-nums">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
-                        </div>
-                        {(loanSummary.overdue_amount ?? 0) > 0 && (
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
-                            <p className="text-base font-bold text-destructive tabular-nums">
-                              {formatCurrency(loanSummary.overdue_amount ?? 0)}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <RestructuredBalanceFigures loan={loan} />
-                    <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
-                  </div>
-                );
-
-                if (!isReleased) return scheduleTable;
-
-                return (
-                  <Tabs defaultValue="schedule" className="gap-3">
-                    <TabsList>
-                      <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                      <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="schedule">{scheduleTable}</TabsContent>
-                    <TabsContent value="balances">{balancesTable}</TabsContent>
-                  </Tabs>
-                );
-              })()}
-            </CardContent>
-          )}
-        </Card>
-      )}
+      {/* Released loans keep the schedule here, up top. Before release it sits
+          at the very bottom of the page, see below. */}
+      {hasServerLoanData && scheduleCard}
 
       {/* Loan Documents — only for approved+ loans */}
       {loan.status !== "draft" && loan.status !== "for_review" && (
@@ -3497,6 +3505,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
       {/* Attached documents — available for every loan, including drafts so
           the policy exception letter is reachable from the very first save. */}
       <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
+
+      {/* Approval stages: the schedule closes the page, collapsed until opened. */}
+      {!hasServerLoanData && scheduleCard}
 
       {/* Reminders need a schedule, so only released loans have any. */}
       {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
