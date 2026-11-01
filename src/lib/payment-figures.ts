@@ -145,19 +145,32 @@ export function dueNowPeriodLabel(due: AmountDueNow | null): string | null {
 /**
  * Whether an upon-maturity payment asks to extend first, from the server's
  * dated preview for exactly this amount and date: `prompt` when its badge is
- * partial, `post` otherwise, `unknown` (don't post) while that preview is
- * missing, stale or has no badge. With no period open there is nothing to
- * extend.
+ * partial, `post` otherwise. Not posted: `failed` when the preview request
+ * for it failed, `unknown` while that preview is missing, stale or has no
+ * badge. With no period open there is nothing to extend.
  */
 export function shouldPromptExtend(input: {
   hasOpenPeriod: boolean;
   preview: { payment_badge?: { type?: unknown } | null } | null;
   previewIsCurrent: boolean;
-}): "prompt" | "post" | "unknown" {
+  previewFailed?: boolean;
+}): "prompt" | "post" | "unknown" | "failed" {
   if (!input.hasOpenPeriod) return "post";
   const type = input.previewIsCurrent ? input.preview?.payment_badge?.type : undefined;
-  if (typeof type !== "string") return "unknown";
+  if (typeof type !== "string") return input.previewFailed ? "failed" : "unknown";
   return type === "partial" ? "prompt" : "post";
+}
+
+/**
+ * Whether the preview on screen answers exactly this amount and date and
+ * nothing newer is on its way.
+ */
+export function previewIsCurrent(
+  state: { answeredKey: string | null; loading: boolean },
+  amount: number,
+  paymentDateISO: string,
+): boolean {
+  return !state.loading && state.answeredKey !== null && state.answeredKey === previewRequestKey(amount, paymentDateISO);
 }
 
 /** Which request a payment preview answers: its amount and payment date. */

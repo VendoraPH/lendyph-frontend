@@ -369,6 +369,22 @@ test("disclosure: premium carried from the previous loan is its own non-finance 
   assert.deepEqual(lines[lines.length - 1].amount, formatCurrency(1000));
 });
 
+test("disclosure: a provisional line says it may change until release", () => {
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    non_finance_charges: {
+      items: [
+        { name: "Insurance premium carried from the previous loan", amount: 400, deducted: 0, owed: 400, provisional: true },
+        { name: "Notarial Fee", amount: 500, deducted: 500, owed: 0 },
+      ],
+      total: 900,
+    },
+  });
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  assert.ok(lines.some((l) => l.label === "a. Insurance premium carried from the previous loan (subject to change until release)"));
+  assert.ok(lines.some((l) => l.label === "b. Notarial Fee"));
+});
+
 test("disclosure: net proceeds reconcile from the server's proceeds", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
 

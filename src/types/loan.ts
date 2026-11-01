@@ -270,7 +270,10 @@ export interface LoanAmountDueNow {
   interest: number;
   penalty: number;
   share_capital_build_up: number;
+  /** The first period covered; null when no period is open. */
   period_number: number | null;
+  /** The last period covered; equal to `period_number` for one. */
+  last_period_number: number | null;
   schedule_id: number | null;
 }
 

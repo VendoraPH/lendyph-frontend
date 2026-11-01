@@ -17,7 +17,7 @@ import {
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import { PrintableMenu, RouteGuard } from "@/components/common";
+import { PermissionButton, PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
@@ -70,6 +70,7 @@ import {
   dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
+  previewIsCurrent,
   previewRequestKey,
   readAmountDueNow,
   shouldPromptExtend,
@@ -734,6 +735,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
   // The amount and date `paymentPreview` answers (previewRequestKey).
   const [paymentPreviewKey, setPaymentPreviewKey] = useState<string | null>(null);
+  // The amount and date whose preview request failed, and a round that asks
+  // again after the cashier is told so.
+  const [paymentPreviewFailedKey, setPaymentPreviewFailedKey] = useState<string | null>(null);
+  const [paymentPreviewRound, setPaymentPreviewRound] = useState(0);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -1422,6 +1427,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
   // The figure is as of today: another payment date shows a dash.
   const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The preview on screen answers exactly the amount and date typed now.
+  const paymentPreviewCurrent = previewIsCurrent(
+    { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+    Number(paymentAmount),
+    formatDateISO(paymentDate),
+  );
   const loanInterestAmount: number | null =
     storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
@@ -1454,11 +1465,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
         if (!cancelled) {
           setPaymentPreview(res ?? null);
           setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
+          setPaymentPreviewFailedKey(null);
         }
       } catch {
         if (!cancelled) {
           setPaymentPreview(null);
           setPaymentPreviewKey(null);
+          setPaymentPreviewFailedKey(previewRequestKey(amt, paymentDateISO));
         }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
@@ -1468,7 +1481,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments]);
+  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments, paymentPreviewRound]);
 
   if (loading) {
     return (
@@ -1867,10 +1880,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
       const decision = shouldPromptExtend({
         hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
         preview: paymentPreview,
-        previewIsCurrent:
+        previewIsCurrent: previewIsCurrent(
+          { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+          payload.amount_paid,
+          payload.payment_date,
+        ),
+        previewFailed:
           !paymentPreviewLoading &&
-          paymentPreviewKey === previewRequestKey(payload.amount_paid, payload.payment_date),
+          paymentPreviewFailedKey === previewRequestKey(payload.amount_paid, payload.payment_date),
       });
+      if (decision === "failed") {
+        toast.error("We couldn't check this payment with the server. Try again.");
+        setPaymentPreviewRound((round) => round + 1);
+        return;
+      }
       if (decision === "unknown") {
         toast.error("We're still checking this payment with the server. Wait for the allocation preview, then try again.");
         return;
@@ -3571,16 +3594,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     New Adjustment
                   </Button>
                 )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    onClick={() => setRecordPaymentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Record Payment
-                  </Button>
-                )}
+                {["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                  (isUponMaturityLoan ? (
+                    // An upon-maturity payment is checked against the
+                    // server's payment preview, which needs payments:view.
+                    <PermissionButton
+                      permission="payments:view"
+                      tooltip="Checking an upon-maturity payment needs permission to view payments"
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </PermissionButton>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </Button>
+                  ))}
             </>
           }
         >
@@ -4239,9 +4276,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
             // Matched by schedule id or the server's period number, never by
             // position: period numbers can skip after an extension.
             const currentAlloc =
-              current === null || isRange
+              current === null || isRange || !paymentPreviewCurrent
                 ? undefined
                 : (paymentPreview?.allocations ?? []).find((a) => allocationMatches(a, current));
+            // The row's due date and status only for one period on today's
+            // date, the date the server's figure is for.
+            const showPeriodDetail = current !== null && !isRange && amountDueOnPaymentDate !== null;
             const currentApplied =
               currentAlloc?.amount_applied ??
               (currentAlloc?.principal ?? 0) +
@@ -4261,7 +4301,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         ? "Amount Due Now"
                         : "Current Scheduled Payment"}
                   </p>
-                  {current === null || isRange ? null : isOverdue ? (
+                  {!showPeriodDetail ? null : isOverdue ? (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                       Overdue
                     </span>
@@ -4281,9 +4321,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <div className="min-w-0">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
                           {periodLabel}
-                          {!isRange && current !== null && <> &middot; Due</>}
+                          {showPeriodDetail && <> &middot; Due</>}
                         </p>
-                        {!isRange && current !== null && (
+                        {showPeriodDetail && current !== null && (
                           <p className="text-base font-semibold truncate">
                             {formatDateObj(current.dueDate)}
                           </p>

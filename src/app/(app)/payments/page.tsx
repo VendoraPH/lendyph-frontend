@@ -1039,15 +1039,23 @@ function PaymentsContent() {
                         partial. */}
                     {serverPreview?.payment_badge?.type === "partial" && (
                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                            Amount Due Now
-                          </p>
-                          <p className="text-lg font-bold text-destructive tabular-nums">
-                            {currencyOrDash(dueNow?.amount)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            this payment is short of it
-                          </p>
+                          {dueNow === null ? (
+                            // Another date: the server's figure is today's,
+                            // so only its verdict for this date shows.
+                            <p className="text-lg font-bold text-destructive">Partial</p>
+                          ) : (
+                            <>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                                Amount Due Now
+                              </p>
+                              <p className="text-lg font-bold text-destructive tabular-nums">
+                                {currencyOrDash(dueNow.amount)}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                this payment is short of it
+                              </p>
+                            </>
+                          )}
                         </div>
                       )}
 

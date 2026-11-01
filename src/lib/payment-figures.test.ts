@@ -22,6 +22,7 @@ import {
   dueNowTiles,
   previewBalanceAfter,
   previewBalanceBefore,
+  previewIsCurrent,
   previewRequestKey,
   readAmountDueNow,
   shouldPromptExtend,
@@ -166,9 +167,32 @@ describe("shouldPromptExtend", () => {
     assert.notEqual(previewRequestKey(12200.37, "2026-11-02"), previewRequestKey(12200.36, "2026-11-02"));
   });
 
+  test("a failed preview request says so, rather than still checking", () => {
+    assert.equal(
+      shouldPromptExtend({ hasOpenPeriod: true, preview: null, previewIsCurrent: false, previewFailed: true }),
+      "failed",
+    );
+    // A later answer for this amount and date wins over an earlier failure.
+    assert.equal(
+      shouldPromptExtend({ hasOpenPeriod: true, preview: partial, previewIsCurrent: true, previewFailed: false }),
+      "prompt",
+    );
+  });
+
   test("with no period open there is nothing to extend", () => {
     assert.equal(shouldPromptExtend({ hasOpenPeriod: false, preview: partial, previewIsCurrent: true }), "post");
     assert.equal(shouldPromptExtend({ hasOpenPeriod: false, preview: null, previewIsCurrent: false }), "post");
+  });
+});
+
+describe("previewIsCurrent", () => {
+  test("only a settled answer for exactly this amount and date is current", () => {
+    const key = previewRequestKey(12200.37, "2026-11-02");
+    assert.equal(previewIsCurrent({ answeredKey: key, loading: false }, 12200.37, "2026-11-02"), true);
+    assert.equal(previewIsCurrent({ answeredKey: key, loading: true }, 12200.37, "2026-11-02"), false);
+    assert.equal(previewIsCurrent({ answeredKey: key, loading: false }, 12200, "2026-11-02"), false);
+    assert.equal(previewIsCurrent({ answeredKey: key, loading: false }, 12200.37, "2026-11-03"), false);
+    assert.equal(previewIsCurrent({ answeredKey: null, loading: false }, 12200.37, "2026-11-02"), false);
   });
 });
 

@@ -38,6 +38,7 @@ export function ReviewStep({
   const shown = view.preview;
   const totals = previewTotals(shown.summary);
   const run = view.run;
+  const partialPremiumNote = run === null ? null : partialInsuranceNote(run);
   const loanCount = loansAffected(shown, includedPartialIds);
   const skips = loanIssues(shown.skips);
   const updating = !view.upToDate && view.error === null;
@@ -104,8 +105,8 @@ export function ReviewStep({
             <dt className="text-muted-foreground">Selected part-paid periods</dt>
             <dd className="text-right tabular-nums">
               {formatCurrency(run.partialTotal)}
-              {partialInsuranceNote(run) !== null && (
-                <span className="block text-xs text-muted-foreground">{partialInsuranceNote(run)}</span>
+              {partialPremiumNote !== null && (
+                <span className="block text-xs text-muted-foreground">{partialPremiumNote}</span>
               )}
             </dd>
             <dt className="text-base font-semibold">Run total</dt>

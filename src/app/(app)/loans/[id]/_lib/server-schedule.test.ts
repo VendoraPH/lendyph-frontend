@@ -4,7 +4,6 @@ import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
   allocationMatches,
-  openPeriod,
   openPeriods,
   rowForAllocation,
   readPreviewResponse,
@@ -277,7 +276,7 @@ test("the server totals of a real extended schedule are the merged row", () => {
 test("the amount to pay is the open period's own total payment, never the merged row's", () => {
   // The merged row's ₱10,800 includes the ₱400 the extension already
   // collected; the open period owes ₱10,400.
-  const due = openPeriod(readScheduleRows(EXTENDED_ROWS, 42)!.schedule);
+  const due = openPeriods(readScheduleRows(EXTENDED_ROWS, 42)!.schedule)[0] ?? null;
   assert.deepEqual(due, {
     period: 2,
     periodNumber: 2,
@@ -326,14 +325,14 @@ const SKIPPED_ROWS = [
 ];
 
 test("the open period carries the server's period number and schedule id, not its position", () => {
-  const due = openPeriod(readScheduleRows(SKIPPED_ROWS, 42)!.schedule);
+  const due = openPeriods(readScheduleRows(SKIPPED_ROWS, 42)!.schedule)[0] ?? null;
   assert.equal(due?.periodNumber, 3);
   assert.equal(due?.scheduleId, 503);
 });
 
 test("an allocation matches its period by schedule id, else by the server's period number, never by position", () => {
   const schedule = readScheduleRows(SKIPPED_ROWS, 42)!.schedule;
-  const due = openPeriod(schedule)!;
+  const due = openPeriods(schedule)[0];
   assert.equal(allocationMatches({ schedule_id: 503, period: 3 }, due), true);
   assert.equal(allocationMatches({ period: 3 }, due), true);
   // Position 2 is the open row, but the server's period 2 is the paid one.
@@ -366,8 +365,8 @@ const THREE = (second: "partial" | "overdue") => [
 ];
 
 test("the open period is the first one not paid: a partial or an overdue one before a pending one", () => {
-  assert.equal(openPeriod(readScheduleRows(THREE("partial"), 42)!.schedule)?.periodNumber, 2);
-  assert.equal(openPeriod(readScheduleRows(THREE("overdue"), 42)!.schedule)?.status, "overdue");
+  assert.equal(openPeriods(readScheduleRows(THREE("partial"), 42)!.schedule)[0]?.periodNumber, 2);
+  assert.equal(openPeriods(readScheduleRows(THREE("overdue"), 42)!.schedule)[0]?.status, "overdue");
   assert.deepEqual(
     openPeriods(readScheduleRows(THREE("overdue"), 42)!.schedule).map((r) => r.periodNumber),
     [2, 3],
@@ -377,15 +376,14 @@ test("the open period is the first one not paid: a partial or an overdue one bef
 test("for a loan that is not upon-maturity the open period is its drawn row, unchanged", () => {
   const schedule = readScheduleRows(THREE("partial"), 42)!.schedule;
   assert.deepEqual(
-    openPeriod(schedule),
+    openPeriods(schedule)[0],
     toDisplaySchedule(schedule, DISPLAY).find((r) => r.status !== "paid"),
   );
 });
 
 test("with no period left unpaid there is no open period", () => {
-  const settled = openPeriod(readScheduleRows([EXTENDED_ROWS[0]], 42)!.schedule);
-  assert.equal(settled, null);
-  assert.equal(openPeriod([]), null);
+  assert.deepEqual(openPeriods(readScheduleRows([EXTENDED_ROWS[0]], 42)!.schedule), []);
+  assert.deepEqual(openPeriods([]), []);
 });
 
 test("an upon-maturity collapse with no server totals shows dashes, never a browser sum", () => {

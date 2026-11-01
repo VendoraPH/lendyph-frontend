@@ -213,11 +213,6 @@ export function openPeriods(schedule: readonly LoanSchedule[]): AmortizationRow[
   return periodRows(schedule).filter((row) => row.status !== "paid");
 }
 
-/** The period the borrower pays next (the first open one), or null when all are paid. */
-export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
-  return openPeriods(schedule)[0] ?? null;
-}
-
 /** What a payment preview allocation names its period by. */
 export interface AllocationRef {
   schedule_id?: number;

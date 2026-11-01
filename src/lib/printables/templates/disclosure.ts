@@ -84,6 +84,8 @@ interface ChargeItem {
    * a premium carried over from the loan a restructure closed).
    */
   owed: number | null;
+  /** The server may still change it before release (`provisional`). */
+  provisional: boolean;
 }
 
 /** `finance_charges.items` or `non_finance_charges.items`, as sent. */
@@ -92,6 +94,7 @@ function readChargeItems(block: Record<string, unknown> | null): ChargeItem[] {
     name: String(pick(item, ["name", "label"]) ?? "Charge"),
     amount: toNumber(pick(item, ["amount"])),
     owed: toNumber(pick(item, ["owed"])),
+    provisional: pick(item, ["provisional"]) === true,
   }));
 }
 
@@ -196,7 +199,7 @@ export function buildDisclosureDoc(
    */
   const nonFinanceLines: PrintChargeLine[] = readChargeItems(nonFinanceBlock).flatMap((item, index) => {
     const line: PrintChargeLine = {
-      label: `${letter(index)}. ${item.name}`,
+      label: `${letter(index)}. ${item.name}${item.provisional ? " (subject to change until release)" : ""}`,
       amount: currencyOrDash(item.amount),
       indent: true,
     };
