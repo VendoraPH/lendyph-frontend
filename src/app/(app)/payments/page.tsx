@@ -54,9 +54,9 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
-import { currentDues } from "@/lib/loan-dues";
 import { currencyOrDash } from "@/lib/report-format";
 import {
+  dueAmountCell,
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
@@ -608,16 +608,22 @@ function PaymentsContent() {
                           <span className="text-sm">{formatDate(loan.next_due_date)}</span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div>
-                            <p className="text-sm font-semibold tabular-nums">
-                              {formatCurrency(currentDues(loan))}
-                            </p>
-                            {loan.penalty_amount > 0 && (
-                              <p className="text-[10px] text-destructive">
-                                incl. {formatCurrency(loan.penalty_amount)} penalty
-                              </p>
-                            )}
-                          </div>
+                          {(() => {
+                            // The server's amount due now, the same figure
+                            // the Record Payment dialog shows as Total Due.
+                            const cell = dueAmountCell(loan.amount_due_now);
+                            return (
+                              <div>
+                                <p className="text-sm font-semibold tabular-nums">{cell.amount}</p>
+                                {cell.penaltyNote && (
+                                  <p className="text-[10px] text-destructive">{cell.penaltyNote}</p>
+                                )}
+                                {cell.insuranceNote && (
+                                  <p className="text-[10px] text-muted-foreground">{cell.insuranceNote}</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right hidden sm:table-cell">
                           <span className="text-sm font-medium tabular-nums">

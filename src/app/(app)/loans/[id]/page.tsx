@@ -28,6 +28,7 @@ import {
   INSURANCE_PREMIUM_LABEL,
   loanInsuranceOwed,
   previewInsuranceApplied,
+  repaymentInsuranceApplied,
 } from "@/lib/insurance-premium";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
@@ -206,6 +207,8 @@ interface LedgerDisplayRow {
   interestCredit?: number;
   penaltyPaid?: number;
   scbPaid?: number;
+  /** The server's `insurance_applied` on a repayment; null shows a dash. */
+  insuranceApplied?: number | null;
   excessAmount?: number;
   totalPaid?: number;
   status?: Repayment["status"];
@@ -1219,6 +1222,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       interestCredit: r.interest_paid,
       penaltyPaid: r.penalty_paid,
       scbPaid: r.scb_paid,
+      insuranceApplied: repaymentInsuranceApplied(r),
       excessAmount: r.excess_amount,
       totalPaid: r.amount_paid,
       status: r.status,
@@ -3640,7 +3644,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 const dash = <span className="text-muted-foreground/40">—</span>;
                 const fmtN = (n: number | undefined) =>
                   n != null && n > 0 ? formatCurrency(n) : dash;
-                const totalCols = hasScb ? 14 : 13;
+                const totalCols = hasScb ? 15 : 14;
                 return (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-xs">
@@ -3652,6 +3656,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
                           <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
                           {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
+                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Insurance Premium</th>
                           <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
                           <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
                         </tr>
@@ -3683,6 +3688,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
                             <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
@@ -3725,6 +3731,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 <td className="border-r px-3 py-2 text-center">{dash}</td>
                                 {/* SCB */}
                                 {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scbPaid)}</td>}
+                                {/* Insurance premium the payment collected first: the server's figure */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums">
+                                  {r.insuranceApplied == null ? dash : formatCurrency(r.insuranceApplied)}
+                                </td>
                                 {/* Others */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excessAmount)}</td>
                                 {/* Total Paid */}
@@ -4616,43 +4626,49 @@ function LoanDetail({ loanId }: { loanId: number }) {
             }> = [
               {
                 n: 1,
-                label: "Penalty",
-                hint: "Late-payment fees first",
-                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+                label: "Insurance Premium",
+                hint: "Premium still owed on the loan, interest-free",
+                cls: "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950/30 dark:text-purple-300",
               },
               {
                 n: 2,
+                label: "Penalty",
+                hint: "Late-payment fees",
+                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+              },
+              {
+                n: 3,
                 label: "Overdue Interest",
                 hint: "Interest on missed periods",
                 cls: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
               },
               {
-                n: 3,
+                n: 4,
                 label: "Current Interest",
                 hint: "Interest for the current period",
                 cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
               },
               {
-                n: 4,
+                n: 5,
                 label: "Current Principal",
                 hint: "Principal for the current period",
                 cls: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
               },
               loanHasScb
                 ? {
-                    n: 5,
+                    n: 6,
                     label: "SCB (Excess)",
                     hint: "Share Capital Build-Up credit",
                     cls: "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-300",
                   }
                 : {
-                    n: 5,
+                    n: 6,
                     label: "Next Interest",
                     hint: "Advance toward next period",
                     cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
                   },
               {
-                n: 6,
+                n: 7,
                 label: loanHasScb ? "Next Interest" : "Next Principal",
                 hint: loanHasScb
                   ? "If SCB is settled, future periods next"
@@ -4692,7 +4708,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   The system applies the entered amount in this order. Each
                   bucket must be fully covered before excess flows to the
-                  next. {loanHasScb
+                  next; insurance premium still owed on the loan is taken
+                  before anything else. {loanHasScb
                     ? "Because this loan has SCB, leftover after current dues credits the borrower's Share Capital before advancing future periods."
                     : "This loan has no SCB, so leftover after current dues advances directly to upcoming periods."}
                 </p>

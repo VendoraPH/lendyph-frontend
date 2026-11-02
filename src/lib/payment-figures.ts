@@ -15,7 +15,8 @@
  *
  * Pure, so it runs under `tsx --test`.
  */
-import { toNumber } from "@/lib/report-format";
+import { formatCurrency } from "@/lib/format";
+import { DASH, toNumber } from "@/lib/report-format";
 
 export interface AmountDueNow {
   amount: number;
@@ -74,6 +75,24 @@ export function readAmountDueNow(raw: unknown): AmountDueNow | null {
     periodNumber: idOrNull(d.period_number),
     lastPeriodNumber: idOrNull(d.last_period_number),
     scheduleId: idOrNull(d.schedule_id),
+  };
+}
+
+/**
+ * The /payments list's Due Amount cell: the server's amount due now (what
+ * the dialog's Total Due shows), with notes for the penalty and premium
+ * inside it; a dash without the figure.
+ */
+export function dueAmountCell(due: AmountDueNow | null): {
+  amount: string;
+  penaltyNote: string | null;
+  insuranceNote: string | null;
+} {
+  if (due === null) return { amount: DASH, penaltyNote: null, insuranceNote: null };
+  return {
+    amount: formatCurrency(due.amount),
+    penaltyNote: due.penalty > 0 ? `incl. ${formatCurrency(due.penalty)} penalty` : null,
+    insuranceNote: due.insurance > 0 ? `incl. ${formatCurrency(due.insurance)} premium` : null,
   };
 }
 

@@ -15,6 +15,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   amountDueNowParts,
+  dueAmountCell,
   dueNowHasOpenPeriod,
   dueNowIsRange,
   dueNowOnDate,
@@ -81,6 +82,28 @@ describe("readAmountDueNow", () => {
     }
     assert.equal(readAmountDueNow({ ...DUE, amount: "abc" }), null);
     for (const junk of [undefined, null, "ok", [], 42]) assert.equal(readAmountDueNow(junk), null);
+  });
+});
+
+describe("dueAmountCell", () => {
+  test("the list's Due Amount is the server's amount due now, with its penalty and premium notes", () => {
+    assert.deepEqual(dueAmountCell(readAmountDueNow({ ...DUE, amount: 24300, penalty: 250, insurance: 400 })), {
+      amount: "₱24,300.00",
+      penaltyNote: "incl. ₱250.00 penalty",
+      insuranceNote: "incl. ₱400.00 premium",
+    });
+  });
+
+  test("no notes for parts that are nothing", () => {
+    assert.deepEqual(dueAmountCell(readAmountDueNow({ ...DUE, penalty: 0, insurance: 0 })), {
+      amount: "₱12,200.37",
+      penaltyNote: null,
+      insuranceNote: null,
+    });
+  });
+
+  test("a dash without the server's figure, never current_due or overdue_amount", () => {
+    assert.deepEqual(dueAmountCell(null), { amount: "—", penaltyNote: null, insuranceNote: null });
   });
 });
 
