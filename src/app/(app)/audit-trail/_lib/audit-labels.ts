@@ -76,14 +76,37 @@ export function auditFieldLabel(field: string): string {
   return field.split("_").filter(Boolean).join(" ");
 }
 
+/** Bookkeeping fields a deleted row's summary leaves out: the id and timestamps. */
+function isBookkeepingField(field: string): boolean {
+  return field === "id" || field.endsWith("_at");
+}
+
+/** "Created" or "Deleted", with the record's label when the server sent one. */
+function withRecordLabel(verb: string, target: AuditLog["target"]): string {
+  const label = target?.label?.trim();
+  return label ? `${verb}: ${label}` : verb;
+}
+
 /**
- * The row's description, or, when the server wrote none, the fields it changed
- * as old → new from its old and new values.
+ * The row's description. When the server wrote none: a created row reads
+ * "Created: <record>", a deleted row lists the old values of its meaningful
+ * fields, and any other row lists the fields it changed as old → new.
  */
-export function auditDescription(log: Pick<AuditLog, "description" | "changes">): string {
+export function auditDescription(
+  log: Pick<AuditLog, "description" | "changes" | "action" | "target">
+): string {
   const own = log.description?.trim();
   if (own) return own;
   const changes = log.changes ?? [];
+
+  if (log.action === "created") return withRecordLabel("Created", log.target);
+
+  if (log.action === "deleted") {
+    const kept = changes.filter((c) => !isBookkeepingField(c.field) && c.old !== null && c.old !== "");
+    if (kept.length === 0) return withRecordLabel("Deleted", log.target);
+    return `Deleted: ${kept.map((c) => `${auditFieldLabel(c.field)} ${c.old}`).join(", ")}`;
+  }
+
   if (changes.length === 0) return "";
   const parts = changes.map(
     (c) => `${auditFieldLabel(c.field)}: ${c.old ?? "—"} → ${c.new ?? "—"}`

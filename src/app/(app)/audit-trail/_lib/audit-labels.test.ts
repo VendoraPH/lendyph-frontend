@@ -116,3 +116,44 @@ test("the module filter offers exactly the modules the server filters by", () =>
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
+
+test("a deleted row with no description lists the old values, without id or timestamps", () => {
+  const row = log({
+    action: "deleted",
+    target: role,
+    changes: [
+      { field: "id", old: "17", new: null },
+      { field: "name", old: "ops_lead", new: null },
+      { field: "display_name", old: null, new: null },
+      { field: "description", old: "Runs operations", new: null },
+      { field: "created_at", old: "2026-10-01T00:00:00Z", new: null },
+      { field: "updated_at", old: "2026-10-02T00:00:00Z", new: null },
+      { field: "deleted_at", old: null, new: "2026-11-02T00:00:00Z" },
+    ],
+  });
+  assert.equal(auditDescription(row), "Deleted: name ops_lead, description Runs operations");
+});
+
+test("a deleted row with nothing meaningful left reads Deleted with the record's label", () => {
+  assert.equal(
+    auditDescription(log({ action: "deleted", target: role, changes: [{ field: "id", old: "17", new: null }] })),
+    "Deleted: cashier"
+  );
+  assert.equal(auditDescription(log({ action: "deleted", target: null })), "Deleted");
+});
+
+test("a created row with no description reads Created with the record's label", () => {
+  assert.equal(auditDescription(log({ action: "created", target: role })), "Created: cashier");
+  assert.equal(
+    auditDescription(
+      log({ action: "created", target: role, changes: [{ field: "name", old: null, new: "cashier" }] })
+    ),
+    "Created: cashier"
+  );
+  assert.equal(auditDescription(log({ action: "created", target: null })), "Created");
+});
+
+test("a created or deleted row's own description still wins", () => {
+  assert.equal(auditDescription(log({ action: "created", target: role, description: "Role created" })), "Role created");
+  assert.equal(auditDescription(log({ action: "deleted", target: role, description: "Role deleted" })), "Role deleted");
+});
