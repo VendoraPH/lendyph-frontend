@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
-import { borrowerService } from "@/services/borrower.service";
 import type { Borrower, BorrowerLoanSummary, Loan, CoMaker } from "@/types";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { NotificationPreferencesCard } from "./notification-preferences-card";
@@ -18,6 +16,12 @@ interface OverviewTabProps {
   borrower: Borrower;
   loans: Loan[];
   coMakers: CoMaker[];
+  /**
+   * The server's loan totals (GET /borrowers/{id}/loan-summary), or null while
+   * loading or after a failure. Adding up `loans` here counted drafts, rejected
+   * and void applications as money borrowed.
+   */
+  summary: BorrowerLoanSummary | null;
 }
 
 function InfoItem({ label, value }: { label: string; value?: string | null }) {
@@ -29,26 +33,7 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
-  // Every total and count here is the server's (GET /borrowers/{id}/loan-summary):
-  // adding up `loans` here counted drafts, rejected and void applications as
-  // money borrowed. Re-read whenever the page reloads the member's loans.
-  const [summary, setSummary] = useState<BorrowerLoanSummary | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    borrowerService
-      .loanSummary(borrower.id)
-      .then((res) => {
-        if (!cancelled) setSummary(res ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setSummary(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [borrower.id, loans]);
-
+export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabProps) {
   const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
   const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
 

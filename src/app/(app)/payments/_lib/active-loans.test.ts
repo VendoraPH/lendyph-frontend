@@ -242,3 +242,83 @@ test("propagates a failed page rather than returning a partial list as complete"
     /boom/,
   );
 });
+
+// The cards used to add up `outstanding_balance` (principal + premium) over the
+// rows they had fetched. They now read the server's own totals, which cover
+// every active loan whether or not the drain got all of them.
+function withTotals(rows: Loan[], perPage: number, totals: unknown): LoanPageFetcher {
+  return async ({ page }) => ({
+    data: rows.slice((page - 1) * perPage, page * perPage),
+    meta: {
+      current_page: page,
+      last_page: Math.max(1, Math.ceil(rows.length / perPage)),
+      per_page: perPage,
+      total: rows.length,
+      totals,
+    },
+  }) as unknown as PaginatedResponse<Loan>;
+}
+
+test("returns the server's list totals from meta.totals", async () => {
+  const result = await fetchAllActiveLoans(
+    withTotals([loan(1), loan(2)], 100, {
+      total_outstanding: 141_600,
+      overdue_amount: 11_800,
+      overdue_count: 1,
+    }),
+  );
+
+  assert.deepEqual(result.totals, {
+    total_outstanding: 141_600,
+    overdue_amount: 11_800,
+    overdue_count: 1,
+  });
+});
+
+test("reads decimal-string totals as numbers", async () => {
+  const result = await fetchAllActiveLoans(
+    withTotals([loan(1)], 100, {
+      total_outstanding: "70800.50",
+      overdue_amount: "0.00",
+      overdue_count: 0,
+    }),
+  );
+
+  assert.deepEqual(result.totals, {
+    total_outstanding: 70_800.5,
+    overdue_amount: 0,
+    overdue_count: 0,
+  });
+});
+
+test("keeps the totals when the drain is truncated: they cover every row, not the rows fetched", async () => {
+  const rows = Array.from({ length: 30 }, (_, i) => loan(i + 1));
+  const result = await fetchAllActiveLoans(
+    withTotals(rows, 10, { total_outstanding: 999_999.99, overdue_amount: 5, overdue_count: 2 }),
+    { perPage: 10, maxPages: 2 },
+  );
+
+  assert.equal(result.truncated, true);
+  assert.equal(result.totals?.total_outstanding, 999_999.99);
+});
+
+test("a figure the server did not send is null, never 0", async () => {
+  const result = await fetchAllActiveLoans(
+    withTotals([loan(1)], 100, { total_outstanding: 500, overdue_amount: null }),
+  );
+
+  assert.deepEqual(result.totals, {
+    total_outstanding: 500,
+    overdue_amount: null,
+    overdue_count: null,
+  });
+});
+
+test("no meta.totals at all gives null totals, not a browser sum", async () => {
+  const rows = [
+    { id: 1, outstanding_balance: 60_400, total_outstanding: 70_800 },
+  ] as unknown as Loan[];
+  const result = await fetchAllActiveLoans(stubApi(rows, []));
+
+  assert.equal(result.totals, null);
+});

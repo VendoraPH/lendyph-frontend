@@ -49,8 +49,10 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { formatCurrency, todayISO } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
 import { notifyError } from "@/lib/notify";
 import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
+import { drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
 interface LocalPledge {
   id: number;
@@ -106,6 +108,9 @@ function PledgeEntryContent() {
   // empty one after a failed request invites an operator to conclude there is
   // nothing to post rather than that nothing loaded.
   const [failed, setFailed] = useState(false);
+  // GET /pledges `meta.totals.amount`: the server's total over every pledge.
+  // Null when it sent none, shown as a dash.
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
 
   const fetchPledges = useCallback(async () => {
     try {
@@ -114,12 +119,17 @@ function PledgeEntryContent() {
       // co-op with more members than that the bulk-posting worksheet simply had
       // no row for the rest — and a bulk entry run against "all selected"
       // reported success for everyone it could see.
-      const { rows, truncated, total } = await shareCapitalService.pledgeListAll();
+      const { drain, totalAmount: serverTotal } = await drainPledgesWithTotal((params) =>
+        shareCapitalService.pledgeList(params),
+      );
+      const { rows, truncated, total } = drain;
       setPledges(rows.map(toLocalPledge));
+      setTotalAmount(serverTotal);
       setShortfall(truncated ? { shown: rows.length, total } : null);
       setFailed(false);
     } catch {
       setShortfall(null);
+      setTotalAmount(null);
       setFailed(true);
       toast.error("We couldn't load the pledges. Please try again.");
     } finally {
@@ -164,7 +174,6 @@ function PledgeEntryContent() {
   // ── Derived data ──
 
   const activeCount = pledges.filter((p) => p.autoCredit).length;
-  const totalPledge = pledges.reduce((sum, p) => sum + p.amount, 0);
 
   const processed = useMemo(() => {
     let result = [...pledges];
@@ -266,6 +275,12 @@ function PledgeEntryContent() {
       );
       setEditingAmountId(null);
       toast.success("Pledge amount updated");
+      // The total is the server's, so ask it again rather than adjust it here.
+      // One one-row page is enough: `meta.totals` covers every pledge.
+      shareCapitalService
+        .pledgeList({ page: 1, per_page: 1 })
+        .then((res) => setTotalAmount(readPledgeTotalAmount(res)))
+        .catch(() => setTotalAmount(null));
     } catch (err) {
       notifyError(err, "We couldn't update the pledge amount. Please try again.");
     }
@@ -485,7 +500,7 @@ function PledgeEntryContent() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-              <span className="text-2xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</span>
+              <span className="text-2xl font-bold text-brand-orange">{currencyOrDash(totalAmount)}</span>
             </div>
           </CardContent>
         </Card>
