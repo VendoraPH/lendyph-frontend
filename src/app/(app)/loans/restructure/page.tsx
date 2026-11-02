@@ -96,6 +96,7 @@ import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
   calcRestructureShortfall,
+  readRestructurableBalance,
   PROCESSING_FEE_LABEL,
   SERVICE_FEE_LABEL,
 } from "@/lib/loan-restructure";
@@ -329,7 +330,7 @@ function RestructureLoanInner() {
       }
       const loan = loanRes.value;
       const summary = summaryRes.status === "fulfilled"
-        ? (summaryRes.value as { outstanding_balance?: number })
+        ? (summaryRes.value as unknown as Record<string, unknown>)
         : null;
 
       // Pre-fill co-makers
@@ -346,13 +347,19 @@ function RestructureLoanInner() {
       const pid = loan.loan_product?.id ?? loan.loan_product_id ?? null;
       setProductId(pid ? String(pid) : null);
 
-      // Principal = outstanding balance
-      const outstanding = summary?.outstanding_balance ?? loan.outstanding_balance ?? loan.principal_amount;
-      setSourceOutstanding(outstanding != null ? Number(outstanding) : null);
+      // Principal = the server's restructurable balance: the outstanding
+      // balance without the insurance premium owed, which the restructure
+      // carries to the new loan instead. Without it, no prefill and no
+      // shortfall to judge; the server still checks the principal.
+      const restructurable = readRestructurableBalance(
+        summary,
+        loan as unknown as Record<string, unknown>,
+      );
+      setSourceOutstanding(restructurable);
       // To the centavo: rounding to whole pesos left a few centavos of
       // "shortfall" to explain and write off, or overshot the balance the API
       // caps the principal at.
-      setPrincipalAmount(outstanding != null ? String(Math.round(Number(outstanding) * 100) / 100) : "");
+      setPrincipalAmount(restructurable !== null ? String(Math.round(restructurable * 100) / 100) : "");
 
       // Terms. Interest type is not prefilled — it is snapshotted from the loan
       // product by the API, so the form derives it from the product instead.
@@ -1092,8 +1099,8 @@ function RestructureLoanInner() {
                         )}
                       >
                         {remarksRequired
-                          ? `${formatCurrencyExact(shortfall)} below the outstanding balance of ${formatCurrencyExact(sourceOutstanding)} — remarks required.`
-                          : `Outstanding balance: ${formatCurrencyExact(sourceOutstanding)}`}
+                          ? `${formatCurrencyExact(shortfall)} below the restructurable balance of ${formatCurrencyExact(sourceOutstanding)} — remarks required.`
+                          : `Restructurable balance: ${formatCurrencyExact(sourceOutstanding)} (any insurance premium owed carries over to the new loan separately)`}
                       </p>
                     )}
                   </div>
@@ -1568,7 +1575,7 @@ function RestructureLoanInner() {
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p>
                       The new principal is {formatCurrencyExact(shortfall)}{" "}
-                      below this loan&rsquo;s outstanding balance of{" "}
+                      below this loan&rsquo;s restructurable balance of{" "}
                       {formatCurrencyExact(sourceOutstanding ?? 0)}. The difference is written
                       off, so a reason is required.
                     </p>

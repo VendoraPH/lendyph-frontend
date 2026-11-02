@@ -53,7 +53,18 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
-import { currentDues } from "@/lib/loan-dues";
+import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
+import { currencyOrDash } from "@/lib/report-format";
+import {
+  dueAmountCell,
+  dueNowOnDate,
+  dueNowPeriodLabel,
+  dueNowTiles,
+  previewBalanceAfter,
+  previewBalanceBefore,
+  readAmountDueNow,
+  type AmountDueNow,
+} from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans } from "./_lib/active-loans";
 import { previewAllocation, previewBadge } from "./_lib/payment-preview";
@@ -81,7 +92,8 @@ interface ActiveLoan {
   next_due_date: string;
   overdue_amount: number;
   penalty_amount: number;
-  scb_amount?: number;
+  /** The server's amount due now and its parts; null when it sent none. */
+  amount_due_now: AmountDueNow | null;
 }
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -158,7 +170,7 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     next_due_date: isUponMaturity ? maturityDate || l.next_due_date || "" : l.next_due_date || "",
     overdue_amount: (l.overdue_amount as number) || 0,
     penalty_amount: (l.penalty_amount as number) || 0,
-    scb_amount: l.scb_amount ?? undefined,
+    amount_due_now: readAmountDueNow(l.amount_due_now),
   };
 }
 
@@ -313,72 +325,15 @@ function PaymentsContent() {
   const serverPreview = currentPreview?.preview ?? null;
   const previewError = currentPreview?.error ?? null;
 
-  // Breakdown of what's currently due (principal/interest/penalty/scb).
-  // Computed once when the dialog opens by running a "full payment" preview.
-  const [duesBreakdown, setDuesBreakdown] = useState<{
-    principal: number;
-    interest: number;
-    penalty: number;
-    scb: number;
-    total: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!selectedLoan || !dialogOpen) {
-      setDuesBreakdown(null);
-      return;
-    }
-    const fullDue = currentDues(selectedLoan);
-    if (fullDue <= 0) {
-      setDuesBreakdown({
-        principal: 0,
-        interest: 0,
-        penalty: 0,
-        scb: selectedLoan.scb_amount ?? 0,
-        total: 0,
-      });
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await repaymentService.preview(selectedLoan.id, {
-          amount_paid: fullDue,
-          payment_date: todayISO(),
-        });
-        if (cancelled) return;
-        const principal =
-          typeof res?.total_principal === "number" ? res.total_principal : 0;
-        const interest =
-          typeof res?.total_interest === "number" ? res.total_interest : 0;
-        const penalty =
-          typeof res?.total_penalty === "number"
-            ? res.total_penalty
-            : (selectedLoan.penalty_amount ?? 0);
-        // SCB due comes from the loan config, not the preview (preview.excess
-        // represents unallocated overflow, not the scheduled SCB contribution).
-        const scb = selectedLoan.scb_amount ?? 0;
-        setDuesBreakdown({
-          principal,
-          interest,
-          penalty,
-          scb,
-          total: principal + interest + penalty + scb,
-        });
-      } catch {
-        if (cancelled) return;
-        setDuesBreakdown(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedLoan, dialogOpen]);
-
-  const newOutstandingBalance = useMemo(() => {
-    if (!selectedLoan || typeof serverPreview?.total_principal !== "number") return null;
-    return Math.max(0, (selectedLoan.outstanding_balance ?? 0) - serverPreview.total_principal);
-  }, [selectedLoan, serverPreview]);
+  // The preview's outstanding balance (premium owed included) before and
+  // after this payment; a dash when the server sent none.
+  const newOutstandingBalance = previewBalanceAfter(serverPreview);
+  const previousOutstandingBalance = previewBalanceBefore(serverPreview);
+  // What a payment must be today (premium owed plus the open period), with
+  // its parts, from the loan; null when the server sent none or the payment
+  // is dated another day (the figure is as of today).
+  const dueNow = dueNowOnDate(selectedLoan?.amount_due_now ?? null, paymentDate, todayISO());
+  const dueNowParts = dueNowTiles(dueNow);
 
   const displayAllocation = useMemo(
     () => (serverPreview ? previewAllocation(serverPreview) : null),
@@ -653,16 +608,22 @@ function PaymentsContent() {
                           <span className="text-sm">{formatDate(loan.next_due_date)}</span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div>
-                            <p className="text-sm font-semibold tabular-nums">
-                              {formatCurrency(currentDues(loan))}
-                            </p>
-                            {loan.penalty_amount > 0 && (
-                              <p className="text-[10px] text-destructive">
-                                incl. {formatCurrency(loan.penalty_amount)} penalty
-                              </p>
-                            )}
-                          </div>
+                          {(() => {
+                            // The server's amount due now, the same figure
+                            // the Record Payment dialog shows as Total Due.
+                            const cell = dueAmountCell(loan.amount_due_now);
+                            return (
+                              <div>
+                                <p className="text-sm font-semibold tabular-nums">{cell.amount}</p>
+                                {cell.penaltyNote && (
+                                  <p className="text-[10px] text-destructive">{cell.penaltyNote}</p>
+                                )}
+                                {cell.insuranceNote && (
+                                  <p className="text-[10px] text-muted-foreground">{cell.insuranceNote}</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right hidden sm:table-cell">
                           <span className="text-sm font-medium tabular-nums">
@@ -745,12 +706,18 @@ function PaymentsContent() {
                   <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.outstanding_balance)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Total Due</p>
-                  <p className="text-sm font-bold tabular-nums">
-                    {formatCurrency(
-                      duesBreakdown?.total ?? currentDues(selectedLoan)
+                  <p className="text-[10px] text-muted-foreground uppercase">
+                    Total Due
+                    {dueNowPeriodLabel(dueNow) !== null && (
+                      <span className="normal-case"> · {dueNowPeriodLabel(dueNow)}</span>
                     )}
                   </p>
+                  <p className="text-sm font-bold tabular-nums">
+                    {currencyOrDash(dueNow?.amount)}
+                  </p>
+                  {dueNow === null && selectedLoan.amount_due_now !== null && (
+                    <p className="text-[10px] text-muted-foreground">Today&apos;s date only</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Next Due Date</p>
@@ -762,66 +729,47 @@ function PaymentsContent() {
                 </div>
               </div>
 
-              {/* Total Dues breakdown: Principal, Interest, Penalty, SCB */}
+              {/* Total Due's parts, as the server sent them: insurance
+                  premium owed first, then penalty, interest, principal and
+                  any share capital build-up. */}
               <Separator />
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase mb-2">
                   Total Dues Breakdown
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="rounded-md border bg-background p-2 text-center">
-                    <p className="text-[10px] text-muted-foreground">Principal</p>
-                    <p className="text-sm font-semibold tabular-nums">
-                      {duesBreakdown
-                        ? formatCurrency(duesBreakdown.principal)
-                        : "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background p-2 text-center">
-                    <p className="text-[10px] text-muted-foreground">Interest</p>
-                    <p className="text-sm font-semibold tabular-nums">
-                      {duesBreakdown
-                        ? formatCurrency(duesBreakdown.interest)
-                        : "—"}
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "rounded-md border bg-background p-2 text-center",
-                      (duesBreakdown?.penalty ?? 0) > 0 &&
-                        "border-destructive/30 bg-destructive/5"
-                    )}
-                  >
-                    <p className="text-[10px] text-muted-foreground">Penalty</p>
-                    <p
-                      className={cn(
-                        "text-sm font-semibold tabular-nums",
-                        (duesBreakdown?.penalty ?? 0) > 0 && "text-destructive"
-                      )}
-                    >
-                      {duesBreakdown
-                        ? formatCurrency(duesBreakdown.penalty)
-                        : "—"}
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "rounded-md border bg-background p-2 text-center",
-                      (duesBreakdown?.scb ?? 0) > 0 &&
-                        "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
-                    )}
-                  >
-                    <p className="text-[10px] text-muted-foreground">SCB</p>
-                    <p
-                      className={cn(
-                        "text-sm font-semibold tabular-nums",
-                        (duesBreakdown?.scb ?? 0) > 0 &&
-                          "text-amber-700 dark:text-amber-400"
-                      )}
-                    >
-                      {duesBreakdown ? formatCurrency(duesBreakdown.scb) : "—"}
-                    </p>
-                  </div>
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    dueNowParts.length >= 5 ? "sm:grid-cols-5" : dueNowParts.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+                  )}
+                >
+                  {dueNowParts.map((part) => {
+                    const owed = (part.amount ?? 0) > 0;
+                    return (
+                      <div
+                        key={part.key}
+                        className={cn(
+                          "rounded-md border bg-background p-2 text-center",
+                          part.key === "insurance" && "border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/20",
+                          part.key === "penalty" && owed && "border-destructive/30 bg-destructive/5",
+                          part.key === "share_capital_build_up" &&
+                            "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                        )}
+                      >
+                        <p className="text-[10px] text-muted-foreground">{part.label}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tabular-nums",
+                            part.key === "insurance" && "text-purple-700 dark:text-purple-300",
+                            part.key === "penalty" && owed && "text-destructive",
+                            part.key === "share_capital_build_up" && "text-amber-700 dark:text-amber-400"
+                          )}
+                        >
+                          {currencyOrDash(part.amount)}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -939,8 +887,24 @@ function PaymentsContent() {
                     <Badge variant={paymentBadge.variant}>{paymentBadge.label}</Badge>
                   </div>
 
-                  {/* Component allocation totals */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {/* Component allocation totals. Insurance premium owed on
+                      the loan is collected first, so it leads when there is any. */}
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-2",
+                      displayAllocation.insuranceApplied > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                    )}
+                  >
+                    {displayAllocation.insuranceApplied > 0 && (
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+                          {INSURANCE_PREMIUM_LABEL}
+                        </p>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(displayAllocation.insuranceApplied)}
+                        </p>
+                      </div>
+                    )}
                     <div className="rounded-lg border p-3 text-center">
                       <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
                       <p
@@ -1069,25 +1033,35 @@ function PaymentsContent() {
                         New Outstanding Balance
                       </p>
                       <p className="text-lg font-bold tabular-nums">
-                        {newOutstandingBalance !== null ? formatCurrency(newOutstandingBalance) : "—"}
+                        {currencyOrDash(newOutstandingBalance)}
                       </p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        was {formatCurrency(selectedLoan.outstanding_balance)}
+                        was {currencyOrDash(previousOutstandingBalance)}
                       </p>
                     </div>
 
-                    {typeof amountPaid === "number" &&
-                      amountPaid < currentDues(selectedLoan) && (
+                    {/* No browser shortfall: the server's amount due now,
+                        shown when its dated preview calls this payment
+                        partial. */}
+                    {serverPreview?.payment_badge?.type === "partial" && (
                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                            Remaining Due
-                          </p>
-                          <p className="text-lg font-bold text-destructive tabular-nums">
-                            {formatCurrency(currentDues(selectedLoan) - amountPaid)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            short of full current dues
-                          </p>
+                          {dueNow === null ? (
+                            // Another date: the server's figure is today's,
+                            // so only its verdict for this date shows.
+                            <p className="text-lg font-bold text-destructive">Partial</p>
+                          ) : (
+                            <>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                                Amount Due Now
+                              </p>
+                              <p className="text-lg font-bold text-destructive tabular-nums">
+                                {currencyOrDash(dueNow.amount)}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                this payment is short of it
+                              </p>
+                            </>
+                          )}
                         </div>
                       )}
 

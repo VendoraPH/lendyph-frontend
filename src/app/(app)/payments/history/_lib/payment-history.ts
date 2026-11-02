@@ -8,6 +8,7 @@
  * amount and never added to it.
  */
 import { formatCurrency } from "@/lib/format";
+import { repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import type { RepaymentListTotals } from "@/types/repayment";
 
 export interface PaymentHistoryFilters {
@@ -33,6 +34,8 @@ export function paymentTotalsParams(filters: PaymentHistoryFilters): Record<stri
 export interface PaymentTotals {
   collected: number | null;
   voided: number | null;
+  /** Insurance premium the posted payments collected (part of `collected`). */
+  insurance: number | null;
 }
 
 const DECIMAL = /^-?\d+(?:\.\d+)?$/;
@@ -50,6 +53,7 @@ export function readPaymentTotals(body: unknown): PaymentTotals {
   return {
     collected: serverFigure(totals?.collected),
     voided: serverFigure(totals?.voided),
+    insurance: serverFigure(totals?.total_insurance_applied),
   };
 }
 
@@ -61,13 +65,25 @@ export function totalFigure(value: number | null | undefined): string {
 export interface PaymentAmountRow {
   amount: number;
   penalty_amount: number;
+  insurance_applied?: number;
 }
 
-/** A payment's amount (`amount_paid`) and the penalty note inside it. */
-export function paymentAmountFigures(row: PaymentAmountRow): { amount: string; penaltyNote: string | null } {
+export interface PaymentAmountFigures {
+  amount: string;
+  penaltyNote: string | null;
+  insuranceNote: string | null;
+}
+
+/**
+ * A payment's amount (`amount_paid`) and the penalty and insurance premium
+ * notes inside it.
+ */
+export function paymentAmountFigures(row: PaymentAmountRow): PaymentAmountFigures {
+  const insurance = repaymentInsuranceApplied(row);
   return {
     amount: formatCurrency(row.amount),
     penaltyNote: row.penalty_amount > 0 ? `incl. ${formatCurrency(row.penalty_amount)} penalty` : null,
+    insuranceNote: insurance === null ? null : `incl. ${formatCurrency(insurance)} insurance premium`,
   };
 }
 

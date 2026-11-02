@@ -154,6 +154,10 @@ export function InsurancePremiumSection({
                 <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
                   {currencyOrDash(insurance?.remaining_balance)}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Any remaining balance will be owed on the loan — interest-free,
+                  collected first from the member&apos;s payments.
+                </p>
               </div>
             </div>
           </div>

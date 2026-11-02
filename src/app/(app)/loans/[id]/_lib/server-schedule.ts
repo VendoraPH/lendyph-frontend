@@ -213,11 +213,6 @@ export function openPeriods(schedule: readonly LoanSchedule[]): AmortizationRow[
   return periodRows(schedule).filter((row) => row.status !== "paid");
 }
 
-/** The period the borrower pays next (the first open one), or null when all are paid. */
-export function openPeriod(schedule: readonly LoanSchedule[]): AmortizationRow | null {
-  return openPeriods(schedule)[0] ?? null;
-}
-
 /** What a payment preview allocation names its period by. */
 export interface AllocationRef {
   schedule_id?: number;
@@ -252,18 +247,4 @@ export function rowForAllocation(schedule: readonly LoanSchedule[], allocation: 
  */
 export function allocationBuildUp(schedule: readonly LoanSchedule[], allocation: AllocationRef): number | null {
   return rowForAllocation(schedule, allocation)?.shareCapitalBuildUp ?? null;
-}
-
-/**
- * How a payment stands against the open period's server total payment, to
- * the centavo: `covers` it (or there is no open period), falls short of it
- * (`partial`), or `unknown` when the server sent no total for the period.
- */
-export function paymentAgainstDue(
-  amount: number,
-  due: AmortizationRow | null,
-): "covers" | "partial" | "unknown" {
-  if (due === null) return "covers";
-  if (due.totalPayment === null) return "unknown";
-  return Math.round(amount * 100) < Math.round(due.totalPayment * 100) ? "partial" : "covers";
 }

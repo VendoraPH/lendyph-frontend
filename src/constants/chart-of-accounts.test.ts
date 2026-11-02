@@ -136,3 +136,14 @@ test("each release-deduction role defaults to the account the backend seeds, of 
     assert.equal(seed.type, type, role);
   }
 });
+
+test("insurance premium collected from payments has no receivable role: it goes to Insurance Premium Payable", () => {
+  // Decision 2 (2026-11-01): the release journal is unchanged, so the owed
+  // part is never booked as a receivable; a payment that collects it credits
+  // 2040, the same account as the part withheld at release.
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(DEFAULT_ACCOUNT_MAPPING_CODES, "insurance_premium_receivable"),
+    false
+  );
+  assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES.insurance_premium_payable, "2040");
+});

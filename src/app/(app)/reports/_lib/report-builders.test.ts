@@ -978,7 +978,46 @@ test("repayments list uses the server totals and splits principal from interest"
   assert.equal(kpiValue(doc, "Penalty Collected"), "₱244,500.00");
   assert.equal(
     kpi(doc, "Total Collected").hint,
-    "Principal ₱7,120,400.25 · Interest ₱2,480,300.25"
+    "Insurance premium — · Principal ₱7,120,400.25 · Interest ₱2,480,300.25"
+  );
+});
+
+test("repayments list names the insurance premium collected, from the server's total only", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 200, total: 3 },
+      totals: {
+        count: 3,
+        total_amount_paid: 12600,
+        total_principal_applied: 10000,
+        total_interest_applied: 1800,
+        total_penalty_applied: 200,
+        total_insurance_applied: 400,
+      },
+    },
+    RANGE
+  );
+
+  assert.equal(
+    kpi(doc, "Total Collected").hint,
+    "Insurance premium ₱400.00 · Principal ₱10,000.00 · Interest ₱1,800.00"
+  );
+});
+
+test("repayments list says the insurance premium total is unknown, not absent, when the server sent none", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 200, total: 3 },
+      totals: { count: 3, total_amount_paid: 12200, total_principal_applied: 10000, total_interest_applied: 1800 },
+    },
+    RANGE
+  );
+
+  assert.equal(
+    kpi(doc, "Total Collected").hint,
+    "Insurance premium — · Principal ₱10,000.00 · Interest ₱1,800.00"
   );
 });
 
@@ -1515,6 +1554,43 @@ test("a transaction row carries the server's debit and credit", () => {
   assert.equal(table.rows[0].running_balance, 42000);
 });
 
+test("a transaction row shows the insurance premium it collected, so the balance's drop is explained", () => {
+  // The statement opens at principal + premium owed; each payment takes off
+  // its principal and its premium. The column is the server's figure only.
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        transactions: [
+          { ...SOA_PAYLOAD.transactions[0], credit: 9900, amount_paid: 9900, insurance_applied: 400, running_balance: 42000 },
+          { ...SOA_PAYLOAD.transactions[0], date: "2026-04-01", insurance_applied: 0, running_balance: 34000 },
+        ],
+      },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "insurance_applied");
+
+  assert.equal(column?.header, "Insurance Premium");
+  assert.equal(column?.format, "currency");
+  assert.equal(table.rows[0].insurance_applied, 400);
+  assert.equal(table.rows[1].insurance_applied, 0);
+  // Placed right before the running balance it explains.
+  const keys = table.columns.map((c) => c.key);
+  assert.equal(keys.indexOf("insurance_applied"), keys.indexOf("running_balance") - 1);
+});
+
+test("a transaction row without the server's premium figure shows a dash, never a worked-out one", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  const column = table.columns.find((c) => c.key === "insurance_applied")!;
+
+  assert.equal(table.rows[0].insurance_applied, null);
+  assert.equal(formatCell(table.rows[0], column), DASH);
+  // No footer total for it: the server sends none, and rows are never added up.
+  assert.equal(table.totals?.some((t) => t.column === "insurance_applied"), false);
+});
+
 test("a typed transaction is posted to the correct side of the ledger", () => {
   const table = namedTable(
     buildStatementOfAccountDoc(
@@ -1804,7 +1880,8 @@ const CASH_FLOW_PAYLOAD = {
       principal: 812400.25,
       interest: 184300.5,
       penalty: 12750.75,
-      overpayment: 4200,
+      insurance: 400,
+      overpayment: 3800,
       total: 1013651.5,
       count: 214,
     },
@@ -1898,6 +1975,7 @@ test("cash flow itemises both sides of the statement", () => {
       "Principal collected",
       "Interest collected",
       "Penalty collected",
+      "Insurance premium collected",
       "Overpayment received",
       "Share capital contributions",
     ]
@@ -1936,12 +2014,29 @@ test("cash flow reads the repayment components out of their nested block", () =>
   // The components live under `inflows.repayments`, not flat on `inflows` —
   // reading them flat dashed every line while the totals still looked right.
   assert.equal(inflows.rows[0].amount, 812400.25);
-  assert.equal(inflows.rows[3].amount, 4200);
-  assert.equal(inflows.rows[4].amount, 96500);
+  assert.equal(inflows.rows[3].amount, 400);
+  assert.equal(inflows.rows[4].amount, 3800);
+  assert.equal(inflows.rows[5].amount, 96500);
   // `outflows.total` includes share capital; only `releases.net_proceeds` is
   // the release line, so reading the wrong one double-counts the withdrawal.
   assert.equal(namedTable(doc, "Cash Outflows").rows[0].amount, 742800.4);
   assert.equal(namedTable(doc, "Cash Outflows").rows[1].amount, 31500);
+});
+
+test("cash flow shows the insurance premium collected as its own repayment line, a dash when not sent", () => {
+  // Premium collected from payments is cash in, inside the repayments total;
+  // it is never income and never added to a total here.
+  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
+  const line = namedTable(doc, "Cash Inflows").rows.find((r) => r.particulars === "Insurance premium collected");
+  assert.equal(line?.amount, 400);
+  assert.equal(namedTableTotal(doc, "Cash Inflows", "amount"), "₱1,110,151.50");
+
+  const older = buildCashFlowDoc(
+    { inflows: { repayments: { principal: 100.25, interest: 20.5, total: 120.75 }, total: 120.75 } },
+    RANGE
+  );
+  const missing = namedTable(older, "Cash Inflows").rows.find((r) => r.particulars === "Insurance premium collected");
+  assert.equal(missing?.amount, null);
 });
 
 test("cash flow still reads a flat payload that never nested the components", () => {
@@ -2086,8 +2181,8 @@ test("cash flow says where payments' share capital build-up is counted, without 
   assert.match(buildUp!, /Share capital contributions/);
   assert.match(buildUp!, /Share Capital report/);
   // Text only: the lines and totals are the server's, unchanged.
-  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 5);
-  assert.equal(namedTable(doc, "Cash Inflows").rows[4].amount, 96500);
+  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 6);
+  assert.equal(namedTable(doc, "Cash Inflows").rows[5].amount, 96500);
   assert.equal(kpiValue(doc, "Total Cash In"), "₱1,110,151.50");
   assert.equal(kpiValue(doc, "Net Movement"), "₱335,851.10");
 });
@@ -2123,7 +2218,7 @@ test("a failed cash flow request still renders the statement shell", () => {
   assert.equal(kpiValue(doc, "Net Movement"), DASH);
   // The lines still stand, so the document reads as a statement with unknown
   // figures rather than as an error page.
-  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 5);
+  assert.equal(namedTable(doc, "Cash Inflows").rows.length, 6);
   assert.equal(namedTableTotal(doc, "Cash Inflows", "amount"), DASH);
   assert.equal(fieldValue(doc, "Net Cash Movement", "Net movement for the period"), DASH);
 });

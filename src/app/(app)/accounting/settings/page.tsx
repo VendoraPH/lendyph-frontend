@@ -99,7 +99,7 @@ const GROUPS: { title: string; description: string; fields: MappingField[] }[] =
       {
         key: "insurance_premium_payable",
         label: "Insurance premium payable",
-        hint: "Insurance premiums withheld at release, owed to the insurer until remitted.",
+        hint: "Insurance premiums withheld at release or collected later from payments, owed to the insurer until remitted.",
         types: ["liability"],
       },
       {

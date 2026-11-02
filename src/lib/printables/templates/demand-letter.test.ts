@@ -207,6 +207,32 @@ test("demand letter: the total demanded and the column totals are the server's",
   assert.equal(chargeAmount(sent, "TOTAL AMOUNT DEMANDED"), formatCurrency(30916.67));
 });
 
+test("demand letter: the insurance premium owed inside the total demanded is its own line", () => {
+  // With arrears the server adds ₱400 premium owed to total_demanded and
+  // states it as demand_totals.insurance_owed.
+  const label = "Insurance premium owed (interest-free, included in the total)";
+  const doc = buildDemandLetterDoc(
+    { ...PAYLOAD, total_demanded: 31316.66, demand_totals: { ...PAYLOAD.demand_totals, insurance_owed: 400 } },
+    { now: NOW }
+  );
+  assert.equal(chargeAmount(doc, label), formatCurrency(400));
+  assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(31316.66));
+
+  // Not demanded (no arrears: 0), or not sent: no line, even though the
+  // summary still says premium is owed.
+  for (const insurance_owed of [0, undefined]) {
+    const none = buildDemandLetterDoc(
+      {
+        ...PAYLOAD,
+        demand_totals: { ...PAYLOAD.demand_totals, insurance_owed },
+        summary: { ...PAYLOAD.summary, insurance_owed: 400 },
+      },
+      { now: NOW }
+    );
+    assert.throws(() => chargeAmount(none, label));
+  }
+});
+
 test("demand letter: totals the server did not send are dashes, never sums of the rows", () => {
   const { total_demanded: _total, demand_totals: _columns, ...rest } = PAYLOAD;
   void _total;

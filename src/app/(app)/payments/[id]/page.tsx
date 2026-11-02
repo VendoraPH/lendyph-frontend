@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { repaymentService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import { toast } from "sonner";
 import type { Repayment } from "@/types";
 
@@ -31,6 +32,8 @@ interface ReceiptData {
   penalty: number;
   interest: number;
   principal: number;
+  /** Insurance premium owed on the loan that this payment collected first. */
+  insurance: number | null;
   total: number;
   previous_balance: number;
   new_balance: number;
@@ -111,6 +114,7 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     penalty: (p.penalty_amount as number) || (p.penalty_paid as number) || 0,
     interest: (p.interest_amount as number) || (p.interest_paid as number) || 0,
     principal: (p.principal_amount as number) || (p.principal_paid as number) || 0,
+    insurance: repaymentInsuranceApplied(p),
     total: p.amount_paid,
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
@@ -426,6 +430,12 @@ function PaymentReceiptContent({
               <div className="space-y-2">
                 <SectionHeading>Payment Breakdown</SectionHeading>
                 <div className="space-y-1.5">
+                  {receipt.insurance !== null && (
+                    <ReceiptRow
+                      label={INSURANCE_PREMIUM_LABEL}
+                      value={formatCurrency(receipt.insurance)}
+                    />
+                  )}
                   <ReceiptRow
                     label="Penalty"
                     value={formatCurrency(receipt.penalty)}
@@ -454,16 +464,24 @@ function PaymentReceiptContent({
               <div className="space-y-2">
                 <SectionHeading>Balance Summary</SectionHeading>
                 <div className="space-y-1.5">
+                  {/* The stored balances are principal only, so they are
+                      labelled that way; the premium collected is its own row. */}
                   <ReceiptRow
-                    label="Previous Balance"
+                    label="Principal balance before payment"
                     value={formatCurrency(receipt.previous_balance)}
                   />
                   <ReceiptRow
                     label="Amount Paid"
                     value={formatCurrency(receipt.total)}
                   />
+                  {receipt.insurance !== null && (
+                    <ReceiptRow
+                      label="Insurance premium collected"
+                      value={formatCurrency(receipt.insurance)}
+                    />
+                  )}
                   <ReceiptRow
-                    label="New Balance"
+                    label="Principal balance after payment"
                     value={formatCurrency(receipt.new_balance)}
                     bold
                   />

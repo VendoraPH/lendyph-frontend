@@ -316,9 +316,9 @@ test("disclosure: non-finance charges have their own section and the server's to
   assert.deepEqual([last.label, last.amount], ["3. Total Non-Finance Charges", formatCurrency(1100)]);
 });
 
-// "Collected first" comes back once the backend collects the unpaid premium
-// ahead of the loan (not built yet); until then the note must not promise it.
-test("disclosure: insurance unpaid at release is owed on the loan, interest-free", () => {
+// Every payment now collects the unpaid premium before anything else
+// (2026-11-01), so the note says so again.
+test("disclosure: insurance unpaid at release is owed on the loan, interest-free, collected first", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
   const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
   const note = lines[lines.findIndex((l) => l.label === "b. Insurance Premium") + 1];
@@ -326,7 +326,7 @@ test("disclosure: insurance unpaid at release is owed on the loan, interest-free
   assert.match(note.label, /₱200\.00/);
   assert.match(note.label, /owed on the loan/);
   assert.match(note.label, /interest-free/);
-  assert.doesNotMatch(note.label, /collected first/);
+  assert.match(note.label, /collected first/);
   // A note, not a figure in the column: the column adds up to the total.
   assert.equal(note.amount, "");
 
@@ -340,6 +340,49 @@ test("disclosure: insurance unpaid at release is owed on the loan, interest-free
   assert.ok(
     !chargesBlock(paid, "IV. Non-Finance Charges").lines.some((l) => /owed on the loan/.test(l.label))
   );
+});
+
+test("disclosure: premium carried from the previous loan is its own non-finance line, all owed", () => {
+  // A restructure moved ₱400 of premium owed onto this loan: a line of its
+  // own, nothing deducted. Its note never says "unpaid at release", which is
+  // about this loan's own premium.
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    non_finance_charges: {
+      items: [
+        { name: "Insurance Premium", amount: 600, deducted: 400, owed: 200 },
+        { name: "Insurance premium carried from the previous loan", amount: 400, deducted: 0, owed: 400 },
+      ],
+      total: 1000,
+    },
+  });
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  const index = lines.findIndex((l) => l.label === "b. Insurance premium carried from the previous loan");
+  assert.ok(index > 0);
+  assert.equal(lines[index].amount, formatCurrency(400));
+  const note = lines[index + 1];
+  assert.equal(note.amount, "");
+  assert.match(note.label, /all owed on the loan/);
+  assert.match(note.label, /interest-free, collected first/);
+  assert.doesNotMatch(note.label, /unpaid at release/);
+  // The column total is the server's, never the lines added up.
+  assert.deepEqual(lines[lines.length - 1].amount, formatCurrency(1000));
+});
+
+test("disclosure: a provisional line says it may change until release", () => {
+  const doc = buildDisclosureDoc({
+    ...PAYLOAD,
+    non_finance_charges: {
+      items: [
+        { name: "Insurance premium carried from the previous loan", amount: 400, deducted: 0, owed: 400, provisional: true },
+        { name: "Notarial Fee", amount: 500, deducted: 500, owed: 0 },
+      ],
+      total: 900,
+    },
+  });
+  const lines = chargesBlock(doc, "IV. Non-Finance Charges").lines;
+  assert.ok(lines.some((l) => l.label === "a. Insurance premium carried from the previous loan (subject to change until release)"));
+  assert.ok(lines.some((l) => l.label === "b. Notarial Fee"));
 });
 
 test("disclosure: net proceeds reconcile from the server's proceeds", () => {

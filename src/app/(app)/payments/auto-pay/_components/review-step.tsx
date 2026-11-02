@@ -7,7 +7,7 @@ import { PartialRowsTable } from "./partial-rows-table";
 import { DueLoansTable } from "./due-loans-table";
 import { LoanIssuesList } from "./loan-issues-list";
 import { formatCurrency } from "@/lib/format";
-import { loanIssues, loansAffected, previewTotals } from "../_lib/auto-pay-view";
+import { loanIssues, loansAffected, partialInsuranceNote, previewTotals } from "../_lib/auto-pay-view";
 import { useAutoPaySelection } from "../_hooks/use-auto-pay-selection";
 import { cn } from "@/lib/utils";
 import type { AutoPayFilter, AutoPayPreview } from "@/types";
@@ -38,6 +38,7 @@ export function ReviewStep({
   const shown = view.preview;
   const totals = previewTotals(shown.summary);
   const run = view.run;
+  const partialPremiumNote = run === null ? null : partialInsuranceNote(run);
   const loanCount = loansAffected(shown, includedPartialIds);
   const skips = loanIssues(shown.skips);
   const updating = !view.upToDate && view.error === null;
@@ -67,9 +68,15 @@ export function ReviewStep({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Total Penalty</p>
         </div>
-        <div className="rounded-lg border p-4 text-center sm:col-span-2">
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 text-center dark:border-purple-800 dark:bg-purple-950/20">
+          <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
+            {totals.insurance === null ? "—" : formatCurrency(totals.insurance)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Insurance Premium</p>
+        </div>
+        <div className="rounded-lg border p-4 text-center">
           <p className="text-xl font-bold">{formatCurrency(totals.amount)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty)</p>
+          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty and premium)</p>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-800 dark:bg-blue-950/20">
           <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
@@ -79,8 +86,9 @@ export function ReviewStep({
         </div>
       </div>
       <p className="-mt-3 text-xs text-muted-foreground">
-        Totals cover the loans with full dues listed below. The run total adds
-        the part-paid periods you include.
+        Totals cover the loans with full dues listed below. Insurance premium
+        still owed on a loan is charged first, on top of its periods. The run
+        total adds the part-paid periods you include.
       </p>
 
       {/* The run's total for the current selection, from the server */}
@@ -95,7 +103,12 @@ export function ReviewStep({
         ) : (
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted-foreground">Selected part-paid periods</dt>
-            <dd className="text-right tabular-nums">{formatCurrency(run.partialTotal)}</dd>
+            <dd className="text-right tabular-nums">
+              {formatCurrency(run.partialTotal)}
+              {partialPremiumNote !== null && (
+                <span className="block text-xs text-muted-foreground">{partialPremiumNote}</span>
+              )}
+            </dd>
             <dt className="text-base font-semibold">Run total</dt>
             <dd className="text-right text-base font-semibold tabular-nums">
               {formatCurrency(run.grandTotal)}
