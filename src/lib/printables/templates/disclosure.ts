@@ -23,7 +23,10 @@
  *
  * Before release the server adds the catalog fees the release will charge,
  * each marked `provisional`, and its totals and net proceeds already include
- * them; such a line says "(to be charged at release)". Nothing is summed here.
+ * them. The wording follows the server's `provisional_reason`: "release_fee"
+ * says "(to be charged at release)", "carried_premium" (premium a
+ * restructure will carry) "(subject to change until release)". Nothing is
+ * summed here.
  *
  * Two things the port fixes rather than preserves:
  *
@@ -90,6 +93,8 @@ interface ChargeItem {
   owed: number | null;
   /** The server may still change it before release (`provisional`). */
   provisional: boolean;
+  /** Why, as the server says (`provisional_reason`); null when it sent none. */
+  provisionalReason: string | null;
 }
 
 /** `finance_charges.items` or `non_finance_charges.items`, as sent. */
@@ -99,19 +104,31 @@ function readChargeItems(block: Record<string, unknown> | null): ChargeItem[] {
     amount: toNumber(pick(item, ["amount"])),
     owed: toNumber(pick(item, ["owed"])),
     provisional: pick(item, ["provisional"]) === true,
+    provisionalReason: typeof pick(item, ["provisional_reason"]) === "string"
+      ? String(pick(item, ["provisional_reason"]))
+      : null,
   }));
 }
 
+/** The note each `provisional_reason` prints after a line's name. */
+const PROVISIONAL_NOTES: Record<string, string> = {
+  release_fee: " (to be charged at release)",
+  carried_premium: " (subject to change until release)",
+};
+
 /**
- * What a provisional line says. A premium carried from the loan a restructure
- * closes is owed and still moves with payments on that loan until release; a
- * catalog fee is deducted when the loan is released.
+ * What a provisional line says, by the server's reason: a catalog fee is
+ * deducted when the loan is released; a premium carried from the loan a
+ * restructure closes still moves with payments on that loan until release.
+ * A provisional line with no reason the printable knows says the general
+ * "(subject to change until release)".
  */
 function provisionalNote(item: ChargeItem): string {
   if (!item.provisional) return "";
-  return item.owed !== null && item.owed > 0
-    ? " (subject to change until release)"
-    : " (to be charged at release)";
+  return (
+    (item.provisionalReason !== null ? PROVISIONAL_NOTES[item.provisionalReason] : undefined) ??
+    PROVISIONAL_NOTES.carried_premium
+  );
 }
 
 /** a., b., c. … — the statute's lettered enumeration under a heading. */
