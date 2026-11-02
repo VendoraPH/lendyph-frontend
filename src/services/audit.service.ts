@@ -24,7 +24,8 @@ export const auditService = {
    *
    * Accepted params (`AuditLogController::index()` / `buildQuery()`): `page`,
    * `per_page` (clamped to `min(per_page, 100)` — note there is no `max(…, 1)`
-   * here, unlike `LoanController`), `search`, `user_id`, `action`,
+   * here, unlike `LoanController`), `search`, `user_id`, `action`, `module`
+   * (the row's module name, as the screen's module filter sends it),
    * `auditable_type` (a LIKE, not an exact match) and `date_from`/`date_to`.
    */
   list: (params?: Record<string, unknown>) =>

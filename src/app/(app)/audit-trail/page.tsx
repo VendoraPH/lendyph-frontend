@@ -52,8 +52,10 @@ import type { AuditLog, AuditAction, AuditModule } from "@/types";
 import {
   auditActionLabel,
   auditDescription,
+  auditFieldLabel,
   auditModuleLabel,
   auditUserName,
+  auditUserRole,
 } from "./_lib/audit-labels";
 
 // ── Constants ──
@@ -95,6 +97,7 @@ const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
   { value: "payments", label: "Payments" },
   { value: "collections", label: "Collections" },
   { value: "users", label: "Users" },
+  { value: "roles", label: "Roles" },
   { value: "reports", label: "Reports" },
 ];
 
@@ -142,7 +145,7 @@ function AuditDetailDrawer({
             <div className="min-w-0">
               <p className="font-medium text-sm">{auditUserName(log)}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                {auditUserRole(log)}
               </p>
             </div>
           </div>
@@ -218,7 +221,7 @@ function AuditDetailDrawer({
                   >
                     <div className="bg-muted/50 px-3 py-1.5">
                       <p className="text-xs font-medium capitalize">
-                        {change.field.replace("_", " ")}
+                        {auditFieldLabel(change.field)}
                       </p>
                     </div>
                     <div className="px-3 py-2 space-y-1">
@@ -311,7 +314,7 @@ function AuditTrailContent() {
       setLoading(true);
       const params: Record<string, unknown> = { page, per_page: perPage };
       if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      if (moduleFilter !== "all") params.module = moduleFilter;
       // Whole-day bounds on `created_at`, applied by `buildQuery()`. Sent as
       // the calendar strings themselves — shifting either end by a day here to
       // reinterpret the window would put the screen and the CSV, which sends
@@ -433,7 +436,7 @@ function AuditTrailContent() {
       const params: Record<string, unknown> = {};
       if (search) params.search = search;
       if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      if (moduleFilter !== "all") params.module = moduleFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       const blob = await auditService.export(params);
@@ -661,7 +664,7 @@ function AuditTrailContent() {
                               {auditUserName(log)}
                             </p>
                             <p className="text-xs text-muted-foreground capitalize">
-                              {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                              {auditUserRole(log)}
                             </p>
                           </div>
                         </div>

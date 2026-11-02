@@ -2,6 +2,7 @@
 // description. Dependency-free so it is unit-testable under `tsx --test`.
 
 import type { AuditLog } from "@/types";
+import { roleLabelForKey } from "@/lib/role-display-name";
 
 const MODULE_LABELS: Record<string, string> = {
   auth: "Auth",
@@ -10,6 +11,7 @@ const MODULE_LABELS: Record<string, string> = {
   payments: "Payments",
   collections: "Collections",
   users: "Users",
+  roles: "Roles",
   reports: "Reports",
 };
 
@@ -36,8 +38,8 @@ function inWords(key: string): string {
 }
 
 /**
- * The row's module. `AuditLogResource` files Role rows under `users`; they read
- * as Roles, by the record they are about.
+ * The row's module. `AuditLogResource` files Role rows under `roles`; older
+ * responses filed them under `users`, so a Role target reads as Roles either way.
  */
 export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): string {
   if (log.target?.type === "Role") return "Roles";
@@ -54,6 +56,16 @@ export function auditUserName(log: Pick<AuditLog, "user">): string {
   return log.user?.full_name?.trim() || "System";
 }
 
+/** The user's role by its label (catalog, else the key in words). */
+export function auditUserRole(log: Pick<AuditLog, "user">): string {
+  return roleLabelForKey(log.user?.roles?.[0], undefined);
+}
+
+/** A changed field's name with every underscore as a space. */
+export function auditFieldLabel(field: string): string {
+  return field.split("_").filter(Boolean).join(" ");
+}
+
 /**
  * The row's description, or, when the server wrote none, the fields it changed
  * as old → new from its old and new values.
@@ -64,7 +76,7 @@ export function auditDescription(log: Pick<AuditLog, "description" | "changes">)
   const changes = log.changes ?? [];
   if (changes.length === 0) return "";
   const parts = changes.map(
-    (c) => `${c.field.split("_").join(" ")}: ${c.old ?? "—"} → ${c.new ?? "—"}`
+    (c) => `${auditFieldLabel(c.field)}: ${c.old ?? "—"} → ${c.new ?? "—"}`
   );
   return `Changed ${parts.join("; ")}`;
 }

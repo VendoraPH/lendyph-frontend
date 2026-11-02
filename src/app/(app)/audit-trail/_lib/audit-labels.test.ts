@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AuditLog } from "@/types";
-import { auditActionLabel, auditDescription, auditModuleLabel, auditUserName } from "./audit-labels";
+import {
+  auditActionLabel,
+  auditDescription,
+  auditFieldLabel,
+  auditModuleLabel,
+  auditUserName,
+  auditUserRole,
+} from "./audit-labels";
 
 function log(overrides: Partial<AuditLog>): AuditLog {
   return {
@@ -68,4 +75,26 @@ test("a role update with no description lists its changed fields from old and ne
 
 test("a row with neither a description nor changes stays blank", () => {
   assert.equal(auditDescription(log({ description: null as unknown as string })), "");
+});
+
+test("rows the server files under roles read Roles", () => {
+  assert.equal(auditModuleLabel(log({ module: "roles", target: role })), "Roles");
+  assert.equal(auditModuleLabel(log({ module: "roles", target: null })), "Roles");
+});
+
+test("a changed field reads with every underscore as a space", () => {
+  assert.equal(auditFieldLabel("insurance_remaining_balance"), "insurance remaining balance");
+  assert.equal(auditFieldLabel("status"), "status");
+});
+
+test("a multi-word changed field reads in words in the description", () => {
+  const row = log({ changes: [{ field: "interest_rate_frequency", old: "monthly", new: "annual" }] });
+  assert.equal(auditDescription(row), "Changed interest rate frequency: monthly → annual");
+});
+
+test("the user's role reads by its label, every underscore a space", () => {
+  assert.equal(auditUserRole(log({ user: { id: 7, full_name: "Ana", roles: ["general_bookkeeper"] } })), "General Bookkeeper");
+  assert.equal(auditUserRole(log({ user: { id: 7, full_name: "Ana", roles: ["branch_head_officer"] } })), "Branch Head Officer");
+  assert.equal(auditUserRole(log({ user: { id: 7, full_name: "Ana", roles: [] } })), "");
+  assert.equal(auditUserRole(log({ user: null as unknown as AuditLog["user"] })), "");
 });

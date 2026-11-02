@@ -19,6 +19,7 @@ export type AuditModule =
   | "payments"
   | "collections"
   | "users"
+  | "roles"
   | "reports";
 
 export interface AuditChange {
