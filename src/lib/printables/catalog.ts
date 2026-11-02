@@ -4,7 +4,7 @@ import {
   FileSignature,
   FileText,
   Landmark,
-  Receipt,
+  ReceiptText,
   ScrollText,
   Wallet,
 } from "lucide-react";
@@ -171,7 +171,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
     description:
       "Two copies — borrower's and file — with the payment's full application.",
     subject: "repayment",
-    icon: Receipt,
+    icon: ReceiptText,
     build: printableBuilder(
       (id) => repaymentService.detail(id),
       buildOfficialReceiptDoc

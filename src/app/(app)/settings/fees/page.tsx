@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Receipt, Plus, Pencil, Trash2, Loader2, Search, Percent, DollarSign,
+  ReceiptText, Plus, Pencil, Trash2, Loader2, Search, Percent, PhilippinePeso,
 } from "lucide-react";
 import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
@@ -491,7 +491,7 @@ function FeesContent() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
+              <ReceiptText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{fees.length}</p>
@@ -500,7 +500,7 @@ function FeesContent() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Fixed</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <PhilippinePeso className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{fixedCount}</p>

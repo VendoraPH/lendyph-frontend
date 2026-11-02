@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/table";
 import {
   Search,
-  Receipt,
+  PhilippinePeso,
+  ReceiptText,
   Banknote,
   CreditCard,
   CalendarIcon,
@@ -60,14 +61,18 @@ import {
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
-  previewBalanceAfter,
-  previewBalanceBefore,
   readAmountDueNow,
   type AmountDueNow,
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans, type ActiveLoanTotals } from "./_lib/active-loans";
-import { previewAllocation, previewBadge } from "./_lib/payment-preview";
+import {
+  postPaymentErrorMessage,
+  previewAllocation,
+  previewBadge,
+  previewTotalOutstandingAfter,
+  previewTotalOutstandingBefore,
+} from "./_lib/payment-preview";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -338,10 +343,10 @@ function PaymentsContent() {
   const serverPreview = currentPreview?.preview ?? null;
   const previewError = currentPreview?.error ?? null;
 
-  // The preview's outstanding balance (premium owed included) before and
-  // after this payment; a dash when the server sent none.
-  const newOutstandingBalance = previewBalanceAfter(serverPreview);
-  const previousOutstandingBalance = previewBalanceBefore(serverPreview);
+  // The preview's outstanding balance (everything owed, premium included)
+  // before and after this payment; a dash when the server sent none.
+  const newOutstandingBalance = previewTotalOutstandingAfter(serverPreview);
+  const previousOutstandingBalance = previewTotalOutstandingBefore(serverPreview);
   // What a payment must be today (premium owed plus the open period), with
   // its parts, from the loan; null when the server sent none or the payment
   // is dated another day (the figure is as of today).
@@ -436,10 +441,8 @@ function PaymentsContent() {
 
       await fetchLoans();
       resetForm();
-    } catch {
-      toast.error("We couldn't post the payment. Please try again.", {
-        description: "Please try again or check your connection.",
-      });
+    } catch (err) {
+      toast.error(postPaymentErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -479,7 +482,7 @@ function PaymentsContent() {
             onClick={() => router.push(`/payments/${lastReceiptId}`)}
             className="gap-2"
           >
-            <Receipt className="size-4" />
+            <ReceiptText className="size-4" />
             View Last Receipt
           </Button>
         )}
@@ -540,7 +543,7 @@ function PaymentsContent() {
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Receipt className="size-4" />
+            <ReceiptText className="size-4" />
             Borrowers with Active Loans
           </CardTitle>
           <div className="relative w-full sm:w-72">
@@ -968,7 +971,7 @@ function PaymentsContent() {
                     <div className="rounded-lg border overflow-hidden">
                       <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
                         <p className="text-xs font-medium flex items-center gap-1.5">
-                          <Receipt className="size-3.5" />
+                          <ReceiptText className="size-3.5" />
                           Schedule Periods Covered
                         </p>
                         <span className="text-[10px] text-muted-foreground">
@@ -1157,7 +1160,7 @@ function PaymentsContent() {
                   </>
                 ) : (
                   <>
-                    <Receipt className="size-4" />
+                    <PhilippinePeso className="size-4" />
                     Post Payment
                   </>
                 )}

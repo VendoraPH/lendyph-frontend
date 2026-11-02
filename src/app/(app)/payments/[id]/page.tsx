@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Printer, Receipt, Ban, Loader2 } from "lucide-react";
+import { ArrowLeft, Printer, ReceiptText, Ban, Loader2 } from "lucide-react";
 import { usePrintables } from "@/hooks";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
@@ -223,7 +223,7 @@ function PaymentReceiptContent({
   if (notFound || !receipt) {
     return (
       <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center gap-4">
-        <Receipt className="h-12 w-12 text-muted-foreground" />
+        <ReceiptText className="h-12 w-12 text-muted-foreground" />
         <p className="text-lg font-semibold">Receipt not found</p>
         <p className="text-sm text-muted-foreground">
           No receipt exists for ID {id}.
@@ -344,7 +344,7 @@ function PaymentReceiptContent({
             {/* Brand header */}
             <div className="bg-brand-orange px-6 py-5 text-center text-white print:bg-black print:text-white">
               <div className="flex items-center justify-center gap-2">
-                <Receipt className="h-5 w-5" />
+                <ReceiptText className="h-5 w-5" />
                 <span className="text-xl font-extrabold tracking-tight">
                   LENDY.PH
                 </span>

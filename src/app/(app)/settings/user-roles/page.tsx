@@ -63,7 +63,7 @@ import {
   BookOpenCheck,
   BookOpen,
   ListTree,
-  Receipt,
+  ReceiptText,
   Wallet,
   Gauge,
   Package,
@@ -284,7 +284,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   expenses: {
     label: "Expenses & Payables",
     description: "Operating costs, whether paid immediately or owed.",
-    icon: Receipt,
+    icon: ReceiptText,
     features: [
       "View expenses and outstanding payables",
       "Record an expense against a cash account or as a payable",

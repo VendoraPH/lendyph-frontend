@@ -1,42 +1,9 @@
 import { INTEREST_METHOD_LABELS } from "@/constants";
 import { getErrorMessage, httpStatusOf, type ApiErrorBody } from "@/lib/api-error";
 import { formatDateISO } from "@/lib/format";
-import type { RestructurePreview } from "@/lib/loan-restructure";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
 import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
-import { pledgedCollaterals, type PledgedCollateral, type SelectedCollateral } from "./edit-collaterals";
-
-/**
- * `POST /loans/preview` as this form sends it. The server values each
- * collateral itself, from the member's register (decision 11a): a collateral
- * goes up by id only, with the member it belongs to, and never a value. A
- * restructure also names its source loan, and the server answers with the
- * shortfall (decision 8a).
- *
- * Declared here rather than in the shared `LoanFormPreviewRequest`, which still
- * carries a `snapshot_value` the server now ignores.
- */
-export type FormPreviewRequest = Omit<LoanFormPreviewRequest, "collaterals"> & {
-  /** Sent whenever `collaterals` is: the server values them from this member's register. */
-  borrower_id?: number;
-  /** A restructure's source loan, so the answer carries `restructure`. */
-  source_loan_id?: number;
-  /**
-   * The loan an edit changes (draft or for_review; needs `loans:update`). The
-   * server then carries the collaterals it already holds at their stored
-   * pledged value, so the total matches what the save keeps.
-   */
-  loan_id?: number;
-  collaterals?: PledgedCollateral[];
-};
-
-/**
- * The preview's answer: the shared shape, plus the restructure section the
- * server adds when the request named a `source_loan_id`.
- */
-export type FormPreview = LoanFormPreview & {
-  restructure?: RestructurePreview | null;
-};
+import { pledgedCollaterals, type SelectedCollateral } from "./edit-collaterals";
 
 /** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
 export interface StatedDeduction {
@@ -78,8 +45,8 @@ function positive(value: number): number | undefined {
  * The `POST /loans/preview` body for the form as it stands, or null when there
  * is nothing to preview: no product chosen and no collateral to value.
  *
- * Collaterals go up by id with the member's id, which the server needs to
- * value them. Until a member is chosen neither is sent: the server could not
+ * Collaterals go up by id only, with the member's id, which the server needs
+ * to value them; never a value, since the server sets it (decision 11a). Until a member is chosen neither is sent: the server could not
  * value the rows.
  *
  * Fields the form has no usable value for are left out; the server works out
@@ -88,7 +55,7 @@ function positive(value: number): number | undefined {
  * submit parses them, and the deductions are the inputs the submit sends, so
  * the preview describes the loan that would be saved.
  */
-export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewRequest | null {
+export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRequest | null {
   const productId = inputs.productId ? Number(inputs.productId) : undefined;
   const principal = positive(parseFloat(inputs.principalAmount));
   const rate = positive(parseFloat(inputs.interestRate));
@@ -135,7 +102,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewReques
 export type LoanPreviewView =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; preview: FormPreview }
+  | { status: "ready"; preview: LoanFormPreview }
   | { status: "error"; message: string; refused?: RefusedCollateral | null };
 
 type SettledView = Extract<LoanPreviewView, { status: "ready" | "error" }>;
@@ -148,7 +115,7 @@ export interface LoanPreviewOutcome {
 }
 
 /** One request body as a comparable key: equal bodies, equal keys. */
-export function loanPreviewKey(request: FormPreviewRequest | null): string | null {
+export function loanPreviewKey(request: LoanFormPreviewRequest | null): string | null {
   return request ? JSON.stringify(request) : null;
 }
 

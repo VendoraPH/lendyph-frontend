@@ -163,30 +163,37 @@ test("presetButtons: one button per preset the server sent, then Pay all remaini
     payoff_amount: "70800.00",
   };
   assert.deepEqual(presetButtons(summary, 7), [
-    { label: "1 period", periods: 1, amount: 100, disabled: false },
-    { label: "2 periods", periods: 2, amount: 200, disabled: false },
-    { label: "3 periods", periods: 3, amount: 300, disabled: false },
-    { label: "6 periods", periods: 6, amount: 600, disabled: false },
-    { label: "Pay all remaining", periods: 7, amount: 70800, disabled: false },
+    { label: "1 period", periods: 1, amount: 100 },
+    { label: "2 periods", periods: 2, amount: 200 },
+    { label: "3 periods", periods: 3, amount: 300 },
+    { label: "6 periods", periods: 6, amount: 600 },
+    { label: "Pay all remaining", periods: 7, amount: 70800 },
   ]);
 });
 
-test("presetButtons on a Share Capital Build-Up loan: only the 1-period preset and payoff", () => {
-  const summary = { advance_presets: [{ periods: 1, amount: 11900 }], payoff_amount: 70800 };
+test("presetButtons on a Share Capital Build-Up loan: only the 1-period preset, no Pay all remaining", () => {
+  // The server sends payoff_amount: null on a Build-Up loan.
+  const summary = { advance_presets: [{ periods: 1, amount: 11900 }], payoff_amount: null };
   assert.deepEqual(
     presetButtons(summary, 6).map((b) => [b.label, b.amount]),
-    [
-      ["1 period", 11900],
-      ["Pay all remaining", 70800],
-    ],
+    [["1 period", 11900]],
   );
 });
 
-test("presetButtons: Pay all remaining reads payoff_amount, a dash and disabled when not sent", () => {
-  const buttons = presetButtons({ advance_presets: [{ periods: 1, amount: 100 }] }, 3);
-  assert.deepEqual(buttons.at(-1), { label: "Pay all remaining", periods: 3, amount: null, disabled: true });
+test("presetButtons: Pay all remaining is left out when payoff_amount is null or not sent", () => {
+  const presetsOnly = [{ label: "1 period", periods: 1, amount: 100 }];
+  assert.deepEqual(presetButtons({ advance_presets: [{ periods: 1, amount: 100 }] }, 3), presetsOnly);
+  assert.deepEqual(
+    presetButtons({ advance_presets: [{ periods: 1, amount: 100 }], payoff_amount: null }, 3),
+    presetsOnly,
+  );
   // Never the presets added up, never the last preset standing in.
-  assert.deepEqual(presetButtons(null, 2), [
-    { label: "Pay all remaining", periods: 2, amount: null, disabled: true },
+  assert.deepEqual(presetButtons(null, 2), []);
+  assert.deepEqual(presetButtons({ payoff_amount: null }, 2), []);
+});
+
+test("presetButtons: a payoff of 0.00 is a real figure and keeps the button", () => {
+  assert.deepEqual(presetButtons({ payoff_amount: "0.00" }, 1), [
+    { label: "Pay all remaining", periods: 1, amount: 0 },
   ]);
 });

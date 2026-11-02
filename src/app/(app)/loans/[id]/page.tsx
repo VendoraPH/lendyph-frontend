@@ -79,6 +79,7 @@ import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import { collectNowParts } from "./_lib/extension-preview";
+import { previewRefusalMessage, recordPaymentErrorMessage } from "./_lib/payment-errors";
 import {
   dueNowHasOpenPeriod,
   dueNowIsRange,
@@ -168,12 +169,12 @@ import {
   CalendarIcon,
   CalendarPlus,
   Plus,
-  DollarSign,
+  PhilippinePeso,
   ChevronDown,
   ChevronUp,
   Pencil,
   AlertTriangle,
-  Receipt,
+  ReceiptText,
   CreditCard,
   Loader2,
   BookOpen,
@@ -715,6 +716,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // again after the cashier is told so.
   const [paymentPreviewFailedKey, setPaymentPreviewFailedKey] = useState<string | null>(null);
   const [paymentPreviewRound, setPaymentPreviewRound] = useState(0);
+  // The server's reason for refusing the preview of an amount and date (a
+  // 422, e.g. a date before release), for those inputs only.
+  const [paymentPreviewRefusal, setPaymentPreviewRefusal] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -1265,6 +1272,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
   // The figure is as of today: another payment date shows a dash.
   const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The server refused the amount and date typed now: posting them would be
+  // refused too, so its reason shows and Record Payment waits for a change.
+  const paymentRefusal =
+    paymentPreviewRefusal !== null &&
+    paymentPreviewRefusal.key === previewRequestKey(Number(paymentAmount), formatDateISO(paymentDate))
+      ? paymentPreviewRefusal.message
+      : null;
   // The preview on screen answers exactly the amount and date typed now.
   const paymentPreviewCurrent = previewIsCurrent(
     { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
@@ -1303,12 +1317,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
           setPaymentPreview(res ?? null);
           setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
           setPaymentPreviewFailedKey(null);
+          setPaymentPreviewRefusal(null);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
+          const key = previewRequestKey(amt, paymentDateISO);
+          const refusal = previewRefusalMessage(err);
           setPaymentPreview(null);
           setPaymentPreviewKey(null);
-          setPaymentPreviewFailedKey(previewRequestKey(amt, paymentDateISO));
+          setPaymentPreviewFailedKey(key);
+          setPaymentPreviewRefusal(refusal === null ? null : { key, message: refusal });
         }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
@@ -1681,8 +1699,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
         ]);
       }
       return true;
-    } catch {
-      toast.error("We couldn't record the payment. Please try again.");
+    } catch (err) {
+      toast.error(recordPaymentErrorMessage(err));
       return false;
     } finally {
       setActionLoading(false);
@@ -3888,7 +3906,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
-              <DollarSign className="h-5 w-5 shrink-0" />
+              <PhilippinePeso className="h-5 w-5 shrink-0" />
               <span>Record Payment</span>
               {paymentMode === "advance" && (
                 <Badge className="bg-blue-600 hover:bg-blue-600 text-white">
@@ -4182,11 +4200,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
             // Only the presets the server sent (one on a Share Capital
-            // Build-Up loan), then "Pay all remaining" with its payoff amount.
+            // Build-Up loan), then "Pay all remaining" when the server sent a
+            // payoff amount (it sends none on a Build-Up loan).
             const buttons = presetButtons(loanSummary, unpaid.length);
-            const fillAmount = (periods: number, amount: number | null) => {
+            if (buttons.length === 0) return null;
+            const fillAmount = (periods: number, amount: number) => {
               setAdvancePeriods(periods);
-              setPaymentAmount(amount !== null && amount > 0 ? amount.toFixed(2) : "");
+              setPaymentAmount(amount > 0 ? amount.toFixed(2) : "");
             };
             return (
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20 space-y-2">
@@ -4210,7 +4230,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         advancePeriods === b.periods &&
                           "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      disabled={b.disabled}
                       onClick={() => fillAmount(b.periods, b.amount)}
                     >
                       {b.label}
@@ -4411,6 +4430,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
             );
           })()}
 
+          {paymentRefusal !== null && Number(paymentAmount) > 0 && (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
+            >
+              {paymentRefusal}
+            </p>
+          )}
+
           {/* Allocation Preview */}
           {paymentPreview && Number(paymentAmount) > 0 && (
             <>
@@ -4506,7 +4534,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div className="rounded-lg border overflow-hidden">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                       <p className="text-xs font-medium flex items-center gap-1.5">
-                        <Receipt className="size-3.5 shrink-0" />
+                        <ReceiptText className="size-3.5 shrink-0" />
                         Schedule Periods Covered
                       </p>
                       <span className="text-[10px] text-muted-foreground">
@@ -4645,7 +4673,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <Button
               className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRecordPayment}
-              disabled={actionLoading || !paymentAmount || Number(paymentAmount) <= 0}
+              disabled={
+                actionLoading || !paymentAmount || Number(paymentAmount) <= 0 || paymentRefusal !== null
+              }
             >
               {actionLoading ? (
                 <>
@@ -4654,7 +4684,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </>
               ) : (
                 <>
-                  <DollarSign className="mr-2 h-4 w-4" />
+                  <PhilippinePeso className="mr-2 h-4 w-4" />
                   Record Payment
                 </>
               )}

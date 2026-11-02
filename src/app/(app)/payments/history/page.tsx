@@ -34,7 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Search,
-  Receipt,
+  ReceiptText,
   Ban,
   AlertTriangle,
   Eye,
@@ -641,7 +641,7 @@ function PaymentHistoryContent() {
             <CardTitle className="text-sm font-medium">
               Transactions Count
             </CardTitle>
-            <Receipt className="h-4 w-4 text-brand-orange" />
+            <ReceiptText className="h-4 w-4 text-brand-orange" />
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{transactionCount}</p>
