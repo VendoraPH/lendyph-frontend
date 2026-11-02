@@ -105,7 +105,21 @@ export interface LoanFormPreviewRequest {
   frequency?: string;
   start_date?: string;
   scb_amount?: number;
-  collaterals?: { collateral_id: number; snapshot_value: number }[];
+  /**
+   * The member the loan is for: collateral rows are read within their
+   * collaterals, and the server values each one itself.
+   */
+  borrower_id?: number;
+  /**
+   * The loan being restructured. When sent, the answer carries a
+   * `restructure` block for it.
+   */
+  source_loan_id?: number;
+  collaterals?: {
+    collateral_id: number;
+    /** @deprecated The server ignores it and values the collateral itself. */
+    snapshot_value?: number;
+  }[];
   /**
    * The deduction inputs exactly as the create, update or restructure payload
    * states them: a percentage's rate, a fixed item's pesos. Absent, the server
@@ -184,6 +198,17 @@ export interface LoanFormPreview {
       share_capital_build_up: number;
       total_payment: number;
     };
+  } | null;
+  /**
+   * Present only when the request sent `source_loan_id`: what the restructure
+   * carries over from that loan and how far the new principal falls short.
+   */
+  restructure?: {
+    restructurable_balance: number;
+    principal: number;
+    shortfall: number;
+    remarks_required: boolean;
+    write_off_permission_required: boolean;
   } | null;
 }
 
@@ -388,8 +413,23 @@ export interface Loan {
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
-  /** The server's total payable; includes `insurance_owed`. */
-  total_payable?: number;
+  /**
+   * The server's total payable: the amount still owed, `insurance_owed`
+   * included and Share Capital Build-Up never. Null before release, when
+   * `contract_total` is the figure to show.
+   */
+  total_payable?: number | null;
+  /** The contract's principal plus interest, shown on its own line. */
+  contract_total?: number | string | null;
+  /** Everything still owed on the loan, insurance premium included. */
+  total_outstanding?: number | string | null;
+  /** Principal still owed; the premium owed is `insurance_owed`. */
+  outstanding_principal?: number | string | null;
+  /**
+   * Deprecated alias: unpaid principal plus premium here, but everything owed
+   * on `GET /loans/{id}/summary`. Read `total_outstanding` or
+   * `outstanding_principal` instead.
+   */
   outstanding_balance?: number;
   /**
    * Insurance premium left unpaid at release and still owed on the loan:
@@ -425,11 +465,14 @@ export interface Loan {
   /**
    * The loan's pledged collateral against its principal, from the server
    * (`GET /loans/{id}`). Null when the relation isn't loaded, as on lists.
+   * `total_value` and `short_by` are null, with `value_unknown` true, when
+   * the viewer may not see a share capital balance pledged to the loan.
    */
   collateral_summary?: {
-    total_value: number;
+    total_value: number | null;
     security_status: SecurityStatus;
-    short_by: number;
+    short_by: number | null;
+    value_unknown?: boolean;
   } | null;
   purpose?: string;
   collateral?: string;
@@ -551,6 +594,35 @@ export interface LoanAmortizationBalances {
     /** Insurance premium still owed on the loan, inside `balance`. */
     insurance_owed?: number | string | null;
   };
+}
+
+/** One Record Payment preset: what paying `periods` periods ahead takes today. */
+export interface LoanAdvancePreset {
+  periods: number;
+  amount: number | string;
+}
+
+/**
+ * `GET /loans/{id}/summary`: the loan's balances as the server works them
+ * out. `total_outstanding` is everything owed, premium included;
+ * `outstanding_balance` is a deprecated alias of it.
+ */
+export interface LoanSummary {
+  total_outstanding?: number | string | null;
+  outstanding_principal?: number | string | null;
+  /** Deprecated alias of `total_outstanding`. */
+  outstanding_balance?: number;
+  /** One per open period, in allocation order (only the 1-period entry on Share Capital Build-Up loans). */
+  advance_presets?: LoanAdvancePreset[];
+  /** What clears the loan today. */
+  payoff_amount?: number | string | null;
+  total_paid?: number;
+  principal_paid?: number;
+  interest_paid?: number;
+  overdue_amount?: number;
+  penalty_amount?: number;
+  next_due_date?: string;
+  next_due_amount?: number;
 }
 
 /**
