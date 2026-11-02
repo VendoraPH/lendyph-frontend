@@ -70,8 +70,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { notifyError, notifyValidation } from "@/lib/notify";
-import { describePermission, otherRoleSaveErrors, roleSaveErrorMessage } from "./_lib/role-save-error";
+import { notifyValidation } from "@/lib/notify";
+import { getErrorMessage } from "@/lib/api-error";
+import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -689,7 +690,9 @@ function UserRolesContent() {
       }
       // The API's own reason (a taken name, a permission it does not have)
       // is what tells the admin what to change; a bare "try again" hid it.
-      notifyError(err, formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
+      // Permission keys it lists read as the matrix labels them.
+      const fallback = formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.";
+      toast.error(readablePermissionKeys(getErrorMessage(err, fallback), describeMatrixPermission));
     } finally {
       setActionLoading(false);
     }

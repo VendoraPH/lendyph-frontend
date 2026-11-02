@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { notifyError, notifyValidation } from "@/lib/notify";
+import { notifyValidation } from "@/lib/notify";
 import { AlertCircle, ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, RefreshCw, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -147,6 +147,7 @@ import {
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
+import { formatProductRangeMessage } from "./_lib/product-range-message";
 
 // ── Helpers ──
 
@@ -905,11 +906,15 @@ function NewLoanApplicationInner() {
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
-      notifyError(
-        err,
-        isEditMode
-          ? "We couldn't update this loan. Please try again."
-          : "We couldn't create this loan. Please try again.",
+      toast.error(
+        formatProductRangeMessage(
+          getErrorMessage(
+            err,
+            isEditMode
+              ? "We couldn't update this loan. Please try again."
+              : "We couldn't create this loan. Please try again.",
+          ),
+        ),
       );
     } finally {
       setSubmitting(false);

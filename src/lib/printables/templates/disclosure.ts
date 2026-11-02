@@ -146,6 +146,7 @@ export function buildDisclosureDoc(
   const financeBlock = asRecord(pick(root, ["finance_charges"]));
   const nonFinanceBlock = asRecord(pick(root, ["non_finance_charges"]));
   const proceeds = asRecord(pick(root, ["proceeds"]));
+  const shareCapitalDeducted = pickNumber(proceeds, ["share_capital"]);
   const rates = asRecord(pick(root, ["rates"]));
 
   const totalPayable =
@@ -273,10 +274,10 @@ export function buildDisclosureDoc(
         },
         lessLine("Less: Finance Charges Deducted", pickNumber(proceeds, ["finance_charges_deducted"])),
         lessLine("Less: Non-Finance Charges Deducted", pickNumber(proceeds, ["non_finance_charges_deducted"])),
-        lessLine(
-          "Less: Share Capital (deducted from proceeds; not a charge)",
-          pickNumber(proceeds, ["share_capital"])
-        ),
+        // No share capital withheld: no line. An unsent figure still prints a dash.
+        ...(shareCapitalDeducted === 0
+          ? []
+          : [lessLine("Less: Share Capital (deducted from proceeds; not a charge)", shareCapitalDeducted)]),
         {
           label: "4. Net Proceeds of Loan (Amount Received by Borrower)",
           amount: currencyOrDash(pickNumber(proceeds, ["net_proceeds"])),
