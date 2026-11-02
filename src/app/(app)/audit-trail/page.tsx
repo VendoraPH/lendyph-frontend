@@ -91,6 +91,11 @@ const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
   { value: "status_changed", label: "Status Changed" },
 ];
 
+// Each filter's options, "all" first. The same list is the Select's `items`,
+// which is what lets the closed trigger show the label, not the raw value.
+const MODULE_FILTER_ITEMS = [{ value: "all", label: "All Modules" }, ...AUDIT_MODULE_OPTIONS];
+const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...ACTION_OPTIONS];
+
 
 
 // ── Helpers ──
@@ -553,26 +558,24 @@ function AuditTrailContent() {
                 aria-label="Search audit logs"
               />
             </div>
-            <Select value={moduleFilter} onValueChange={changeModuleFilter}>
+            <Select value={moduleFilter} onValueChange={changeModuleFilter} items={MODULE_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Module" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Modules</SelectItem>
-                {AUDIT_MODULE_OPTIONS.map((m) => (
+                {MODULE_FILTER_ITEMS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={changeActionFilter}>
+            <Select value={actionFilter} onValueChange={changeActionFilter} items={ACTION_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Action" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Actions</SelectItem>
-                {ACTION_OPTIONS.map((a) => (
+                {ACTION_FILTER_ITEMS.map((a) => (
                   <SelectItem key={a.value} value={a.value}>
                     {a.label}
                   </SelectItem>
