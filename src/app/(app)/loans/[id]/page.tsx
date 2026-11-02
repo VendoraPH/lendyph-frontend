@@ -5152,7 +5152,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
           if (choice !== null) void handlePartialExtendChoice(choice);
         }}
       >
-        <AlertDialogContent>
+        {/* Three buttons don't fit the default width: widen it from sm up and
+            let the row wrap; below sm the footer stacks them full width. */}
+        <AlertDialogContent className="data-[size=default]:sm:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Extend loan?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -5166,7 +5168,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               nothing and takes you back to the payment form.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="sm:flex-wrap">
             <AlertDialogCancel
               disabled={actionLoading}
               onClick={() => void handlePartialExtendChoice("cancel")}
