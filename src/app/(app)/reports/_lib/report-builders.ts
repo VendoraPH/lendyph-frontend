@@ -1756,17 +1756,14 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
     // paid in and out by its members (by the member's branch); a member with
     // no branch is in the server's "Unassigned" row (`branch_id` null).
     //
-    // The server's wording wins because it is scope-dependent: with a branch
-    // filter applied, share capital is scoped through the member's branch
-    // (matching the Share Capital report), and only the unfiltered case is
-    // organisation-wide. The fallback claims only what holds in both.
+    // Always this plain sentence: the server's `share_capital.note` is written
+    // for developers (field names and formulas) and is never printed on the
+    // report. The sentence holds with or without a branch filter.
     sections.push({
       kind: "note",
-      text: String(
-        pick(shareBlock, ["note"]) ??
-          "Share capital paid in and out is in the row of the branch each member belongs to; " +
-            "members with no branch are under Unassigned."
-      ),
+      text:
+        "Share capital paid in and out is in the row of the branch each member belongs to; " +
+        "members with no branch are under Unassigned.",
     });
   }
 

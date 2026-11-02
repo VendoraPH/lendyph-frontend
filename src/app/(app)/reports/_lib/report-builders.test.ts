@@ -2271,62 +2271,105 @@ test("a negative net movement is toned as a loss, a positive one as a gain", () 
   assert.equal(kpi(buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE), "Net Movement").tone, "positive");
 });
 
-test("cash flow breaks down by branch and says why it will not reconcile", () => {
-  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
-  const table = namedTable(doc, "Breakdown by Branch");
-
-  assert.equal(table.rows.length, 2);
-  assert.equal(table.rows[0].branch_name, "Main");
-  // Loan cash only: this equals inflows.repayments.total (1,013,651.50), NOT
-  // inflows.total (1,110,151.50) — the difference is the share capital credit.
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), "₱1,013,651.50");
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), "₱742,800.40");
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), "₱270,851.10");
-
-  // The server explains the gap in its own words; the builder prints them.
-  const note = noteText(doc);
-  assert.ok(note, "expected the share capital scoping note");
-  assert.match(note!, /no branch column/);
-  assert.equal(note, CASH_FLOW_PAYLOAD.share_capital.note);
-});
-
-test("the branch rows are loan cash only and say so rather than appearing wrong", () => {
-  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
-  const branchInflows = namedTableTotal(doc, "Breakdown by Branch", "inflows");
-
-  // A reader who adds the branch column and compares it to the headline must
-  // find the discrepancy explained, not left to guess at a bug.
-  assert.notEqual(branchInflows, kpiValue(doc, "Total Cash In"));
-  assert.equal(branchInflows, "₱1,013,651.50");
-  assert.ok(noteText(doc));
-});
-
 // Decision 5c: the server puts share capital paid in and out into the row of
 // each member's branch, and a member with no branch into an "Unassigned" row
-// (`branch_id` null), so the branch rows add up to the statement totals.
+// (`branch_id` null), so the branch rows add up to the statement totals:
+// cash in ₱1,013,651.50 loan cash + ₱96,500.00 share capital = ₱1,110,151.50,
+// cash out ₱742,800.40 + ₱31,500.00 = ₱774,300.40.
 const CASH_FLOW_WITH_SHARE_BY_BRANCH = {
   ...CASH_FLOW_PAYLOAD,
+  share_capital: {
+    ...CASH_FLOW_PAYLOAD.share_capital,
+    // The server's wording is for developers (field names, formulas) and is
+    // never printed on the report.
+    note:
+      "No branch filter applied, so these figures are organisation-wide. In by_branch, share capital paid in and out on its own is in the row of the branch each member belongs to (inflow_share_capital, outflow_share_capital, inside inflow_total and outflow_total).",
+  },
   by_branch: [
-    ...CASH_FLOW_PAYLOAD.by_branch,
+    {
+      ...CASH_FLOW_PAYLOAD.by_branch[0],
+      inflow_repayments: 720450.25,
+      inflow_share_capital: 60000,
+      inflow_total: 780450.25,
+      outflow_share_capital: 20000,
+      outflow_total: 532800.4,
+      share_capital_count: 25,
+      net_movement: 247649.85,
+    },
+    {
+      ...CASH_FLOW_PAYLOAD.by_branch[1],
+      inflow_repayments: 293201.25,
+      inflow_share_capital: 35000,
+      inflow_total: 328201.25,
+      outflow_share_capital: 11000,
+      outflow_total: 241000,
+      share_capital_count: 14,
+      net_movement: 87201.25,
+    },
     {
       branch_id: null,
       branch_name: "Unassigned",
       inflow_repayments: 0,
       inflow_share_capital: 1500,
       inflow_total: 1500,
+      repayment_count: 0,
       outflow_net_proceeds: 0,
       outflow_share_capital: 500,
       outflow_total: 500,
+      release_count: 0,
+      share_capital_count: 2,
       net_movement: 1000,
     },
   ],
+  by_branch_totals: {
+    inflow_share_capital: 96500,
+    inflow_total: 1110151.5,
+    outflow_share_capital: 31500,
+    outflow_total: 774300.4,
+    net_movement: 335851.1,
+  },
 };
+
+const CASH_FLOW_BRANCH_NOTE =
+  "Share capital paid in and out is in the row of the branch each member belongs to; " +
+  "members with no branch are under Unassigned.";
+
+test("cash flow breaks down by branch, members' share capital included, in plain words", () => {
+  const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
+  const table = namedTable(doc, "Breakdown by Branch");
+
+  assert.equal(table.rows.length, 3);
+  assert.equal(table.rows[0].branch_name, "Main");
+  // Loan cash plus the members' share capital, as the server sent each row.
+  assert.equal(table.rows[0].inflows, 780450.25);
+  assert.equal(table.rows[0].outflows, 532800.4);
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), "₱1,110,151.50");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), "₱774,300.40");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), "₱335,851.10");
+
+  // The builder's own sentence, never the server's technical note.
+  const note = noteText(doc);
+  assert.equal(note, CASH_FLOW_BRANCH_NOTE);
+  assert.notEqual(note, CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital.note);
+  assert.doesNotMatch(note!, /inflow_share_capital|by_branch|organisation-wide/);
+});
+
+test("the branch rows add up to the statement totals, so the footer matches the headline", () => {
+  const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
+
+  // A reader who adds the branch column and compares it to the headline finds
+  // the same figure: share capital is inside the rows, not left out of them.
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), kpiValue(doc, "Total Cash In"));
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), kpiValue(doc, "Total Cash Out"));
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), kpiValue(doc, "Net Movement"));
+  // The old caveat is gone: nothing needs adding back.
+  assert.doesNotMatch(noteText(doc)!, /cannot be attributed|loan collections and releases only|add the share capital lines back/);
+});
 
 test("cash flow lists members without a branch in an Unassigned row", () => {
   const table = namedTable(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE), "Breakdown by Branch");
   const unassigned = table.rows[2];
 
-  assert.equal(table.rows.length, 3);
   assert.equal(unassigned.branch_name, "Unassigned");
   assert.equal(unassigned.inflows, 1500);
   assert.equal(unassigned.outflows, 500);
@@ -2347,17 +2390,13 @@ test("a branch row with a null branch_id and no name still reads Unassigned", ()
   assert.equal(table.rows[0].branch_name, "Unassigned");
 });
 
-test("without the server's note, the branch note says share capital is in the members' branch rows", () => {
+test("the branch note is the same plain sentence whether or not the server sends a note", () => {
   const { note, ...shareWithoutNote } = CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital;
   void note;
-  const doc = buildCashFlowDoc({ ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: shareWithoutNote }, RANGE);
-  const text = noteText(doc);
+  const without = buildCashFlowDoc({ ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: shareWithoutNote }, RANGE);
 
-  assert.ok(text, "expected the branch breakdown note");
-  assert.match(text!, /branch each member belongs to/);
-  assert.match(text!, /Unassigned/);
-  // The old claim is gone: share capital is no longer left out of the rows.
-  assert.doesNotMatch(text!, /cannot be attributed|loan collections and releases only|add the share capital lines back/);
+  assert.equal(noteText(without), CASH_FLOW_BRANCH_NOTE);
+  assert.equal(noteText(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE)), CASH_FLOW_BRANCH_NOTE);
 });
 
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
