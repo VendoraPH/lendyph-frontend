@@ -60,14 +60,18 @@ import {
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
-  previewBalanceAfter,
-  previewBalanceBefore,
   readAmountDueNow,
   type AmountDueNow,
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans, type ActiveLoanTotals } from "./_lib/active-loans";
-import { previewAllocation, previewBadge } from "./_lib/payment-preview";
+import {
+  postPaymentErrorMessage,
+  previewAllocation,
+  previewBadge,
+  previewTotalOutstandingAfter,
+  previewTotalOutstandingBefore,
+} from "./_lib/payment-preview";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -338,10 +342,10 @@ function PaymentsContent() {
   const serverPreview = currentPreview?.preview ?? null;
   const previewError = currentPreview?.error ?? null;
 
-  // The preview's outstanding balance (premium owed included) before and
-  // after this payment; a dash when the server sent none.
-  const newOutstandingBalance = previewBalanceAfter(serverPreview);
-  const previousOutstandingBalance = previewBalanceBefore(serverPreview);
+  // The preview's outstanding balance (everything owed, premium included)
+  // before and after this payment; a dash when the server sent none.
+  const newOutstandingBalance = previewTotalOutstandingAfter(serverPreview);
+  const previousOutstandingBalance = previewTotalOutstandingBefore(serverPreview);
   // What a payment must be today (premium owed plus the open period), with
   // its parts, from the loan; null when the server sent none or the payment
   // is dated another day (the figure is as of today).
@@ -436,10 +440,8 @@ function PaymentsContent() {
 
       await fetchLoans();
       resetForm();
-    } catch {
-      toast.error("We couldn't post the payment. Please try again.", {
-        description: "Please try again or check your connection.",
-      });
+    } catch (err) {
+      toast.error(postPaymentErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }

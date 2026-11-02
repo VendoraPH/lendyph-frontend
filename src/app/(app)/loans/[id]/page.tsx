@@ -79,6 +79,7 @@ import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import { collectNowParts } from "./_lib/extension-preview";
+import { previewRefusalMessage, recordPaymentErrorMessage } from "./_lib/payment-errors";
 import {
   dueNowHasOpenPeriod,
   dueNowIsRange,
@@ -715,6 +716,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // again after the cashier is told so.
   const [paymentPreviewFailedKey, setPaymentPreviewFailedKey] = useState<string | null>(null);
   const [paymentPreviewRound, setPaymentPreviewRound] = useState(0);
+  // The server's reason for refusing the preview of an amount and date (a
+  // 422, e.g. a date before release), for those inputs only.
+  const [paymentPreviewRefusal, setPaymentPreviewRefusal] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -1265,6 +1272,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
   // The figure is as of today: another payment date shows a dash.
   const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The server refused the amount and date typed now: posting them would be
+  // refused too, so its reason shows and Record Payment waits for a change.
+  const paymentRefusal =
+    paymentPreviewRefusal !== null &&
+    paymentPreviewRefusal.key === previewRequestKey(Number(paymentAmount), formatDateISO(paymentDate))
+      ? paymentPreviewRefusal.message
+      : null;
   // The preview on screen answers exactly the amount and date typed now.
   const paymentPreviewCurrent = previewIsCurrent(
     { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
@@ -1303,12 +1317,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
           setPaymentPreview(res ?? null);
           setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
           setPaymentPreviewFailedKey(null);
+          setPaymentPreviewRefusal(null);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
+          const key = previewRequestKey(amt, paymentDateISO);
+          const refusal = previewRefusalMessage(err);
           setPaymentPreview(null);
           setPaymentPreviewKey(null);
-          setPaymentPreviewFailedKey(previewRequestKey(amt, paymentDateISO));
+          setPaymentPreviewFailedKey(key);
+          setPaymentPreviewRefusal(refusal === null ? null : { key, message: refusal });
         }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
@@ -1681,8 +1699,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
         ]);
       }
       return true;
-    } catch {
-      toast.error("We couldn't record the payment. Please try again.");
+    } catch (err) {
+      toast.error(recordPaymentErrorMessage(err));
       return false;
     } finally {
       setActionLoading(false);
@@ -4412,6 +4430,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
             );
           })()}
 
+          {paymentRefusal !== null && Number(paymentAmount) > 0 && (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
+            >
+              {paymentRefusal}
+            </p>
+          )}
+
           {/* Allocation Preview */}
           {paymentPreview && Number(paymentAmount) > 0 && (
             <>
@@ -4646,7 +4673,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <Button
               className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRecordPayment}
-              disabled={actionLoading || !paymentAmount || Number(paymentAmount) <= 0}
+              disabled={
+                actionLoading || !paymentAmount || Number(paymentAmount) <= 0 || paymentRefusal !== null
+              }
             >
               {actionLoading ? (
                 <>
