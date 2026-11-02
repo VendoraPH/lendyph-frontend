@@ -1,10 +1,10 @@
 // How an audit row reads on the Audit Trail: its module, action, user and
 // description. Dependency-free so it is unit-testable under `tsx --test`.
 
-import type { AuditLog } from "@/types";
+import type { AuditLog, AuditModule } from "@/types";
 import { roleLabelForKey } from "@/lib/role-display-name";
 
-const MODULE_LABELS: Record<string, string> = {
+const MODULE_LABELS: Record<AuditModule, string> = {
   auth: "Auth",
   borrowers: "Borrowers",
   loans: "Loans",
@@ -12,8 +12,15 @@ const MODULE_LABELS: Record<string, string> = {
   collections: "Collections",
   users: "Users",
   roles: "Roles",
-  reports: "Reports",
 };
+
+/**
+ * The module filter's options: exactly the module names the audit log list's
+ * `module` parameter accepts (anything else is refused with 422).
+ */
+export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles"] as const
+).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
   login: "Login",
@@ -43,7 +50,7 @@ function inWords(key: string): string {
  */
 export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): string {
   if (log.target?.type === "Role") return "Roles";
-  return MODULE_LABELS[log.module] ?? inWords(log.module);
+  return (MODULE_LABELS as Record<string, string>)[log.module] ?? inWords(log.module);
 }
 
 /** The row's action: a known label, or the server's key in words. */

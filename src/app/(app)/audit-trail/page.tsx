@@ -48,8 +48,9 @@ import {
 import { cn } from "@/lib/utils";
 import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
-import type { AuditLog, AuditAction, AuditModule } from "@/types";
+import type { AuditLog, AuditAction } from "@/types";
 import {
+  AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditDescription,
   auditFieldLabel,
@@ -90,16 +91,6 @@ const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
   { value: "status_changed", label: "Status Changed" },
 ];
 
-const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
-  { value: "auth", label: "Auth" },
-  { value: "borrowers", label: "Borrowers" },
-  { value: "loans", label: "Loans" },
-  { value: "payments", label: "Payments" },
-  { value: "collections", label: "Collections" },
-  { value: "users", label: "Users" },
-  { value: "roles", label: "Roles" },
-  { value: "reports", label: "Reports" },
-];
 
 
 // ── Helpers ──
@@ -568,7 +559,7 @@ function AuditTrailContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Modules</SelectItem>
-                {MODULE_OPTIONS.map((m) => (
+                {AUDIT_MODULE_OPTIONS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>

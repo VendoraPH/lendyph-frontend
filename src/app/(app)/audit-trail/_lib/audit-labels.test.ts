@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AuditLog } from "@/types";
 import {
+  AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditDescription,
   auditFieldLabel,
@@ -97,4 +98,12 @@ test("the user's role reads by its label, every underscore a space", () => {
   assert.equal(auditUserRole(log({ user: { id: 7, full_name: "Ana", roles: ["branch_head_officer"] } })), "Branch Head Officer");
   assert.equal(auditUserRole(log({ user: { id: 7, full_name: "Ana", roles: [] } })), "");
   assert.equal(auditUserRole(log({ user: null as unknown as AuditLog["user"] })), "");
+});
+
+test("the module filter offers exactly the modules the server filters by", () => {
+  assert.deepEqual(
+    AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
+    ["auth", "borrowers", "collections", "loans", "payments", "roles", "users"]
+  );
+  assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
