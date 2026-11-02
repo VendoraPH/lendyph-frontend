@@ -36,31 +36,16 @@ import {
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
 import { reportService } from "@/services";
 import { currencyOrDash } from "@/lib/report-format";
+import { compareFigure } from "./_lib/past-due-outstanding";
 import {
-  compareOutstanding,
-  mergeOutstanding,
-  readRowOutstanding,
-} from "./_lib/past-due-outstanding";
-
-// ── Types ──
-
-interface PastDueLoan {
-  loanId: number;
-  loanNumber: string;
-  memberId: string;
-  memberName: string;
-  daysPastDue: number;
-  pastDuePrincipal: number;
-  pastDueInterest: number;
-  pastDuePenalty: number;
-  /** Everything owed on the loan (`total_outstanding`); null when not sent. */
-  outstandingBalance: number | null;
-  lastPaymentDate: string | null;
-  branch: string;
-}
+  aggregateByLoan,
+  mapRow,
+  summarizePastDue,
+  type PastDueLoan,
+  type RawPastDueRow,
+} from "./_lib/past-due-loans";
 
 // ── Helpers ──
 
@@ -72,9 +57,6 @@ const formatDate = (dateStr: string | null) => {
     day: "numeric",
   });
 };
-
-const totalPastDue = (l: PastDueLoan) =>
-  l.pastDuePrincipal + l.pastDueInterest + l.pastDuePenalty;
 
 type AgingBucket = "all" | "1-30" | "31-60" | "61-90" | "90+";
 
@@ -99,124 +81,6 @@ const severityClass = (days: number): string => {
 type SortKey = "memberName" | "daysPastDue" | "pastDue" | "outstanding";
 type SortDir = "asc" | "desc";
 
-// ── Response mapping ──
-//
-// /api/reports/due-past-due is documented in swagger as a paginated list of
-// "schedules that are due or overdue as of today" — but the response body
-// shape isn't pinned down there. Map defensively against the most likely
-// snake_case field names so this works whether the row represents a loan
-// summary or an individual schedule period, with sensible fallbacks.
-
-interface RawPastDueRow {
-  [key: string]: unknown;
-  loan?: {
-    loan_account_number?: string;
-    outstanding_balance?: number | string;
-    total_outstanding?: number | string | null;
-  } | null;
-  borrower?: {
-    full_name?: string;
-    name?: string;
-    borrower_code?: string;
-  } | null;
-  branch?: { name?: string } | string | null;
-}
-
-const num = (v: unknown): number => {
-  if (v === null || v === undefined || v === "") return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const str = (v: unknown, fallback = ""): string => {
-  if (v === null || v === undefined) return fallback;
-  return String(v);
-};
-
-const computeDaysPastDue = (raw: RawPastDueRow): number => {
-  const direct = num(raw.days_past_due ?? raw.days_overdue ?? raw.daysPastDue);
-  if (direct > 0) return direct;
-  const dueDate = raw.due_date ?? raw.dueDate;
-  if (typeof dueDate === "string") {
-    const ms = Date.now() - new Date(dueDate).getTime();
-    if (Number.isFinite(ms) && ms > 0) {
-      return Math.floor(ms / 86_400_000);
-    }
-  }
-  return 0;
-};
-
-const mapRow = (raw: RawPastDueRow): PastDueLoan => {
-  const loanId = num(raw.loan_id ?? raw.loanId ?? raw.id);
-  const loanNumber = str(
-    raw.loan_account_number ??
-      raw.loan_number ??
-      raw.loanNumber ??
-      raw.loan?.loan_account_number,
-    loanId ? `#${loanId}` : "—",
-  );
-  const memberId = str(
-    raw.borrower_code ??
-      raw.member_id ??
-      raw.memberId ??
-      raw.borrower?.borrower_code ??
-      raw.borrower_id,
-    "—",
-  );
-  const memberName = str(
-    raw.borrower_name ??
-      raw.member_name ??
-      raw.memberName ??
-      raw.borrower?.full_name ??
-      raw.borrower?.name,
-    "—",
-  );
-  const branchValue = raw.branch_name ?? raw.branchName ?? raw.branch;
-  const branch =
-    typeof branchValue === "object" && branchValue !== null
-      ? str((branchValue as { name?: string }).name, "—")
-      : str(branchValue, "—");
-  const lastPaymentRaw =
-    raw.last_payment_date ??
-    raw.last_payment_at ??
-    raw.lastPaymentDate ??
-    null;
-  const lastPaymentDate =
-    typeof lastPaymentRaw === "string" ? lastPaymentRaw : null;
-
-  return {
-    loanId,
-    loanNumber,
-    memberId,
-    memberName,
-    daysPastDue: computeDaysPastDue(raw),
-    pastDuePrincipal: num(
-      raw.past_due_principal ??
-        raw.pastDuePrincipal ??
-        raw.principal_due ??
-        raw.principal_remaining,
-    ),
-    pastDueInterest: num(
-      raw.past_due_interest ??
-        raw.pastDueInterest ??
-        raw.interest_due ??
-        raw.interest_remaining,
-    ),
-    pastDuePenalty: num(
-      raw.past_due_penalty ??
-        raw.pastDuePenalty ??
-        raw.penalty_amount ??
-        raw.penalty,
-    ),
-    outstandingBalance: readRowOutstanding(raw),
-    lastPaymentDate,
-    branch,
-  };
-};
-
-// Row extraction moved to `reportService.duePastDueAll`, which has to read the
-// `{ data, meta }` envelope anyway to know when it has reached the last page.
-
 /** HTTP status of a failed request, or null when it never got a response. */
 const statusOf = (err: unknown): number | null => {
   if (!err || typeof err !== "object" || !("response" in err)) return null;
@@ -237,47 +101,11 @@ const statusOf = (err: unknown): number | null => {
 const isMalformedRequest = (status: number | null): boolean =>
   status !== null && status >= 400 && status < 500 && ![401, 403, 429].includes(status);
 
-// If the backend returns one row per overdue *schedule period* instead of
-// one row per loan, multiple rows can share the same loan_id. Aggregate
-// into per-loan summaries so the UI shows each member's loan once.
-const aggregateByLoan = (rows: PastDueLoan[]): PastDueLoan[] => {
-  const map = new Map<number, PastDueLoan>();
-  for (const r of rows) {
-    if (!r.loanId) continue;
-    const existing = map.get(r.loanId);
-    if (existing) {
-      existing.pastDuePrincipal += r.pastDuePrincipal;
-      existing.pastDueInterest += r.pastDueInterest;
-      existing.pastDuePenalty += r.pastDuePenalty;
-      // Keep the largest daysPastDue (oldest unpaid period defines the loan's age)
-      if (r.daysPastDue > existing.daysPastDue) {
-        existing.daysPastDue = r.daysPastDue;
-      }
-      // Outstanding is the loan's own total, the same on every period row, so
-      // it is kept rather than added up.
-      existing.outstandingBalance = mergeOutstanding(
-        existing.outstandingBalance,
-        r.outstandingBalance,
-      );
-      // Latest last-payment date wins
-      if (
-        r.lastPaymentDate &&
-        (!existing.lastPaymentDate ||
-          new Date(r.lastPaymentDate) > new Date(existing.lastPaymentDate))
-      ) {
-        existing.lastPaymentDate = r.lastPaymentDate;
-      }
-    } else {
-      map.set(r.loanId, { ...r });
-    }
-  }
-  return Array.from(map.values());
-};
-
 // ── Page ──
 
 function PastDueLoansContent() {
   const [loans, setLoans] = useState<PastDueLoan[]>([]);
+  const [serverTotals, setServerTotals] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // Rows fetched so far / rows the server says there are. Drives the progress
@@ -304,11 +132,12 @@ function PastDueLoansContent() {
       // due date, so a loan's periods are spread across the whole set and
       // aggregateByLoan() under-reports days past due and amounts owed for any
       // loan whose periods it cannot all see.
-      const { rows, complete } = await reportService.duePastDueAll(
+      const { rows, complete, totals } = await reportService.duePastDueAll(
         undefined,
         (loaded, total) => setProgress({ loaded, total }),
       );
       setLoans(aggregateByLoan((rows as RawPastDueRow[]).map(mapRow)));
+      setServerTotals(totals);
       setFailed(false);
       setPartial(!complete);
     } catch (err) {
@@ -334,6 +163,7 @@ function PastDueLoansContent() {
       }
       notifyError(err, "We couldn't load past due loans.");
       setLoans([]);
+      setServerTotals(null);
       setFailed(true);
       setPartial(false);
     } finally {
@@ -363,39 +193,24 @@ function PastDueLoansContent() {
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "memberName":
-          cmp = a.memberName.localeCompare(b.memberName);
-          break;
-        case "daysPastDue":
-          cmp = a.daysPastDue - b.daysPastDue;
-          break;
-        case "pastDue":
-          cmp = totalPastDue(a) - totalPastDue(b);
-          break;
-        case "outstanding":
-          cmp = compareOutstanding(a.outstandingBalance, b.outstandingBalance);
-          break;
+      // Money columns keep rows with no figure last in either direction.
+      if (sortKey === "pastDue") return compareFigure(a.pastDueAmount, b.pastDueAmount, sortDir);
+      if (sortKey === "outstanding") {
+        return compareFigure(a.outstandingBalance, b.outstandingBalance, sortDir);
       }
+      const cmp =
+        sortKey === "memberName"
+          ? a.memberName.localeCompare(b.memberName)
+          : a.daysPastDue - b.daysPastDue;
       return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  const totals = useMemo(() => {
-    const memberIds = new Set<string>();
-    let pastDueSum = 0;
-    for (const l of sorted) {
-      memberIds.add(l.memberId);
-      pastDueSum += totalPastDue(l);
-    }
-    return {
-      memberCount: memberIds.size,
-      loanCount: sorted.length,
-      pastDueSum,
-    };
-  }, [sorted]);
+  // Every loaded loan, not `sorted`: the search and age filters narrow the
+  // table only.
+  const summary = useMemo(() => summarizePastDue(loans, serverTotals), [loans, serverTotals]);
+  const filterActive = search.trim() !== "" || bucket !== "all";
 
   // A failed load has no figures to show. Rendering the zeroed totals would
   // print "0 members past due / ₱0.00" over a cooperative's real arrears.
@@ -459,7 +274,7 @@ function PastDueLoansContent() {
                   Members Past Due
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {figuresUnavailable ? "—" : totals.memberCount}
+                  {figuresUnavailable ? "—" : summary.memberCount}
                 </p>
               </div>
             </div>
@@ -476,7 +291,7 @@ function PastDueLoansContent() {
                   Past Due Loans
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {figuresUnavailable ? "—" : totals.loanCount}
+                  {figuresUnavailable ? "—" : summary.loanCount}
                 </p>
               </div>
             </div>
@@ -493,7 +308,7 @@ function PastDueLoansContent() {
                   Total Past Due
                 </p>
                 <p className="text-xl font-bold tabular-nums text-red-600">
-                  {figuresUnavailable ? "—" : formatCurrency(totals.pastDueSum)}
+                  {figuresUnavailable ? "—" : currencyOrDash(summary.pastDueAmount)}
                 </p>
               </div>
             </div>
@@ -510,14 +325,20 @@ function PastDueLoansContent() {
                   Outstanding Balance
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {/* No server total for this yet; never a sum of the rows. */}
-                  —
+                  {figuresUnavailable ? "—" : currencyOrDash(summary.totalOutstanding)}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {filterActive && !figuresUnavailable ? (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          These totals cover every loan in this list (due or past due), not
+          only the filtered rows.
+        </p>
+      ) : null}
 
       {/* Filters */}
       <Card>
@@ -562,8 +383,8 @@ function PastDueLoansContent() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             This list is incomplete — not every past due payment could be
-            loaded, so the totals below are a minimum, not the full amount.
-            Refresh to try again.
+            loaded, so the table and the member and loan counts may be missing
+            loans. Refresh to try again.
           </p>
         </div>
       ) : null}
@@ -691,7 +512,7 @@ function PastDueLoansContent() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-red-600">
-                      {formatCurrency(totalPastDue(l))}
+                      {currencyOrDash(l.pastDueAmount)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {currencyOrDash(l.outstandingBalance)}
