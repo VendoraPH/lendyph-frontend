@@ -12,6 +12,7 @@ import type { CollateralType, LoanCollateral } from "@/types";
 import type { Loan } from "@/types/loan";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/lib/utils";
+import { attachedCollateralValue } from "../_lib/collateral-display";
 
 interface LoanCollateralsCardProps {
   loanId: number;
@@ -31,8 +32,11 @@ interface AttachedRow {
    */
   link: LoanCollateral;
   type?: CollateralType;
-  /** What the collateral was booked at when attached, from the pivot. */
-  snapshotValue: number;
+  /**
+   * What the collateral was booked at when attached, from the pivot; null
+   * (a dash) when the server hides it or sent no pivot.
+   */
+  snapshotValue: number | null;
 }
 
 export function LoanCollateralsCard({
@@ -62,7 +66,7 @@ export function LoanCollateralsCard({
         const enriched: AttachedRow[] = links.map((link) => ({
           link,
           type: link.collateral_type,
-          snapshotValue: link.pivot?.snapshot_value ?? link.amount,
+          snapshotValue: attachedCollateralValue(link),
         }));
         setRows(enriched);
       } catch {
@@ -131,7 +135,7 @@ export function LoanCollateralsCard({
                   )}
                 </div>
                 <span className="text-sm font-semibold tabular-nums">
-                  {formatCurrency(snapshotValue)}
+                  {snapshotValue === null ? "—" : formatCurrency(snapshotValue)}
                 </span>
               </div>
             ))}
