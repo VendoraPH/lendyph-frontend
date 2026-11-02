@@ -95,6 +95,12 @@ describe("walk-in rows", () => {
     assert.equal(option.contactNumber, "09171234567");
   });
 
+  test("a walk-in without an ID has no hint line, never \"null · null\"", () => {
+    const option = walkInOption(walkIn({ id_type: null, id_number: null }));
+    assert.equal(option.hint, null);
+    assert.equal(option.contactNumber, "09171234567");
+  });
+
   test("members carry no walk-in record", () => {
     assert.equal(memberOption(member()).nonMember, null);
   });
