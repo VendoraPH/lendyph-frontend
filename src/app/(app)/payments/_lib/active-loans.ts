@@ -1,4 +1,5 @@
 import type { Loan, PaginatedResponse } from "@/types";
+import { toNumber } from "@/lib/report-format";
 
 /**
  * The `status` value this screen sends.
@@ -51,6 +52,30 @@ export type LoanPageFetcher = (params: {
   per_page: number;
 }) => Promise<PaginatedResponse<Loan>>;
 
+/**
+ * GET /loans `meta.totals`: the server's figures over every row matching the
+ * request's filters, not over the page. `total_outstanding` is everything owed
+ * (principal, interest, penalty and premium). Each is null when the server
+ * did not send a readable figure, so the screen shows a dash rather than 0.
+ */
+export interface ActiveLoanTotals {
+  total_outstanding: number | null;
+  overdue_amount: number | null;
+  overdue_count: number | null;
+}
+
+/** `meta.totals` out of a list response, or null when it carried none. */
+export function readLoanListTotals(response: unknown): ActiveLoanTotals | null {
+  const totals = (pageMeta(response) as { totals?: unknown } | null)?.totals;
+  if (!totals || typeof totals !== "object" || Array.isArray(totals)) return null;
+  const t = totals as Record<string, unknown>;
+  return {
+    total_outstanding: toNumber(t.total_outstanding),
+    overdue_amount: toNumber(t.overdue_amount),
+    overdue_count: toNumber(t.overdue_count),
+  };
+}
+
 export interface ActiveLoansResult {
   /** Every active loan the API handed over, in the order it returned them. */
   loans: Loan[];
@@ -67,6 +92,12 @@ export interface ActiveLoansResult {
    * it is only acceptable when the screen says so.
    */
   truncated: boolean;
+  /**
+   * The server's totals over every active loan, read from the first page that
+   * carried them. They hold even when `truncated` is true. Null when no page
+   * sent `meta.totals`.
+   */
+  totals: ActiveLoanTotals | null;
 }
 
 /** Rows out of a paginator body, tolerating a bare array or a missing `data`. */
@@ -97,25 +128,19 @@ function positiveInt(value: unknown): number | null {
  * Every active loan, across as many pages as the API needs to hand them over.
  *
  * This screen takes payments over the counter, so it needs the whole set rather
- * than a page of it, and the reason is not convenience — it is that two of the
- * three things it does with the set cannot be moved to the server as the API
- * stands:
+ * than a page of it, because it orders the queue by "overdue first, then
+ * earliest next due date". `overdue_amount` and `next_due_date` are not
+ * columns; `LoanResource` derives them per row from the loaded amortization
+ * schedules, after the page has already been selected. `?sort=` accepts no
+ * equivalent key, so a server-paged page 1 would be the newest applications,
+ * not the most urgent: a queue that looks sorted and is not.
  *
- *  - It orders the queue by "overdue first, then earliest next due date".
- *    `overdue_amount` and `next_due_date` are not columns; `LoanResource`
- *    derives them per row from the loaded amortization schedules, after the
- *    page has already been selected. `?sort=` accepts no equivalent key, so a
- *    server-paged page 1 would be the newest applications, not the most urgent
- *    — a queue that looks sorted and is not.
- *  - Its "Overdue" and "Total Outstanding" cards are aggregates over those same
- *    derived values. `meta.stats` is a `GROUP BY status` row count and has no
- *    money in it, so under server paging both cards would quietly describe
- *    whichever page was loaded. That is the same silent wrongness as the bug,
- *    moved from the table to the cards.
+ * The "Overdue" and "Total Outstanding" cards do NOT depend on the drain: they
+ * read the server's `meta.totals`, which cover every matching row. Never add
+ * the rows up in their place.
  *
- * Only search could move server-side, and moving search alone would fix
- * nothing. If the API ever grows a schedule-derived sort and totals, this
- * screen should page properly and this function should go.
+ * If the API ever grows a schedule-derived sort, this screen should page
+ * properly and this function should go.
  *
  * The loop follows the server's `meta.last_page` and stops on the first short
  * page; `MAX_ACTIVE_LOAN_PAGES` only bounds a runaway, and reaching it is
@@ -131,6 +156,7 @@ export async function fetchAllActiveLoans(
   const loans: Loan[] = [];
   let total: number | null = null;
   let truncated = false;
+  let totals: ActiveLoanTotals | null = null;
   let page = 1;
 
   for (;;) {
@@ -142,6 +168,7 @@ export async function fetchAllActiveLoans(
 
     const rows = pageRows(response);
     loans.push(...rows);
+    totals ??= readLoanListTotals(response);
 
     const meta = pageMeta(response);
     const metaTotal = positiveInt(meta?.total);
@@ -174,5 +201,5 @@ export async function fetchAllActiveLoans(
     page += 1;
   }
 
-  return { loans, total, truncated };
+  return { loans, total, truncated, totals };
 }

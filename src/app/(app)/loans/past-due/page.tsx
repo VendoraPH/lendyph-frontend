@@ -38,6 +38,12 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { reportService } from "@/services";
+import { currencyOrDash } from "@/lib/report-format";
+import {
+  compareOutstanding,
+  mergeOutstanding,
+  readRowOutstanding,
+} from "./_lib/past-due-outstanding";
 
 // ── Types ──
 
@@ -50,7 +56,8 @@ interface PastDueLoan {
   pastDuePrincipal: number;
   pastDueInterest: number;
   pastDuePenalty: number;
-  outstandingBalance: number;
+  /** Everything owed on the loan (`total_outstanding`); null when not sent. */
+  outstandingBalance: number | null;
   lastPaymentDate: string | null;
   branch: string;
 }
@@ -102,7 +109,11 @@ type SortDir = "asc" | "desc";
 
 interface RawPastDueRow {
   [key: string]: unknown;
-  loan?: { loan_account_number?: string; outstanding_balance?: number | string } | null;
+  loan?: {
+    loan_account_number?: string;
+    outstanding_balance?: number | string;
+    total_outstanding?: number | string | null;
+  } | null;
   borrower?: {
     full_name?: string;
     name?: string;
@@ -197,12 +208,7 @@ const mapRow = (raw: RawPastDueRow): PastDueLoan => {
         raw.penalty_amount ??
         raw.penalty,
     ),
-    outstandingBalance: num(
-      raw.outstanding_balance ??
-        raw.outstandingBalance ??
-        raw.remaining_balance ??
-        raw.loan?.outstanding_balance,
-    ),
+    outstandingBalance: readRowOutstanding(raw),
     lastPaymentDate,
     branch,
   };
@@ -247,11 +253,12 @@ const aggregateByLoan = (rows: PastDueLoan[]): PastDueLoan[] => {
       if (r.daysPastDue > existing.daysPastDue) {
         existing.daysPastDue = r.daysPastDue;
       }
-      // Outstanding should be the loan's running balance — same across periods
-      // but take the max defensively in case some rows omit it.
-      if (r.outstandingBalance > existing.outstandingBalance) {
-        existing.outstandingBalance = r.outstandingBalance;
-      }
+      // Outstanding is the loan's own total, the same on every period row, so
+      // it is kept rather than added up.
+      existing.outstandingBalance = mergeOutstanding(
+        existing.outstandingBalance,
+        r.outstandingBalance,
+      );
       // Latest last-payment date wins
       if (
         r.lastPaymentDate &&
@@ -368,7 +375,7 @@ function PastDueLoansContent() {
           cmp = totalPastDue(a) - totalPastDue(b);
           break;
         case "outstanding":
-          cmp = a.outstandingBalance - b.outstandingBalance;
+          cmp = compareOutstanding(a.outstandingBalance, b.outstandingBalance);
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -379,17 +386,14 @@ function PastDueLoansContent() {
   const totals = useMemo(() => {
     const memberIds = new Set<string>();
     let pastDueSum = 0;
-    let outstandingSum = 0;
     for (const l of sorted) {
       memberIds.add(l.memberId);
       pastDueSum += totalPastDue(l);
-      outstandingSum += l.outstandingBalance;
     }
     return {
       memberCount: memberIds.size,
       loanCount: sorted.length,
       pastDueSum,
-      outstandingSum,
     };
   }, [sorted]);
 
@@ -506,7 +510,8 @@ function PastDueLoansContent() {
                   Outstanding Balance
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {figuresUnavailable ? "—" : formatCurrency(totals.outstandingSum)}
+                  {/* No server total for this yet; never a sum of the rows. */}
+                  —
                 </p>
               </div>
             </div>
@@ -689,7 +694,7 @@ function PastDueLoansContent() {
                       {formatCurrency(totalPastDue(l))}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(l.outstandingBalance)}
+                      {currencyOrDash(l.outstandingBalance)}
                     </TableCell>
                     <TableCell className="text-sm">
                       {formatDate(l.lastPaymentDate)}

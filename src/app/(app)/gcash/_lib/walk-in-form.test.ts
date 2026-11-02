@@ -1,10 +1,16 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ID_NUMBER_NEEDS_TYPE,
   ID_NUMBER_NOT_BLANK,
+  ID_TYPE_NEEDS_NUMBER,
   WALK_IN_MAX_LENGTH,
+  acknowledgedWalkInPayload,
+  hasRequiredWalkInFields,
+  possibleDuplicateWarning,
   validateWalkInForm,
   walkInFieldErrors,
+  walkInFormFrom,
   walkInPayload,
   type WalkInFormState,
 } from "./walk-in-form";
@@ -134,5 +140,124 @@ describe("payload", () => {
         remarks: null,
       },
     );
+  });
+});
+
+describe("optional ID", () => {
+  const NO_ID: WalkInFormState = { ...FILLED, id_type: "", id_number: "" };
+
+  test("a walk-in without an ID sends both ID fields as null", () => {
+    const payload = walkInPayload({ ...NO_ID, id_number: "   " });
+    assert.equal(payload.id_type, null);
+    assert.equal(payload.id_number, null);
+  });
+
+  test("name and mobile number are all that is required", () => {
+    assert.equal(hasRequiredWalkInFields(walkInPayload(NO_ID)), true);
+    assert.equal(
+      hasRequiredWalkInFields(walkInPayload({ ...NO_ID, full_name: "  " })),
+      false,
+    );
+    assert.equal(
+      hasRequiredWalkInFields(walkInPayload({ ...NO_ID, mobile_number: "" })),
+      false,
+    );
+  });
+
+  test("no ID at all passes validation", () => {
+    assert.deepEqual(validateWalkInForm(NO_ID), {});
+  });
+
+  test("both ID fields filled passes validation", () => {
+    assert.deepEqual(validateWalkInForm(FILLED), {});
+  });
+
+  test("an ID type without a number asks for the number", () => {
+    assert.deepEqual(validateWalkInForm({ ...NO_ID, id_type: "UMID" }), {
+      id_number: ID_TYPE_NEEDS_NUMBER,
+    });
+  });
+
+  test("an ID number without a type asks for the type", () => {
+    assert.deepEqual(validateWalkInForm({ ...NO_ID, id_number: "1234" }), {
+      id_type: ID_NUMBER_NEEDS_TYPE,
+    });
+  });
+
+  test("a dash-only number without a type gets both messages", () => {
+    assert.deepEqual(validateWalkInForm({ ...NO_ID, id_number: "---" }), {
+      id_type: ID_NUMBER_NEEDS_TYPE,
+      id_number: ID_NUMBER_NOT_BLANK,
+    });
+  });
+
+  test("uses the backend's own both-or-neither wording", () => {
+    assert.equal(
+      ID_TYPE_NEEDS_NUMBER,
+      "Enter the ID number too, or leave both ID fields blank.",
+    );
+    assert.equal(
+      ID_NUMBER_NEEDS_TYPE,
+      "Enter the ID type too, or leave both ID fields blank.",
+    );
+  });
+
+  test("a saved walk-in without an ID edits as empty fields, not \"null\"", () => {
+    const form = walkInFormFrom({
+      id: 1,
+      full_name: "Juan",
+      mobile_number: "0917",
+      id_type: null,
+      id_number: null,
+      remarks: null,
+      created_at: "2026-11-02T00:00:00Z",
+      updated_at: "2026-11-02T00:00:00Z",
+    });
+    assert.equal(form.id_type, "");
+    assert.equal(form.id_number, "");
+  });
+});
+
+describe("possible duplicate warning", () => {
+  const WARNING =
+    "A walk-in named Carla Dizon with the same mobile number is already registered. Check that this is a different customer, or save anyway.";
+
+  test("maps errors.possible_duplicate to its message", () => {
+    const err = httpError(422, {
+      message: WARNING,
+      errors: { possible_duplicate: [WARNING] },
+    });
+    assert.equal(possibleDuplicateWarning(err), WARNING);
+  });
+
+  test("is not a field error, so it never lands on an input", () => {
+    const err = httpError(422, { errors: { possible_duplicate: [WARNING] } });
+    assert.deepEqual(walkInFieldErrors(err), {});
+  });
+
+  test("anything else is not a warning", () => {
+    assert.equal(
+      possibleDuplicateWarning(httpError(422, { errors: { id_number: [DUPLICATE] } })),
+      null,
+    );
+    assert.equal(
+      possibleDuplicateWarning(httpError(409, { errors: { possible_duplicate: [WARNING] } })),
+      null,
+    );
+    assert.equal(
+      possibleDuplicateWarning(httpError(422, { errors: { possible_duplicate: "flat" } })),
+      null,
+    );
+    assert.equal(possibleDuplicateWarning(new Error("offline")), null);
+    assert.equal(possibleDuplicateWarning(undefined), null);
+  });
+
+  test("Save anyway resends the same payload with the acknowledgement", () => {
+    const payload = walkInPayload({ ...FILLED, id_type: "", id_number: "" });
+    assert.deepEqual(acknowledgedWalkInPayload(payload), {
+      ...payload,
+      acknowledge_possible_duplicate: true,
+    });
+    assert.equal(payload.acknowledge_possible_duplicate, undefined);
   });
 });

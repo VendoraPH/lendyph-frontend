@@ -25,6 +25,7 @@ import { BorrowerHeader } from "./_components/borrower-header";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
 import { PaymentsTab } from "./_components/payments-tab";
+import { useBorrowerLoanSummary } from "./_hooks/use-borrower-loan-summary";
 import { CoMakersTab } from "./_components/co-makers-tab";
 import { DocumentsTab } from "./_components/documents-tab";
 import { LedgerTab } from "./_components/ledger-tab";
@@ -62,6 +63,8 @@ function BorrowerDetailContent() {
   const { can } = usePermission();
   const canListLoans = can("loans:view");
   const canListPayments = can("payments:view");
+  // One read of the server's loan totals for the Overview and Payments tabs.
+  const loanSummary = useBorrowerLoanSummary(borrower?.id, loans);
 
   const fetchCoMakers = useCallback(async () => {
     try {
@@ -246,7 +249,7 @@ function BorrowerDetailContent() {
           shown={paymentShortfall.shown}
           total={paymentShortfall.total}
           noun="payments"
-          consequence="The Payments tab's count and Total Paid cover only the payments that loaded."
+          consequence="The Payments tab's list and count cover only the payments that loaded."
         />
       )}
 
@@ -263,7 +266,7 @@ function BorrowerDetailContent() {
         </TabsList>
 
         <TabsContent value="overview" className="pt-4">
-          <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} />
+          <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} summary={loanSummary} />
         </TabsContent>
 
         <TabsContent value="loans" className="pt-4">
@@ -271,7 +274,7 @@ function BorrowerDetailContent() {
         </TabsContent>
 
         <TabsContent value="payments" className="pt-4">
-          <PaymentsTab payments={payments} loans={loans} />
+          <PaymentsTab payments={payments} loans={loans} summary={loanSummary} />
         </TabsContent>
 
         <TabsContent value="co-makers" className="pt-4">
