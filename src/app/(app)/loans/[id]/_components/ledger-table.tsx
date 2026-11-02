@@ -9,6 +9,7 @@ import { currencyOrDash } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { Repayment } from "@/types";
 import {
+  ledgerRowDescription,
   ledgerRowPayment,
   type LedgerBalancesView,
   type LedgerCell,
@@ -24,6 +25,8 @@ interface LedgerTableProps {
   onRetry: () => void;
   /** Show the share capital build-up columns. */
   hasScb: boolean;
+  /** The loan's status: a restructured loan's payments can't be voided. */
+  loanStatus: string;
   /** The payments the rows name, for receipts, amounts paid and Void. */
   repaymentsById: Map<number, Repayment>;
   onVoid: (repaymentId: number) => void;
@@ -61,20 +64,40 @@ function ClosingBalance({ value }: { value: number | null }) {
   );
 }
 
+/** The premium a payment collected; on a void row, the premium put back. */
+function Insurance({ value }: { value: LedgerViewRow["insurance"] }) {
+  return (
+    <td className="border-r px-3 py-2 text-right tabular-nums">
+      {value.amount === null ? (
+        dash
+      ) : value.restored && value.amount !== 0 ? (
+        <span className="whitespace-nowrap">
+          {formatCurrency(value.amount)} <span className="text-[10px] text-muted-foreground">restored</span>
+        </span>
+      ) : (
+        formatCurrency(value.amount)
+      )}
+    </td>
+  );
+}
+
 function LedgerRow({
   row,
   hasScb,
+  loanStatus,
   repayment,
   onVoid,
   actionLoading,
 }: {
   row: LedgerViewRow;
   hasScb: boolean;
+  loanStatus: string;
   repayment: Repayment | undefined;
   onVoid: (repaymentId: number) => void;
   actionLoading: boolean;
 }) {
-  const payment = ledgerRowPayment(row, repayment);
+  const payment = ledgerRowPayment(row, repayment, loanStatus);
+  const description = ledgerRowDescription(row.description, payment.voided);
   const repaymentId = row.repaymentId;
   return (
     <tr className={cn("border-b transition-colors hover:bg-muted/30", row.kind === "release" && "bg-blue-50/40 dark:bg-blue-950/20")}>
@@ -85,11 +108,11 @@ function LedgerRow({
       <Component cell={row.interest} balance={row.balances.interest} />
       <Component cell={row.penalty} balance={row.balances.penalty} debitClassName="text-destructive" />
       {hasScb && <Component cell={row.scb} balance={row.balances.scb} />}
-      <Figure value={row.insurance} />
+      <Insurance value={row.insurance} />
       <Figure value={payment.amountPaid} className="font-semibold" />
       <td className="px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">{row.description || dash}</span>
+          <span className="text-muted-foreground">{description || dash}</span>
           {payment.voided && (
             <Badge variant="destructive" className="shrink-0 text-[10px] px-1 py-0">voided</Badge>
           )}
@@ -122,18 +145,20 @@ export function LedgerTable({
   failed,
   onRetry,
   hasScb,
+  loanStatus,
   repaymentsById,
   onVoid,
   actionLoading,
 }: LedgerTableProps) {
-  if (loading || (ledger === null && !failed)) {
+  // A re-read (after a payment or a void) keeps the rows on screen.
+  if (ledger === null && !failed) {
     return (
       <div className="flex items-center justify-center py-8">
         <Spinner className="size-5 text-muted-foreground" />
       </div>
     );
   }
-  if (failed || ledger === null) {
+  if (ledger === null) {
     return (
       <div role="alert" className="flex flex-col items-center gap-3 px-4 py-8 text-center text-sm">
         <p className="flex items-center gap-2 text-destructive">
@@ -152,6 +177,24 @@ export function LedgerTable({
   const closing: LedgerBalancesView = ledger.closing;
   return (
     <div className="overflow-x-auto">
+      {failed && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs text-destructive">
+          <span className="flex items-center gap-1.5">
+            <AlertCircle className="size-3.5 shrink-0" />
+            We couldn&rsquo;t refresh the ledger; these figures may be out of date.
+          </span>
+          <Button variant="outline" size="sm" className="h-7" onClick={onRetry}>
+            <RefreshCw className="mr-1.5 size-3.5" />
+            Retry
+          </Button>
+        </div>
+      )}
+      {loading && (
+        <p role="status" className="flex items-center gap-1.5 border-b px-4 py-1.5 text-[11px] text-muted-foreground">
+          <Spinner className="size-3" />
+          Updating the ledger…
+        </p>
+      )}
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
@@ -185,6 +228,7 @@ export function LedgerTable({
                 key={row.key}
                 row={row}
                 hasScb={hasScb}
+                loanStatus={loanStatus}
                 repayment={row.repaymentId === null ? undefined : repaymentsById.get(row.repaymentId)}
                 onVoid={onVoid}
                 actionLoading={actionLoading}

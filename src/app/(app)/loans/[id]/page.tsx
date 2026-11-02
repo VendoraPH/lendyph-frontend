@@ -42,7 +42,7 @@ import {
   toDisplaySchedule,
   type ScheduleTotals,
 } from "./_lib/server-schedule";
-import { readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
+import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
 import {
   outstandingPrincipal,
   presetButtons,
@@ -1884,8 +1884,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
         fetchRepayments(loan.id),
         fetchLedger(loan.id),
       ]);
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment on a restructured loan).
+      toast.error(getErrorMessage(err, "We couldn't void the payment. Please try again."));
     } finally {
       setActionLoading(false);
     }
@@ -3484,7 +3485,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
               loading={ledgerLoading}
               failed={ledgerFailed}
               onRetry={() => void fetchLedger(loan.id)}
-              hasScb={(loan.scb_amount ?? 0) > 0}
+              hasScb={ledgerShowsScb(scheduleHasScb, ledger)}
+              loanStatus={loan.status}
               repaymentsById={repaymentsById}
               onVoid={handleVoidRepayment}
               actionLoading={actionLoading}

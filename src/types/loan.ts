@@ -633,8 +633,7 @@ export type LoanLedgerKind =
   | "extension_charge"
   | "penalty_charge"
   | "adjustment"
-  | "void"
-  | "imported";
+  | "void";
 
 /** Balances after a Ledger row, insurance premium owed left out. */
 export interface LoanLedgerBalances {

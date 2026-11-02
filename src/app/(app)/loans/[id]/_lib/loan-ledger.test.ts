@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ledgerKindLabel, ledgerRowPayment, readLoanLedger } from "./loan-ledger";
+import { ledgerKindLabel, ledgerRowDescription, ledgerRowPayment, ledgerShowsScb, readLoanLedger } from "./loan-ledger";
 
 const balances = (principal: number, interest: number, penalty: number, scb: number) => ({
   principal,
@@ -84,7 +84,7 @@ test("a payment lowers the balances: its figures are credits, read as numbers", 
   assert.deepEqual(row.principal, { debit: null, credit: 10000 });
   assert.deepEqual(row.interest, { debit: null, credit: 1800 });
   assert.deepEqual(row.penalty, { debit: null, credit: 0 });
-  assert.equal(row.insurance, 400);
+  assert.deepEqual(row.insurance, { amount: 400, restored: false });
   const ext = readLoanLedger({ rows: [{ ...PAYMENT, kind: "extension_payment" }], closing: {} })!.rows[0];
   assert.deepEqual(ext.interest, { debit: null, credit: 1800 });
 });
@@ -105,7 +105,7 @@ test("a figure or balance the server did not send is null (a dash)", () => {
     closing: {},
   })!.rows[0];
   assert.deepEqual(row.principal, { debit: null, credit: null });
-  assert.equal(row.insurance, null);
+  assert.deepEqual(row.insurance, { amount: null, restored: false });
   assert.deepEqual(row.balances, { principal: 100, interest: null, penalty: null, scb: null });
   assert.equal(row.description, "");
 });
@@ -124,14 +124,13 @@ test("every kind has a plain label", () => {
   assert.equal(ledgerKindLabel("penalty_charge"), "Penalty charged");
   assert.equal(ledgerKindLabel("adjustment"), "Adjustment");
   assert.equal(ledgerKindLabel("void"), "Payment voided");
-  assert.equal(ledgerKindLabel("imported"), "Imported");
   // A kind added later still reads as words, never as a code.
   assert.equal(ledgerKindLabel("interest_rebate"), "Interest rebate");
 });
 
 test("ledgerRowPayment: a payment row shows its receipt, amount paid and a Void button", () => {
   const repayment = { id: 41, receipt_number: "OR-2026-0001", amount_paid: "12300.00", status: "completed" };
-  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment), {
+  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment, "current"), {
     refNo: "OR-2026-0001",
     amountPaid: 12300,
     voided: false,
@@ -141,13 +140,13 @@ test("ledgerRowPayment: a payment row shows its receipt, amount paid and a Void 
 
 test("ledgerRowPayment: a voided payment can't be voided again; its void row shows no amount paid", () => {
   const repayment = { id: 41, receipt_number: null, amount_paid: 12300, status: "voided" };
-  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment), {
+  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment, "current"), {
     refNo: "OR-000041",
     amountPaid: 12300,
     voided: true,
     canVoid: false,
   });
-  assert.deepEqual(ledgerRowPayment({ kind: "void", repaymentId: 41 }, repayment), {
+  assert.deepEqual(ledgerRowPayment({ kind: "void", repaymentId: 41 }, repayment, "current"), {
     refNo: "OR-000041",
     amountPaid: null,
     voided: false,
@@ -157,21 +156,53 @@ test("ledgerRowPayment: a voided payment can't be voided again; its void row sho
 
 test("ledgerRowPayment: an extension's payment is never voided from here", () => {
   const repayment = { id: 9, amount_paid: 1800, status: "completed" };
-  assert.equal(ledgerRowPayment({ kind: "extension_payment", repaymentId: 9 }, repayment).canVoid, false);
-  assert.equal(ledgerRowPayment({ kind: "extension_payment", repaymentId: 9 }, repayment).amountPaid, 1800);
+  assert.equal(ledgerRowPayment({ kind: "extension_payment", repaymentId: 9 }, repayment, "current").canVoid, false);
+  assert.equal(ledgerRowPayment({ kind: "extension_payment", repaymentId: 9 }, repayment, "current").amountPaid, 1800);
 });
 
 test("ledgerRowPayment: no payment on the row, or none loaded, is a dash and no Void", () => {
-  assert.deepEqual(ledgerRowPayment({ kind: "release", repaymentId: null }, undefined), {
+  assert.deepEqual(ledgerRowPayment({ kind: "release", repaymentId: null }, undefined, "current"), {
     refNo: "—",
     amountPaid: null,
     voided: false,
     canVoid: false,
   });
-  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, undefined), {
+  assert.deepEqual(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, undefined, "current"), {
     refNo: "—",
     amountPaid: null,
     voided: false,
     canVoid: false,
   });
+});
+
+test("ledgerRowPayment: no Void on a restructured loan; the server refuses those voids", () => {
+  const repayment = { id: 41, amount_paid: 12300, status: "completed" };
+  assert.equal(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment, "restructured").canVoid, false);
+  assert.equal(ledgerRowPayment({ kind: "repayment", repaymentId: 41 }, repayment, "past_due").canVoid, true);
+});
+
+test("a void row's premium is put back, not collected again", () => {
+  const row = readLoanLedger({
+    rows: [{ ...PAYMENT, kind: "void", insurance: 400 }],
+    closing: {},
+  })!.rows[0];
+  assert.deepEqual(row.insurance, { amount: 400, restored: true });
+  // Its other figures raise the balances again.
+  assert.deepEqual(row.principal, { debit: 10000, credit: null });
+});
+
+test("the voided payment's description drops the server's '(voided)': the badge says it once", () => {
+  assert.equal(ledgerRowDescription("Payment OR-2026-0001 (voided)", true), "Payment OR-2026-0001");
+  assert.equal(ledgerRowDescription("Payment OR-2026-0001 voided", false), "Payment OR-2026-0001 voided");
+  // Not voided: the description is shown as sent.
+  assert.equal(ledgerRowDescription("Payment OR-2026-0001 (voided)", false), "Payment OR-2026-0001 (voided)");
+});
+
+test("ledgerShowsScb: the schedule's rule, or any row whose build-up is not 0", () => {
+  const plain = readLoanLedger({ rows: [{ ...PAYMENT, scb: 0 }], closing: {} });
+  const withScb = readLoanLedger({ rows: [{ ...PAYMENT, scb: 0 }, { ...PAYMENT, scb: 100 }], closing: {} });
+  assert.equal(ledgerShowsScb(true, plain), true);
+  assert.equal(ledgerShowsScb(false, plain), false);
+  assert.equal(ledgerShowsScb(false, withScb), true);
+  assert.equal(ledgerShowsScb(false, null), false);
 });

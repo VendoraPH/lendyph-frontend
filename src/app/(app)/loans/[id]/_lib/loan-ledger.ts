@@ -8,7 +8,8 @@
  * row's figures are the signed change it made (negative lowers). So each
  * figure goes in the Debit column (raises what is owed) or the Credit column
  * (lowers it) by its kind, an adjustment's by its sign. The balances leave out
- * the insurance premium owed, which payment rows show in their own column.
+ * the insurance premium owed, which payment rows show in their own column; a
+ * void row's premium is the premium put back, not collected again.
  *
  * A figure the server did not send is null (a dash on screen); 0 stays 0.
  * Pure, so it runs under `tsx --test`.
@@ -41,8 +42,11 @@ export interface LedgerViewRow {
   interest: LedgerCell;
   penalty: LedgerCell;
   scb: LedgerCell;
-  /** The insurance premium a payment collected. */
-  insurance: number | null;
+  /**
+   * The insurance premium a payment collected, or on a void row the premium
+   * put back (`restored`).
+   */
+  insurance: { amount: number | null; restored: boolean };
   balances: LedgerBalancesView;
 }
 
@@ -59,7 +63,6 @@ const KIND_LABELS: Record<string, string> = {
   penalty_charge: "Penalty charged",
   adjustment: "Adjustment",
   void: "Payment voided",
-  imported: "Imported",
 };
 
 /** Kinds whose positive figures raise what is owed. */
@@ -128,11 +131,30 @@ export function readLoanLedger(raw: unknown): LedgerView | null {
       interest: cell(kind, figure(r.interest)),
       penalty: cell(kind, figure(r.penalty)),
       scb: cell(kind, figure(r.scb)),
-      insurance: figure(r.insurance),
+      insurance: { amount: figure(r.insurance), restored: kind === "void" },
       balances: balancesOf(r.balances),
     };
   });
   return { rows, closing: balancesOf(data.closing) };
+}
+
+/**
+ * Whether the Ledger shows the build-up columns: when the schedule does
+ * (`scheduleHasScb`), or when any row's build-up is not 0.
+ */
+export function ledgerShowsScb(scheduleHasScb: boolean, ledger: LedgerView | null): boolean {
+  if (scheduleHasScb) return true;
+  return (ledger?.rows ?? []).some(
+    (row) => (row.scb.debit !== null && row.scb.debit !== 0) || (row.scb.credit !== null && row.scb.credit !== 0),
+  );
+}
+
+/**
+ * A row's description; a voided payment's drops the server's trailing
+ * "(voided)", because the row's badge already says so.
+ */
+export function ledgerRowDescription(description: string, voided: boolean): string {
+  return voided ? description.replace(/\s*\(voided\)\s*$/i, "") : description;
 }
 
 interface LedgerRepayment {
@@ -145,12 +167,15 @@ interface LedgerRepayment {
 /**
  * What a row shows of the payment it names: the receipt number, the amount
  * paid on a payment row, whether that payment was voided, and whether it can
- * be voided from here (a plain payment not yet voided; an extension's payment
- * is never voided from here). A dash and no Void without a loaded payment.
+ * be voided from here: a plain payment not yet voided, on a loan that isn't
+ * restructured (the server refuses both an extension's payment and any
+ * payment on a restructured loan). A dash and no Void without a loaded
+ * payment.
  */
 export function ledgerRowPayment(
   row: { kind: string; repaymentId: number | null },
   repayment: LedgerRepayment | undefined,
+  loanStatus: string,
 ): { refNo: string; amountPaid: number | null; voided: boolean; canVoid: boolean } {
   if (row.repaymentId === null || repayment === undefined) {
     return { refNo: "—", amountPaid: null, voided: false, canVoid: false };
@@ -161,6 +186,6 @@ export function ledgerRowPayment(
     refNo: repaymentRefNo(repayment),
     amountPaid: isPayment ? figure(repayment.amount_paid) : null,
     voided,
-    canVoid: row.kind === "repayment" && !voided,
+    canVoid: row.kind === "repayment" && !voided && loanStatus !== "restructured",
   };
 }
