@@ -36,7 +36,19 @@ test("merging a loan's period rows keeps the figure, never adds them", () => {
   assert.equal(mergeLoanFigure(null, null), null);
 });
 
-test("sorting puts rows with no figure below every real figure, zero included", () => {
+test("merging keeps the first real figure, never picks the larger", () => {
+  assert.equal(mergeLoanFigure(500, 70_800), 500);
+  assert.equal(mergeLoanFigure(0, 70_800), 0);
+});
+
+test("sorting keeps rows with no figure last in both directions, zero included", () => {
   const values = [500, null, 0, 70_800, null];
-  assert.deepEqual([...values].sort(compareFigure), [null, null, 0, 500, 70_800]);
+  assert.deepEqual(
+    [...values].sort((a, b) => compareFigure(a, b, "asc")),
+    [0, 500, 70_800, null, null],
+  );
+  assert.deepEqual(
+    [...values].sort((a, b) => compareFigure(a, b, "desc")),
+    [70_800, 500, 0, null, null],
+  );
 });

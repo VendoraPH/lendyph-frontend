@@ -42,13 +42,10 @@ import { compareFigure } from "./_lib/past-due-outstanding";
 import {
   aggregateByLoan,
   mapRow,
-  readPastDueTotals,
+  summarizePastDue,
   type PastDueLoan,
-  type PastDueTotals,
   type RawPastDueRow,
 } from "./_lib/past-due-loans";
-
-const NO_TOTALS: PastDueTotals = { pastDueAmount: null, totalOutstanding: null };
 
 // ── Helpers ──
 
@@ -108,7 +105,7 @@ const isMalformedRequest = (status: number | null): boolean =>
 
 function PastDueLoansContent() {
   const [loans, setLoans] = useState<PastDueLoan[]>([]);
-  const [summary, setSummary] = useState<PastDueTotals>(NO_TOTALS);
+  const [serverTotals, setServerTotals] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // Rows fetched so far / rows the server says there are. Drives the progress
@@ -140,7 +137,7 @@ function PastDueLoansContent() {
         (loaded, total) => setProgress({ loaded, total }),
       );
       setLoans(aggregateByLoan((rows as RawPastDueRow[]).map(mapRow)));
-      setSummary(readPastDueTotals(totals));
+      setServerTotals(totals);
       setFailed(false);
       setPartial(!complete);
     } catch (err) {
@@ -166,7 +163,7 @@ function PastDueLoansContent() {
       }
       notifyError(err, "We couldn't load past due loans.");
       setLoans([]);
-      setSummary(NO_TOTALS);
+      setServerTotals(null);
       setFailed(true);
       setPartial(false);
     } finally {
@@ -196,35 +193,23 @@ function PastDueLoansContent() {
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "memberName":
-          cmp = a.memberName.localeCompare(b.memberName);
-          break;
-        case "daysPastDue":
-          cmp = a.daysPastDue - b.daysPastDue;
-          break;
-        case "pastDue":
-          cmp = compareFigure(a.pastDueAmount, b.pastDueAmount);
-          break;
-        case "outstanding":
-          cmp = compareFigure(a.outstandingBalance, b.outstandingBalance);
-          break;
+      // Money columns keep rows with no figure last in either direction.
+      if (sortKey === "pastDue") return compareFigure(a.pastDueAmount, b.pastDueAmount, sortDir);
+      if (sortKey === "outstanding") {
+        return compareFigure(a.outstandingBalance, b.outstandingBalance, sortDir);
       }
+      const cmp =
+        sortKey === "memberName"
+          ? a.memberName.localeCompare(b.memberName)
+          : a.daysPastDue - b.daysPastDue;
       return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  // The cards describe the whole list, like the server's money totals beside
-  // them; the search and age filters narrow the table only.
-  const counts = useMemo(
-    () => ({
-      memberCount: new Set(loans.map((l) => l.memberId)).size,
-      loanCount: loans.length,
-    }),
-    [loans],
-  );
+  // Every loaded loan, not `sorted`: the search and age filters narrow the
+  // table only.
+  const summary = useMemo(() => summarizePastDue(loans, serverTotals), [loans, serverTotals]);
   const filterActive = search.trim() !== "" || bucket !== "all";
 
   // A failed load has no figures to show. Rendering the zeroed totals would
@@ -289,7 +274,7 @@ function PastDueLoansContent() {
                   Members Past Due
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {figuresUnavailable ? "—" : counts.memberCount}
+                  {figuresUnavailable ? "—" : summary.memberCount}
                 </p>
               </div>
             </div>
@@ -306,7 +291,7 @@ function PastDueLoansContent() {
                   Past Due Loans
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {figuresUnavailable ? "—" : counts.loanCount}
+                  {figuresUnavailable ? "—" : summary.loanCount}
                 </p>
               </div>
             </div>
@@ -350,8 +335,8 @@ function PastDueLoansContent() {
 
       {filterActive && !figuresUnavailable ? (
         <p className="-mt-3 text-xs text-muted-foreground">
-          These totals cover every past due loan. The search and age filters
-          narrow the table only.
+          These totals cover every loan in this list (due or past due), not
+          only the filtered rows.
         </p>
       ) : null}
 

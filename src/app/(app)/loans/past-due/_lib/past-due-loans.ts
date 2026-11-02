@@ -33,9 +33,14 @@ const num = (v: unknown): number => toNumber(v) ?? 0;
 const str = (v: unknown, fallback = ""): string =>
   v === null || v === undefined ? fallback : String(v);
 
+/**
+ * The server's days past due, as sent: 0 for a period still inside its grace
+ * window, so such a loan never reads late. Counted from the due date only when
+ * the row carries neither field.
+ */
 const computeDaysPastDue = (raw: RawPastDueRow): number => {
-  const direct = num(raw.days_past_due ?? raw.days_overdue ?? raw.daysPastDue);
-  if (direct > 0) return direct;
+  const direct = toNumber(raw.days_past_due ?? raw.days_overdue);
+  if (direct !== null) return direct;
   const dueDate = raw.due_date ?? raw.dueDate;
   if (typeof dueDate === "string") {
     const ms = Date.now() - new Date(dueDate).getTime();
@@ -45,7 +50,9 @@ const computeDaysPastDue = (raw: RawPastDueRow): number => {
 };
 
 export function mapRow(raw: RawPastDueRow): PastDueLoan {
-  const loanId = num(raw.loan_id ?? raw.loanId ?? raw.id);
+  // A row without its loan's id is skipped by aggregateByLoan, never keyed by
+  // the period's own id.
+  const loanId = num(raw.loan_id ?? raw.loanId);
   const branchValue = raw.branch_name ?? raw.branchName ?? raw.branch;
   const lastPayment = raw.loan_last_payment_date;
 
@@ -123,5 +130,26 @@ export function readPastDueTotals(totals: Record<string, unknown> | null): PastD
   return {
     pastDueAmount: toNumber(totals?.past_due_amount),
     totalOutstanding: toNumber(totals?.total_outstanding),
+  };
+}
+
+export interface PastDueSummary extends PastDueTotals {
+  memberCount: number;
+  loanCount: number;
+}
+
+/**
+ * The four summary cards. Pass every loaded loan, not the filtered table: the
+ * money comes from the server's totals for the whole list, so the counts beside
+ * it describe the same set.
+ */
+export function summarizePastDue(
+  loans: PastDueLoan[],
+  totals: Record<string, unknown> | null,
+): PastDueSummary {
+  return {
+    memberCount: new Set(loans.map((l) => l.memberId)).size,
+    loanCount: loans.length,
+    ...readPastDueTotals(totals),
   };
 }
