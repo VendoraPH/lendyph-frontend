@@ -62,6 +62,7 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
+import { creditEntryPaid } from "./_lib/ledger-rows";
 import { collectNowParts } from "./_lib/extension-preview";
 import {
   dueNowHasOpenPeriod,
@@ -1232,21 +1233,31 @@ function LoanDetail({ loanId }: { loanId: number }) {
       scbBal: 0,
     }));
 
-    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => ({
-      key: `ledger-${e.id}`,
-      date: e.entry_date,
-      createdAt: e.created_at,
-      refNo: "—",
-      remarks: e.description,
-      interestDebit: e.type === "debit" ? e.amount : undefined,
-      interestCredit: e.type === "credit" ? e.amount : undefined,
+    const repaymentsById = new Map(repayments.map((r) => [r.id, r]));
+    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => {
       // A credit here IS the cash collection (its Repayment twin was dropped
-      // above), so it belongs in Total Paid too; a debit moves no cash.
-      totalPaid: e.type === "credit" ? e.amount : undefined,
-      principalBal: 0,
-      interestBal: 0,
-      scbBal: 0,
-    }));
+      // above), so it belongs in Total Paid too; a debit moves no cash. The
+      // twin's own amount paid and premium are shown, so a premium the same
+      // payment collected first is on the row and the parts add up.
+      const paid =
+        e.type === "credit"
+          ? creditEntryPaid(e.amount, e.repayment_id != null ? repaymentsById.get(e.repayment_id) ?? null : null)
+          : null;
+      return {
+        key: `ledger-${e.id}`,
+        date: e.entry_date,
+        createdAt: e.created_at,
+        refNo: "—",
+        remarks: e.description,
+        interestDebit: e.type === "debit" ? e.amount : undefined,
+        interestCredit: e.type === "credit" ? e.amount : undefined,
+        insuranceApplied: paid?.insuranceApplied ?? null,
+        totalPaid: paid?.totalPaid,
+        principalBal: 0,
+        interestBal: 0,
+        scbBal: 0,
+      };
+    });
 
     const sorted = [...repaymentRows, ...ledgerEntryRows].sort((a, b) => {
       const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();

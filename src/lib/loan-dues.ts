@@ -24,12 +24,3 @@ export interface LoanDueFigures {
 export function overdueWithPenalty(figures: LoanDueFigures): number {
   return figures.overdue_amount ?? 0;
 }
-
-/**
- * What is due now: everything that is late, or the next instalment when
- * nothing is.
- */
-export function currentDues(figures: LoanDueFigures): number {
-  const overdue = figures.overdue_amount ?? 0;
-  return overdue > 0 ? overdue : (figures.current_due ?? 0);
-}
