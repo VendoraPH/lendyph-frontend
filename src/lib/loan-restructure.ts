@@ -165,16 +165,6 @@ export function restructurableBalanceShown(
   return restructure.restructurableBalance ?? summaryBalance;
 }
 
-/**
- * Whether the user holds Loans: Write off (`loans:write_off`), which the
- * restructure needs to take a principal below the restructurable balance.
- * Read from the permission list by name: the shared `Permission` type does
- * not list the `write_off` action, though the backend seeds it.
- */
-export function holdsWriteOff(permissions: readonly string[]): boolean {
-  return permissions.includes("loans:write_off");
-}
-
 /** What the restructure page shows and requires for the server's shortfall. */
 export interface RestructureShortfallState {
   /** The shortfall notice and the "remarks required" hint are shown. */

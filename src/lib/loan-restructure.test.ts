@@ -4,7 +4,6 @@ import {
   buildLoanDeductions,
   readRestructurableBalance,
   readRestructurePreview,
-  holdsWriteOff,
   restructurableBalanceShown,
   restructureShortfallState,
   restructureSubmitCheck,
@@ -331,10 +330,4 @@ test("the hint shows the preview's restructurable balance, the summary's only as
   assert.equal(restructurableBalanceShown(SHORT, 70000), 70800);
   assert.equal(restructurableBalanceShown(UNKNOWN, 70000), 70000);
   assert.equal(restructurableBalanceShown(UNKNOWN, null), null);
-});
-
-test("holding Loans: Write off is read from the user's permissions by its exact name", () => {
-  assert.equal(holdsWriteOff(["loans:view", "loans:write_off"]), true);
-  assert.equal(holdsWriteOff(["loans:view", "loans:restructure"]), false);
-  assert.equal(holdsWriteOff([]), false);
 });

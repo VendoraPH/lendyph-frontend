@@ -106,8 +106,9 @@ export interface LoanFormPreviewRequest {
   start_date?: string;
   scb_amount?: number;
   /**
-   * The member the loan is for: collateral rows are read within their
-   * collaterals, and the server values each one itself.
+   * The member the loan is for, sent whenever `collaterals` is: collateral
+   * rows are read within their collaterals, and the server values each one
+   * itself.
    */
   borrower_id?: number;
   /**
@@ -115,11 +116,14 @@ export interface LoanFormPreviewRequest {
    * `restructure` block for it.
    */
   source_loan_id?: number;
-  collaterals?: {
-    collateral_id: number;
-    /** @deprecated The server ignores it and values the collateral itself. */
-    snapshot_value?: number;
-  }[];
+  /**
+   * The loan an edit changes (draft or for_review; needs `loans:update`). The
+   * server then carries the collaterals it already holds at their stored
+   * pledged value, so the total matches what the save keeps.
+   */
+  loan_id?: number;
+  /** Each collateral by id only; the server sets the value it is held at. */
+  collaterals?: { collateral_id: number }[];
   /**
    * The deduction inputs exactly as the create, update or restructure payload
    * states them: a percentage's rate, a fixed item's pesos. Absent, the server

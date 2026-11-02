@@ -16,19 +16,17 @@ export type LoanApplicationPayload = Omit<Partial<Loan>, "deductions"> & {
   deductions?: LoanDeductionInput[];
   /**
    * `PUT /loans/{id}` only: the loan's full collateral list. The server
-   * detaches the unlisted ones, attaches the new ones at its own valuation
-   * (a sent `snapshot_value` is ignored), and leaves the ones already
-   * attached untouched with their original snapshot. `[]` detaches everything. Absent, the loan's
-   * collaterals are not touched. Sending it needs `collaterals:update`.
+   * detaches the unlisted ones, attaches the new ones at its own valuation,
+   * and leaves the ones already attached untouched with their original
+   * snapshot. `[]` detaches everything. Absent, the loan's collaterals are
+   * not touched. Sending it needs `collaterals:update`.
    */
   collaterals?: LoanCollateralInput[];
 };
 
-/** One collateral in an edit's `collaterals` list. */
+/** One collateral in an edit's `collaterals` list: by id only, never a value. */
 export type LoanCollateralInput = {
   collateral_id: number;
-  /** @deprecated The server ignores it and values the collateral itself. */
-  snapshot_value?: number;
 };
 
 export type ReleaseLoanPayload = {
@@ -205,11 +203,13 @@ export const loanService = {
     api.post<Loan>(API_ENDPOINTS.LOANS.CREATE, data),
 
   /**
-   * `POST /loans/preview`: the loan form's collateral total, security status,
-   * shortfall and amortization schedule, worked out by the server for the
-   * terms entered so far. Writes nothing. Needs `loans:create` or
-   * `loans:update` (403 otherwise); malformed input is a 422. `signal` lets a
-   * superseded preview be cancelled.
+   * `POST /loans/preview` for the loan form and the restructure page: the
+   * collateral total, security status, "Short by", deductions, schedule and,
+   * for a restructure (`source_loan_id`), the shortfall, all worked out by the
+   * server for the terms entered so far. Writes nothing. Needs `loans:create`
+   * or `loans:update` (403 otherwise); malformed input, or a share capital
+   * collateral the role may not value, is a 422. `signal` lets a superseded
+   * preview be cancelled.
    */
   preview: (data: LoanFormPreviewRequest, signal?: AbortSignal) =>
     api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.PREVIEW, data, { signal }),

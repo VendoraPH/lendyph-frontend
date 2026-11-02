@@ -74,16 +74,17 @@ export interface PresetButton {
   label: string;
   /** The period count the payment's remark states. */
   periods: number;
-  /** The server's amount; null (a dash) when not sent. */
-  amount: number | null;
-  disabled: boolean;
+  /** The server's amount. */
+  amount: number;
 }
 
 /**
  * The Record Payment dialog's "Pay ahead by" buttons: one per preset the
  * server sent among `ADVANCE_PRESET_CHOICES`, then "Pay all remaining" with
- * `payoff_amount` (disabled, a dash, when not sent). `unpaidCount` is the
- * open periods on the schedule, for that button's remark only.
+ * `payoff_amount`. That button is left out when `payoff_amount` is null or not
+ * sent (the server sends null on a Share Capital Build-Up loan and on a loan
+ * that can't take payments). `unpaidCount` is the open periods on the
+ * schedule, for that button's remark only.
  */
 export function presetButtons(summary: unknown, unpaidCount: number): PresetButton[] {
   const presets = offeredAdvancePresets(readAdvancePresets(summary), ADVANCE_PRESET_CHOICES).map(
@@ -91,14 +92,11 @@ export function presetButtons(summary: unknown, unpaidCount: number): PresetButt
       label: `${periods} period${periods === 1 ? "" : "s"}`,
       periods,
       amount,
-      disabled: false,
     }),
   );
   const payoff = readPayoffAmount(summary);
-  return [
-    ...presets,
-    { label: "Pay all remaining", periods: unpaidCount, amount: payoff, disabled: payoff === null },
-  ];
+  if (payoff === null) return presets;
+  return [...presets, { label: "Pay all remaining", periods: unpaidCount, amount: payoff }];
 }
 
 /** The summary's `payoff_amount`, null when not sent. */

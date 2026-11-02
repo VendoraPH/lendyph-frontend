@@ -95,7 +95,6 @@ import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
-  holdsWriteOff,
   readRestructurableBalance,
   readRestructurePreview,
   restructurableBalanceShown,
@@ -189,7 +188,7 @@ const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 function RestructureLoanInner() {
   const router = useRouter();
-  const { can, permissions } = usePermission();
+  const { can } = usePermission();
   // Attaching a collateral is `POST /loans/{loan}/collaterals`, which needs
   // both of these. A role that can only restructure still gets the source
   // loan's collaterals (the server carries them over) but cannot add others.
@@ -200,7 +199,9 @@ function RestructureLoanInner() {
   const canListMembers = can("borrowers:view");
   const canListCollaterals = can("collaterals:view");
   const canReadShareCapital = can("share_capital:view");
-  const canWriteOff = holdsWriteOff(permissions);
+  // Taking a principal below the restructurable balance writes the shortfall
+  // off, which needs Loans: Write off.
+  const canWriteOff = can("loans:write_off");
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);

@@ -5,8 +5,15 @@
  * shortfall, and build the amortization schedule in the browser. It now posts
  * its inputs to `POST /loans/preview` and only displays what comes back.
  *
- * WHAT THIS PROVES: the body posted, that the `data` envelope is unwrapped with
- * every figure as the server sent it, and that a 403 or 422 reaches the caller.
+ * The pledge value is the server's (decision 11a): the loan form and the
+ * restructure page name each collateral by id with the member it belongs to,
+ * an edit names its loan, and a restructure names its source loan so the
+ * server states the shortfall (decision 8a). Both pages post through
+ * `loanService.preview`.
+ *
+ * WHAT THIS PROVES: the body posted, with no `snapshot_value`, that the `data`
+ * envelope is unwrapped with every figure (`restructure` included) as the
+ * server sent it, and that a 403 or 422 reaches the caller.
  * WHAT IT DOES NOT PROVE: the figures; those are the backend's preview tests.
  */
 import { test, before, after, beforeEach, describe } from "node:test";
@@ -135,5 +142,49 @@ describe("loanService.preview", () => {
         return true;
       });
     }
+  });
+});
+
+describe("loanService.preview for the loan form's edit mode and the restructure page", () => {
+  const restructure = {
+    restructurable_balance: 70800,
+    principal: 50000,
+    shortfall: 20800,
+    remarks_required: true,
+    write_off_permission_required: true,
+  };
+  const restructureBody = {
+    borrower_id: 11,
+    source_loan_id: 40,
+    loan_product_id: 3,
+    principal_amount: 50000,
+    collaterals: [{ collateral_id: 7 }, { collateral_id: 8 }],
+  };
+
+  test("POSTs the member, the source loan and the collateral ids, no snapshot_value", async () => {
+    await loanService.preview(restructureBody);
+    assert.deepEqual(seen, [{ method: "POST", path: "/loans/preview", body: restructureBody }]);
+    assert.equal(JSON.stringify(seen[0].body).includes("snapshot_value"), false);
+  });
+
+  test("POSTs an edit's loan_id with the member and the collateral ids, no snapshot_value", async () => {
+    const editBody = { borrower_id: 11, loan_id: 7, loan_product_id: 3, collaterals: [{ collateral_id: 9 }] };
+    await loanService.preview(editBody);
+    assert.deepEqual(seen, [{ method: "POST", path: "/loans/preview", body: editBody }]);
+    assert.equal(JSON.stringify(seen[0].body).includes("snapshot_value"), false);
+  });
+
+  test("returns data.restructure unwrapped and untouched", async () => {
+    reply = [200, { data: { ...PREVIEW, restructure } }];
+    const preview = await loanService.preview(restructureBody);
+    assert.deepEqual(preview, { ...PREVIEW, restructure });
+    assert.deepEqual(preview.restructure, restructure);
+  });
+
+  test("passes a cancelled preview's abort to the caller", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(loanService.preview(restructureBody, controller.signal));
+    assert.equal(seen.length, 0);
   });
 });

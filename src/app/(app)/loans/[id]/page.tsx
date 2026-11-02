@@ -4182,11 +4182,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
             // Only the presets the server sent (one on a Share Capital
-            // Build-Up loan), then "Pay all remaining" with its payoff amount.
+            // Build-Up loan), then "Pay all remaining" when the server sent a
+            // payoff amount (it sends none on a Build-Up loan).
             const buttons = presetButtons(loanSummary, unpaid.length);
-            const fillAmount = (periods: number, amount: number | null) => {
+            if (buttons.length === 0) return null;
+            const fillAmount = (periods: number, amount: number) => {
               setAdvancePeriods(periods);
-              setPaymentAmount(amount !== null && amount > 0 ? amount.toFixed(2) : "");
+              setPaymentAmount(amount > 0 ? amount.toFixed(2) : "");
             };
             return (
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20 space-y-2">
@@ -4210,7 +4212,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         advancePeriods === b.periods &&
                           "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      disabled={b.disabled}
                       onClick={() => fillAmount(b.periods, b.amount)}
                     >
                       {b.label}
