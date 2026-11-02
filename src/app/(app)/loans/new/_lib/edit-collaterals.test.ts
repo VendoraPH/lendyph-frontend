@@ -47,10 +47,10 @@ function link(id: number, snapshot: number, extra: Partial<LoanCollateral> = {})
   };
 }
 
-/** A collateral picked from the member's list, booked at its live value. */
+/** A collateral picked from the member's list, shown at the server's valuation. */
 function picked(id: number, value: number): SelectedCollateral {
   const [row] = attachedCollateralRows([link(id, value, { active_loans: [] })], LOAN_ID);
-  return { collateral: { ...row.collateral, effective_value: value }, snapshot_value: value };
+  return { collateral: { ...row.collateral, effective_value: value }, shown_value: value };
 }
 
 const ready = (attached: SelectedCollateral[]): EditCollateralResult => ({
@@ -105,15 +105,22 @@ describe("edit mode's collateral load state", () => {
 });
 
 describe("attachedCollateralRows", () => {
-  test("keeps every attached collateral, booked at its snapshot, from the link row itself", () => {
+  test("keeps every attached collateral, shown at the loan's pivot value, from the link row itself", () => {
     // Collateral 9 is not in the member's list the picker reads (for example
     // that list failed, or was cut short). It must still be on the form.
     const rows = attachedCollateralRows([link(1, 50_000), link(9, 120_000)], LOAN_ID);
 
     assert.deepEqual(rows.map((r) => r.collateral.id), [1, 9]);
-    assert.deepEqual(rows.map((r) => r.snapshot_value), [50_000, 120_000]);
+    assert.deepEqual(rows.map((r) => r.shown_value), [50_000, 120_000]);
     assert.equal(rows[1].collateral.type?.name, "Land Title");
     assert.equal(rows[1].collateral.detail_value, "TCT-9");
+  });
+
+  test("a link row without its pivot shows no value, never the collateral's current one", () => {
+    // The pivot is what the loan holds the collateral at, set by the server.
+    // The collateral's own amount or valuation is a different figure.
+    const [row] = attachedCollateralRows([link(1, 50_000, { pivot: undefined })], LOAN_ID);
+    assert.equal(row.shown_value, null);
   });
 
   test("the loan being edited is not a conflict with itself", () => {
@@ -143,18 +150,19 @@ describe("editedCollaterals: the `collaterals` key of an edit", () => {
 
   test("the full list when one is removed", () => {
     assert.deepEqual(editedCollaterals([attached[1]], attached), {
-      collaterals: [{ collateral_id: 9, snapshot_value: 120_000 }],
+      collaterals: [{ collateral_id: 9 }],
     });
   });
 
-  test("the full list when one is added, the new one at the value the page shows", () => {
+  test("the full list when one is added, by id only: the server sets each pledge's value", () => {
     assert.deepEqual(editedCollaterals([...attached, picked(4, 30_000)], attached), {
-      collaterals: [
-        { collateral_id: 1, snapshot_value: 50_000 },
-        { collateral_id: 9, snapshot_value: 120_000 },
-        { collateral_id: 4, snapshot_value: 30_000 },
-      ],
+      collaterals: [{ collateral_id: 1 }, { collateral_id: 9 }, { collateral_id: 4 }],
     });
+  });
+
+  test("never sends a snapshot_value, whatever the form shows", () => {
+    const body = editedCollaterals([attached[0], picked(4, 99_999_999)], attached);
+    assert.equal(JSON.stringify(body).includes("snapshot_value"), false);
   });
 
   test("an empty list when every one is removed", () => {

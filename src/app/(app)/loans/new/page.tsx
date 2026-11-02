@@ -142,6 +142,7 @@ import {
   interestMethodLabel,
   loanPreviewRequest,
   previewDeductionAmount,
+  previewFailureText,
   showsShortBy,
 } from "./_lib/loan-preview";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
@@ -240,9 +241,9 @@ function NewLoanApplicationInner() {
     CollateralValueRow[]
   >([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
-  // Collaterals the user has chosen to attach to THIS loan, with the
-  // value snapshotted at attach time so post-attach ledger drift doesn't
-  // silently move security status.
+  // Collaterals the user has chosen to attach to THIS loan, each with the
+  // server figure the row shows. The server sets the value the loan holds
+  // each at when it attaches it; the form never sends one.
   const [selectedCollaterals, setSelectedCollaterals] = useState<
     SelectedCollateral[]
   >([]);
@@ -433,10 +434,9 @@ function NewLoanApplicationInner() {
             // the user must be able to keep the security it already holds.
             lock: collateralLock(c, { exceptLoanId: editLoanId }),
             // `value_unknown` when this is a share-capital collateral whose
-            // balance could not be read. Attaching such a row would
-            // write its value onto the loan as `snapshot_value` — a permanent
-            // appraisal nobody computed — so the picker refuses
-            // it below rather than booking one.
+            // balance could not be read. The server refuses to value such a
+            // row for this role (a 422 on the preview), so the picker refuses
+            // it below rather than offering a row the form can't price.
             ...collateralValue(c, t, scBalance),
           };
         });
@@ -663,6 +663,8 @@ function NewLoanApplicationInner() {
   // preview is on its way, or after one failed, it shows no figures.
   const { view: preview, retry: retryPreview } = useLoanPreview(
     loanPreviewRequest({
+      borrowerId,
+      editLoanId,
       productId,
       principalAmount,
       interestRate,
@@ -685,6 +687,18 @@ function NewLoanApplicationInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // A collateral the preview refused is worded by whether this user can take
+  // it off the form: only when the collaterals can change, and in edit mode
+  // not one the loan already holds.
+  const heldIds = new Set(isEditMode ? (collateralResult?.attached ?? []).map((a) => a.collateral.id) : []);
+  const previewError =
+    preview.status === "error"
+      ? previewFailureText(
+          preview,
+          selectedCollaterals,
+          (row) => canEditCollaterals && !heldIds.has(row.collateral.id),
+        )
+      : null;
 
   // Picker rows: show all of the borrower's collaterals, but disable the
   // ones already selected here or locked to a different active loan.
@@ -696,9 +710,8 @@ function NewLoanApplicationInner() {
       collateral: c,
       isSelected: selectedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
-      // Not selectable: there is no value to attach it at. Refusing here is
-      // the point — the alternative is a loan secured at a figure nobody
-      // computed, which nothing downstream can tell from a real appraisal.
+      // Not selectable: the server won't value it for this role (the preview
+      // answers 422), so the form could show no total or security for it.
       isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
@@ -853,18 +866,15 @@ function NewLoanApplicationInner() {
       // Create mode
       const loan = await loanService.create(payload);
 
-      // Attach selected collaterals. Snapshot value is captured here so
-      // a future change to the underlying balance / amount does not retro-
-      // actively change this loan's security status.
+      // Attach selected collaterals, by id. The server sets the value the
+      // loan holds each at (its amount, or the member's share capital
+      // balance) as it attaches it, so a later change to the collateral does
+      // not change this loan's security status.
       if (selectedCollaterals.length > 0 && loan.id) {
         try {
           await Promise.all(
             selectedCollaterals.map((s) =>
-              collateralService.attachToLoan(
-                loan.id,
-                s.collateral.id,
-                s.snapshot_value,
-              ),
+              collateralService.attachToLoan(loan.id, s.collateral.id),
             ),
           );
         } catch {
@@ -1539,7 +1549,7 @@ function NewLoanApplicationInner() {
               </div>
             ) : (
               <div className="space-y-2">
-                {selectedCollaterals.map(({ collateral: c, snapshot_value }) => (
+                {selectedCollaterals.map(({ collateral: c, shown_value }) => (
                   <div
                     key={c.id}
                     className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
@@ -1558,7 +1568,7 @@ function NewLoanApplicationInner() {
                       )}
                     </div>
                     <span className="text-sm font-semibold tabular-nums">
-                      {formatCurrency(snapshot_value)}
+                      {shown_value === null ? "—" : formatCurrency(shown_value)}
                     </span>
                     {canEditCollaterals && (
                       <Button
@@ -1603,7 +1613,7 @@ function NewLoanApplicationInner() {
                         <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
                         We couldn&rsquo;t load the collateral preview.
                       </p>
-                      <p className="text-xs text-muted-foreground">{preview.message}</p>
+                      <p className="text-xs text-muted-foreground">{previewError}</p>
                       <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                         <RefreshCw className="mr-2 size-4" />
                         Retry
@@ -1912,7 +1922,7 @@ function NewLoanApplicationInner() {
                 <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
                 We couldn&rsquo;t load the deductions preview.
               </p>
-              <span className="text-xs text-muted-foreground">{preview.message}</span>
+              <span className="text-xs text-muted-foreground">{previewError}</span>
               <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                 <RefreshCw className="mr-2 size-4" />
                 Retry
@@ -1949,7 +1959,7 @@ function NewLoanApplicationInner() {
                 <p className="font-medium">
                   We couldn&rsquo;t load the schedule preview.
                 </p>
-                <p className="text-muted-foreground">{preview.message}</p>
+                <p className="text-muted-foreground">{previewError}</p>
                 <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                   <RefreshCw className="mr-2 size-4" />
                   Retry
@@ -2102,7 +2112,7 @@ function NewLoanApplicationInner() {
                       ...prev,
                       {
                         collateral: c,
-                        snapshot_value: c.effective_value,
+                        shown_value: c.effective_value,
                       },
                     ]);
                   }}

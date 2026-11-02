@@ -2,14 +2,37 @@
 // what the save sends. Dependency-free, so it runs under `tsx --test`.
 
 import { collateralLock } from "@/lib/collateral-lock";
-import type { LoanCollateralInput } from "@/services/loan.service";
 import type { LoanCollateral } from "@/types/collateral";
 import type { CollateralValueRow } from "@/utils/collateral-value";
 
-/** A collateral on the form, at the value it is (or will be) booked at. */
+/**
+ * A collateral on the form.
+ *
+ * `shown_value` is what the row displays, and only ever a server figure: the
+ * loan's pivot value for a collateral it already holds, the server's
+ * valuation (`effective_value`) for one just picked. Null when the server sent
+ * none, shown as a dash. It is never sent: the server sets the value a loan
+ * holds a collateral at (decision 11a).
+ */
 export interface SelectedCollateral {
   collateral: CollateralValueRow;
-  snapshot_value: number;
+  shown_value: number | null;
+}
+
+/**
+ * One collateral as a request names it: by id only. `POST /loans/preview`,
+ * the `collaterals` list of `PUT /loans/{id}`, and the attach take no value;
+ * the server sets it (decision 11a).
+ */
+export interface PledgedCollateral {
+  collateral_id: number;
+}
+
+/** The rows as a request names them: each collateral's id, in order, nothing else. */
+export function pledgedCollaterals(
+  rows: readonly Pick<SelectedCollateral, "collateral">[],
+): PledgedCollateral[] {
+  return rows.map((row) => ({ collateral_id: row.collateral.id }));
 }
 
 /**
@@ -107,15 +130,16 @@ export function statedAttachedCollaterals(
  * Not looked up in the member's collateral list: a row missing from that list
  * would otherwise drop out of the form, and saving would detach it. The link
  * row is a full `CollateralResource` with its type, valuation and holders, so
- * it carries everything the card shows. The snapshot is the value it was
- * booked at.
+ * it carries everything the card shows. Each row shows the pivot value the
+ * server holds it at, or nothing when the pivot is missing: the collateral's
+ * own amount is a different figure.
  */
 export function attachedCollateralRows(
   links: readonly LoanCollateral[],
   loanId: number,
 ): SelectedCollateral[] {
   return links.map((link) => {
-    const snapshot = link.pivot?.snapshot_value ?? link.effective_value ?? link.amount;
+    const pivotValue = link.pivot?.snapshot_value ?? null;
     return {
       collateral: {
         id: link.id,
@@ -128,16 +152,16 @@ export function attachedCollateralRows(
         updated_at: link.updated_at,
         type: link.collateral_type ?? link.type,
         lock: collateralLock(link, { exceptLoanId: loanId }),
-        effective_value: link.effective_value ?? snapshot,
+        effective_value: link.effective_value ?? link.amount,
         value_unknown: link.value_unknown ?? false,
       },
-      snapshot_value: snapshot,
+      shown_value: pivotValue,
     };
   });
 }
 
 /**
- * The `collaterals` part of an edit's `PUT /loans/{id}` body.
+ * The `collaterals` part of an edit's `PUT /loans/{id}` body, by id only.
  *
  * The full list, only when the selection differs from what the loan held when
  * the form loaded (compared by collateral id). Otherwise nothing, so the server
@@ -147,16 +171,11 @@ export function attachedCollateralRows(
 export function editedCollaterals(
   selected: readonly SelectedCollateral[],
   attached: readonly SelectedCollateral[] | null,
-): { collaterals?: LoanCollateralInput[] } {
+): { collaterals?: PledgedCollateral[] } {
   if (attached === null) return {};
   const before = new Set(attached.map((a) => a.collateral.id));
   const after = new Set(selected.map((s) => s.collateral.id));
   const unchanged = before.size === after.size && [...after].every((id) => before.has(id));
   if (unchanged) return {};
-  return {
-    collaterals: selected.map((s) => ({
-      collateral_id: s.collateral.id,
-      snapshot_value: s.snapshot_value,
-    })),
-  };
+  return { collaterals: pledgedCollaterals(selected) };
 }
