@@ -388,8 +388,23 @@ export interface Loan {
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
-  /** The server's total payable; includes `insurance_owed`. */
-  total_payable?: number;
+  /**
+   * The server's total payable: the amount still owed, `insurance_owed`
+   * included and Share Capital Build-Up never. Null before release, when
+   * `contract_total` is the figure to show.
+   */
+  total_payable?: number | null;
+  /** The contract's principal plus interest, shown on its own line. */
+  contract_total?: number | string | null;
+  /** Everything still owed on the loan, insurance premium included. */
+  total_outstanding?: number | string | null;
+  /** Principal still owed; the premium owed is `insurance_owed`. */
+  outstanding_principal?: number | string | null;
+  /**
+   * Deprecated alias: unpaid principal plus premium here, but everything owed
+   * on `GET /loans/{id}/summary`. Read `total_outstanding` or
+   * `outstanding_principal` instead.
+   */
   outstanding_balance?: number;
   /**
    * Insurance premium left unpaid at release and still owed on the loan:
@@ -551,6 +566,35 @@ export interface LoanAmortizationBalances {
     /** Insurance premium still owed on the loan, inside `balance`. */
     insurance_owed?: number | string | null;
   };
+}
+
+/** One Record Payment preset: what paying `periods` periods ahead takes today. */
+export interface LoanAdvancePreset {
+  periods: number;
+  amount: number | string;
+}
+
+/**
+ * `GET /loans/{id}/summary`: the loan's balances as the server works them
+ * out. `total_outstanding` is everything owed, premium included;
+ * `outstanding_balance` is a deprecated alias of it.
+ */
+export interface LoanSummary {
+  total_outstanding?: number | string | null;
+  outstanding_principal?: number | string | null;
+  /** Deprecated alias of `total_outstanding`. */
+  outstanding_balance?: number;
+  /** One per open period, in allocation order (only the 1-period entry on Share Capital Build-Up loans). */
+  advance_presets?: LoanAdvancePreset[];
+  /** What clears the loan today. */
+  payoff_amount?: number | string | null;
+  total_paid?: number;
+  principal_paid?: number;
+  interest_paid?: number;
+  overdue_amount?: number;
+  penalty_amount?: number;
+  next_due_date?: string;
+  next_due_amount?: number;
 }
 
 /**

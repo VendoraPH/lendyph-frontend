@@ -1,6 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
+import type { LoanSummary } from "@/types/loan";
 import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
@@ -266,7 +267,7 @@ export const loanService = {
 
   /** Loan balance summary (replaces the old /schedule endpoint) */
   summary: (id: number) =>
-    api.get(API_ENDPOINTS.LOANS.SUMMARY(id)),
+    api.get<LoanSummary>(API_ENDPOINTS.LOANS.SUMMARY(id)),
 
   /** Alias — maps to amortization-schedule for backward compat */
   schedule: (id: number) =>
