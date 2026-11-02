@@ -208,14 +208,28 @@ test("demand letter: the total demanded and the column totals are the server's",
 });
 
 test("demand letter: the insurance premium owed inside the total demanded is its own line", () => {
-  // The server includes ₱400 premium owed in total_demanded and sends it apart.
-  const doc = buildDemandLetterDoc({ ...PAYLOAD, total_demanded: 31316.66, insurance_owed: 400 }, { now: NOW });
-  assert.equal(chargeAmount(doc, "Insurance premium owed (interest-free, included in the total)"), formatCurrency(400));
+  // With arrears the server adds ₱400 premium owed to total_demanded and
+  // states it as demand_totals.insurance_owed.
+  const label = "Insurance premium owed (interest-free, included in the total)";
+  const doc = buildDemandLetterDoc(
+    { ...PAYLOAD, total_demanded: 31316.66, demand_totals: { ...PAYLOAD.demand_totals, insurance_owed: 400 } },
+    { now: NOW }
+  );
+  assert.equal(chargeAmount(doc, label), formatCurrency(400));
   assert.equal(chargeAmount(doc, "TOTAL AMOUNT DEMANDED"), formatCurrency(31316.66));
 
+  // Not demanded (no arrears: 0), or not sent: no line, even though the
+  // summary still says premium is owed.
   for (const insurance_owed of [0, undefined]) {
-    const none = buildDemandLetterDoc({ ...PAYLOAD, insurance_owed }, { now: NOW });
-    assert.throws(() => chargeAmount(none, "Insurance premium owed (interest-free, included in the total)"));
+    const none = buildDemandLetterDoc(
+      {
+        ...PAYLOAD,
+        demand_totals: { ...PAYLOAD.demand_totals, insurance_owed },
+        summary: { ...PAYLOAD.summary, insurance_owed: 400 },
+      },
+      { now: NOW }
+    );
+    assert.throws(() => chargeAmount(none, label));
   }
 });
 

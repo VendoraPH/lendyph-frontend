@@ -87,10 +87,11 @@ export function buildDemandLetterDoc(
     });
 
   const totalDemanded = pickNumber(root, ["total_demanded"]);
-  // Insurance premium owed on the loan, inside total_demanded as the server
-  // sends it: its own line when above zero.
-  const insuranceOwed = pickNumber(root, ["insurance_owed"]) ?? pickNumber(summary, ["insurance_owed"]);
   const demandTotals = asRecord(pick(root, ["demand_totals"]));
+  // The insurance premium the server put inside total_demanded (only when the
+  // loan has arrears): its own line when above zero. Not summary.insurance_owed,
+  // which is the premium owed whether or not it is demanded.
+  const insuranceOwed = pickNumber(demandTotals, ["insurance_owed"]);
   const outstandingBalance =
     pickNumber(summary, ["outstanding_balance", "total_balance"]) ??
     pickNumber(root, ["outstanding_balance"]);
