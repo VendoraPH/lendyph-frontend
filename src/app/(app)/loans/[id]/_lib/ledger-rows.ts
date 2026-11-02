@@ -23,3 +23,18 @@ export function creditEntryPaid(
   if (linked === null || amountPaid === null) return { totalPaid: entryAmount, insuranceApplied: null };
   return { totalPaid: amountPaid, insuranceApplied: repaymentInsuranceApplied(linked) };
 }
+
+type ReceiptRef = { id: number; receipt_number?: string | null };
+
+/** A repayment row's Ref No: its receipt number, else its id as an OR number. */
+export function repaymentRefNo(repayment: ReceiptRef): string {
+  return repayment.receipt_number || `OR-${String(repayment.id).padStart(6, "0")}`;
+}
+
+/**
+ * An extension's "pay" credit entry's Ref No: the receipt of the repayment it
+ * stands in for. An entry with no readable linked repayment has none.
+ */
+export function creditEntryRefNo(linked: ReceiptRef | null): string {
+  return linked ? repaymentRefNo(linked) : "—";
+}
