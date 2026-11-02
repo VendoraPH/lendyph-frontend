@@ -12,6 +12,7 @@ import type { CollateralType, LoanCollateral } from "@/types";
 import type { Loan } from "@/types/loan";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/lib/utils";
+import { attachedCollateralValue, collateralSummaryFigures } from "../_lib/collateral-display";
 
 interface LoanCollateralsCardProps {
   loanId: number;
@@ -31,8 +32,11 @@ interface AttachedRow {
    */
   link: LoanCollateral;
   type?: CollateralType;
-  /** What the collateral was booked at when attached, from the pivot. */
-  snapshotValue: number;
+  /**
+   * What the collateral was booked at when attached, from the pivot; null
+   * (a dash) when the server hides it or sent no pivot.
+   */
+  snapshotValue: number | null;
 }
 
 export function LoanCollateralsCard({
@@ -62,7 +66,7 @@ export function LoanCollateralsCard({
         const enriched: AttachedRow[] = links.map((link) => ({
           link,
           type: link.collateral_type,
-          snapshotValue: link.pivot?.snapshot_value ?? link.amount,
+          snapshotValue: attachedCollateralValue(link),
         }));
         setRows(enriched);
       } catch {
@@ -77,6 +81,8 @@ export function LoanCollateralsCard({
   }, [loanId, canListCollaterals]);
 
   const status = summary?.security_status ?? null;
+  // A share capital value the viewer may not see leaves both figures null: a dash.
+  const { totalValue, shortBy, valueHidden } = collateralSummaryFigures(summary);
 
   return (
     <CollapsibleCard
@@ -131,7 +137,7 @@ export function LoanCollateralsCard({
                   )}
                 </div>
                 <span className="text-sm font-semibold tabular-nums">
-                  {formatCurrency(snapshotValue)}
+                  {snapshotValue === null ? "—" : formatCurrency(snapshotValue)}
                 </span>
               </div>
             ))}
@@ -142,14 +148,19 @@ export function LoanCollateralsCard({
                   Total Collateral Value
                 </p>
                 <p className="text-lg font-bold tabular-nums">
-                  {summary ? formatCurrency(summary.total_value) : "—"}
+                  {totalValue === null ? "—" : formatCurrency(totalValue)}
                 </p>
+                {valueHidden && (
+                  <p className="text-xs text-muted-foreground">
+                    Share capital value hidden for your role
+                  </p>
+                )}
               </div>
               {summary && summary.security_status !== "secured" && (
                 <p className="text-xs text-muted-foreground">
                   Short by{" "}
                   <span className="font-medium text-foreground">
-                    {formatCurrency(summary.short_by)}
+                    {shortBy === null ? "—" : formatCurrency(shortBy)}
                   </span>{" "}
                   vs. principal
                 </p>

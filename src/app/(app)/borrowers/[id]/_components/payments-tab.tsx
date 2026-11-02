@@ -6,8 +6,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { formatCurrency, todayISO } from "@/lib/format";
-import type { Payment, Loan } from "@/types";
+import { formatCurrency } from "@/lib/format";
+import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
+import { memberPaymentFigures } from "../_lib/member-payment-figures";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -30,20 +31,18 @@ const paymentStatusColor: Record<string, string> = {
 interface PaymentsTabProps {
   payments: Payment[];
   loans: Loan[];
+  /** GET /borrowers/{id}/loan-summary; null while loading or after a failure. */
+  summary: BorrowerLoanSummary | null;
 }
 
-export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
-  const completedPayments = payments.filter((p) => p.status === "completed");
-  const totalPaid = completedPayments.reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
-  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
+export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
+  // Every money card is the server's figure; a missing one shows a dash.
+  const figures = memberPaymentFigures(summary);
+  const hasOverdue = (summary?.overdue_amount ?? 0) > 0;
 
   const ongoingLoans = loans.filter((l) => l.status === "ongoing");
   const nextDueDates = ongoingLoans.map((l) => l.next_due_date).filter(Boolean).sort();
   const nextDueDate = nextDueDates[0];
-
-  const today = todayISO();
-  const overdueLoans = ongoingLoans.filter((l) => l.next_due_date && l.next_due_date < today);
-  const overdueAmount = overdueLoans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
 
   const sortedPayments = [...payments].sort((a, b) => {
     const dateA = a.paid_at ?? a.created_at;
@@ -64,7 +63,7 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Total Paid</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalPaid)}</p>
+                <p className="text-2xl font-bold text-green-600">{figures.totalPaid}</p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600/30" />
             </div>
@@ -74,8 +73,8 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Remaining Balance</p>
-                <p className="text-2xl font-bold text-brand-orange">{formatCurrency(totalOutstanding)}</p>
+                <p className="text-xs text-muted-foreground">Outstanding</p>
+                <p className="text-2xl font-bold text-brand-orange">{figures.outstanding}</p>
               </div>
               <Banknote className="h-8 w-8 text-brand-orange/30" />
             </div>
@@ -97,11 +96,11 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Overdue</p>
-                <p className={`text-2xl font-bold ${overdueAmount > 0 ? "text-red-600" : ""}`}>
-                  {overdueAmount > 0 ? formatCurrency(overdueAmount) : "None"}
+                <p className={`text-2xl font-bold ${hasOverdue ? "text-red-600" : ""}`}>
+                  {figures.overdue}
                 </p>
               </div>
-              <AlertCircle className={`h-8 w-8 ${overdueAmount > 0 ? "text-red-600/30" : "text-muted-foreground/30"}`} />
+              <AlertCircle className={`h-8 w-8 ${hasOverdue ? "text-red-600/30" : "text-muted-foreground/30"}`} />
             </div>
           </CardContent>
         </Card>

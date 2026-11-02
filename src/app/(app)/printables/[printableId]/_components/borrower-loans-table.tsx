@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { LOAN_STATUS_COLORS, LOAN_STATUS_LABELS } from "@/constants";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import type { Loan } from "@/types";
@@ -39,6 +40,9 @@ function releasedOn(loan: Loan): string {
   const released = loan.released_at ?? loan.release_date;
   return released ? formatDate(released) : "—";
 }
+
+/** The LoanResource field the Outstanding column reads that `Loan` does not declare. */
+type LoanWithTotalOutstanding = Loan & { total_outstanding?: number | string | null };
 
 interface BorrowerLoansTableProps {
   loans: Loan[];
@@ -114,9 +118,8 @@ export function BorrowerLoansTable({
                   {formatCurrency(loan.principal_amount)}
                 </TableCell>
                 <TableCell className="text-sm text-right tabular-nums">
-                  {loan.outstanding_balance !== undefined
-                    ? formatCurrency(loan.outstanding_balance)
-                    : "—"}
+                  {/* Everything owed; a dash when the server sent no figure. */}
+                  {currencyOrDash((loan as LoanWithTotalOutstanding).total_outstanding)}
                 </TableCell>
                 <TableCell className="text-sm">{releasedOn(loan)}</TableCell>
                 <TableCell className="text-sm">
