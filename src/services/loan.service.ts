@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { LoanSummary } from "@/types/loan";
+import type { LoanLedger, LoanSummary } from "@/types/loan";
 import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
@@ -298,6 +298,10 @@ export const loanService = {
 
   restructure: (id: number, data: Record<string, unknown>) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
+
+  /** The Ledger: every row and running balance from the server — see `LoanLedger`. */
+  ledger: (id: number) =>
+    api.get<LoanLedger>(API_ENDPOINTS.LOANS.LEDGER(id)),
 
   /** Debit/credit postings against the loan's interest — see `LoanLedgerEntry`. */
   ledgerEntries: (id: number) =>

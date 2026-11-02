@@ -28,7 +28,6 @@ import {
   INSURANCE_PREMIUM_LABEL,
   loanInsuranceOwed,
   previewInsuranceApplied,
-  repaymentInsuranceApplied,
 } from "@/lib/insurance-premium";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
@@ -43,7 +42,7 @@ import {
   toDisplaySchedule,
   type ScheduleTotals,
 } from "./_lib/server-schedule";
-import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
+import { readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
 import {
   outstandingPrincipal,
   presetButtons,
@@ -64,6 +63,7 @@ import {
   type ScheduleLoad,
 } from "./_components/schedule-notice";
 import { AmortizationBalanceTable } from "./_components/amortization-balance-table";
+import { LedgerTable } from "./_components/ledger-table";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
 import { LoanRemindersCard } from "./_components/loan-reminders-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
@@ -76,7 +76,6 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
-import { creditEntryPaid, creditEntryRefNo, repaymentRefNo } from "./_lib/ledger-rows";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import { collectNowParts } from "./_lib/extension-preview";
@@ -100,7 +99,7 @@ import {
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import type { LoanSchedule, LoanLedgerEntry, LoanSummary } from "@/types/loan";
+import type { LoanSchedule, LoanSummary } from "@/types/loan";
 import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
@@ -204,34 +203,7 @@ import {
   isEverReleasedLoanStatus,
 } from "@/constants";
 import type { Loan } from "@/types/loan";
-import type { ApiScheduleRow } from "@/lib/amortization";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
-
-// One row of the Ledger table — either a Repayment or a LoanLedgerEntry
-// (interest a loan extension accrues or collects), flattened to a common
-// shape so both render in one chronological list with running balances.
-interface LedgerDisplayRow {
-  key: string;
-  date: string;
-  createdAt: string;
-  refNo: string;
-  remarks: string;
-  principalPaid?: number;
-  interestDebit?: number;
-  interestCredit?: number;
-  penaltyPaid?: number;
-  scbPaid?: number;
-  /** The server's `insurance_applied` on a repayment; null shows a dash. */
-  insuranceApplied?: number | null;
-  excessAmount?: number;
-  totalPaid?: number;
-  status?: Repayment["status"];
-  repaymentId?: number;
-  principalBal: number;
-  /** Null while the balance's opening is unknown (no schedule rows on screen). */
-  interestBal: number | null;
-  scbBal: number | null;
-}
 
 // ── Status Colors ──
 //
@@ -690,11 +662,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // is an answer: the loan has no instalments.
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
   const [scheduleFailed, setScheduleFailed] = useState(false);
-  // Raw amortization rows exactly as the backend returns them. The mapped
-  // `apiSchedule` above folds each row's interest_paid into amount_paid, which
-  // loses the per-row interest breakdown; we keep the raw rows so the extend
-  // flow can read the true outstanding interest (interest_due - interest_paid).
-  const [rawSchedule, setRawSchedule] = useState<ApiScheduleRow[] | null>(null);
 
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
@@ -722,13 +689,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [repaymentsLoading, setRepaymentsLoading] = useState(false);
-  // Set only when the repayment drain gave up with pages outstanding, i.e. the
-  // ledger is knowingly missing payments. Null means complete.
+  // Set only when the repayment drain gave up with pages outstanding: the
+  // Ledger rows of the payments it missed show no receipt number or Void.
+  // Null means complete.
   const [repaymentsShortfall, setRepaymentsShortfall] = useState<RepaymentListShortfall | null>(null);
-  // Ledger debit/credit entries (interest an extension accrues/collects) —
-  // merged with repayments into `ledgerRows` below.
-  const [ledgerEntries, setLedgerEntries] = useState<LoanLedgerEntry[]>([]);
-  const [ledgerEntriesLoading, setLedgerEntriesLoading] = useState(false);
+  // The Ledger as the server sends it (GET /loans/{id}/ledger): every row and
+  // running balance. Null until it has answered; `ledgerFailed` says whether
+  // it could not be read.
+  const [ledger, setLedger] = useState<LedgerView | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerFailed, setLedgerFailed] = useState(false);
   // Bumped after an action that posts to the share-capital ledger (a payment
   // credits any SCB build-up, a void reverses it) so the Share Capital card
   // re-reads its balance. No other action writes to that ledger.
@@ -855,11 +825,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     try {
       const read = readScheduleRows(await loanService.schedule(id), id);
       setApiSchedule(read?.schedule ?? null);
-      setRawSchedule(read?.raw ?? null);
       setScheduleFailed(read === null);
     } catch {
       setApiSchedule(null);
-      setRawSchedule(null);
       setScheduleFailed(true);
     }
   }, []);
@@ -980,18 +948,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   }, [canViewPayments]);
 
-  // Fetch debit/credit ledger entries for released+ loans — merged into
-  // `ledgerRows` alongside repayments.
-  const fetchLedgerEntries = useCallback(async (id: number) => {
+  // Fetch the Ledger for released+ loans. A failed or unreadable answer is
+  // shown as such, with a Retry: nothing stands in for the server's rows.
+  const fetchLedger = useCallback(async (id: number) => {
     try {
-      setLedgerEntriesLoading(true);
-      const res = await loanService.ledgerEntries(id);
-      const list: LoanLedgerEntry[] = Array.isArray(res) ? res : res.data ?? [];
-      setLedgerEntries(list);
+      setLedgerLoading(true);
+      const read = readLoanLedger(await loanService.ledger(id));
+      setLedger(read);
+      setLedgerFailed(read === null);
     } catch {
-      // silently fail — the ledger still renders correctly from repayments alone
+      setLedgerFailed(true);
     } finally {
-      setLedgerEntriesLoading(false);
+      setLedgerLoading(false);
     }
   }, []);
 
@@ -1017,9 +985,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (loadedLoanId !== undefined && hasServerLoanData) {
       fetchRepayments(loadedLoanId);
       fetchAdjustments(loadedLoanId);
-      fetchLedgerEntries(loadedLoanId);
+      fetchLedger(loadedLoanId);
     }
-  }, [loadedLoanId, hasServerLoanData, fetchRepayments, fetchAdjustments, fetchLedgerEntries]);
+  }, [loadedLoanId, hasServerLoanData, fetchRepayments, fetchAdjustments, fetchLedger]);
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
@@ -1161,146 +1129,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // totals one; a figure the server did not send in them is a dash.
   const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
 
-  // The interest still OWED on the loan, which the Ledger's Interest column
-  // opens from. (The Extend dialog shows the server's extension preview.)
-  //
-  // This must be the OUTSTANDING interest, not the gross interest_due. It is
-  // computed from the raw amortization rows as Σ max(0, interest_due −
-  // interest_paid) over every not-fully-paid period. The gross sum (what the
-  // collapsed upon-maturity row exposes) re-charges interest already collected
-  // in earlier periods: after the backend's /extend carries a settled period
-  // forward alongside a new one, a 2nd extension would bill period-1's interest
-  // again. Netting out interest_paid per row means a settled period contributes
-  // 0, so extension N collects exactly period-N's still-unpaid interest.
-  //
-  // Rounded to centavos so the displayed figure and the posted amount match to
-  // the last decimal (formatCurrencyPrecise shows the same value we charge).
-  //
-  // Null while the server's schedule is loading or could not be read: the
-  // interest owed is then unknown, which is not the same as none.
-  const currentInterestDue = useMemo(() => {
-    if (rawSchedule && rawSchedule.length > 0) {
-      const outstanding = rawSchedule.reduce((sum, row) => {
-        const due = parseFloat(String(row.interest_due ?? 0)) || 0;
-        const paid = parseFloat(String(row.interest_paid ?? 0)) || 0;
-        return sum + Math.max(0, due - paid);
-      }, 0);
-      return Math.round(outstanding * 100) / 100;
-    }
-    if (scheduleLoad !== "loaded") return null;
-    // No raw API rows: the server answered with no instalments (nothing is
-    // owed), or with rows lacking the paid breakdown, where the first open
-    // period's interest is the amount owed.
-    const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
-    return Math.round(fallback * 100) / 100;
-  }, [rawSchedule, storedSchedule, scheduleLoad]);
-
-  // Ledger rows: repayments merged with debit/credit ledger entries (interest
-  // a loan extension accrues or collects), sorted by date so the table reads
-  // as one chronological history with running Principal/Interest/SCB balances.
-  const ledgerRows = useMemo(() => {
-    // The API's category can widen to "principal" / "penalty" later even
-    // though only "interest" entries exist today (see LoanLedgerEntry) — this
-    // table only has an Interest debit/credit pair to put them in, so entries
-    // in some other category are left out rather than mislabeled as interest.
-    const interestEntries = ledgerEntries.filter((e) => e.category === "interest");
-
-    // A "pay" extension collects interest through a real Repayment AND logs
-    // the same money again as a credit ledger entry (linked via
-    // repayment_id) so it carries a description. Keep the ledger entry — it's
-    // the one with the description — and drop the repayment it stands in
-    // for, or that collection would render, and count, twice.
-    const creditedRepaymentIds = new Set(
-      interestEntries.map((e) => e.repayment_id).filter((id): id is number => id != null),
-    );
-    const keptRepayments = repayments.filter((r) => !creditedRepaymentIds.has(r.id));
-
-    const repaymentRows: LedgerDisplayRow[] = keptRepayments.map((r) => ({
-      key: `repayment-${r.id}`,
-      date: r.payment_date,
-      createdAt: r.created_at,
-      refNo: repaymentRefNo(r as Repayment & { receipt_number?: string | null }),
-      remarks: r.remarks || "payment",
-      principalPaid: r.principal_paid,
-      interestCredit: r.interest_paid,
-      penaltyPaid: r.penalty_paid,
-      scbPaid: r.scb_paid,
-      insuranceApplied: repaymentInsuranceApplied(r),
-      excessAmount: r.excess_amount,
-      totalPaid: r.amount_paid,
-      status: r.status,
-      repaymentId: r.id,
-      principalBal: 0,
-      interestBal: 0,
-      scbBal: 0,
-    }));
-
-    const repaymentsById = new Map(repayments.map((r) => [r.id, r]));
-    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => {
-      // A credit here IS the cash collection (its Repayment twin was dropped
-      // above), so it belongs in Total Paid too; a debit moves no cash. The
-      // twin's own amount paid and premium are shown, so a premium the same
-      // payment collected first is on the row and the parts add up.
-      const linked =
-        e.type === "credit" && e.repayment_id != null ? repaymentsById.get(e.repayment_id) ?? null : null;
-      const paid = e.type === "credit" ? creditEntryPaid(e.amount, linked) : null;
-      return {
-        key: `ledger-${e.id}`,
-        date: e.entry_date,
-        createdAt: e.created_at,
-        refNo: creditEntryRefNo(linked as (Repayment & { receipt_number?: string | null }) | null),
-        remarks: e.description,
-        interestDebit: e.type === "debit" ? e.amount : undefined,
-        interestCredit: e.type === "credit" ? e.amount : undefined,
-        insuranceApplied: paid?.insuranceApplied ?? null,
-        totalPaid: paid?.totalPaid,
-        principalBal: 0,
-        interestBal: 0,
-        scbBal: 0,
-      };
-    });
-
-    const sorted = [...repaymentRows, ...ledgerEntryRows].sort((a, b) => {
-      const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
-      if (byDate !== 0) return byDate;
-      // Same-day tiebreaker: a debit and its paired credit share an entry_date,
-      // so fall back to creation order to keep them in a stable, sensible sequence.
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
-
-    // Interest must walk FORWARD — a debit (extension interest accruing)
-    // raises what's owed; a credit or repayment lowers it — unlike
-    // Principal/SCB, which only ever go down. The API only ever debits
-    // extension interest; the loan's origination interest was never posted
-    // as a ledger entry, so this can't start at 0 either. Instead, solve for
-    // the opening balance that makes the LAST row land exactly on
-    // currentInterestDue — this file's own "single source of truth" for what's
-    // actually still owed (see its definition above). With no schedule rows
-    // there is nothing to solve from, and ledgerOpening leaves it unknown. storedScheduleTotals.interest
-    // is deliberately NOT the anchor here even though it seeds the Interest
-    // column of the static "Loan released" row above: it's a gross, never-paid-down
-    // total (Σ interest_due across every period the schedule has ever had), so
-    // once anything has been paid it no longer equals what's outstanding today —
-    // anchoring to it would land the last row on a number too high by whatever's
-    // already been paid off. currentInterestDue nets paid amounts out already, so:
-    //
-    //   opening = currentInterestDue − debits + credits + interest paid
-    //
-    // and re-applying every debit/credit/payment below recreates that same
-    // closing figure at the end of the walk — verified against worked examples
-    // covering a bare "pay" extension and a "defer" extension stacked after one,
-    // both landing exactly on currentInterestDue.
-    const opening = ledgerOpening({
-      principalAmount: loan?.principal_amount ?? 0,
-      scheduleRowCount: storedSchedule.length,
-      currentInterestDue,
-      scheduleScbTotal: storedScheduleTotals.shareCapitalBuildUp,
-      interestDebits: interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0),
-      interestCredits: interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0),
-      interestPaid: ledgerInterestPaid(keptRepayments),
-    });
-    return walkLedgerBalances(sorted, opening);
-  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedSchedule.length, storedScheduleTotals.shareCapitalBuildUp]);
+  // The payments the Ledger rows name, for each row's receipt number, amount
+  // paid and Void button.
+  const repaymentsById = useMemo(() => new Map(repayments.map((r) => [r.id, r])), [repayments]);
 
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
@@ -1415,7 +1246,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
   };
   const loanProcessingFee = findDeductionAmount("Processing Fee");
   const loanServiceFee = findDeductionAmount("Service Fee");
-  const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
   // Total Payable is the server's amount still owed (never Share Capital
   // Build-Up), a dash before release; the contract total is its own line.
   // Neither falls back to the schedule's total payment.
@@ -1846,6 +1676,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           fetchSchedule(loanId),
           fetchLoanSummary(loanId),
           fetchRepayments(loanId),
+          fetchLedger(loanId),
           loadLoan(loanId, loan).then(setLoan),
         ]);
       }
@@ -1949,10 +1780,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
-        // Extend always posts a debit (and a credit when "pay" collects the
-        // interest) — refresh so the Ledger shows both immediately rather
-        // than only after the next full page load.
-        await fetchLedgerEntries(loan.id);
+        // An extension adds Ledger rows (its interest charge, and its payment
+        // when "pay" collects the interest): re-read the server's Ledger.
+        await fetchLedger(loan.id);
         // Refresh the extension/adjustment history too — the effect that loads
         // adjustments only runs when the loan first has server data, so an
         // extension wouldn't trigger it, leaving the history card stale.
@@ -1993,7 +1823,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
         fetchSchedule(loan.id),
         fetchLoanSummary(loan.id),
         fetchRepayments(loan.id),
-        fetchLedgerEntries(loan.id),
+        fetchLedger(loan.id),
         fetchAdjustments(loan.id),
       ]);
       setActionLoading(false);
@@ -2052,6 +1882,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
         fetchSchedule(loan.id),
         fetchLoanSummary(loan.id),
         fetchRepayments(loan.id),
+        fetchLedger(loan.id),
       ]);
     } catch {
       toast.error("We couldn't void the payment. Please try again.");
@@ -2151,12 +1982,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
         await loanAdjustmentService.apply(adjId);
         toast.success("Adjustment applied");
         // Applying rewrites the loan's open schedule rows, and with them its
-        // balances; it posts no payments and no ledger entries. Settled rather
-        // than thrown: a failed re-read is not a failed apply.
+        // balances, and adds its row to the Ledger. Settled rather than
+        // thrown: a failed re-read is not a failed apply.
         await Promise.allSettled([
           loadLoan(loan.id, loan).then(setLoan),
           fetchSchedule(loan.id),
           fetchLoanSummary(loan.id),
+          fetchLedger(loan.id),
         ]);
       }
       fetchAdjustments(loan.id);
@@ -3644,147 +3476,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 shown={repaymentsShortfall.shown}
                 total={repaymentsShortfall.total}
                 noun="payments"
-                consequence="Payments missing from the ledger below are left out of its running principal, interest and SCB balances, so the balances it ends on are not the loan's current ones."
+                consequence="Ledger rows for the payments not loaded show no receipt number or amount paid and can't be voided here. The figures and balances are the server's and are complete."
               />
             )}
-            {repaymentsLoading || ledgerEntriesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
-              </div>
-            ) : (
-              (() => {
-                const hasScb = (loan.scb_amount ?? 0) > 0;
-                const dash = <span className="text-muted-foreground/40">—</span>;
-                const fmtN = (n: number | undefined) =>
-                  n != null && n > 0 ? formatCurrency(n) : dash;
-                const totalCols = hasScb ? 15 : 14;
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
-                          <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Date</th>
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Ref No</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Principal</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
-                          <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
-                          {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Insurance Premium</th>
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
-                          <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
-                        </tr>
-                        <tr className="border-b bg-muted/30 text-center text-muted-foreground">
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Penalty</th>
-                          <th className="border-r px-3 py-1">Interest</th>
-                          <th className="border-r px-3 py-1">Amount</th>
-                          <th className="px-3 py-1 text-left">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* Opening entry */}
-                        {loanReleaseDate && (
-                          <tr className="border-b bg-blue-50/40 dark:bg-blue-950/20">
-                            <td className="border-r px-3 py-2 text-left">{formatDate(loanReleaseDate)}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">—</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{(storedScheduleTotals.interest ?? 0) > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{(storedScheduleTotals.interest ?? 0) > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
-                            <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
-                          </tr>
-                        )}
-                        {/* Repayment + ledger entry rows, interleaved chronologically */}
-                        {ledgerRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={totalCols} className="px-3 py-6 text-center text-muted-foreground">
-                              No repayments recorded yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          ledgerRows.map((r) => {
-                            const repaymentId = r.repaymentId;
-                            return (
-                              <tr
-                                key={r.key}
-                                className={cn(
-                                  "border-b transition-colors hover:bg-muted/30",
-                                  r.status === "voided" && "opacity-50 line-through",
-                                )}
-                              >
-                                <td className="border-r px-3 py-2 text-left">{formatDate(r.date)}</td>
-                                <td className="border-r px-3 py-2 text-center text-muted-foreground">{r.refNo}</td>
-                                {/* Principal */}
-                                <td className="border-r px-3 py-2 text-center">{dash}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principalPaid)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
-                                {/* Interest */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestDebit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestCredit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{r.interestBal === null ? dash : formatCurrency(r.interestBal)}</td>
-                                {/* Past Due */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">
-                                  {r.penaltyPaid != null && r.penaltyPaid > 0 ? (
-                                    <span className="text-destructive">{formatCurrency(r.penaltyPaid)}</span>
-                                  ) : dash}
-                                </td>
-                                <td className="border-r px-3 py-2 text-center">{dash}</td>
-                                {/* SCB */}
-                                {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scbPaid)}</td>}
-                                {/* Insurance premium the payment collected first: the server's figure */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">
-                                  {r.insuranceApplied == null ? dash : formatCurrency(r.insuranceApplied)}
-                                </td>
-                                {/* Others */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excessAmount)}</td>
-                                {/* Total Paid */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{fmtN(r.totalPaid)}</td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-muted-foreground">{r.remarks}</span>
-                                    {repaymentId != null && (
-                                      <div className="flex shrink-0 items-center gap-1">
-                                        {r.status === "voided" && (
-                                          <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
-                                        )}
-                                        {r.status !== "voided" && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
-                                            onClick={() => handleVoidRepayment(repaymentId)}
-                                            disabled={actionLoading}
-                                          >
-                                            Void
-                                          </Button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()
-            )}
+            <LedgerTable
+              ledger={ledger}
+              loading={ledgerLoading}
+              failed={ledgerFailed}
+              onRetry={() => void fetchLedger(loan.id)}
+              hasScb={(loan.scb_amount ?? 0) > 0}
+              repaymentsById={repaymentsById}
+              onVoid={handleVoidRepayment}
+              actionLoading={actionLoading}
+            />
         </CollapsibleCard>
       )}
 
