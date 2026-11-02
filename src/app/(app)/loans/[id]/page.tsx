@@ -3105,8 +3105,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
           version={shareCapitalVersion}
         />
 
-        {/* Auto-Pay Status Card */}
-        {["released", "current"].includes(loan.status) && (
+        {/* Auto-Pay Status Card: the loans the backend's toggle accepts
+            (Loan::ACTIVE_STATUSES, released and ongoing), which both read
+            "Current". */}
+        {["released", "ongoing", "current"].includes(loan.status) && (
           <CollapsibleCard
             title="Auto-Pay"
             headerExtra={
