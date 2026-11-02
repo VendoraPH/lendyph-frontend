@@ -263,6 +263,20 @@ export interface LoanCoMaker {
   added_at?: string | null;
 }
 
+export interface LoanAmountDueNow {
+  amount: number;
+  insurance: number;
+  principal: number;
+  interest: number;
+  penalty: number;
+  share_capital_build_up: number;
+  /** The first period covered; null when no period is open. */
+  period_number: number | null;
+  /** The last period covered; equal to `period_number` for one. */
+  last_period_number: number | null;
+  schedule_id: number | null;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -374,8 +388,22 @@ export interface Loan {
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
+  /** The server's total payable; includes `insurance_owed`. */
   total_payable?: number;
   outstanding_balance?: number;
+  /**
+   * Insurance premium left unpaid at release and still owed on the loan:
+   * interest-free, collected first from each payment, on every loan that
+   * owes it. Part of `total_payable`.
+   */
+  insurance_owed?: number | string;
+  /**
+   * What a payment must be today to clear `insurance_owed` plus the first
+   * open period in full, penalty included, with its parts. Null unless the
+   * loan is released or ongoing; `period_number` and `schedule_id` are null
+   * when no period is open.
+   */
+  amount_due_now?: LoanAmountDueNow | null;
   /**
    * `total_deductions` less the itemised `deductions`, signed: the release
    * voucher prints it as its own line when not 0.
@@ -459,7 +487,10 @@ export interface LoanExtensionPreview {
   interest_option: ExtensionInterestOption;
   /** Collected as a payment before the loan extends; zeros for "defer". */
   collect_now: {
+    /** Includes the insurance premium owed on "pay". */
     amount: number;
+    /** Insurance premium owed on the loan, collected first on "pay". */
+    insurance_part?: number;
     penalty_part: number;
     interest_part: number;
   };
@@ -514,8 +545,11 @@ export interface LoanAmortizationBalances {
     interest: AmortizationComponentBalance;
     penalty: AmortizationPenaltyBalance;
     paid: number;
+    /** Includes `insurance_owed`, so it equals Current Outstanding. */
     balance: number;
     overdue: number;
+    /** Insurance premium still owed on the loan, inside `balance`. */
+    insurance_owed?: number | string | null;
   };
 }
 

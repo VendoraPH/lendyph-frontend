@@ -17,20 +17,26 @@ import {
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import { PrintableMenu, RouteGuard } from "@/components/common";
+import { PermissionButton, PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
 import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
 import { coMakerName } from "@/lib/co-maker-name";
+import {
+  INSURANCE_OWED_LABEL,
+  INSURANCE_PREMIUM_LABEL,
+  loanInsuranceOwed,
+  previewInsuranceApplied,
+  repaymentInsuranceApplied,
+} from "@/lib/insurance-premium";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
   allocationMatches,
-  openPeriod,
+  rowForAllocation,
   openPeriods,
-  paymentAgainstDue,
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
@@ -56,6 +62,21 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
+import { creditEntryPaid } from "./_lib/ledger-rows";
+import { collectNowParts } from "./_lib/extension-preview";
+import {
+  dueNowHasOpenPeriod,
+  dueNowIsRange,
+  dueNowOnDate,
+  dueNowPeriodLabel,
+  dueNowTiles,
+  previewBalanceAfter,
+  previewBalanceBefore,
+  previewIsCurrent,
+  previewRequestKey,
+  readAmountDueNow,
+  shouldPromptExtend,
+} from "@/lib/payment-figures";
 import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
 import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
 import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
@@ -145,6 +166,7 @@ import {
   BookOpen,
   Zap,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
@@ -156,6 +178,7 @@ import {
   formatDateObj,
   formatDateTime,
   formatRate,
+  todayISO,
 } from "@/lib/format";
 import {
   LOAN_STATUS_COLORS,
@@ -185,6 +208,8 @@ interface LedgerDisplayRow {
   interestCredit?: number;
   penaltyPaid?: number;
   scbPaid?: number;
+  /** The server's `insurance_applied` on a repayment; null shows a dash. */
+  insuranceApplied?: number | null;
   excessAmount?: number;
   totalPaid?: number;
   status?: Repayment["status"];
@@ -712,6 +737,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
+  // The amount and date `paymentPreview` answers (previewRequestKey).
+  const [paymentPreviewKey, setPaymentPreviewKey] = useState<string | null>(null);
+  // The amount and date whose preview request failed, and a round that asks
+  // again after the cashier is told so.
+  const [paymentPreviewFailedKey, setPaymentPreviewFailedKey] = useState<string | null>(null);
+  const [paymentPreviewRound, setPaymentPreviewRound] = useState(0);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -1124,11 +1155,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
       totals: storedScheduleTotals,
     });
   }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, storedScheduleTotals, scheduleRows]);
-  // The period the borrower pays next, with its own server figures. Payment
-  // amounts and the partial-payment check read this, never the merged
-  // upon-maturity row, whose totals include what an extension already
-  // collected.
-  const duePeriod = useMemo(() => (scheduleRows ? openPeriod(scheduleRows) : null), [scheduleRows]);
   // The build-up columns show when the loan carries a build-up or the server
   // totals one; a figure the server did not send in them is a dash.
   const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
@@ -1197,6 +1223,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       interestCredit: r.interest_paid,
       penaltyPaid: r.penalty_paid,
       scbPaid: r.scb_paid,
+      insuranceApplied: repaymentInsuranceApplied(r),
       excessAmount: r.excess_amount,
       totalPaid: r.amount_paid,
       status: r.status,
@@ -1206,21 +1233,31 @@ function LoanDetail({ loanId }: { loanId: number }) {
       scbBal: 0,
     }));
 
-    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => ({
-      key: `ledger-${e.id}`,
-      date: e.entry_date,
-      createdAt: e.created_at,
-      refNo: "—",
-      remarks: e.description,
-      interestDebit: e.type === "debit" ? e.amount : undefined,
-      interestCredit: e.type === "credit" ? e.amount : undefined,
+    const repaymentsById = new Map(repayments.map((r) => [r.id, r]));
+    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => {
       // A credit here IS the cash collection (its Repayment twin was dropped
-      // above), so it belongs in Total Paid too; a debit moves no cash.
-      totalPaid: e.type === "credit" ? e.amount : undefined,
-      principalBal: 0,
-      interestBal: 0,
-      scbBal: 0,
-    }));
+      // above), so it belongs in Total Paid too; a debit moves no cash. The
+      // twin's own amount paid and premium are shown, so a premium the same
+      // payment collected first is on the row and the parts add up.
+      const paid =
+        e.type === "credit"
+          ? creditEntryPaid(e.amount, e.repayment_id != null ? repaymentsById.get(e.repayment_id) ?? null : null)
+          : null;
+      return {
+        key: `ledger-${e.id}`,
+        date: e.entry_date,
+        createdAt: e.created_at,
+        refNo: "—",
+        remarks: e.description,
+        interestDebit: e.type === "debit" ? e.amount : undefined,
+        interestCredit: e.type === "credit" ? e.amount : undefined,
+        insuranceApplied: paid?.insuranceApplied ?? null,
+        totalPaid: paid?.totalPaid,
+        principalBal: 0,
+        interestBal: 0,
+        scbBal: 0,
+      };
+    });
 
     const sorted = [...repaymentRows, ...ledgerEntryRows].sort((a, b) => {
       const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -1395,6 +1432,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : storedSchedule.length > 0
         ? storedScheduleTotals.totalPayment
         : null;
+  // Insurance premium left unpaid at release, still owed on the loan (part of
+  // the server's total_payable); null when none is.
+  const insuranceOwed = loanInsuranceOwed(loan);
+  // What the previewed payment will collect of it first; null when none.
+  const paymentPreviewInsurance = previewInsuranceApplied(paymentPreview);
+  // What a payment must be today to clear the premium owed and the first
+  // open period, with its parts: the server's, null when it sent none.
+  const amountDueNow = readAmountDueNow(loan?.amount_due_now);
+  // The figure is as of today: another payment date shows a dash.
+  const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The preview on screen answers exactly the amount and date typed now.
+  const paymentPreviewCurrent = previewIsCurrent(
+    { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+    Number(paymentAmount),
+    formatDateISO(paymentDate),
+  );
   const loanInterestAmount: number | null =
     storedSchedule.length === 0 || storedScheduleTotals.interest === null
       ? null
@@ -1418,14 +1471,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
     let cancelled = false;
     setPaymentPreviewLoading(true);
     const handle = setTimeout(async () => {
+      const paymentDateISO = formatDateISO(paymentDate);
       try {
         const res = await repaymentService.preview(loan.id, {
           amount_paid: amt,
-          payment_date: formatDateISO(paymentDate),
+          payment_date: paymentDateISO,
         });
-        if (!cancelled) setPaymentPreview(res ?? null);
+        if (!cancelled) {
+          setPaymentPreview(res ?? null);
+          setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
+          setPaymentPreviewFailedKey(null);
+        }
       } catch {
-        if (!cancelled) setPaymentPreview(null);
+        if (!cancelled) {
+          setPaymentPreview(null);
+          setPaymentPreviewKey(null);
+          setPaymentPreviewFailedKey(previewRequestKey(amt, paymentDateISO));
+        }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
       }
@@ -1434,7 +1496,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments]);
+  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments, paymentPreviewRound]);
 
   if (loading) {
     return (
@@ -1825,17 +1887,33 @@ function LoanDetail({ loanId }: { loanId: number }) {
       remarks: composedRemarks,
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the open
-    // period's total payment, prompt to extend instead of silently posting a
-    // partial payment. Without the server's total for that period the payment
-    // can't be judged, so it is not posted at all.
+    // Upon Maturity loans: if the server's preview for this amount and date
+    // calls it partial (premium owed counted), prompt to extend instead of
+    // silently posting a partial payment. Until that preview has answered
+    // for exactly this amount and date, the payment is not posted at all.
     if (isUponMaturityLoan && paymentMode === "regular") {
-      const standing = paymentAgainstDue(payload.amount_paid, duePeriod);
-      if (standing === "unknown") {
-        toast.error("We couldn't read the amount due for this period. Reload the loan and try again.");
+      const decision = shouldPromptExtend({
+        hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
+        preview: paymentPreview,
+        previewIsCurrent: previewIsCurrent(
+          { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+          payload.amount_paid,
+          payload.payment_date,
+        ),
+        previewFailed:
+          !paymentPreviewLoading &&
+          paymentPreviewFailedKey === previewRequestKey(payload.amount_paid, payload.payment_date),
+      });
+      if (decision === "failed") {
+        toast.error("We couldn't check this payment with the server. Try again.");
+        setPaymentPreviewRound((round) => round + 1);
         return;
       }
-      if (standing === "partial") {
+      if (decision === "unknown") {
+        toast.error("We're still checking this payment with the server. Wait for the allocation preview, then try again.");
+        return;
+      }
+      if (decision === "prompt") {
         setPendingPayment(payload);
         setPartialExtendOpen(true);
         return;
@@ -2977,6 +3055,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </p>
                 )}
               </div>
+              {/* Insurance premium left unpaid at release: part of the
+                  server's Total Payable, collected before anything else. */}
+              {insuranceOwed !== null && (
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">{INSURANCE_OWED_LABEL}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(insuranceOwed)}</p>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -3523,16 +3609,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     New Adjustment
                   </Button>
                 )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    onClick={() => setRecordPaymentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Record Payment
-                  </Button>
-                )}
+                {["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                  (isUponMaturityLoan ? (
+                    // An upon-maturity payment is checked against the
+                    // server's payment preview, which needs payments:view.
+                    <PermissionButton
+                      permission="payments:view"
+                      tooltip="Checking an upon-maturity payment needs permission to view payments"
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </PermissionButton>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </Button>
+                  ))}
             </>
           }
         >
@@ -3555,7 +3655,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 const dash = <span className="text-muted-foreground/40">—</span>;
                 const fmtN = (n: number | undefined) =>
                   n != null && n > 0 ? formatCurrency(n) : dash;
-                const totalCols = hasScb ? 14 : 13;
+                const totalCols = hasScb ? 15 : 14;
                 return (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-xs">
@@ -3567,6 +3667,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
                           <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
                           {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
+                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Insurance Premium</th>
                           <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
                           <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
                         </tr>
@@ -3598,6 +3699,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
+                            <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center">{dash}</td>
                             <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
                             <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
@@ -3640,6 +3742,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                 <td className="border-r px-3 py-2 text-center">{dash}</td>
                                 {/* SCB */}
                                 {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scbPaid)}</td>}
+                                {/* Insurance premium the payment collected first: the server's figure */}
+                                <td className="border-r px-3 py-2 text-right tabular-nums">
+                                  {r.insuranceApplied == null ? dash : formatCurrency(r.insuranceApplied)}
+                                </td>
                                 {/* Others */}
                                 <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excessAmount)}</td>
                                 {/* Total Paid */}
@@ -4144,24 +4250,59 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </div>
           </div>
 
+          {/* Insurance premium owed on the loan: the server takes it out of
+              this payment before any period, so the amounts below are
+              reached only after it. */}
+          {insuranceOwed !== null && (
+            <div
+              role="note"
+              className="flex gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900 dark:border-purple-800 dark:bg-purple-950/20 dark:text-purple-200"
+            >
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="font-semibold tabular-nums">{formatCurrency(insuranceOwed)}</span>{" "}
+                insurance premium is still owed on this loan (interest-free). This payment
+                collects it first, before penalty, interest and principal.
+              </p>
+            </div>
+          )}
+
           {/* Current Scheduled Payment — shows the single amortization
               installment the borrower currently needs to pay (the earliest
               unpaid period). Gives the cashier a clear "this is what's due
               right now" anchor before they enter an amount. */}
           {(() => {
-            const current = duePeriod;
-            if (!current) return null;
-            const hasScb = scheduleHasScb;
-            const currentTotal = current.totalPayment;
-            const isOverdue = current.status === "overdue";
-            const isPartial = current.status === "partial";
+            // Built on the server's amount due now, which also covers a loan
+            // whose periods are all paid but still owes premium. The period
+            // shown is the server's, matched to its row by schedule id or
+            // period number for the due date and status.
+            if (amountDueNow === null) return null;
+            const currentTotal = amountDueOnPaymentDate?.amount ?? null;
+            const dueParts = dueNowTiles(amountDueOnPaymentDate);
+            const periodLabel = dueNowPeriodLabel(amountDueNow);
+            // Several periods due: no single due date, status or per-period
+            // verdict, only the server's range and its amounts.
+            const isRange = dueNowIsRange(amountDueNow);
+            const current =
+              scheduleRows && periodLabel !== null
+                ? rowForAllocation(scheduleRows, {
+                    schedule_id: amountDueNow.scheduleId ?? undefined,
+                    period: amountDueNow.periodNumber ?? undefined,
+                  })
+                : null;
+            const isOverdue = current?.status === "overdue";
+            const isPartial = current?.status === "partial";
             // If the cashier has already typed an amount, surface what
             // portion of THIS payment lands on the current period.
             // Matched by schedule id or the server's period number, never by
             // position: period numbers can skip after an extension.
-            const currentAlloc = (paymentPreview?.allocations ?? []).find((a) =>
-              allocationMatches(a, current)
-            );
+            const currentAlloc =
+              current === null || isRange || !paymentPreviewCurrent
+                ? undefined
+                : (paymentPreview?.allocations ?? []).find((a) => allocationMatches(a, current));
+            // The row's due date and status only for one period on today's
+            // date, the date the server's figure is for.
+            const showPeriodDetail = current !== null && !isRange && amountDueOnPaymentDate !== null;
             const currentApplied =
               currentAlloc?.amount_applied ??
               (currentAlloc?.principal ?? 0) +
@@ -4175,9 +4316,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                   <p className="text-xs font-medium flex items-center gap-1.5">
                     <CalendarIcon className="size-3.5 shrink-0" />
-                    Current Scheduled Payment
+                    {periodLabel === null
+                      ? "Insurance Premium Owed"
+                      : isRange
+                        ? "Amount Due Now"
+                        : "Current Scheduled Payment"}
                   </p>
-                  {isOverdue ? (
+                  {!showPeriodDetail ? null : isOverdue ? (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                       Overdue
                     </span>
@@ -4193,18 +4338,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
                 <div className="px-3 sm:px-4 py-3 space-y-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        Period {current.periodNumber ?? "—"} &middot; Due
-                      </p>
-                      <p className="text-base font-semibold truncate">
-                        {formatDateObj(current.dueDate)}
-                      </p>
-                    </div>
-                    {/* Prominent "Amount to Pay" callout — gives the cashier
-                        an unmissable reference for what the borrower owes
-                        for the current period, with a one-click fill into
-                        the Amount input. */}
+                    {periodLabel !== null && (
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {periodLabel}
+                          {showPeriodDetail && <> &middot; Due</>}
+                        </p>
+                        {showPeriodDetail && current !== null && (
+                          <p className="text-base font-semibold truncate">
+                            {formatDateObj(current.dueDate)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Prominent "Amount to Pay" callout — the server's
+                        amount due now (premium owed plus every period due,
+                        or the next period), with a one-click fill into the
+                        Amount input. */}
                     <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30 sm:text-right">
                       <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
                         Amount to Pay
@@ -4212,6 +4362,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
                         {currencyOrDash(currentTotal)}
                       </p>
+                      {amountDueOnPaymentDate === null && (
+                        <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                          Shown for today&apos;s date only
+                        </p>
+                      )}
                       {currentTotal !== null && (
                         <button
                           type="button"
@@ -4224,27 +4379,27 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </div>
                   </div>
 
-                  <div className={cn("grid gap-2", hasScb ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Principal</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {currencyOrDash(current.principal)}
-                      </p>
-                    </div>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Interest</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {currencyOrDash(current.interest)}
-                      </p>
-                    </div>
-                    {hasScb && (
-                      <div className="rounded-md border bg-background p-2 text-center min-w-0 col-span-2 sm:col-span-1">
-                        <p className="text-[10px] text-muted-foreground">SCB</p>
-                        <p className="text-sm font-semibold tabular-nums text-brand-orange truncate">
-                          {currencyOrDash(current.shareCapitalBuildUp)}
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-2",
+                      dueParts.length >= 5 ? "sm:grid-cols-5" : dueParts.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+                    )}
+                  >
+                    {dueParts.map((part) => (
+                      <div key={part.key} className="rounded-md border bg-background p-2 text-center min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{part.label}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tabular-nums truncate",
+                            part.key === "insurance" && "text-purple-700 dark:text-purple-300",
+                            part.key === "penalty" && (part.amount ?? 0) > 0 && "text-destructive",
+                            part.key === "share_capital_build_up" && "text-brand-orange"
+                          )}
+                        >
+                          {currencyOrDash(part.amount)}
                         </p>
                       </div>
-                    )}
+                    ))}
                   </div>
 
                   {/* When an amount is entered, show the live verdict for
@@ -4424,8 +4579,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Amount <span className="text-red-500">*</span>
                 </Label>
                 {(() => {
-                  if (!duePeriod) return null;
-                  const suggested = duePeriod.totalPayment;
+                  const suggested = amountDueOnPaymentDate?.amount ?? null;
                   if (suggested === null || suggested <= 0) return null;
                   return (
                     <button
@@ -4483,43 +4637,49 @@ function LoanDetail({ loanId }: { loanId: number }) {
             }> = [
               {
                 n: 1,
-                label: "Penalty",
-                hint: "Late-payment fees first",
-                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+                label: "Insurance Premium",
+                hint: "Premium still owed on the loan, interest-free",
+                cls: "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950/30 dark:text-purple-300",
               },
               {
                 n: 2,
+                label: "Penalty",
+                hint: "Late-payment fees",
+                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+              },
+              {
+                n: 3,
                 label: "Overdue Interest",
                 hint: "Interest on missed periods",
                 cls: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
               },
               {
-                n: 3,
+                n: 4,
                 label: "Current Interest",
                 hint: "Interest for the current period",
                 cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
               },
               {
-                n: 4,
+                n: 5,
                 label: "Current Principal",
                 hint: "Principal for the current period",
                 cls: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
               },
               loanHasScb
                 ? {
-                    n: 5,
+                    n: 6,
                     label: "SCB (Excess)",
                     hint: "Share Capital Build-Up credit",
                     cls: "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-300",
                   }
                 : {
-                    n: 5,
+                    n: 6,
                     label: "Next Interest",
                     hint: "Advance toward next period",
                     cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
                   },
               {
-                n: 6,
+                n: 7,
                 label: loanHasScb ? "Next Interest" : "Next Principal",
                 hint: loanHasScb
                   ? "If SCB is settled, future periods next"
@@ -4559,7 +4719,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   The system applies the entered amount in this order. Each
                   bucket must be fully covered before excess flows to the
-                  next. {loanHasScb
+                  next; insurance premium still owed on the loan is taken
+                  before anything else. {loanHasScb
                     ? "Because this loan has SCB, leftover after current dues credits the borrower's Share Capital before advancing future periods."
                     : "This loan has no SCB, so leftover after current dues advances directly to upcoming periods."}
                 </p>
@@ -4587,8 +4748,24 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </p>
                 </div>
 
-                {/* Component allocation totals */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Component allocation totals. Insurance premium owed on the
+                    loan is collected first, so it leads when there is any. */}
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    paymentPreviewInsurance !== null ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                  )}
+                >
+                  {paymentPreviewInsurance !== null && (
+                    <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+                        {INSURANCE_PREMIUM_LABEL}
+                      </p>
+                      <p className="text-sm font-semibold tabular-nums truncate">
+                        {formatCurrency(paymentPreviewInsurance)}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
                     <p
@@ -4742,19 +4919,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       New Outstanding Balance
                     </p>
                     <p className="text-lg font-bold tabular-nums break-words">
-                      {formatCurrency(
-                        Math.max(
-                          0,
-                          (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) -
-                            (paymentPreview.total_principal ?? 0)
-                        )
-                      )}
+                      {currencyOrDash(previewBalanceAfter(paymentPreview))}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      was{" "}
-                      {formatCurrency(
-                        loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                      )}
+                      was {currencyOrDash(previewBalanceBefore(paymentPreview))}
                     </p>
                   </div>
 
@@ -4867,17 +5035,28 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       : extendPreview.preview.carryInterest,
                   )}
                 </p>
-                {extendPreview.preview.collectNow && extendPreview.preview.collectNow.penaltyPart !== null && (
+                {(() => {
+                  // The server's parts, premium owed first, then penalty,
+                  // then interest; only when there is more than interest.
+                  const parts = collectNowParts(extendPreview.preview.collectNow);
+                  if (parts.length === 0) return null;
+                  return (
+                    <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                      Includes{" "}
+                      {parts.map((part, index) => (
+                        <span key={part.label}>
+                          {index > 0 && (index === parts.length - 1 ? " and " : ", ")}
+                          <span className="font-semibold tabular-nums">{formatCurrency(part.amount)}</span>{" "}
+                          {part.label}
+                        </span>
+                      ))}
+                      .
+                    </p>
+                  );
+                })()}
+                {extendPreview.preview.collectNow?.insurancePart != null && (
                   <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-                    Includes{" "}
-                    <span className="font-semibold tabular-nums">
-                      {formatCurrency(extendPreview.preview.collectNow.penaltyPart)}
-                    </span>{" "}
-                    late penalty and{" "}
-                    <span className="font-semibold tabular-nums">
-                      {formatCurrency(extendPreview.preview.collectNow.interestPart)}
-                    </span>{" "}
-                    interest.
+                    The insurance premium still owed on the loan is collected first (interest-free).
                   </p>
                 )}
                 <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-emerald-200 pt-2 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">

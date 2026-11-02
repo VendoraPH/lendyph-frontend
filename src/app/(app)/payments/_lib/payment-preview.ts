@@ -1,4 +1,5 @@
 import type { PaymentBadgeType, RepaymentPreview } from "@/services/repayment.service";
+import { previewInsuranceApplied } from "@/lib/insurance-premium";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -33,5 +34,7 @@ export function previewAllocation(preview: RepaymentPreview) {
     scbApplied: preview.excess ?? 0,
     nextInterestApplied: preview.allocated_to_next_interest ?? 0,
     nextPrincipalApplied: preview.allocated_to_next_principal ?? 0,
+    // Insurance premium owed on the loan, collected before everything else.
+    insuranceApplied: previewInsuranceApplied(preview) ?? 0,
   };
 }

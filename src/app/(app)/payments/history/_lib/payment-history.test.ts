@@ -28,6 +28,7 @@ describe("paymentAmountFigures", () => {
     assert.deepEqual(paymentAmountFigures({ amount: 1500, penalty_amount: 100 }), {
       amount: "₱1,500.00",
       penaltyNote: "incl. ₱100.00 penalty",
+      insuranceNote: null,
     });
   });
 
@@ -35,6 +36,15 @@ describe("paymentAmountFigures", () => {
     assert.deepEqual(paymentAmountFigures({ amount: 1500.55, penalty_amount: 0 }), {
       amount: "₱1,500.55",
       penaltyNote: null,
+      insuranceNote: null,
+    });
+  });
+
+  test("insurance premium the payment collected is a note inside the amount too", () => {
+    assert.deepEqual(paymentAmountFigures({ amount: 1500, penalty_amount: 0, insurance_applied: 200 }), {
+      amount: "₱1,500.00",
+      penaltyNote: null,
+      insuranceNote: "incl. ₱200.00 insurance premium",
     });
   });
 });
@@ -55,29 +65,38 @@ describe("paymentTotalsParams", () => {
 describe("readPaymentTotals", () => {
   test("reads meta.totals exactly as the server sent them", () => {
     assert.deepEqual(
-      readPaymentTotals({ data: [], meta: { stats: { posted: 3 }, totals: { collected: 12345.5, voided: 300 } } }),
-      { collected: 12345.5, voided: 300 }
+      readPaymentTotals({
+        data: [],
+        meta: { stats: { posted: 3 }, totals: { collected: 12345.5, voided: 300, total_insurance_applied: 400.25 } },
+      }),
+      { collected: 12345.5, voided: 300, insurance: 400.25 }
     );
   });
 
   test("accepts the decimal strings Laravel can send", () => {
-    assert.deepEqual(readPaymentTotals({ meta: { totals: { collected: "12345.50", voided: "0.00" } } }), {
-      collected: 12345.5,
-      voided: 0,
-    });
+    assert.deepEqual(
+      readPaymentTotals({ meta: { totals: { collected: "12345.50", voided: "0.00", total_insurance_applied: "0.00" } } }),
+      { collected: 12345.5, voided: 0, insurance: 0 }
+    );
   });
 
   test("a figure the server didn't send is null, never a sum of rows", () => {
-    assert.deepEqual(readPaymentTotals({ data: [{ amount_paid: 100 }], meta: { total: 1 } }), {
+    assert.deepEqual(readPaymentTotals({ data: [{ amount_paid: 100, insurance_applied: 50 }], meta: { total: 1 } }), {
       collected: null,
       voided: null,
+      insurance: null,
     });
-    assert.deepEqual(readPaymentTotals({ meta: { totals: { collected: 5 } } }), { collected: 5, voided: null });
+    assert.deepEqual(readPaymentTotals({ meta: { totals: { collected: 5 } } }), {
+      collected: 5,
+      voided: null,
+      insurance: null,
+    });
     assert.deepEqual(readPaymentTotals({ meta: { totals: { collected: "abc", voided: null } } }), {
       collected: null,
       voided: null,
+      insurance: null,
     });
-    assert.deepEqual(readPaymentTotals(null), { collected: null, voided: null });
+    assert.deepEqual(readPaymentTotals(null), { collected: null, voided: null, insurance: null });
   });
 });
 

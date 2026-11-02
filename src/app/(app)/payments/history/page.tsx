@@ -40,6 +40,7 @@ import {
   Eye,
   CheckCircle2,
   XCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -75,6 +76,7 @@ interface MockPayment {
   date: string;
   amount: number;
   penalty_amount: number;
+  insurance_applied: number;
   method: PaymentMethod;
   status: PaymentStatus;
   collected_by: string;
@@ -138,6 +140,7 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.penalty_paid as number) ||
       (p.penalty_amount as number) ||
       0,
+    insurance_applied: Number(p.insurance_applied ?? 0) || 0,
     method: ((p.method as PaymentMethod) || "cash"),
     status: (p.status === "voided" ? "voided" : "completed") as PaymentStatus,
     collected_by: (p.collected_by as string) || "—",
@@ -531,7 +534,7 @@ function PaymentHistoryContent() {
         if (current) setTotals({ key: totalsRequest.key, figures: readPaymentTotals(body) });
       })
       .catch(() => {
-        if (current) setTotals({ key: totalsRequest.key, figures: { collected: null, voided: null } });
+        if (current) setTotals({ key: totalsRequest.key, figures: { collected: null, voided: null, insurance: null } });
       });
     return () => {
       current = false;
@@ -572,12 +575,12 @@ function PaymentHistoryContent() {
           shown={shortfall.shown}
           total={shortfall.total}
           noun="payments"
-          consequence="The search box and the status tabs describe only the payments that loaded, and a payment that is missing cannot be voided from this screen. The Total Collected and Total Voided cards come from the server and cover every payment."
+          consequence="The search box and the status tabs describe only the payments that loaded, and a payment that is missing cannot be voided from this screen. The Total Collected, Total Voided and Insurance Premium Collected cards come from the server and cover every payment."
         />
       )}
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -606,6 +609,21 @@ function PaymentHistoryContent() {
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Reversed transactions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Insurance Premium Collected</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+              {totalFigure(shownTotals?.insurance)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Included in Total Collected
             </p>
           </CardContent>
         </Card>
@@ -765,6 +783,11 @@ function PaymentHistoryContent() {
                         {figures.penaltyNote && (
                           <p className="text-xs text-amber-600 text-right">
                             {figures.penaltyNote}
+                          </p>
+                        )}
+                        {figures.insuranceNote && (
+                          <p className="text-xs text-muted-foreground text-right">
+                            {figures.insuranceNote}
                           </p>
                         )}
                       </TableCell>

@@ -17,6 +17,7 @@ import { getErrorMessage } from "@/lib/api-error";
 import {
   extensionPreviewAnswer,
   extensionPreviewKey,
+  collectNowParts,
   extensionPreviewState,
   readExtensionPreview,
 } from "./extension-preview";
@@ -47,7 +48,7 @@ const DEFER = {
 test("pay shows what is collected now, its penalty part, and the new period, as sent", () => {
   assert.deepEqual(readExtensionPreview(PAY, "pay"), {
     option: "pay",
-    collectNow: { amount: 3412.37, penaltyPart: 112.37, interestPart: 3300 },
+    collectNow: { amount: 3412.37, penaltyPart: 112.37, interestPart: 3300, insurancePart: null },
     carryInterest: 0,
     freshInterest: 2100.01,
     newInterestDue: 2100.01,
@@ -61,7 +62,50 @@ test("a collection with no penalty shows no penalty part", () => {
     { ...PAY, collect_now: { amount: 3300, penalty_part: 0, interest_part: 3300 } },
     "pay",
   );
-  assert.deepEqual(view?.collectNow, { amount: 3300, penaltyPart: null, interestPart: 3300 });
+  assert.deepEqual(view?.collectNow, { amount: 3300, penaltyPart: null, interestPart: 3300, insurancePart: null });
+});
+
+test("pay shows the insurance premium it collects first, as sent", () => {
+  // ₱400 premium still owed on the loan: the same payment takes it before
+  // the penalty and the interest. The amount is the server's, never added up.
+  const view = readExtensionPreview(
+    { ...PAY, collect_now: { amount: 3812.37, insurance_part: 400, penalty_part: 112.37, interest_part: 3300 } },
+    "pay",
+  );
+  assert.deepEqual(view?.collectNow, { amount: 3812.37, penaltyPart: 112.37, interestPart: 3300, insurancePart: 400 });
+  assert.equal(
+    readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, insurance_part: "400.50" } }, "pay")?.collectNow
+      ?.insurancePart,
+    400.5,
+  );
+});
+
+test("no insurance part when none is owed or the server sent none", () => {
+  for (const insurance_part of [0, "0.00", undefined]) {
+    const view = readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, insurance_part } }, "pay");
+    assert.equal(view?.collectNow?.insurancePart, null, String(insurance_part));
+  }
+});
+
+test("an unreadable insurance part shows nothing, never a figure worked out here", () => {
+  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, insurance_part: "abc" } }, "pay"), null);
+});
+
+test("the collection's parts, premium first, only when there is more than interest", () => {
+  assert.deepEqual(
+    collectNowParts({ amount: 3812.37, insurancePart: 400, penaltyPart: 112.37, interestPart: 3300 }),
+    [
+      { label: "insurance premium", amount: 400 },
+      { label: "late penalty", amount: 112.37 },
+      { label: "interest", amount: 3300 },
+    ],
+  );
+  assert.deepEqual(collectNowParts({ amount: 3700, insurancePart: 400, penaltyPart: null, interestPart: 3300 }), [
+    { label: "insurance premium", amount: 400 },
+    { label: "interest", amount: 3300 },
+  ]);
+  assert.deepEqual(collectNowParts({ amount: 3300, insurancePart: null, penaltyPart: null, interestPart: 3300 }), []);
+  assert.deepEqual(collectNowParts(null), []);
 });
 
 test("defer collects nothing now and shows the carried and fresh interest", () => {

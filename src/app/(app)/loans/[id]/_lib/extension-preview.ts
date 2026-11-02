@@ -6,13 +6,22 @@
 import { getErrorMessage } from "@/lib/api-error";
 import type { ExtensionInterestOption } from "@/types/loan";
 
+export interface CollectNowView {
+  amount: number;
+  /** Insurance premium owed on the loan, taken first. */
+  insurancePart: number | null;
+  penaltyPart: number | null;
+  interestPart: number;
+}
+
 export interface ExtensionPreviewView {
   option: ExtensionInterestOption;
   /**
    * What "pay" collects before the loan extends. Null for "defer", which
-   * collects nothing. `penaltyPart` is null when no penalty is collected.
+   * collects nothing. `penaltyPart` is null when no penalty is collected, and
+   * `insurancePart` when no insurance premium owed on the loan is.
    */
-  collectNow: { amount: number; penaltyPart: number | null; interestPart: number } | null;
+  collectNow: CollectNowView | null;
   carryInterest: number;
   freshInterest: number;
   newInterestDue: number;
@@ -48,6 +57,10 @@ export function readExtensionPreview(
   const amount = figure(collect?.amount);
   const penaltyPart = figure(collect?.penalty_part);
   const interestPart = figure(collect?.interest_part);
+  // Optional: an answer without it collects no insurance premium. Sent but
+  // unreadable is as bad as any other unreadable figure.
+  const rawInsurancePart = collect?.insurance_part;
+  const insurancePart = rawInsurancePart === undefined || rawInsurancePart === null ? 0 : figure(rawInsurancePart);
   const carryInterest = figure(d.carry_interest);
   const freshInterest = figure(d.fresh_interest);
   const newInterestDue = figure(d.new_interest_due);
@@ -57,6 +70,7 @@ export function readExtensionPreview(
     amount === null ||
     penaltyPart === null ||
     interestPart === null ||
+    insurancePart === null ||
     carryInterest === null ||
     freshInterest === null ||
     newInterestDue === null ||
@@ -67,13 +81,35 @@ export function readExtensionPreview(
   }
   return {
     option,
-    collectNow: option === "pay" ? { amount, penaltyPart: penaltyPart > 0 ? penaltyPart : null, interestPart } : null,
+    collectNow:
+      option === "pay"
+        ? {
+            amount,
+            penaltyPart: penaltyPart > 0 ? penaltyPart : null,
+            interestPart,
+            insurancePart: insurancePart > 0 ? insurancePart : null,
+          }
+        : null,
     carryInterest,
     freshInterest,
     newInterestDue,
     newTotalDue,
     newDueDate,
   };
+}
+
+/**
+ * The parts of what "pay" collects, in the order the server takes them:
+ * insurance premium owed, then late penalty, then interest. Empty when it is
+ * interest alone, which the headline amount already says.
+ */
+export function collectNowParts(collectNow: CollectNowView | null): { label: string; amount: number }[] {
+  if (collectNow === null || (collectNow.insurancePart === null && collectNow.penaltyPart === null)) return [];
+  const parts: { label: string; amount: number }[] = [];
+  if (collectNow.insurancePart !== null) parts.push({ label: "insurance premium", amount: collectNow.insurancePart });
+  if (collectNow.penaltyPart !== null) parts.push({ label: "late penalty", amount: collectNow.penaltyPart });
+  parts.push({ label: "interest", amount: collectNow.interestPart });
+  return parts;
 }
 
 /** What a failed preview says when the server gives no usable reason. */

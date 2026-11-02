@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildLoanDeductions,
   calcRestructureShortfall,
+  readRestructurableBalance,
   restructureSuccessor,
 } from "./loan-restructure";
 import type { RestructuredIntoLoan } from "@/types/loan";
@@ -149,4 +150,26 @@ test("an untyped payload row is read the same way", () => {
     { id: 42, status: 7 },
   ];
   assert.equal(restructureSuccessor(rows)?.id, 41);
+});
+
+test("a restructure starts from the server's restructurable balance, never the outstanding balance", () => {
+  // ₱42,000 principal still owed plus ₱400 premium owed: the outstanding
+  // balance is ₱42,400, but the premium is carried to the new loan, so the
+  // restructure covers ₱42,000. Nothing is subtracted here.
+  assert.equal(
+    readRestructurableBalance({ restructurable_balance: 42000, outstanding_balance: 42400 }, { outstanding_balance: 42400 }),
+    42000,
+  );
+  assert.equal(readRestructurableBalance({ restructurable_balance: "42000.50" }, null), 42000.5);
+  // The loan resource's figure stands in when the summary failed.
+  assert.equal(readRestructurableBalance(null, { restructurable_balance: 41000, outstanding_balance: 41400 }), 41000);
+});
+
+test("without the server's restructurable balance there is none, not the outstanding balance or principal", () => {
+  assert.equal(
+    readRestructurableBalance({ outstanding_balance: 42400 }, { outstanding_balance: 42400, principal_amount: 60000 }),
+    null,
+  );
+  assert.equal(readRestructurableBalance({ restructurable_balance: "abc" }, null), null);
+  assert.equal(readRestructurableBalance(null, null), null);
 });

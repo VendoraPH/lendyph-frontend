@@ -6,6 +6,7 @@
 // created loan matching the amortization preview the user just approved.
 
 import { isEverReleasedLoanStatus } from "@/constants/loan-status";
+import { toNumber } from "@/lib/report-format";
 
 export type LoanDeductionType = "fixed" | "percentage";
 
@@ -81,8 +82,28 @@ export function buildLoanDeductions({
 }
 
 /**
+ * What a restructure starts from and measures its shortfall against: the
+ * server's `restructurable_balance`, from the loan summary or, when that read
+ * failed, the loan. It leaves out the insurance premium owed, which a
+ * restructure carries to the new loan instead. Null when neither sent it:
+ * never the outstanding balance (premium included) or the principal.
+ */
+export function readRestructurableBalance(
+  summary: { restructurable_balance?: unknown; [key: string]: unknown } | null,
+  loan: { restructurable_balance?: unknown; [key: string]: unknown } | null,
+): number | null {
+  for (const raw of [summary?.restructurable_balance, loan?.restructurable_balance]) {
+    if (typeof raw === "number" || typeof raw === "string") {
+      const value = toNumber(raw);
+      if (value !== null) return value;
+    }
+  }
+  return null;
+}
+
+/**
  * How far a restructure's new principal falls short of the source loan's
- * outstanding balance. A shortfall writes debt off, so the API rejects it (422)
+ * restructurable balance. A shortfall writes debt off, so the API rejects it (422)
  * unless `remarks` explain why — 0 means no explanation is required.
  *
  * The comparison is deliberately exact (no rounding) so the form demands

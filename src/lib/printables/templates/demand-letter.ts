@@ -30,6 +30,7 @@ import {
   asArray,
   asRecord,
   currencyOrDash,
+  formatCurrency,
   dateOrBlank,
   escapeHtml,
   field,
@@ -87,6 +88,10 @@ export function buildDemandLetterDoc(
 
   const totalDemanded = pickNumber(root, ["total_demanded"]);
   const demandTotals = asRecord(pick(root, ["demand_totals"]));
+  // The insurance premium the server put inside total_demanded (only when the
+  // loan has arrears): its own line when above zero. Not summary.insurance_owed,
+  // which is the premium owed whether or not it is demanded.
+  const insuranceOwed = pickNumber(demandTotals, ["insurance_owed"]);
   const outstandingBalance =
     pickNumber(summary, ["outstanding_balance", "total_balance"]) ??
     pickNumber(root, ["outstanding_balance"]);
@@ -174,6 +179,15 @@ export function buildDemandLetterDoc(
     {
       kind: "charges",
       lines: [
+        ...(!incomplete && insuranceOwed !== null && insuranceOwed > 0
+          ? [
+              {
+                label: "Insurance premium owed (interest-free, included in the total)",
+                amount: formatCurrency(insuranceOwed),
+                indent: true,
+              },
+            ]
+          : []),
         {
           label: "TOTAL AMOUNT DEMANDED",
           // A blank rule, never P0.00 — a notice that demands zero pesos over
