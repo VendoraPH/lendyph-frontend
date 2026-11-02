@@ -36,6 +36,41 @@ export const EMPTY_FEE: CustomFeeEntry = {
   loan_amount_eq: "",
 };
 
+const CONDITION_KEYS = [
+  "term_days_gt",
+  "term_days_lt",
+  "term_days_eq",
+  "loan_amount_gt",
+  "loan_amount_lt",
+  "loan_amount_eq",
+] as const;
+
+/**
+ * A product's saved custom fees as the form's entries. Conditions are read
+ * from each fee's `conditions` object, the shape `formToApiPayload` saves
+ * them in, so editing a product keeps them (they were read from top-level
+ * keys the API never returns, and a re-save dropped them). A zero condition
+ * is kept as "0".
+ */
+export function customFeeEntriesFromApi(rawFees: readonly Record<string, unknown>[]): CustomFeeEntry[] {
+  return rawFees.map((f) => {
+    const conditions = (f.conditions && typeof f.conditions === "object" ? f.conditions : {}) as Record<string, unknown>;
+    const entry: CustomFeeEntry = {
+      ...EMPTY_FEE,
+      name: String(f.name ?? ""),
+      type: (f.type as CustomFeeEntry["type"]) ?? "fixed",
+      value: String(f.value ?? ""),
+      per_month: Boolean(f.per_month),
+      min_amount: f.min_amount != null ? String(f.min_amount) : "",
+      max_amount: f.max_amount != null ? String(f.max_amount) : "",
+    };
+    for (const key of CONDITION_KEYS) {
+      if (conditions[key] != null) entry[key] = String(conditions[key]);
+    }
+    return entry;
+  });
+}
+
 export interface ProductForm {
   name: string;
   description: string;
@@ -95,12 +130,9 @@ export function formToApiPayload(form: ProductForm) {
     .filter((f) => f.name.trim() && f.value.trim())
     .map((f) => {
       const conditions: Record<string, number> = {};
-      if (f.term_days_gt) conditions.term_days_gt = Number(f.term_days_gt);
-      if (f.term_days_lt) conditions.term_days_lt = Number(f.term_days_lt);
-      if (f.term_days_eq) conditions.term_days_eq = Number(f.term_days_eq);
-      if (f.loan_amount_gt) conditions.loan_amount_gt = Number(f.loan_amount_gt);
-      if (f.loan_amount_lt) conditions.loan_amount_lt = Number(f.loan_amount_lt);
-      if (f.loan_amount_eq) conditions.loan_amount_eq = Number(f.loan_amount_eq);
+      for (const key of CONDITION_KEYS) {
+        if (f[key].trim() !== "") conditions[key] = Number(f[key]);
+      }
       const formula = f.type === "formula"
         ? buildFormulaFields({ perMonth: f.per_month, minAmount: f.min_amount, maxAmount: f.max_amount })
         : null;

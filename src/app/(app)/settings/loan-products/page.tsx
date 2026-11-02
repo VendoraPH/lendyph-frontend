@@ -76,6 +76,7 @@ import { formatCurrency } from "@/lib/format";
 import {
   EMPTY_FEE,
   EMPTY_FORM,
+  customFeeEntriesFromApi,
   formToApiPayload,
   type CustomFeeEntry,
   type ProductForm,
@@ -194,20 +195,7 @@ function productToForm(p: LoanProduct): ProductForm {
     scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
     min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
     max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
-    custom_fees: rawFees.map((f) => ({
-      name: String(f.name ?? ""),
-      type: (f.type as CustomFeeEntry["type"]) ?? "fixed",
-      value: String(f.value ?? ""),
-      per_month: Boolean(f.per_month),
-      min_amount: f.min_amount != null ? String(f.min_amount) : "",
-      max_amount: f.max_amount != null ? String(f.max_amount) : "",
-      term_days_gt: f.term_days_gt ? String(f.term_days_gt) : "",
-      term_days_lt: f.term_days_lt ? String(f.term_days_lt) : "",
-      term_days_eq: f.term_days_eq ? String(f.term_days_eq) : "",
-      loan_amount_gt: f.loan_amount_gt ? String(f.loan_amount_gt) : "",
-      loan_amount_lt: f.loan_amount_lt ? String(f.loan_amount_lt) : "",
-      loan_amount_eq: f.loan_amount_eq ? String(f.loan_amount_eq) : "",
-    })),
+    custom_fees: customFeeEntriesFromApi(rawFees),
   };
 }
 

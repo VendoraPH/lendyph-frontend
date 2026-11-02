@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  ReceiptText, Plus, Pencil, Trash2, Loader2, Search, Percent, PhilippinePeso,
+  ReceiptText, Plus, Pencil, Trash2, Loader2, Search, Percent, PhilippinePeso, Calculator,
 } from "lucide-react";
 import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
@@ -488,8 +488,8 @@ function FeesContent() {
   });
 
   const fixedCount = fees.filter((f) => f.type === "fixed").length;
-  // A formula fee is a percentage of the principal too, so it counts here.
-  const percentageCount = fees.filter((f) => f.type !== "fixed").length;
+  const percentageCount = fees.filter((f) => f.type === "percentage").length;
+  const formulaCount = fees.filter((f) => f.type === "formula").length;
 
   function handleAdd() {
     setEditFee(null);
@@ -543,7 +543,7 @@ function FeesContent() {
           </div>
         )}
         {!loadError && <>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
@@ -569,6 +569,15 @@ function FeesContent() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{percentageCount}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Formula</CardTitle>
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formulaCount}</p>
             </CardContent>
           </Card>
         </div>

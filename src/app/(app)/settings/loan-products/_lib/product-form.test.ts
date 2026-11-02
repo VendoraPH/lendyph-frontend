@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EMPTY_FEE, EMPTY_FORM, formToApiPayload } from "./product-form";
+import { customFeeEntriesFromApi, EMPTY_FEE, EMPTY_FORM, formToApiPayload } from "./product-form";
 import { customFormulaFeesError } from "@/lib/fee-form";
 
 // Past Due Transfer was never stored: the backend has no such column and drops
@@ -66,4 +66,25 @@ test("a custom formula fee with a minimum above its maximum is named in the erro
   assert.match(customFormulaFeesError(fees) ?? "", /^Handling: The minimum \(₱300\.00\)/);
   assert.equal(customFormulaFeesError([{ ...fees[1], max_amount: "" }]), null);
   assert.equal(customFormulaFeesError([fees[0]]), null);
+});
+
+// Custom-fee conditions were saved under `conditions` but read back from
+// top-level keys the API never returns, so editing a product and saving it
+// again dropped every condition. Load and save now use the same shape.
+test("custom-fee conditions survive a save and reload", () => {
+  const entries = [
+    { ...EMPTY_FEE, name: "Handling", type: "formula" as const, value: "0.5", per_month: true, min_amount: "100", term_days_gt: "30", loan_amount_lt: "50000" },
+    { ...EMPTY_FEE, name: "Flat", type: "fixed" as const, value: "50", term_days_eq: "0" },
+  ];
+  const saved = formToApiPayload({ ...EMPTY_FORM, name: "Salary Loan", custom_fees: entries }).custom_fees ?? [];
+
+  assert.deepEqual(saved[0].conditions, { term_days_gt: 30, loan_amount_lt: 50000 });
+  assert.deepEqual(saved[1].conditions, { term_days_eq: 0 });
+  assert.deepEqual(customFeeEntriesFromApi(saved as Record<string, unknown>[]), entries);
+});
+
+test("a saved custom fee without conditions loads with blank ones", () => {
+  assert.deepEqual(customFeeEntriesFromApi([{ name: "Flat", type: "fixed", value: 50 }]), [
+    { ...EMPTY_FEE, name: "Flat", type: "fixed", value: "50" },
+  ]);
 });
