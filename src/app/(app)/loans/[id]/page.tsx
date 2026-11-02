@@ -45,6 +45,20 @@ import {
 } from "./_lib/server-schedule";
 import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
+  outstandingPrincipal,
+  presetButtons,
+  previewOutstandingAfter,
+  previewOutstandingBefore,
+  totalOutstanding,
+  totalPayableFigures,
+} from "./_lib/loan-figures";
+import {
+  PARTIAL_EXTEND_LABELS,
+  dispatchPartialExtend,
+  partialExtendOnOpenChange,
+  type PartialExtendChoice,
+} from "./_lib/partial-extend";
+import {
   RestructuredBalanceFigures,
   ScheduleNotice,
   type ScheduleLoad,
@@ -72,8 +86,6 @@ import {
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
-  previewBalanceAfter,
-  previewBalanceBefore,
   previewIsCurrent,
   previewRequestKey,
   readAmountDueNow,
@@ -88,7 +100,7 @@ import {
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
+import type { LoanSchedule, LoanLedgerEntry, LoanSummary } from "@/types/loan";
 import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
@@ -194,7 +206,6 @@ import {
 import type { Loan } from "@/types/loan";
 import type { ApiScheduleRow } from "@/lib/amortization";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
-import { overdueWithPenalty } from "@/lib/loan-dues";
 
 // One row of the Ledger table — either a Repayment or a LoanLedgerEntry
 // (interest a loan extension accrues or collects), flattened to a common
@@ -372,9 +383,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                     <div>
                       <p className="text-[10px] text-muted-foreground">Outstanding Balance</p>
                       <p className="text-xs font-medium tabular-nums">
-                        {bl.outstanding_balance != null
-                          ? formatCurrency(bl.outstanding_balance)
-                          : "—"}
+                        {currencyOrDash(totalOutstanding(null, bl))}
                       </p>
                     </div>
                   </div>
@@ -690,16 +699,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
   // that supersede client-side calculations when present.
-  const [loanSummary, setLoanSummary] = useState<{
-    outstanding_balance?: number;
-    total_paid?: number;
-    principal_paid?: number;
-    interest_paid?: number;
-    overdue_amount?: number;
-    penalty_amount?: number;
-    next_due_date?: string;
-    next_due_amount?: number;
-  } | null>(null);
+  const [loanSummary, setLoanSummary] = useState<LoanSummary | null>(null);
 
   // Server-computed amortization preview (for pre-release loans). Populated
   // via loanService.amortizationPreview — lets approvers see the same schedule
@@ -870,7 +870,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       const res = await loanService.summary(id);
       const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
         ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
+        : res) as LoanSummary | null;
       setLoanSummary(payload ?? null);
     } catch {
       setLoanSummary(null);
@@ -1415,24 +1415,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   };
   const loanProcessingFee = findDeductionAmount("Processing Fee");
   const loanServiceFee = findDeductionAmount("Service Fee");
-  const loanNotarialFee = findDeductionAmount("Notarial Fee");
-  const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
-  const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
   const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
-  // total_payable from API is computed by summing amortization_schedules. When
-  // it is 0 the schedule's total payment stands in: the server's column total,
-  // persisted or previewed, and a dash when the server sent none or there are
-  // no server rows at all. Nothing is added up here or
-  // projected from the loan's terms; `expectedInterest` is only the Interest
-  // Amount of a schedule whose server total carries no interest.
-  const expectedInterest =
-    Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
-  const loanTotalPayable: number | null =
-    Number(loan?.total_payable ?? 0) > 0
-      ? Number(loan!.total_payable)
-      : storedSchedule.length > 0
-        ? storedScheduleTotals.totalPayment
-        : null;
+  // Total Payable is the server's amount still owed (never Share Capital
+  // Build-Up), a dash before release; the contract total is its own line.
+  // Neither falls back to the schedule's total payment.
+  const { totalPayable: loanTotalPayable, contractTotal: loanContractTotal } = totalPayableFigures(loan);
+  // Everything still owed, premium included, from the summary or the loan
+  // (the same figure on both); a dash when neither sent it.
+  const loanTotalOutstanding = totalOutstanding(loanSummary, loan);
+  // Principal still owed, from the summary or the loan.
+  const loanPrincipalBalance = outstandingPrincipal(loanSummary, loan);
   // Insurance premium left unpaid at release, still owed on the loan (part of
   // the server's total_payable); null when none is.
   const insuranceOwed = loanInsuranceOwed(loan);
@@ -1449,10 +1441,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     Number(paymentAmount),
     formatDateISO(paymentDate),
   );
+  // The server's interest total: ₱0.00 when it is 0, a dash when not sent.
   const loanInterestAmount: number | null =
-    storedSchedule.length === 0 || storedScheduleTotals.interest === null
-      ? null
-      : storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
+    storedSchedule.length === 0 ? null : storedScheduleTotals.interest;
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly
@@ -1973,11 +1964,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
-  const handlePartialExtendConfirm = async () => {
-    if (!pendingPayment) return;
-    const payload = pendingPayment;
-    setPartialExtendOpen(false);
-    setPendingPayment(null);
+  // "Yes, extend" on the partial-payment prompt: record the payment, then extend.
+  const recordPaymentAndExtend = async (payload: NonNullable<typeof pendingPayment>) => {
     // Pay first — this posts the cashier's originally-entered amount against
     // the CURRENT period (before it rolls over), then extend. Reversing this
     // order (as the old code did) posted the payment against the already-
@@ -2012,19 +2000,24 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
-  const handlePartialExtendDecline = async () => {
-    if (!pendingPayment) return;
+  // The "Extend loan?" prompt's three buttons. Every choice closes it and
+  // clears the pending payment; what runs is dispatchPartialExtend's: Cancel
+  // nothing, "Record partial payment" the payment only, "Yes, extend" both.
+  const handlePartialExtendChoice = async (choice: PartialExtendChoice) => {
     const payload = pendingPayment;
     setPartialExtendOpen(false);
     setPendingPayment(null);
-    await submitRepayment(payload);
+    await dispatchPartialExtend(choice, payload, {
+      record: (payment) => submitRepayment(payment),
+      recordAndExtend: recordPaymentAndExtend,
+    });
   };
 
   // ── Auto Pay (Upon Maturity) ──
 
   const handleAutoPayConfirm = async () => {
-    const amount = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
-    if (!amount || amount <= 0) return;
+    const amount = loanTotalOutstanding;
+    if (amount === null || amount <= 0) return;
     setAutoPayProcessing(true);
     try {
       const repayment = await repaymentService.create(loan.id, {
@@ -2232,8 +2225,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : { demand_letter: "Available once the loan falls past due" }),
   };
 
-  const totalDeductions = loan.total_deductions ?? (loanProcessingFee + loanServiceFee + (loanOtherDeductions > 0 ? loanOtherDeductions : 0));
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2290,7 +2281,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-              (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
+              (loanTotalOutstanding ?? 0) > 0 && (
                 <Button
                   onClick={() => {
                     setExtendInterestOption("pay");
@@ -3042,8 +3033,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div>
                 <p className="text-xs text-muted-foreground">Total Payable</p>
                 <p className="text-sm font-semibold">
-                  {loanTotalPayable === null ? "—" : formatCurrency(loanTotalPayable)}
+                  {currencyOrDash(loanTotalPayable)}
                 </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Contract Total</p>
+                <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Net Proceeds</p>
@@ -3107,8 +3102,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 const named = deductionsArray
                   .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
                   .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0) }));
-                const namedTotal = named.reduce((s, r) => s + r.amount, 0);
-                const other = Math.max(0, (loan.total_deductions ?? 0) - namedTotal);
+                // The server's unitemised remainder, signed; its own line when not 0.
+                const other = Number(loan.unitemised_deductions ?? 0);
                 const rows = named.length > 0
                   ? named
                   : [
@@ -3123,7 +3118,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
                       </div>
                     ))}
-                    {other > 0 && (
+                    {other !== 0 && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Other Deductions</span>
                         <span className="text-sm font-medium">{formatCurrency(other)}</span>
@@ -3140,7 +3135,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     ? releasePreview.status === "loaded"
                       ? formatCurrencyExact(releasePreview.preview.total_deductions)
                       : "—"
-                    : formatCurrency(totalDeductions)}
+                    : currencyOrDash(loan.total_deductions)}
                 </span>
               </div>
             </div>
@@ -3367,31 +3362,31 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(
-                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                  )}
-                </p>
+                <p className="text-sm font-semibold">{currencyOrDash(loanTotalOutstanding)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Principal Balance</p>
+                <p className="text-sm font-medium">{currencyOrDash(loanPrincipalBalance)}</p>
               </div>
             </div>
             {loanSummary && (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
                 <div>
                   <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_paid)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Principal Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.principal_paid ?? 0)}</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.principal_paid)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.interest_paid)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
                   <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(overdueWithPenalty(loanSummary))}
+                    {currencyOrDash(loanSummary.overdue_amount)}
                   </p>
                 </div>
               </div>
@@ -3428,7 +3423,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   const canAutoPay =
                     isUponMaturity &&
                     ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0;
+                    (loanTotalOutstanding ?? 0) > 0;
                   if (!canAutoPay) return null;
                   return (
                     <Button
@@ -3519,18 +3514,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
                           <p className="text-base font-bold text-brand-orange tabular-nums">
-                            {formatCurrency(loanSummary.outstanding_balance ?? 0)}
+                            {currencyOrDash(loanTotalOutstanding)}
                           </p>
                         </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
-                          <p className="text-base font-bold tabular-nums">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
+                          <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_paid)}</p>
                         </div>
                         {(loanSummary.overdue_amount ?? 0) > 0 && (
                           <div>
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
                             <p className="text-base font-bold text-destructive tabular-nums">
-                              {formatCurrency(loanSummary.overdue_amount ?? 0)}
+                              {currencyOrDash(loanSummary.overdue_amount)}
                             </p>
                           </div>
                         )}
@@ -3895,7 +3890,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <div className="flex flex-col items-center py-6">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Outstanding Balance</p>
             <p className="text-5xl font-bold text-brand-orange">
-              {formatCurrency(loanSummary?.outstanding_balance ?? loan?.outstanding_balance ?? 0)}
+              {currencyOrDash(loanTotalOutstanding)}
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               {loan?.borrower?.full_name ?? loan?.borrower?.name ?? "Member"}
@@ -4219,15 +4214,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase">Outstanding</p>
                 <p className="text-sm font-bold tabular-nums truncate">
-                  {formatCurrency(
-                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                  )}
+                  {currencyOrDash(loanTotalOutstanding)}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase">Next Due</p>
                 <p className="text-sm font-bold tabular-nums truncate">
-                  {formatCurrency(loanSummary?.next_due_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.next_due_amount)}
                 </p>
               </div>
               <div className="min-w-0">
@@ -4238,7 +4231,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     (loanSummary?.overdue_amount ?? 0) > 0 && "text-destructive"
                   )}
                 >
-                  {formatCurrency(loanSummary?.overdue_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.overdue_amount)}
                 </p>
               </div>
               <div className="min-w-0">
@@ -4249,7 +4242,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     (loanSummary?.penalty_amount ?? 0) > 0 && "text-destructive"
                   )}
                 >
-                  {formatCurrency(loanSummary?.penalty_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.penalty_amount)}
                 </p>
               </div>
             </div>
@@ -4308,14 +4301,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
             // The row's due date and status only for one period on today's
             // date, the date the server's figure is for.
             const showPeriodDetail = current !== null && !isRange && amountDueOnPaymentDate !== null;
-            const currentApplied =
-              currentAlloc?.amount_applied ??
-              (currentAlloc?.principal ?? 0) +
-                (currentAlloc?.interest ?? 0) +
-                (currentAlloc?.penalty ?? 0);
-            const currentRemaining = currentAlloc?.remaining_balance ?? 0;
+            // The server's amount applied and remaining balance; no verdict
+            // without them.
+            const currentApplied = currentAlloc?.amount_applied ?? null;
+            const currentRemaining = currentAlloc?.remaining_balance ?? null;
             const willFullySettle =
-              !!currentAlloc && currentApplied > 0 && currentRemaining <= 0;
+              currentApplied !== null && currentApplied > 0 && currentRemaining !== null && currentRemaining <= 0;
             return (
               <div className="rounded-lg border overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
@@ -4409,7 +4400,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
                   {/* When an amount is entered, show the live verdict for
                       the current period: settled / partial / no impact. */}
-                  {currentAlloc && currentApplied > 0 && (
+                  {currentApplied !== null && currentApplied > 0 && (
                     <div
                       className={cn(
                         "rounded-md border px-3 py-2 text-xs flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between",
@@ -4423,7 +4414,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         <span className="break-words">
                           {willFullySettle
                             ? "This payment fully settles this scheduled period"
-                            : `Partial: ${formatCurrency(currentRemaining)} will still be owed for this period`}
+                            : `Partial: ${currencyOrDash(currentRemaining)} will still be owed for this period`}
                         </span>
                       </span>
                       <span className="font-semibold tabular-nums whitespace-nowrap shrink-0">
@@ -4476,24 +4467,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
           </div>
 
           {/* Advance-mode helpers: quick presets that auto-fill the amount
-              with the sum of the next N unpaid scheduled installments. The
-              cashier can still edit the amount manually. */}
+              with the server's figure for paying N periods ahead (premium and
+              penalty owed included), or for paying the loan off. The cashier
+              can still edit the amount manually. */}
           {paymentMode === "advance" && scheduleRows && (() => {
-            // The open periods with their own server figures, never the merged
-            // upon-maturity row (whose totals include what was collected).
+            // The open periods count the "remaining" label and the remark's
+            // period count only; every amount is the server's.
             const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
-            // Null when a period in it has no total payment from the server.
-            const sumOfNext = (n: number) =>
-              unpaid.slice(0, n).reduce<number | null>(
-                (s, r) => (s === null || r.totalPayment === null ? null : s + r.totalPayment),
-                0,
-              );
-            const fillForPeriods = (n: number) => {
-              const capped = Math.max(1, Math.min(n, unpaid.length));
-              setAdvancePeriods(capped);
-              const total = sumOfNext(capped);
-              setPaymentAmount(total !== null && total > 0 ? String(total.toFixed(2)) : "");
+            // Only the presets the server sent (one on a Share Capital
+            // Build-Up loan), then "Pay all remaining" with its payoff amount.
+            const buttons = presetButtons(loanSummary, unpaid.length);
+            const fillAmount = (periods: number, amount: number | null) => {
+              setAdvancePeriods(periods);
+              setPaymentAmount(amount !== null && amount > 0 ? amount.toFixed(2) : "");
             };
             return (
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20 space-y-2">
@@ -4506,41 +4493,26 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {[1, 2, 3, 6].filter((n) => n <= unpaid.length).map((n) => (
+                  {buttons.map((b) => (
                     <Button
-                      key={n}
+                      key={b.label}
                       type="button"
-                      variant={advancePeriods === n ? "default" : "outline"}
+                      variant={advancePeriods === b.periods ? "default" : "outline"}
                       size="sm"
                       className={cn(
                         "h-8 text-xs whitespace-nowrap",
-                        advancePeriods === n &&
+                        advancePeriods === b.periods &&
                           "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      onClick={() => fillForPeriods(n)}
+                      disabled={b.disabled}
+                      onClick={() => fillAmount(b.periods, b.amount)}
                     >
-                      {n} period{n === 1 ? "" : "s"}
+                      {b.label}
                       <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                        ({currencyOrDash(sumOfNext(n))})
+                        ({currencyOrDash(b.amount)})
                       </span>
                     </Button>
                   ))}
-                  <Button
-                    type="button"
-                    variant={advancePeriods === unpaid.length ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-8 text-xs whitespace-nowrap",
-                      advancePeriods === unpaid.length &&
-                        "bg-blue-600 hover:bg-blue-700 text-white"
-                    )}
-                    onClick={() => fillForPeriods(unpaid.length)}
-                  >
-                    Pay all remaining
-                    <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                      ({currencyOrDash(sumOfNext(unpaid.length))})
-                    </span>
-                  </Button>
                 </div>
                 <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 break-words">
                   Tap a preset to auto-fill the amount. You can still edit it
@@ -4779,19 +4751,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         (paymentPreview.total_penalty ?? 0) > 0 && "text-destructive"
                       )}
                     >
-                      {formatCurrency(paymentPreview.total_penalty ?? 0)}
+                      {currencyOrDash(paymentPreview.total_penalty)}
                     </p>
                   </div>
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Interest</p>
                     <p className="text-sm font-semibold tabular-nums truncate">
-                      {formatCurrency(paymentPreview.total_interest ?? 0)}
+                      {currencyOrDash(paymentPreview.total_interest)}
                     </p>
                   </div>
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Principal</p>
                     <p className="text-sm font-semibold tabular-nums truncate">
-                      {formatCurrency(paymentPreview.total_principal ?? 0)}
+                      {currencyOrDash(paymentPreview.total_principal)}
                     </p>
                   </div>
                   <div
@@ -4808,7 +4780,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         (paymentPreview.excess ?? 0) > 0 && "text-amber-700 dark:text-amber-400"
                       )}
                     >
-                      {formatCurrency(paymentPreview.excess ?? 0)}
+                      {currencyOrDash(paymentPreview.excess)}
                     </p>
                   </div>
                 </div>
@@ -4854,24 +4826,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         </TableHeader>
                         <TableBody>
                           {paymentPreview.allocations.map((a, idx) => {
-                            const applied =
-                              a.amount_applied ??
-                              (a.principal ?? 0) + (a.interest ?? 0) + (a.penalty ?? 0);
-                            const remaining = a.remaining_balance ?? 0;
-                            const isFullySettled = remaining <= 0 && applied > 0;
+                            const applied = a.amount_applied ?? null;
+                            const remaining = a.remaining_balance ?? null;
+                            const isFullySettled =
+                              remaining !== null && remaining <= 0 && applied !== null && applied > 0;
                             return (
                               <TableRow key={`${a.schedule_id ?? idx}-${a.period ?? idx}`}>
                                 <TableCell className="text-center text-xs font-medium">
-                                  {a.period ?? idx + 1}
+                                  {a.period ?? "—"}
                                 </TableCell>
                                 <TableCell className="text-xs">
                                   {a.due_date ? formatDate(a.due_date) : "—"}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
-                                  {formatCurrency(a.principal ?? 0)}
+                                  {currencyOrDash(a.principal)}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
-                                  {formatCurrency(a.interest ?? 0)}
+                                  {currencyOrDash(a.interest)}
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
@@ -4884,10 +4855,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                     (a.penalty ?? 0) > 0 && "text-destructive"
                                   )}
                                 >
-                                  {formatCurrency(a.penalty ?? 0)}
+                                  {currencyOrDash(a.penalty)}
                                 </TableCell>
                                 <TableCell className="text-right text-xs font-semibold tabular-nums">
-                                  {formatCurrency(applied)}
+                                  {currencyOrDash(applied)}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
                                   {isFullySettled ? (
@@ -4896,7 +4867,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                     </span>
                                   ) : (
                                     <span className="text-muted-foreground">
-                                      {formatCurrency(remaining)}
+                                      {currencyOrDash(remaining)}
                                     </span>
                                   )}
                                 </TableCell>
@@ -4924,10 +4895,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       New Outstanding Balance
                     </p>
                     <p className="text-lg font-bold tabular-nums break-words">
-                      {currencyOrDash(previewBalanceAfter(paymentPreview))}
+                      {currencyOrDash(previewOutstandingAfter(paymentPreview))}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      was {currencyOrDash(previewBalanceBefore(paymentPreview))}
+                      was {currencyOrDash(previewOutstandingBefore(paymentPreview))}
                     </p>
                   </div>
 
@@ -5174,26 +5145,46 @@ function LoanDetail({ loanId }: { loanId: number }) {
       </AlertDialog>
 
       {/* Partial-Payment Extend Prompt (Upon Maturity — Process 2) */}
-      <AlertDialog open={partialExtendOpen} onOpenChange={setPartialExtendOpen}>
-        <AlertDialogContent>
+      <AlertDialog
+        open={partialExtendOpen}
+        onOpenChange={(open) => {
+          const choice = partialExtendOnOpenChange(open);
+          if (choice !== null) void handlePartialExtendChoice(choice);
+        }}
+      >
+        {/* Three buttons don't fit the default width: widen it from sm up and
+            let the row wrap; below sm the footer stacks them full width. */}
+        <AlertDialogContent className="data-[size=default]:sm:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Extend loan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Payment is not enough to fully settle this loan. Do you want to
-              extend the loan? The remaining principal and interest will be
-              carried over to the next cycle.
+              Payment is not enough to fully settle this loan.{" "}
+              <span className="font-medium">{PARTIAL_EXTEND_LABELS.extend}</span> records the
+              payment and extends the loan: the remaining principal and interest carry
+              over to the next cycle.{" "}
+              <span className="font-medium">{PARTIAL_EXTEND_LABELS.record}</span> records the
+              payment without extending.{" "}
+              <span className="font-medium">{PARTIAL_EXTEND_LABELS.cancel}</span> records
+              nothing and takes you back to the payment form.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="sm:flex-wrap">
             <AlertDialogCancel
               disabled={actionLoading}
-              onClick={handlePartialExtendDecline}
+              onClick={() => void handlePartialExtendChoice("cancel")}
             >
-              No, thanks
+              {PARTIAL_EXTEND_LABELS.cancel}
             </AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={actionLoading}
+              onClick={() => void handlePartialExtendChoice("record")}
+            >
+              {PARTIAL_EXTEND_LABELS.record}
+            </Button>
             <AlertDialogAction
               disabled={actionLoading}
-              onClick={handlePartialExtendConfirm}
+              onClick={() => void handlePartialExtendChoice("extend")}
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (
@@ -5204,7 +5195,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               ) : (
                 <>
                   <CalendarPlus className="mr-2 h-4 w-4" />
-                  Yes, extend
+                  {PARTIAL_EXTEND_LABELS.extend}
                 </>
               )}
             </AlertDialogAction>

@@ -15,6 +15,7 @@ import {
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import type { GCashNonMember } from "@/types";
+import { walkInDetails } from "../_lib/walk-in-display";
 
 interface Props {
   nonMember: GCashNonMember;
@@ -57,7 +58,7 @@ export function DeleteWalkInDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {nonMember.full_name}?</AlertDialogTitle>
           <AlertDialogDescription>
-            {nonMember.id_type} · {nonMember.id_number} · {nonMember.mobile_number}.
+            {walkInDetails(nonMember)}.
             They will no longer come up when you search for a name. Past
             transactions keep this walk-in.
           </AlertDialogDescription>

@@ -37,6 +37,10 @@ export interface RepaymentPreview {
   balance_before?: number;
   /** The same balance once the payment posts. */
   balance_after?: number;
+  /** Everything owed on the loan (the summary's `total_outstanding`) before the payment. */
+  total_outstanding_before?: number;
+  /** Everything owed on the loan once the payment posts. */
+  total_outstanding_after?: number;
   /** What the payment will store; anything paid before its due date is `advance`. */
   payment_type?: "exact" | "partial" | "advance";
   /** The payments page's badge, measured against what is owed on the payment date. */
