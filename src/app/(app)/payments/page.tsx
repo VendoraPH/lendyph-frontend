@@ -54,7 +54,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
-import { currencyOrDash } from "@/lib/report-format";
+import { currencyOrDash, toNumber } from "@/lib/report-format";
 import {
   dueAmountCell,
   dueNowOnDate,
@@ -66,7 +66,7 @@ import {
   type AmountDueNow,
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
-import { fetchAllActiveLoans } from "./_lib/active-loans";
+import { fetchAllActiveLoans, type ActiveLoanTotals } from "./_lib/active-loans";
 import { previewAllocation, previewBadge } from "./_lib/payment-preview";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,8 @@ interface ActiveLoan {
   interest_type: "fixed" | "diminishing";
   term_months: number;
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
-  outstanding_balance: number;
+  /** Everything owed (principal, interest, penalty, premium); null when not sent. */
+  total_outstanding: number | null;
   total_payable: number;
   status: string;
   current_due: number;
@@ -143,8 +144,11 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
 // Map API Loan to local shape
 // ---------------------------------------------------------------------------
 
+/** The list row fields this screen reads that `Loan` does not declare. */
+type LoanListRow = Loan & { total_outstanding?: number | string | null };
+
 function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
-  const l = loan as Loan & Record<string, unknown>;
+  const l = loan as LoanListRow & Record<string, unknown>;
   // Upon-maturity loans have a single payment due at maturity, so the next due
   // date is the maturity date — never a monthly increment off the release date.
   const isUponMaturity =
@@ -163,7 +167,7 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     interest_type: ((l.interest_method ?? l.interest_type) === "upon_maturity" ? "fixed" : (l.interest_method ?? l.interest_type ?? "fixed")) as ActiveLoan["interest_type"],
     term_months: l.term ?? l.term_months ?? 0,
     payment_frequency: (l.frequency ?? l.payment_frequency ?? "monthly") as ActiveLoan["payment_frequency"],
-    outstanding_balance: l.outstanding_balance ?? 0,
+    total_outstanding: toNumber(l.total_outstanding),
     total_payable: l.total_payable ?? 0,
     status: l.status,
     current_due: (l.current_due as number) || 0,
@@ -189,11 +193,14 @@ function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
 function SummaryCard({
   label,
   value,
+  detail,
   icon,
   iconBg,
 }: {
   label: string;
   value: string | null;
+  /** An optional second figure under the value, already formatted. */
+  detail?: string;
   icon: React.ReactNode;
   iconBg: string;
 }) {
@@ -205,6 +212,7 @@ function SummaryCard({
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="text-2xl font-bold">{value ?? "—"}</p>
+            {detail && <p className="text-xs text-muted-foreground tabular-nums">{detail}</p>}
           </div>
         </div>
       </CardContent>
@@ -249,6 +257,9 @@ function PaymentsContent() {
   // Set only when the page guard stopped the fetch with pages outstanding.
   // Rendered, never swallowed — see the notice below the header.
   const [truncated, setTruncated] = useState(false);
+  // GET /loans `meta.totals` for the same query: the server's figures over
+  // every active loan. Null until a response carries them.
+  const [listTotals, setListTotals] = useState<ActiveLoanTotals | null>(null);
   // A failed load must not look like an empty one. Without this the table falls
   // back to "No active loans found", which tells a cashier standing in front of
   // a member that the member has nothing to pay.
@@ -264,11 +275,13 @@ function PaymentsContent() {
       setApiLoans(result.loans.map(mapLoanToActiveLoan));
       setActiveLoanTotal(result.total);
       setTruncated(result.truncated);
+      setListTotals(result.totals);
     } catch (err) {
       console.error("Failed to load active loans", err);
       setApiLoans([]);
       setActiveLoanTotal(null);
       setTruncated(false);
+      setListTotals(null);
       setError("We couldn't load the active loans.");
       notifyError(err, "We couldn't load the active loans. Please try again.");
     } finally {
@@ -434,16 +447,12 @@ function PaymentsContent() {
 
   const needsReference = paymentMethod !== "cash";
 
-  // Stats.
-  //
-  // Both of these are aggregates over `overdue_amount` / `outstanding_balance`,
-  // which LoanResource derives per row from the loaded amortization schedules.
-  // There is no server-side equivalent — `meta.stats` is a GROUP BY status row
-  // count — so they are only meaningful because `apiLoans` is now the complete
-  // active set. If that ever stops being true the `truncated` notice says so;
-  // do not reintroduce a partial fetch and leave these summing a page.
-  const overdueCount = apiLoans.filter((l) => l.overdue_amount > 0).length;
-  const totalOutstanding = apiLoans.reduce((sum, l) => sum + l.outstanding_balance, 0);
+  // Stats. The overdue and outstanding figures are the server's totals over
+  // every active loan (GET /loans `meta.totals`); a figure it did not send
+  // shows a dash. Never add the rows up here.
+  const overdueCount = listTotals?.overdue_count ?? null;
+  const overdueAmount = listTotals?.overdue_amount ?? null;
+  const totalOutstanding = listTotals?.total_outstanding ?? null;
   // The count of active loans is the one figure the server can state directly,
   // so prefer `meta.total` over the row count: they agree normally, and when
   // they don't, the server is right and the notice explains the gap.
@@ -492,9 +501,9 @@ function PaymentsContent() {
                 : "."}
             </p>
             <p className="mt-0.5 text-muted-foreground">
-              Some borrowers will not appear below, and the figures above count
-              only the loans shown. Please report this so the payments screen can
-              be paged properly.
+              Some borrowers will not appear below. The figures above are the
+              server&apos;s totals and still cover every active loan. Please report
+              this so the payments screen can be paged properly.
             </p>
           </div>
         </div>
@@ -510,13 +519,18 @@ function PaymentsContent() {
         />
         <SummaryCard
           label="Overdue"
-          value={statsKnown ? String(overdueCount) : null}
+          value={statsKnown && overdueCount !== null ? String(overdueCount) : null}
+          detail={
+            statsKnown && overdueCount !== null && overdueAmount !== null
+              ? `${formatCurrency(overdueAmount)} overdue`
+              : undefined
+          }
           icon={<AlertCircle className="size-5 text-destructive" />}
           iconBg="bg-destructive/10"
         />
         <SummaryCard
           label="Total Outstanding"
-          value={statsKnown ? formatCurrency(totalOutstanding) : null}
+          value={statsKnown && totalOutstanding !== null ? formatCurrency(totalOutstanding) : null}
           icon={<Banknote className="size-5 text-blue-600" />}
           iconBg="bg-blue-500/10"
         />
@@ -627,7 +641,7 @@ function PaymentsContent() {
                         </TableCell>
                         <TableCell className="text-right hidden sm:table-cell">
                           <span className="text-sm font-medium tabular-nums">
-                            {formatCurrency(loan.outstanding_balance)}
+                            {currencyOrDash(loan.total_outstanding)}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
@@ -703,7 +717,7 @@ function PaymentsContent() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Outstanding</p>
-                  <p className="text-sm font-bold tabular-nums">{formatCurrency(selectedLoan.outstanding_balance)}</p>
+                  <p className="text-sm font-bold tabular-nums">{currencyOrDash(selectedLoan.total_outstanding)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">
