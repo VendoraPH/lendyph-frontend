@@ -233,3 +233,23 @@ test("a saved loan with no deductions states none", () => {
   assert.deepEqual(storedDeductionInputs(null), []);
   assert.deepEqual(storedDeductionInputs(undefined), []);
 });
+
+// A formula fee in Settings adds a `formula` item at release: `amount` is the
+// pesos it charged, `original_value` its rate. No loan request takes a formula
+// deduction, so the form carries it over as a fixed deduction of those pesos,
+// never its rate read as pesos.
+test("a formula item carries over as a fixed deduction of the pesos it charged", () => {
+  const formula = {
+    name: "Insurance Handling", amount: 555.53, type: "formula", original_value: 0.75,
+    per_month: true, min_amount: 100, max_amount: 1000, fee_id: 4,
+  } as StoredDeduction;
+  const fixed: StoredDeduction = { name: "Notarial", amount: 250, type: "fixed", original_value: 250 };
+
+  assert.deepEqual(storedDeductionInputs([formula, fixed]), [
+    { name: "Insurance Handling", amount: 555.53, type: "fixed" },
+    { name: "Notarial", amount: 250, type: "fixed" },
+  ]);
+  assert.deepEqual(storedDeductionFields([formula])?.otherDeductions, [
+    { name: "Insurance Handling", amount: "555.53" },
+  ]);
+});

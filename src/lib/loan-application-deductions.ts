@@ -64,7 +64,8 @@ export function productDeductionFields(product: ProductFees): DeductionFields {
  * Processing and Service Fee percentages fill the two rate fields, and when
  * one is missing it is 0%, never the product's current rate. Any other
  * percentage item, the notarial fee, has no field and is carried unchanged.
- * Fixed items become other deductions.
+ * Fixed items become other deductions, and so does a formula item, at the
+ * pesos it charged (`storedInput()`).
  */
 export function storedDeductionFields(
   items: readonly StoredDeduction[] | null | undefined,
@@ -81,7 +82,7 @@ export function storedDeductionFields(
   let hasService = false;
 
   for (const item of items) {
-    const value = toRate(item.original_value ?? item.amount);
+    const value = storedInput(item).amount;
     if (item.type === "percentage" && item.name === PROCESSING_FEE_LABEL && !hasProcessing) {
       hasProcessing = true;
       fields.processingFeeRate = decimalInputValue(value);
@@ -98,19 +99,28 @@ export function storedDeductionFields(
 }
 
 /**
- * A saved loan's deductions as the inputs they were stated with, exactly as
+ * One saved deduction as the input it is stated with: a percentage item's
+ * rate and a fixed item's pesos, both from `original_value` (falling back to
+ * `amount`). A formula item (a formula fee in Settings, added at release) is
+ * stated as a fixed deduction of the pesos it charged, its `amount`: no loan
+ * request takes a formula deduction, and its `original_value` is a rate.
+ */
+function storedInput(item: StoredDeduction): LoanDeduction {
+  if (item.type === "formula") {
+    return { name: item.name, amount: toRate(item.amount), type: "fixed" };
+  }
+  return { name: item.name, amount: toRate(item.original_value ?? item.amount), type: item.type };
+}
+
+/**
+ * A saved loan's deductions as the inputs they were stated with, as
  * `LoanService::deductionInputsFrom()` reads them back when an edit states no
- * deductions: a percentage item's rate and a fixed item's pesos, both from
- * `original_value` (falling back to `amount`). No figure is worked out here.
+ * deductions (`storedInput()`). No figure is worked out here.
  */
 export function storedDeductionInputs(
   items: readonly StoredDeduction[] | null | undefined,
 ): LoanDeduction[] {
-  return (items ?? []).map((item) => ({
-    name: item.name,
-    amount: toRate(item.original_value ?? item.amount),
-    type: item.type,
-  }));
+  return (items ?? []).map(storedInput);
 }
 
 /** The rate a fee field stands for: what it says, or the product's while it is blank. */
