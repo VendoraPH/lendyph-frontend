@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { INSURANCE_OWED_LABEL, insuranceOwedLine } from "@/lib/insurance-premium";
 import { loanService } from "@/services";
 import type { Loan, LoanAmortizationBalances } from "@/types/loan";
 import { balanceStatus, type BalanceStatus } from "../_lib/amortization-balance-status";
@@ -90,6 +91,9 @@ export function AmortizationBalanceTable({ loan, refreshKey }: AmortizationBalan
   }
 
   const { totals } = balances;
+  // Insurance premium owed: its own row above the footer, inside the footer's
+  // server total; no row when none is owed, a dash when not sent.
+  const insuranceOwed = insuranceOwedLine(totals.insurance_owed);
 
   return (
     <div className="overflow-x-auto">
@@ -135,6 +139,15 @@ export function AmortizationBalanceTable({ loan, refreshKey }: AmortizationBalan
               </TableRow>
             );
           })}
+          {insuranceOwed !== null && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-muted-foreground">
+                {INSURANCE_OWED_LABEL}
+              </TableCell>
+              <TableCell className="text-right font-medium tabular-nums">{insuranceOwed}</TableCell>
+              <TableCell />
+            </TableRow>
+          )}
         </TableBody>
         <TableFooter>
           <TableRow>

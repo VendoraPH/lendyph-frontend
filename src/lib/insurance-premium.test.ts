@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import {
   INSURANCE_OWED_LABEL,
   INSURANCE_PREMIUM_LABEL,
+  insuranceOwedLine,
   loanInsuranceOwed,
   previewInsuranceApplied,
   repaymentInsuranceApplied,
@@ -57,4 +58,22 @@ describe("repaymentInsuranceApplied", () => {
 test("the labels say what the figure is", () => {
   assert.equal(INSURANCE_PREMIUM_LABEL, "Insurance premium");
   assert.equal(INSURANCE_OWED_LABEL, "Insurance premium owed — interest-free, collected first");
+});
+
+describe("insuranceOwedLine", () => {
+  test("a line with the server's premium owed when there is some", () => {
+    assert.equal(insuranceOwedLine(400), "₱400.00");
+    assert.equal(insuranceOwedLine("400.50"), "₱400.50");
+  });
+
+  test("no line when none is owed", () => {
+    assert.equal(insuranceOwedLine(0), null);
+    assert.equal(insuranceOwedLine("0.00"), null);
+  });
+
+  test("a dash when the server sent no figure", () => {
+    assert.equal(insuranceOwedLine(undefined), "—");
+    assert.equal(insuranceOwedLine(null), "—");
+    assert.equal(insuranceOwedLine("abc"), "—");
+  });
 });

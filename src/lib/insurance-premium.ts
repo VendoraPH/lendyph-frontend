@@ -13,7 +13,8 @@
  * These helpers only read those figures and say whether a screen has a line
  * to show (above zero); none is worked out here.
  */
-import { toNumber } from "@/lib/report-format";
+import { formatCurrency } from "@/lib/format";
+import { DASH, toNumber } from "@/lib/report-format";
 
 export const INSURANCE_PREMIUM_LABEL = "Insurance premium";
 export const INSURANCE_OWED_LABEL = "Insurance premium owed — interest-free, collected first";
@@ -43,4 +44,14 @@ export function repaymentInsuranceApplied(
   repayment: { insurance_applied?: unknown } | null | undefined
 ): number | null {
   return positive(repayment?.insurance_applied);
+}
+
+/**
+ * A table's "Insurance premium owed" line: the server's figure when above
+ * zero, no line (null) when none is owed, a dash when the server sent none.
+ */
+export function insuranceOwedLine(value: unknown): string | null {
+  const n = typeof value === "number" || typeof value === "string" ? toNumber(value) : null;
+  if (n === null) return DASH;
+  return n > 0 ? formatCurrency(n) : null;
 }

@@ -545,8 +545,11 @@ export interface LoanAmortizationBalances {
     interest: AmortizationComponentBalance;
     penalty: AmortizationPenaltyBalance;
     paid: number;
+    /** Includes `insurance_owed`, so it equals Current Outstanding. */
     balance: number;
     overdue: number;
+    /** Insurance premium still owed on the loan, inside `balance`. */
+    insurance_owed?: number | string | null;
   };
 }
 
