@@ -664,6 +664,7 @@ function NewLoanApplicationInner() {
   const { view: preview, retry: retryPreview } = useLoanPreview(
     loanPreviewRequest({
       borrowerId,
+      editLoanId,
       productId,
       principalAmount,
       interestRate,

@@ -21,6 +21,12 @@ export type FormPreviewRequest = Omit<LoanFormPreviewRequest, "collaterals"> & {
   borrower_id?: number;
   /** A restructure's source loan, so the answer carries `restructure`. */
   source_loan_id?: number;
+  /**
+   * The loan an edit changes (draft or for_review; needs `loans:update`). The
+   * server then carries the collaterals it already holds at their stored
+   * pledged value, so the total matches what the save keeps.
+   */
+  loan_id?: number;
   collaterals?: PledgedCollateral[];
 };
 
@@ -52,6 +58,8 @@ export interface LoanPreviewInputs {
   borrowerId: number | null;
   /** The loan a restructure replaces; absent or null for a new application. */
   sourceLoanId?: number | null;
+  /** The loan being edited; absent or null for a new application or a restructure. */
+  editLoanId?: number | null;
   /** Only each row's collateral id goes up; the figure a row shows never does. */
   collaterals: readonly Pick<SelectedCollateral, "collateral">[];
   /**
@@ -92,6 +100,9 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewReques
   // The shortfall needs a principal to measure, so a restructure names its
   // source loan only once one above 0 is entered.
   const sourceLoanId = principal !== undefined ? inputs.sourceLoanId ?? undefined : undefined;
+  // Only an edit names its loan; a restructure names its source loan instead.
+  const editLoanId =
+    inputs.sourceLoanId == null ? inputs.editLoanId ?? undefined : undefined;
   const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
 
   if (productId === undefined && !valuable) return null;
@@ -99,6 +110,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewReques
   return {
     ...(borrowerId !== undefined && { borrower_id: borrowerId }),
     ...(sourceLoanId !== undefined && { source_loan_id: sourceLoanId }),
+    ...(editLoanId !== undefined && { loan_id: editLoanId }),
     ...(productId !== undefined && { loan_product_id: productId }),
     ...(principal !== undefined && { principal_amount: principal }),
     ...(rate !== undefined && { interest_rate: rate }),

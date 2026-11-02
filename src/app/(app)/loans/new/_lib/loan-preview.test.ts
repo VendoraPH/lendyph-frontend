@@ -145,6 +145,30 @@ describe("loanPreviewRequest", () => {
     assert.deepEqual(request?.collaterals, [{ collateral_id: 7 }, { collateral_id: 8 }]);
   });
 
+  test("an edit names the loan, so the server carries what it already holds at its pledged value", () => {
+    assert.equal(loanPreviewRequest({ ...COMPLETE, editLoanId: 7 })?.loan_id, 7);
+    // Even with nothing else to ask, the loan's own collaterals are valued.
+    assert.equal(loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7 })?.loan_id, 7);
+  });
+
+  test("a new application names no loan", () => {
+    for (const inputs of [COMPLETE, { ...COMPLETE, editLoanId: null }]) {
+      const request = loanPreviewRequest(inputs);
+      assert.ok(request);
+      assert.equal("loan_id" in request, false);
+    }
+  });
+
+  test("a restructure names its source loan, never loan_id", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40, editLoanId: 7 });
+    assert.ok(request);
+    assert.equal(request.source_loan_id, 40);
+    assert.equal("loan_id" in request, false);
+    const blankPrincipal = loanPreviewRequest({ ...COMPLETE, principalAmount: "", sourceLoanId: 40, editLoanId: 7 });
+    assert.ok(blankPrincipal);
+    assert.equal("loan_id" in blankPrincipal, false);
+  });
+
   test("never sends a snapshot_value, whatever the form shows", () => {
     for (const inputs of [
       COMPLETE,
