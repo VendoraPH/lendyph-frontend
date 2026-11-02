@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,9 @@ import {
   EMPTY_WALK_IN_FORM,
   WALK_IN_FIELDS,
   WALK_IN_MAX_LENGTH,
+  acknowledgedWalkInPayload,
+  hasRequiredWalkInFields,
+  possibleDuplicateWarning,
   validateWalkInForm,
   walkInFieldErrors,
   walkInFormFrom,
@@ -111,10 +116,18 @@ export function NonMemberFormDialog({
   const [form, setForm] = useState<WalkInFormState>(EMPTY_WALK_IN_FORM);
   const [errors, setErrors] = useState<WalkInFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * The server's name-and-mobile warning for a walk-in without an ID. While
+   * set, the dialog asks the teller to confirm before saving anyway.
+   */
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(
+    null,
+  );
 
   if (useDialogOpening(open, nonMember)) {
     setForm(nonMember ? walkInFormFrom(nonMember) : EMPTY_WALK_IN_FORM);
     setErrors({});
+    setDuplicateWarning(null);
   }
 
   const set = <K extends keyof WalkInFormState>(
@@ -122,7 +135,9 @@ export function NonMemberFormDialog({
     value: WalkInFormState[K],
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    // The message was about the old value; editing it is the fix in progress.
+    // The warning and the message were about the old values; editing them is
+    // the fix in progress.
+    setDuplicateWarning(null);
     setErrors((prev) => {
       if (!prev[key]) return prev;
       const next = { ...prev };
@@ -145,43 +160,49 @@ export function NonMemberFormDialog({
   };
 
   const payload = walkInPayload(form);
-  // A walk-in has no member record behind them, so the counter needs a name,
-  // a reachable number, and a presented ID on every row.
-  const canSubmit =
-    !submitting &&
-    payload.full_name.length > 0 &&
-    payload.mobile_number.length > 0 &&
-    payload.id_type.length > 0 &&
-    payload.id_number.length > 0;
+  // A walk-in has no member record behind them, so the counter needs at least
+  // a name and a reachable number. The ID is optional (both fields or neither).
+  const canSubmit = !submitting && hasRequiredWalkInFields(payload);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (acknowledgeDuplicate = false) => {
     if (!canSubmit) return;
     const invalid = validateWalkInForm(form);
     if (Object.keys(invalid).length > 0) {
       showErrors(invalid);
       return;
     }
+    const sent = acknowledgeDuplicate
+      ? acknowledgedWalkInPayload(payload)
+      : payload;
     setSubmitting(true);
     try {
       let saved: GCashNonMember | undefined;
       if (nonMember) {
-        const updated = await gcashService.updateNonMember(nonMember.id, payload);
+        const updated = await gcashService.updateNonMember(nonMember.id, sent);
         // Keep the selection right even if the reply carries no row.
         saved = updated ?? { ...nonMember, ...payload };
         toast.success(`${payload.full_name} updated.`);
       } else {
-        saved = await gcashService.createNonMember(payload);
+        saved = await gcashService.createNonMember(sent);
         toast.success(`${payload.full_name} added.`);
       }
       onSaved?.(saved);
       onOpenChange(false);
     } catch (err) {
+      const warning = possibleDuplicateWarning(err);
       const serverErrors = walkInFieldErrors(err);
-      if (Object.keys(serverErrors).length > 0) showErrors(serverErrors);
+      if (warning) setDuplicateWarning(warning);
+      else if (Object.keys(serverErrors).length > 0) showErrors(serverErrors);
       else toast.error(extractGCashErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const hasIdInput = form.id_type !== "" || form.id_number !== "";
+  const clearId = () => {
+    set("id_type", "");
+    set("id_number", "");
   };
 
   return (
@@ -190,9 +211,9 @@ export function NonMemberFormDialog({
         <DialogHeader>
           <DialogTitle>{nonMember ? "Edit Walk-in" : "Add Walk-in"}</DialogTitle>
           <DialogDescription>
-            A walk-in customer who is not a coop member. Name, mobile number,
-            and a presented ID are required — they are the only record you have
-            of who transacted.
+            A walk-in customer who is not a coop member. Name and mobile number
+            are required. An ID is optional: enter both the ID presented and
+            its number, or leave both blank.
           </DialogDescription>
         </DialogHeader>
 
@@ -232,8 +253,7 @@ export function NonMemberFormDialog({
           <div className="grid grid-cols-2 gap-3">
             <FormField
               field="id_type"
-              label="ID Presented"
-              required
+              label="ID Presented (optional)"
               error={errors.id_type}
             >
               <Select
@@ -261,8 +281,7 @@ export function NonMemberFormDialog({
             </FormField>
             <FormField
               field="id_number"
-              label="ID Number"
-              required
+              label="ID Number (optional)"
               error={errors.id_number}
             >
               <Input
@@ -274,6 +293,18 @@ export function NonMemberFormDialog({
               />
             </FormField>
           </div>
+          {hasIdInput && (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={clearId}
+              disabled={submitting}
+            >
+              Clear ID (no ID presented)
+            </Button>
+          )}
 
           <FormField
             field="remarks"
@@ -290,23 +321,49 @@ export function NonMemberFormDialog({
           </FormField>
         </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting
-              ? "Saving…"
-              : nonMember
-                ? "Save Changes"
-                : "Add Walk-in"}
-          </Button>
-        </DialogFooter>
+        {duplicateWarning ? (
+          <>
+            <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+              <AlertTriangle />
+              <AlertTitle>Possible duplicate walk-in</AlertTitle>
+              <AlertDescription>{duplicateWarning}</AlertDescription>
+            </Alert>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDuplicateWarning(null)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => handleSubmit(true)}
+                disabled={!canSubmit}
+              >
+                {submitting ? "Saving…" : "Save anyway"}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => handleSubmit()} disabled={!canSubmit}>
+              {submitting
+                ? "Saving…"
+                : nonMember
+                  ? "Save Changes"
+                  : "Add Walk-in"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
