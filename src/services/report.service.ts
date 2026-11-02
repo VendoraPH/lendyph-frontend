@@ -53,6 +53,12 @@ export interface CollectedPages {
   pagesFetched: number;
   /** False when the walk stopped early — `rows` is then a partial set. */
   complete: boolean;
+  /**
+   * The first page's `totals` object, as the server sent it, or null when it
+   * sent none. The server computes it over the whole filtered set, so it is
+   * complete even when `rows` is not.
+   */
+  totals: Record<string, unknown> | null;
 }
 
 /**
@@ -73,6 +79,13 @@ const extractRows = (body: unknown): unknown[] => {
     }
   }
   return [];
+};
+
+const extractTotals = (body: unknown): Record<string, unknown> | null => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const totals = (body as { totals?: unknown }).totals;
+  if (!totals || typeof totals !== "object" || Array.isArray(totals)) return null;
+  return totals as Record<string, unknown>;
 };
 
 const extractMeta = (body: unknown): PaginatorMeta | null => {
@@ -116,6 +129,7 @@ export async function collectReportPages(
   let page = 1;
   let pagesFetched = 0;
   let complete = true;
+  let totals: Record<string, unknown> | null = null;
 
   while (page <= lastPage) {
     if (page > maxPages) {
@@ -125,6 +139,7 @@ export async function collectReportPages(
 
     const body = await fetchPage(page);
     pagesFetched += 1;
+    if (page === 1) totals = extractTotals(body);
     const batch = extractRows(body);
     for (const row of batch) rows.push(row);
 
@@ -148,7 +163,7 @@ export async function collectReportPages(
     page += 1;
   }
 
-  return { rows, total, pagesFetched, complete };
+  return { rows, total, pagesFetched, complete, totals };
 }
 
 export const reportService = {
