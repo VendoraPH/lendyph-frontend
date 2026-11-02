@@ -91,7 +91,7 @@ export const collateralService = {
    * are NOT pivot rows, whatever the name suggests: there is no `collateral_id`
    * key at any level, and reading one yields `undefined` rather than an error.
    * Use `row.id` for the collateral and `row.pivot?.snapshot_value` for the
-   * amount it was booked at.
+   * value the server holds it at on this loan.
    *
    * `active_loans` here INCLUDES `loanId` itself when that loan is active, so
    * anything asking "is this held elsewhere" must pass
@@ -105,7 +105,10 @@ export const collateralService = {
   },
 
   /**
-   * Attach a collateral to a loan.
+   * Attach a collateral to a loan, by id only. The server sets the value the
+   * loan holds it at (decision 11a: the collateral's amount, or the member's
+   * share capital balance) and returns the link row with that value under
+   * `pivot`. No value is sent: one the browser sent used to be stored as is.
    *
    * `CollateralController::attach()` now refuses a collateral that another loan
    * in `Loan::ACTIVE_STATUSES` already holds, with a 422 on `collateral_id`
@@ -114,14 +117,9 @@ export const collateralService = {
    * and a stale page can still hit it. Surface the message rather than a
    * generic failure: it tells the operator exactly which loan to detach from.
    */
-  attachToLoan: (
-    loanId: number,
-    collateralId: number,
-    snapshotValue: number,
-  ): Promise<LoanCollateral> =>
+  attachToLoan: (loanId: number, collateralId: number): Promise<LoanCollateral> =>
     api.post<LoanCollateral>(API_ENDPOINTS.COLLATERALS.ATTACH(loanId), {
       collateral_id: collateralId,
-      snapshot_value: snapshotValue,
     }),
 
   detachFromLoan: (loanId: number, collateralId: number): Promise<void> =>

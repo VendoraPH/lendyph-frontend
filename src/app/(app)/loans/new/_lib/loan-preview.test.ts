@@ -24,20 +24,33 @@ import {
   loanPreviewRequest,
   loanPreviewView,
   previewDeductionAmount,
+  previewFailureText,
+  refusedCollateral,
+  refusedCollateralMessage,
   showsShortBy,
   type LoanPreviewInputs,
   type LoanPreviewOutcome,
   type StatedDeduction,
 } from "./loan-preview";
 
-function selected(id: number, snapshot: number): SelectedCollateral {
+function selected(id: number, shown: number): SelectedCollateral {
   return {
     collateral: { id } as SelectedCollateral["collateral"],
-    snapshot_value: snapshot,
+    shown_value: shown,
   };
 }
 
+/** Every key anywhere in a body, however deep. */
+function keysOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(keysOf);
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([k, v]) => [k, ...keysOf(v)]);
+  }
+  return [];
+}
+
 const COMPLETE: LoanPreviewInputs = {
+  borrowerId: 11,
   productId: "3",
   principalAmount: "50000",
   interestRate: "2.5",
@@ -89,6 +102,7 @@ const PREVIEW: LoanFormPreview = {
 describe("loanPreviewRequest", () => {
   test("states every field the form has, as the submit parses them", () => {
     assert.deepEqual(loanPreviewRequest(COMPLETE), {
+      borrower_id: 11,
       loan_product_id: 3,
       principal_amount: 50000,
       interest_rate: 2.5,
@@ -96,7 +110,7 @@ describe("loanPreviewRequest", () => {
       frequency: "monthly",
       start_date: "2026-10-03",
       scb_amount: 100,
-      collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }],
+      collaterals: [{ collateral_id: 7 }],
       deductions: [
         { name: "Processing Fee", amount: 1.5, type: "percentage" },
         { name: "Notarial", amount: 250.5, type: "fixed" },
@@ -119,17 +133,81 @@ describe("loanPreviewRequest", () => {
     assert.equal("deductions" in request, false);
   });
 
-  test("keeps the rate's and the collateral's decimals exactly as entered", () => {
+  test("keeps the rate's decimals exactly as entered, and names collaterals by id only", () => {
+    // The server values each collateral itself (decision 11a); the figure the
+    // form shows for a row is never sent as its value.
     const request = loanPreviewRequest({
       ...COMPLETE,
       interestRate: "2.375",
       collaterals: [selected(7, 0.01), selected(8, 1234.56)],
     });
     assert.equal(request?.interest_rate, 2.375);
-    assert.deepEqual(request?.collaterals, [
-      { collateral_id: 7, snapshot_value: 0.01 },
-      { collateral_id: 8, snapshot_value: 1234.56 },
-    ]);
+    assert.deepEqual(request?.collaterals, [{ collateral_id: 7 }, { collateral_id: 8 }]);
+  });
+
+  test("an edit names the loan, so the server carries what it already holds at its pledged value", () => {
+    assert.equal(loanPreviewRequest({ ...COMPLETE, editLoanId: 7 })?.loan_id, 7);
+    // Even with nothing else to ask, the loan's own collaterals are valued.
+    assert.equal(loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7 })?.loan_id, 7);
+  });
+
+  test("a new application names no loan", () => {
+    for (const inputs of [COMPLETE, { ...COMPLETE, editLoanId: null }]) {
+      const request = loanPreviewRequest(inputs);
+      assert.ok(request);
+      assert.equal("loan_id" in request, false);
+    }
+  });
+
+  test("a restructure names its source loan, never loan_id", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40, editLoanId: 7 });
+    assert.ok(request);
+    assert.equal(request.source_loan_id, 40);
+    assert.equal("loan_id" in request, false);
+    const blankPrincipal = loanPreviewRequest({ ...COMPLETE, principalAmount: "", sourceLoanId: 40, editLoanId: 7 });
+    assert.ok(blankPrincipal);
+    assert.equal("loan_id" in blankPrincipal, false);
+  });
+
+  test("never sends a snapshot_value, whatever the form shows", () => {
+    for (const inputs of [
+      COMPLETE,
+      { ...COMPLETE, collaterals: [selected(7, 0), selected(8, 99_999_999)] },
+      { ...COMPLETE, productId: null },
+      { ...COMPLETE, sourceLoanId: 40 },
+    ]) {
+      assert.equal(keysOf(loanPreviewRequest(inputs)).includes("snapshot_value"), false);
+    }
+  });
+
+  test("sends the member with the collaterals, so the server values them from that member's register", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, productId: null, deductions: null });
+    assert.equal(request?.borrower_id, 11);
+    assert.deepEqual(request?.collaterals, [{ collateral_id: 7 }]);
+    const another = loanPreviewRequest({ ...COMPLETE, borrowerId: 12 });
+    assert.equal(another?.borrower_id, 12);
+  });
+
+  test("leaves the collaterals out until a member is chosen, rather than send ids the server can't value", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, borrowerId: null });
+    assert.ok(request);
+    assert.equal("borrower_id" in request, false);
+    assert.equal("collaterals" in request, false);
+  });
+
+  test("a restructure names its source loan once a principal is entered, so the server states the shortfall", () => {
+    assert.equal(loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40 })?.source_loan_id, 40);
+    for (const principalAmount of ["", "0", "abc"]) {
+      const blank = loanPreviewRequest({ ...COMPLETE, principalAmount, sourceLoanId: 40 });
+      assert.ok(blank);
+      assert.equal("source_loan_id" in blank, false, principalAmount);
+    }
+    const plain = loanPreviewRequest(COMPLETE);
+    assert.ok(plain);
+    assert.equal("source_loan_id" in plain, false);
+    const cleared = loanPreviewRequest({ ...COMPLETE, sourceLoanId: null });
+    assert.ok(cleared);
+    assert.equal("source_loan_id" in cleared, false);
   });
 
   test("leaves out fields with no usable value and lets the server work out what it can", () => {
@@ -145,12 +223,13 @@ describe("loanPreviewRequest", () => {
         scbAmount: "",
         deductions: null,
       }),
-      { collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }] },
+      { borrower_id: 11, collaterals: [{ collateral_id: 7 }] },
     );
   });
 
   test("asks for the schedule with no collateral once its inputs are all known", () => {
     assert.deepEqual(loanPreviewRequest({ ...COMPLETE, scbAmount: "", collaterals: [], deductions: null }), {
+      borrower_id: 11,
       loan_product_id: 3,
       principal_amount: 50000,
       interest_rate: 2.5,
@@ -185,7 +264,7 @@ describe("loanPreviewRequest", () => {
     const request = loanPreviewRequest({ ...COMPLETE, principalAmount: "", termValue: "" });
     assert.ok(request);
     assert.equal(request.principal_amount, undefined);
-    assert.deepEqual(request.collaterals, [{ collateral_id: 7, snapshot_value: 25000.5 }]);
+    assert.deepEqual(request.collaterals, [{ collateral_id: 7 }]);
   });
 });
 
@@ -233,9 +312,107 @@ describe("loanPreviewFailureMessage", () => {
     );
   });
 
+  test("a refused collateral with a readable reason shows just that reason", () => {
+    const message = loanPreviewFailureMessage(refusal("collaterals.0.collateral_id", "This collateral belongs to another member."));
+    assert.equal(message, "This collateral belongs to another member.");
+  });
+
+  test("a refused collateral with no readable reason names the share capital permission", () => {
+    const message = loanPreviewFailureMessage(refusal("collaterals", ""));
+    assert.match(message, /^A share capital collateral on this form can't be valued for your role/);
+    assert.match(message, /Share Capital: View/);
+  });
+
+  test("a 422 on another field keeps the server's own message", () => {
+    assert.equal(
+      loanPreviewFailureMessage({
+        isAxiosError: true,
+        response: { status: 422, data: { errors: { term: ["The term must be at least 1."] } } },
+      }),
+      "The term must be at least 1.",
+    );
+  });
+
   test("anything else falls back to a retry hint", () => {
     assert.equal(typeof loanPreviewFailureMessage(new Error("boom")), "string");
     assert.notEqual(loanPreviewFailureMessage(new Error("boom")), "boom");
+  });
+});
+
+function refusal(field: string, reason: string) {
+  return {
+    isAxiosError: true,
+    response: { status: 422, data: { message: "The given data was invalid.", errors: { [field]: [reason] } } },
+  };
+}
+
+describe("refusedCollateral", () => {
+  test("reads which row the server refused, and its reason", () => {
+    assert.deepEqual(refusedCollateral(refusal("collaterals.2.collateral_id", "Not valued.")), {
+      index: 2,
+      reason: "Not valued.",
+    });
+    assert.deepEqual(refusedCollateral(refusal("collaterals", "Not valued.")), { index: null, reason: "Not valued." });
+  });
+
+  test("an unreadable reason (blank, or an identifier) is none", () => {
+    assert.deepEqual(refusedCollateral(refusal("collaterals.0.collateral_id", "")), { index: 0, reason: null });
+    assert.deepEqual(refusedCollateral(refusal("collaterals.0", "share_capital_hidden")), { index: 0, reason: null });
+  });
+
+  test("not a collateral refusal: none", () => {
+    assert.equal(refusedCollateral(refusal("term", "The term must be at least 1.")), null);
+    assert.equal(refusedCollateral({ isAxiosError: true, response: { status: 403, data: {} } }), null);
+    assert.equal(refusedCollateral(new Error("boom")), null);
+  });
+});
+
+describe("refusedCollateralMessage", () => {
+  test("the server's readable reason, alone, whether or not the row can be removed", () => {
+    for (const removable of [true, false]) {
+      assert.equal(refusedCollateralMessage({ index: 0, reason: "Not valued." }, removable), "Not valued.");
+    }
+  });
+
+  test("a row the user can remove: suggest removing it", () => {
+    const message = refusedCollateralMessage({ index: 0, reason: null }, true);
+    assert.match(message, /Remove it to see the loan figures\.$/);
+    assert.doesNotMatch(message, /Ask a user/);
+  });
+
+  test("a row the user can't remove: ask someone with Share Capital: View, never suggest removing it", () => {
+    const message = refusedCollateralMessage({ index: 0, reason: null }, false);
+    assert.match(message, /Ask a user with Share Capital: View to complete this loan\.$/);
+    assert.doesNotMatch(message, /Remove it/);
+  });
+});
+
+describe("previewFailureText", () => {
+  type Row = { id: number; removable: boolean };
+  const rows: Row[] = [
+    { id: 1, removable: false },
+    { id: 2, removable: true },
+  ];
+  const isRemovable = (row: Row) => row.removable;
+  const failed = (index: number | null) =>
+    ({ status: "error", message: "stock", refused: { index, reason: null } }) as const;
+
+  test("names the refused row's own removability", () => {
+    assert.match(previewFailureText(failed(0), rows, isRemovable), /Ask a user with Share Capital: View/);
+    assert.match(previewFailureText(failed(1), rows, isRemovable), /Remove it/);
+  });
+
+  test("with no row index, suggests removing only when every row can be removed", () => {
+    assert.match(previewFailureText(failed(null), rows, isRemovable), /Ask a user/);
+    assert.match(previewFailureText(failed(null), [rows[1]], isRemovable), /Remove it/);
+  });
+
+  test("an index past the rows is not removable", () => {
+    assert.match(previewFailureText(failed(5), rows, isRemovable), /Ask a user/);
+  });
+
+  test("any other failure keeps its message", () => {
+    assert.equal(previewFailureText({ status: "error", message: "Please try again." }, rows, isRemovable), "Please try again.");
   });
 });
 

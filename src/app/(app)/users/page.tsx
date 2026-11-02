@@ -76,6 +76,7 @@ import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
+import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -153,6 +154,9 @@ function RoleSelector({
               </div>
               <p className="text-xs font-medium leading-tight">{roleDisplayName(role)}</p>
               <p className="font-mono text-[10px] leading-tight text-muted-foreground">{role.name}</p>
+              {isInactiveRole(role) && (
+                <p className="text-[10px] leading-tight text-amber-700">Inactive: grants no access</p>
+              )}
             </button>
           );
         })}
@@ -495,7 +499,7 @@ function AddUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roles}
+                roles={roleOptions(roles)}
               />
               {!form.role && submitting && (
                 <p className="text-xs text-red-500">Please select a role</p>
@@ -577,7 +581,7 @@ function EditUserDialog({
 
     setSubmitting(true);
     try {
-      await userService.update(user.id, userEditPayload(form));
+      await userService.update(user.id, withoutUnchangedRole(userEditPayload(form), user.roles?.[0]));
       toast.success("User updated");
       onOpenChange(false);
       onSave();
@@ -676,7 +680,7 @@ function EditUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roles}
+                roles={roleOptions(roles, user.roles?.[0])}
               />
             </div>
           </div>

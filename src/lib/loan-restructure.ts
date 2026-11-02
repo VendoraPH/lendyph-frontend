@@ -6,7 +6,7 @@
 // created loan matching the amortization preview the user just approved.
 
 import { isEverReleasedLoanStatus } from "@/constants/loan-status";
-import { toNumber } from "@/lib/report-format";
+import { currencyOrDash, toNumber } from "@/lib/report-format";
 
 export type LoanDeductionType = "fixed" | "percentage";
 
@@ -102,20 +102,171 @@ export function readRestructurableBalance(
 }
 
 /**
- * How far a restructure's new principal falls short of the source loan's
- * restructurable balance. A shortfall writes debt off, so the API rejects it (422)
- * unless `remarks` explain why — 0 means no explanation is required.
- *
- * The comparison is deliberately exact (no rounding) so the form demands
- * remarks in precisely the cases the API would reject.
+ * The `restructure` section of `POST /loans/preview`, sent when the request
+ * named a `source_loan_id` (decision 8a). Built by the server with the rule
+ * the restructure itself applies (`LoanService::assertRestructureInvariants`).
+ * Figures may arrive as numbers or decimal strings.
  */
-export function calcRestructureShortfall(
+export interface RestructurePreview {
+  restructurable_balance?: number | string | null;
+  principal?: number | string | null;
+  /** How far the principal falls short of the restructurable balance: debt written off. */
+  shortfall?: number | string | null;
+  /** True when the shortfall needs remarks (the restructure refuses it without). */
+  remarks_required?: boolean | null;
+  /** True when the shortfall needs the Loans: Write off permission. */
+  write_off_permission_required?: boolean | null;
+}
+
+/** The restructure section as the page shows it. Null means the server sent no figure: a dash. */
+export interface RestructureShortfallView {
+  restructurableBalance: number | null;
+  principal: number | null;
+  shortfall: number | null;
+  remarksRequired: boolean | null;
+  writeOffPermissionRequired: boolean | null;
+}
+
+function figure(raw: unknown): number | null {
+  return typeof raw === "number" || typeof raw === "string" ? toNumber(raw) : null;
+}
+
+function flag(raw: unknown): boolean | null {
+  return typeof raw === "boolean" ? raw : null;
+}
+
+/**
+ * The server's restructure figures (a `RestructurePreview`), read as sent and
+ * checked, since they come off the wire. Nothing is subtracted here:
+ * the browser used to work the shortfall out as balance minus principal, which
+ * could drift from the server's rule (rounding, or a balance that moved since
+ * the page loaded). A missing or unreadable figure is null, never 0.
+ */
+export function readRestructurePreview(raw: unknown): RestructureShortfallView {
+  const section: Record<string, unknown> = raw && typeof raw === "object" ? { ...raw } : {};
+  return {
+    restructurableBalance: figure(section.restructurable_balance),
+    principal: figure(section.principal),
+    shortfall: figure(section.shortfall),
+    remarksRequired: flag(section.remarks_required),
+    writeOffPermissionRequired: flag(section.write_off_permission_required),
+  };
+}
+
+/**
+ * The restructurable balance the amount hint quotes: the preview's, which is
+ * the server's figure for the terms on screen, with the loan summary's (read
+ * when the loan was picked) only until the preview has one. Null with neither.
+ */
+export function restructurableBalanceShown(
+  restructure: RestructureShortfallView,
+  summaryBalance: number | null,
+): number | null {
+  return restructure.restructurableBalance ?? summaryBalance;
+}
+
+/**
+ * Whether the user holds Loans: Write off (`loans:write_off`), which the
+ * restructure needs to take a principal below the restructurable balance.
+ * Read from the permission list by name: the shared `Permission` type does
+ * not list the `write_off` action, though the backend seeds it.
+ */
+export function holdsWriteOff(permissions: readonly string[]): boolean {
+  return permissions.includes("loans:write_off");
+}
+
+/** What the restructure page shows and requires for the server's shortfall. */
+export interface RestructureShortfallState {
+  /** The shortfall notice and the "remarks required" hint are shown. */
+  showsShortfall: boolean;
+  /** Submit needs remarks. */
+  remarksRequired: boolean;
+  /**
+   * The restructure writes debt off, which needs Loans: Write off, and this
+   * user doesn't hold it: the server would refuse it, so Submit is blocked.
+   */
+  blockedByWriteOff: boolean;
+}
+
+/**
+ * The server's shortfall flags as the page applies them. Each is a presence
+ * check, never arithmetic: nothing applies until a principal above 0 is
+ * entered (the preview names no source loan before then), and
+ * `write_off_permission_required` states what the restructure needs, so it
+ * blocks only a user without `loans:write_off`.
+ */
+export function restructureShortfallState(
   principal: number,
-  outstandingBalance: number | null,
-): number {
-  if (outstandingBalance == null || principal <= 0) return 0;
-  const shortfall = outstandingBalance - principal;
-  return shortfall > 0 ? shortfall : 0;
+  restructure: RestructureShortfallView,
+  canWriteOff: boolean,
+): RestructureShortfallState {
+  const applies = principal > 0;
+  const remarksRequired = applies && restructure.remarksRequired === true;
+  return {
+    showsShortfall: remarksRequired,
+    remarksRequired,
+    blockedByWriteOff: applies && restructure.writeOffPermissionRequired === true && !canWriteOff,
+  };
+}
+
+/**
+ * Why a user without Loans: Write off can't restructure for less, in the
+ * server's own wording (`LoanService::assertRestructureInvariants`), quoting
+ * the balance to restructure instead: the preview's, else the summary's, else
+ * a dash.
+ */
+export function writeOffNotice(
+  restructure: RestructureShortfallView,
+  summaryBalance: number | null,
+): string {
+  const balance = currencyOrDash(restructurableBalanceShown(restructure, summaryBalance));
+  return (
+    "Writing off part of the balance requires the Loans: Write off permission. " +
+    `Restructure the full restructurable balance of ${balance} instead.`
+  );
+}
+
+export interface RestructureSubmitInputs {
+  previewStatus: "idle" | "loading" | "ready" | "error";
+  principal: number;
+  restructure: RestructureShortfallView;
+  remarks: string;
+  canWriteOff: boolean;
+  /** The loan summary's restructurable balance, for the write-off notice's fallback. */
+  summaryBalance?: number | null;
+}
+
+export interface RestructureSubmitCheck {
+  /** Set while the preview's figures are loading: Submit waits, saying this. */
+  wait: string | null;
+  /** Fields still to complete, for the validation pop-up. */
+  missing: string[];
+  /** Set when the write-off is one the user can't make: Submit is blocked, saying this. */
+  writeOff: string | null;
+}
+
+/**
+ * Whether Submit may go ahead, on the server's figures. It waits while the
+ * preview loads, since the shortfall and its requirements aren't known yet. A
+ * failed preview blocks nothing: the restructure applies the same rule and
+ * refuses with its own message.
+ */
+export function restructureSubmitCheck(inputs: RestructureSubmitInputs): RestructureSubmitCheck {
+  if (inputs.previewStatus === "loading") {
+    return {
+      wait: "The loan figures are still loading. Submit again once they appear.",
+      missing: [],
+      writeOff: null,
+    };
+  }
+  const state = restructureShortfallState(inputs.principal, inputs.restructure, inputs.canWriteOff);
+  return {
+    wait: null,
+    missing: state.remarksRequired && !inputs.remarks.trim() ? ["Remarks"] : [],
+    writeOff: state.blockedByWriteOff
+      ? writeOffNotice(inputs.restructure, inputs.summaryBalance ?? null)
+      : null,
+  };
 }
 
 /**
