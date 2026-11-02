@@ -1554,6 +1554,43 @@ test("a transaction row carries the server's debit and credit", () => {
   assert.equal(table.rows[0].running_balance, 42000);
 });
 
+test("a transaction row shows the insurance premium it collected, so the balance's drop is explained", () => {
+  // The statement opens at principal + premium owed; each payment takes off
+  // its principal and its premium. The column is the server's figure only.
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        transactions: [
+          { ...SOA_PAYLOAD.transactions[0], credit: 9900, amount_paid: 9900, insurance_applied: 400, running_balance: 42000 },
+          { ...SOA_PAYLOAD.transactions[0], date: "2026-04-01", insurance_applied: 0, running_balance: 34000 },
+        ],
+      },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "insurance_applied");
+
+  assert.equal(column?.header, "Insurance Premium");
+  assert.equal(column?.format, "currency");
+  assert.equal(table.rows[0].insurance_applied, 400);
+  assert.equal(table.rows[1].insurance_applied, 0);
+  // Placed right before the running balance it explains.
+  const keys = table.columns.map((c) => c.key);
+  assert.equal(keys.indexOf("insurance_applied"), keys.indexOf("running_balance") - 1);
+});
+
+test("a transaction row without the server's premium figure shows a dash, never a worked-out one", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  const column = table.columns.find((c) => c.key === "insurance_applied")!;
+
+  assert.equal(table.rows[0].insurance_applied, null);
+  assert.equal(formatCell(table.rows[0], column), DASH);
+  // No footer total for it: the server sends none, and rows are never added up.
+  assert.equal(table.totals?.some((t) => t.column === "insurance_applied"), false);
+});
+
 test("a typed transaction is posted to the correct side of the ledger", () => {
   const table = namedTable(
     buildStatementOfAccountDoc(

@@ -1082,7 +1082,8 @@ const SOA_SCHEDULE_COLUMNS: ReportColumn[] = [
   { key: "status", header: "Status", format: "text", width: 100 },
 ];
 
-const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
+/** A ledger's transaction lines; the subsidiary ledger reads these. */
+const TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "date", header: "Date", format: "date", width: 110 },
   { key: "reference", header: "Reference", format: "text", width: 140 },
   { key: "particulars", header: "Particulars", format: "text", width: 220 },
@@ -1090,6 +1091,17 @@ const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "debit", header: "Debit", format: "currency", align: "right", width: 130 },
   { key: "credit", header: "Credit", format: "currency", align: "right", width: 130 },
   { key: "running_balance", header: "Balance", format: "currency", align: "right", width: 140 },
+];
+
+/**
+ * The Statement of Account's lines add the insurance premium each payment
+ * collected first, right before the balance: with its principal, what the
+ * running balance drops by (the statement opens at principal + premium owed).
+ */
+const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
+  ...TRANSACTION_COLUMNS.slice(0, -1),
+  { key: "insurance_applied", header: "Insurance Premium", format: "currency", align: "right", width: 140 },
+  ...TRANSACTION_COLUMNS.slice(-1),
 ];
 
 function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unknown> {
@@ -1133,6 +1145,8 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
     method: pick(raw, ["method", "payment_method"]),
     debit: explicitDebit ?? (isDebit && !isCredit ? amount : null),
     credit: explicitCredit ?? (isCredit ? amount : null),
+    // The server's figure; a row without it is "—".
+    insurance_applied: toNumber(pick(raw, ["insurance_applied"])),
     running_balance: pick(raw, ["running_balance", "balance", "outstanding_balance"]),
   };
 }
@@ -1373,7 +1387,7 @@ export function buildSubsidiaryLedgerDoc(
     sections.push({
       kind: "table",
       title: "Payment History",
-      columns: SOA_TRANSACTION_COLUMNS,
+      columns: TRANSACTION_COLUMNS,
       rows: entryRows,
     });
   }
