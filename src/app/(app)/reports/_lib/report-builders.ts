@@ -302,10 +302,12 @@ export function buildDailyCollectionDoc(
   const obj = asRecord(raw);
 
   // The three collected figures are the server's own and are never added up
-  // here: `total_collected` is principal plus interest on the periods due in
-  // the range, `penalty_collected` the penalty the period's payments took, and
-  // `total_received` the money those payments took in (premium left out). A
-  // figure the server did not send is "—".
+  // here. They are counted on different bases, so they need not add up to
+  // each other: `total_collected` counts by period (principal plus interest
+  // paid on the periods falling due in the range), while `penalty_collected`
+  // and `total_received` are cash-basis (the penalty, and the money, taken by
+  // payments dated in the range; the premium is left out). A figure the server
+  // did not send is "—".
   const items: KpiItem[] = [
     kpi("Total Due", currencyOrDash(pick(obj, ["total_due", "due", "total_scheduled"]))),
     kpi("Collected (Principal + Interest)", currencyOrDash(pick(obj, ["total_collected"])), {
@@ -1145,7 +1147,8 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
 
   return {
     date: pick(raw, ["date", "transaction_date", "paid_at", "payment_date", "created_at"]),
-    reference: pick(raw, ["receipt_number", "reference", "reference_no", "receipt_no", "or_number", "id"]),
+    // The receipt number; never the row's database id. "—" without one.
+    reference: pick(raw, ["receipt_number", "reference", "reference_no", "receipt_no", "or_number"]),
     particulars:
       pick(raw, ["particulars", "description", "remarks", "narration"]) ??
       (type ? type.replace(/_/g, " ") : null),

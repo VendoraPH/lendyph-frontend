@@ -20,3 +20,13 @@ export function sparklinePoints(series: unknown): SparklinePoint[] {
 export function hasSparklineData(points: SparklinePoint[]): boolean {
   return points.some((p) => p.v !== null);
 }
+
+/**
+ * Whether the point at `index` is a real figure with no real figure on either
+ * side. The line has no segment to draw there, so it gets a dot of its own;
+ * without one a lone point (today's, before any snapshot exists) shows nothing.
+ */
+export function isIsolatedPoint(points: SparklinePoint[], index: number): boolean {
+  if (points[index]?.v == null) return false;
+  return (points[index - 1]?.v ?? null) === null && (points[index + 1]?.v ?? null) === null;
+}

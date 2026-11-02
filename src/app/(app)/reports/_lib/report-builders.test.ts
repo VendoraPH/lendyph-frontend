@@ -1579,6 +1579,22 @@ test("statement of account's transaction Reference is the payment's receipt numb
   assert.equal(formatCell(table.rows[0], column), "OR-1001");
 });
 
+test("a transaction without a receipt number shows a dash, never the row's id", () => {
+  const { receipt_number, ...withoutReceipt } = SOA_PAYLOAD.transactions[0];
+  void receipt_number;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_PAYLOAD, transactions: [{ ...withoutReceipt, id: 42 }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "reference")!;
+
+  assert.equal(table.rows[0].reference, null);
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
 test("statement of account's schedule Balance is the server's amount_remaining only", () => {
   const [first, second] = SOA_PAYLOAD.amortization_schedule;
   const { amount_remaining, ...withoutRemaining } = second;

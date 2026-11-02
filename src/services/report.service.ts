@@ -186,8 +186,9 @@ export const reportService = {
    * instead of asking for one big one.
    *
    * `params` takes the server-side filters `reportFilters()` accepts —
-   * `date_from`, `date_to`, `branch_id`. `per_page` and `page` are set here and
-   * anything passed for them is ignored.
+   * `date_from`, `date_to`, `branch_id` — plus `past_due_only=1`, which keeps
+   * only periods past their grace period (the totals follow the same filter).
+   * `per_page` and `page` are set here and anything passed for them is ignored.
    */
   duePastDueAll: (
     params?: Record<string, unknown>,

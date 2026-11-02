@@ -10,6 +10,7 @@ import {
   dateOrNull,
   numOrNull,
   clampOneOf,
+  offersAutoPay,
 } from "./utils";
 
 // The loans screen keeps its entire state in the URL, so `?tab=` is a public,
@@ -152,4 +153,13 @@ test("clampOneOf falls back rather than passing a value through", () => {
   assert.equal(clampOneOf("asc", ["asc", "desc"], "desc"), "asc");
   assert.equal(clampOneOf("sideways", ["asc", "desc"], "desc"), "desc");
   assert.equal(clampOneOf(999, [10, 20, 50], 10), 10);
+});
+
+test("every Current loan offers auto-pay, released or ongoing", () => {
+  // Both read "Current" and the backend's auto-pay covers both.
+  assert.equal(offersAutoPay("released"), true);
+  assert.equal(offersAutoPay("ongoing"), true);
+  for (const status of ["draft", "for_review", "approved", "completed", "defaulted", "restructured", "void", "current", "", null, undefined]) {
+    assert.equal(offersAutoPay(status), false, String(status));
+  }
 });

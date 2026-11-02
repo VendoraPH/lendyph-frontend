@@ -35,7 +35,12 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
-import { hasSparklineData, sparklinePoints, type SparklinePoint } from "./_lib/sparkline";
+import {
+  hasSparklineData,
+  isIsolatedPoint,
+  sparklinePoints,
+  type SparklinePoint,
+} from "./_lib/sparkline";
 
 // ---------------------------------------------------------------------------
 // Backend response shapes
@@ -149,8 +154,14 @@ function Sparkline({ data, color }: { data: SparklinePoint[]; color: string }) {
         stroke={color}
         strokeWidth={1.5}
         fill={`url(#${gradId})`}
-        dot={false}
         // A day without a figure (`v: null`) is a gap, never bridged or zeroed.
+        // A real point with a gap on both sides has no segment, so it gets a
+        // dot; every other point draws none.
+        dot={({ cx, cy, index, key }) =>
+          isIsolatedPoint(data, index) && cx != null && cy != null ? (
+            <circle key={key} cx={cx} cy={cy} r={1.5} fill={color} />
+          ) : null
+        }
         connectNulls={false}
         isAnimationActive={false}
       />

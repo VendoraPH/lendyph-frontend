@@ -64,6 +64,15 @@ export type FilterTab = "all" | VirtualTabValue | LoanStatus;
  */
 export const ACTIVE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
+/**
+ * Whether a loan row offers the auto-pay control. Both `released` and
+ * `ongoing` read "Current" and the backend's auto-pay covers both, so a
+ * Current loan offers it whichever of the two it stores.
+ */
+export function offersAutoPay(status: string | null | undefined): boolean {
+  return !!status && (ACTIVE_STATUSES as readonly string[]).includes(status);
+}
+
 export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "draft", label: "Draft" },
