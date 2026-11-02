@@ -19,7 +19,8 @@ export type AuditModule =
   | "payments"
   | "collections"
   | "users"
-  | "roles";
+  | "roles"
+  | "system";
 
 export interface AuditChange {
   field: string;

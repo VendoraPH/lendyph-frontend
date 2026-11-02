@@ -100,10 +100,14 @@ test("the user's role reads by its label, every underscore a space", () => {
   assert.equal(auditUserRole(log({ user: null as unknown as AuditLog["user"] })), "");
 });
 
+test("system rows (accounting, GCash, imports, no record) read System", () => {
+  assert.equal(auditModuleLabel(log({ module: "system", target: null })), "System");
+});
+
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["auth", "borrowers", "collections", "loans", "payments", "roles", "users"]
+    ["auth", "borrowers", "collections", "loans", "payments", "roles", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });

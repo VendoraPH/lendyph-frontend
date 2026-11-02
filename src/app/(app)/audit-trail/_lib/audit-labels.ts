@@ -12,6 +12,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   collections: "Collections",
   users: "Users",
   roles: "Roles",
+  system: "System",
 };
 
 /**
@@ -19,7 +20,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles"] as const
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "system"] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
