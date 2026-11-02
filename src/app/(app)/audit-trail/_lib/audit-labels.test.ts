@@ -104,10 +104,15 @@ test("system rows (accounting, GCash, imports, no record) read System", () => {
   assert.equal(auditModuleLabel(log({ module: "system", target: null })), "System");
 });
 
+test("accounting and GCash rows read by their module names", () => {
+  assert.equal(auditModuleLabel(log({ module: "accounting", target: null })), "Accounting");
+  assert.equal(auditModuleLabel(log({ module: "gcash", target: null })), "GCash");
+});
+
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["auth", "borrowers", "collections", "loans", "payments", "roles", "system", "users"]
+    ["accounting", "auth", "borrowers", "collections", "gcash", "loans", "payments", "roles", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
