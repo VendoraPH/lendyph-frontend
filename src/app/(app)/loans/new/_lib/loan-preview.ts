@@ -1,9 +1,36 @@
 import { INTEREST_METHOD_LABELS } from "@/constants";
-import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf, type ApiErrorBody } from "@/lib/api-error";
 import { formatDateISO } from "@/lib/format";
+import type { RestructurePreview } from "@/lib/loan-restructure";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
 import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
-import type { SelectedCollateral } from "./edit-collaterals";
+import { pledgedCollaterals, type PledgedCollateral, type SelectedCollateral } from "./edit-collaterals";
+
+/**
+ * `POST /loans/preview` as this form sends it. The server values each
+ * collateral itself, from the member's register (decision 11a): a collateral
+ * goes up by id only, with the member it belongs to, and never a value. A
+ * restructure also names its source loan, and the server answers with the
+ * shortfall (decision 8a).
+ *
+ * Declared here rather than in the shared `LoanFormPreviewRequest`, which still
+ * carries a `snapshot_value` the server now ignores.
+ */
+export type FormPreviewRequest = Omit<LoanFormPreviewRequest, "collaterals"> & {
+  /** Sent whenever `collaterals` is: the server values them from this member's register. */
+  borrower_id?: number;
+  /** A restructure's source loan, so the answer carries `restructure`. */
+  source_loan_id?: number;
+  collaterals?: PledgedCollateral[];
+};
+
+/**
+ * The preview's answer: the shared shape, plus the restructure section the
+ * server adds when the request named a `source_loan_id`.
+ */
+export type FormPreview = LoanFormPreview & {
+  restructure?: RestructurePreview | null;
+};
 
 /** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
 export interface StatedDeduction {
@@ -21,7 +48,12 @@ export interface LoanPreviewInputs {
   paymentFrequency: string | null;
   releaseDate: Date | undefined;
   scbAmount: string;
-  collaterals: readonly SelectedCollateral[];
+  /** The member the collaterals belong to, or null before one is chosen. */
+  borrowerId: number | null;
+  /** The loan a restructure replaces; absent or null for a new application. */
+  sourceLoanId?: number | null;
+  /** Only each row's collateral id goes up; the figure a row shows never does. */
+  collaterals: readonly Pick<SelectedCollateral, "collateral">[];
   /**
    * The deductions the save would state, or null when it states none and the
    * server charges the product's own fees.
@@ -36,7 +68,11 @@ function positive(value: number): number | undefined {
 
 /**
  * The `POST /loans/preview` body for the form as it stands, or null when there
- * is nothing to preview: no product chosen and no collateral attached.
+ * is nothing to preview: no product chosen and no collateral to value.
+ *
+ * Collaterals go up by id with the member's id, which the server needs to
+ * value them. Until a member is chosen neither is sent: the server could not
+ * value the rows.
  *
  * Fields the form has no usable value for are left out; the server works out
  * whatever sections it can from the rest — the maturity date needs no
@@ -44,7 +80,7 @@ function positive(value: number): number | undefined {
  * submit parses them, and the deductions are the inputs the submit sends, so
  * the preview describes the loan that would be saved.
  */
-export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRequest | null {
+export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewRequest | null {
   const productId = inputs.productId ? Number(inputs.productId) : undefined;
   const principal = positive(parseFloat(inputs.principalAmount));
   const rate = positive(parseFloat(inputs.interestRate));
@@ -52,10 +88,15 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   const scb = positive(parseFloat(inputs.scbAmount));
   const frequency = inputs.paymentFrequency ?? undefined;
   const startDate = inputs.releaseDate ? formatDateISO(inputs.releaseDate) : undefined;
+  const borrowerId = inputs.borrowerId ?? undefined;
+  const sourceLoanId = inputs.sourceLoanId ?? undefined;
+  const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
 
-  if (productId === undefined && inputs.collaterals.length === 0) return null;
+  if (productId === undefined && !valuable) return null;
 
   return {
+    ...(borrowerId !== undefined && { borrower_id: borrowerId }),
+    ...(sourceLoanId !== undefined && { source_loan_id: sourceLoanId }),
     ...(productId !== undefined && { loan_product_id: productId }),
     ...(principal !== undefined && { principal_amount: principal }),
     ...(rate !== undefined && { interest_rate: rate }),
@@ -63,10 +104,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
     ...(frequency !== undefined && { frequency }),
     ...(startDate !== undefined && { start_date: startDate }),
     ...(scb !== undefined && { scb_amount: scb }),
-    collaterals: inputs.collaterals.map((c) => ({
-      collateral_id: c.collateral.id,
-      snapshot_value: c.snapshot_value,
-    })),
+    ...(borrowerId !== undefined && { collaterals: pledgedCollaterals(inputs.collaterals) }),
     ...(inputs.deductions !== null && {
       deductions: inputs.deductions.map((d) => ({ name: d.name, amount: d.amount, type: d.type })),
     }),
@@ -83,7 +121,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
 export type LoanPreviewView =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; preview: LoanFormPreview }
+  | { status: "ready"; preview: FormPreview }
   | { status: "error"; message: string };
 
 type SettledView = Extract<LoanPreviewView, { status: "ready" | "error" }>;
@@ -96,7 +134,7 @@ export interface LoanPreviewOutcome {
 }
 
 /** One request body as a comparable key: equal bodies, equal keys. */
-export function loanPreviewKey(request: LoanFormPreviewRequest | null): string | null {
+export function loanPreviewKey(request: FormPreviewRequest | null): string | null {
   return request ? JSON.stringify(request) : null;
 }
 
@@ -117,9 +155,46 @@ export function loanPreviewView(
   return outcome.view;
 }
 
-/** Why a preview failed, as the form says it. */
+const REFUSED_COLLATERAL = "A collateral on this form can't be valued for your role";
+
+/**
+ * The server's reasons for refusing a collateral (`collaterals`,
+ * `collaterals.0.collateral_id`, ...), in order. Empty when no collateral was
+ * refused.
+ */
+function collateralErrors(err: unknown): string[] {
+  const errors = (err as { response?: { data?: ApiErrorBody } } | null)?.response?.data?.errors;
+  if (!errors || typeof errors !== "object") return [];
+  return Object.entries(errors)
+    .filter(([field]) => field === "collaterals" || field.startsWith("collaterals."))
+    .flatMap(([, messages]) => (Array.isArray(messages) ? messages : []));
+}
+
+/**
+ * Why a preview failed, as the form says it.
+ *
+ * A 422 on a collateral is, in practice, a share capital collateral whose
+ * balance the role may not see (`share_capital:view`): valuing it would reveal
+ * the balance, so the server refuses the whole preview. It is named as such,
+ * with the server's reason when it has a readable one, so the user knows which
+ * row to remove rather than retrying.
+ */
 export function loanPreviewFailureMessage(err: unknown): string {
-  if (httpStatusOf(err) === 403) return "Your role can't preview loan terms.";
+  const status = httpStatusOf(err);
+  if (status === 403) return "Your role can't preview loan terms.";
+  if (status === 422) {
+    const refused = collateralErrors(err);
+    if (refused.length > 0) {
+      // The shared reader keeps a reason only when it reads like copy for a
+      // person; otherwise it gives its stock validation line, which says
+      // nothing about the collateral.
+      const reason = getErrorMessage({ response: { status: 422, data: { errors: { collaterals: refused } } } });
+      const stock = getErrorMessage({ response: { status: 422, data: {} } });
+      return reason !== stock
+        ? `${REFUSED_COLLATERAL}: ${reason.replace(/\.$/, "")}. Remove it to see the loan figures.`
+        : `${REFUSED_COLLATERAL}. A share capital collateral needs the Share Capital: View permission; remove it to see the loan figures.`;
+    }
+  }
   return getErrorMessage(err, "Please try again.");
 }
 

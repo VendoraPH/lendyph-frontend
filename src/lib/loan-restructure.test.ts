@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildLoanDeductions,
-  calcRestructureShortfall,
   readRestructurableBalance,
+  readRestructurePreview,
   restructureSuccessor,
 } from "./loan-restructure";
 import type { RestructuredIntoLoan } from "@/types/loan";
@@ -77,18 +77,60 @@ test("blank and zero custom rows are dropped, unnamed ones get a label", () => {
   );
 });
 
-test("no shortfall when principal covers the outstanding balance", () => {
-  assert.equal(calcRestructureShortfall(50000, 50000), 0);
-  assert.equal(calcRestructureShortfall(60000, 50000), 0);
+// ── readRestructurePreview: the shortfall is the server's ──────────────────
+
+test("no shortfall when the server says the principal covers the restructurable balance", () => {
+  assert.deepEqual(
+    readRestructurePreview({
+      restructurable_balance: 59000,
+      principal: 59000,
+      shortfall: 0,
+      remarks_required: false,
+      write_off_permission_required: false,
+    }),
+    {
+      restructurableBalance: 59000,
+      principal: 59000,
+      shortfall: 0,
+      remarksRequired: false,
+      writeOffPermissionRequired: false,
+    },
+  );
 });
 
-test("shortfall is the uncovered remainder of the outstanding balance", () => {
-  assert.equal(calcRestructureShortfall(40000, 50000), 10000);
+test("the shortfall and both requirements are read from the server, never subtracted here", () => {
+  // A figure that disagrees with balance − principal proves nothing is worked
+  // out in the browser: the server's ₱20,800.00 stands as sent.
+  const view = readRestructurePreview({
+    restructurable_balance: "70800.00",
+    principal: "50000.00",
+    shortfall: "20800.00",
+    remarks_required: true,
+    write_off_permission_required: true,
+  });
+  assert.equal(view.restructurableBalance, 70800);
+  assert.equal(view.principal, 50000);
+  assert.equal(view.shortfall, 20800);
+  assert.equal(view.remarksRequired, true);
+  assert.equal(view.writeOffPermissionRequired, true);
+  assert.equal(readRestructurePreview({ restructurable_balance: 100, principal: 40, shortfall: 1 }).shortfall, 1);
 });
 
-test("shortfall is 0 while the amount is still blank or unknown", () => {
-  assert.equal(calcRestructureShortfall(0, 50000), 0);
-  assert.equal(calcRestructureShortfall(40000, null), 0);
+test("no restructure section, or a missing or unreadable figure, is unknown (a dash), never 0", () => {
+  const unknown = {
+    restructurableBalance: null,
+    principal: null,
+    shortfall: null,
+    remarksRequired: null,
+    writeOffPermissionRequired: null,
+  };
+  assert.deepEqual(readRestructurePreview(undefined), unknown);
+  assert.deepEqual(readRestructurePreview(null), unknown);
+  assert.deepEqual(readRestructurePreview({}), unknown);
+  assert.deepEqual(
+    readRestructurePreview({ shortfall: "abc", remarks_required: "yes", write_off_permission_required: 1 }),
+    unknown,
+  );
 });
 
 // ── restructureSuccessor ────────────────────────────────────────────────────

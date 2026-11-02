@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { loanService } from "@/services/loan.service";
-import type { LoanFormPreviewRequest } from "@/types";
+import { postLoanFormPreview } from "../_lib/form-preview-api";
 import {
+  type FormPreviewRequest,
   loanPreviewFailureMessage,
   loanPreviewKey,
   loanPreviewView,
@@ -20,7 +20,7 @@ const DEBOUNCE_MS = 300;
  * nothing to preview.
  */
 export function useLoanPreview(
-  request: LoanFormPreviewRequest | null,
+  request: FormPreviewRequest | null,
 ): { view: LoanPreviewView; retry: () => void } {
   const [outcome, setOutcome] = useState<LoanPreviewOutcome | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -30,11 +30,10 @@ export function useLoanPreview(
 
   useEffect(() => {
     if (key === null) return;
-    const body = JSON.parse(key) as LoanFormPreviewRequest;
+    const body = JSON.parse(key) as FormPreviewRequest;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      loanService
-        .preview(body, controller.signal)
+      postLoanFormPreview(body, controller.signal)
         .then((preview) => {
           if (controller.signal.aborted) return;
           setOutcome({ key, attempt, view: { status: "ready", preview } });

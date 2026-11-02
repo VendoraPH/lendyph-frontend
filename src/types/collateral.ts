@@ -82,6 +82,10 @@ export interface LoanCollateral extends Collateral {
   value_unknown?: boolean;
   pivot?: {
     loan_id: number;
+    /**
+     * The value the loan holds this collateral at. Set by the server when it
+     * is attached (decision 11a); read it, never send it.
+     */
     snapshot_value: number;
     attached_at: string | null;
   };

@@ -81,11 +81,11 @@ describe("saveLoanEdit", () => {
     assert.deepEqual(seen, [{ method: "PUT", path: "/loans/7", body: { purpose: "Tuition" } }]);
   });
 
-  test("a changed selection is one PUT with the full list, the missing-from-list one kept", async () => {
+  test("a changed selection is one PUT with the full list by id, the missing-from-list one kept", async () => {
     seen.length = 0;
     const added: SelectedCollateral = {
       ...attachedCollateralRows([link(4, 30_000)], 7)[0],
-      snapshot_value: 30_000,
+      shown_value: 30_000,
     };
     await saveLoanEdit(7, { purpose: "Tuition" }, [attached[1], added], attached);
 
@@ -95,10 +95,7 @@ describe("saveLoanEdit", () => {
         path: "/loans/7",
         body: {
           purpose: "Tuition",
-          collaterals: [
-            { collateral_id: 9, snapshot_value: 120_000 },
-            { collateral_id: 4, snapshot_value: 30_000 },
-          ],
+          collaterals: [{ collateral_id: 9 }, { collateral_id: 4 }],
         },
       },
     ]);

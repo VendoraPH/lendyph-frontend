@@ -102,20 +102,55 @@ export function readRestructurableBalance(
 }
 
 /**
- * How far a restructure's new principal falls short of the source loan's
- * restructurable balance. A shortfall writes debt off, so the API rejects it (422)
- * unless `remarks` explain why — 0 means no explanation is required.
- *
- * The comparison is deliberately exact (no rounding) so the form demands
- * remarks in precisely the cases the API would reject.
+ * The `restructure` section of `POST /loans/preview`, sent when the request
+ * named a `source_loan_id` (decision 8a). Built by the server with the rule
+ * the restructure itself applies (`LoanService::assertRestructureInvariants`).
+ * Figures may arrive as numbers or decimal strings.
  */
-export function calcRestructureShortfall(
-  principal: number,
-  outstandingBalance: number | null,
-): number {
-  if (outstandingBalance == null || principal <= 0) return 0;
-  const shortfall = outstandingBalance - principal;
-  return shortfall > 0 ? shortfall : 0;
+export interface RestructurePreview {
+  restructurable_balance?: number | string | null;
+  principal?: number | string | null;
+  /** How far the principal falls short of the restructurable balance: debt written off. */
+  shortfall?: number | string | null;
+  /** True when the shortfall needs remarks (the restructure refuses it without). */
+  remarks_required?: boolean | null;
+  /** True when the shortfall needs the Loans: Write off permission. */
+  write_off_permission_required?: boolean | null;
+}
+
+/** The restructure section as the page shows it. Null means the server sent no figure: a dash. */
+export interface RestructureShortfallView {
+  restructurableBalance: number | null;
+  principal: number | null;
+  shortfall: number | null;
+  remarksRequired: boolean | null;
+  writeOffPermissionRequired: boolean | null;
+}
+
+function figure(raw: unknown): number | null {
+  return typeof raw === "number" || typeof raw === "string" ? toNumber(raw) : null;
+}
+
+function flag(raw: unknown): boolean | null {
+  return typeof raw === "boolean" ? raw : null;
+}
+
+/**
+ * The server's restructure figures (a `RestructurePreview`), read as sent and
+ * checked, since they come off the wire. Nothing is subtracted here:
+ * the browser used to work the shortfall out as balance minus principal, which
+ * could drift from the server's rule (rounding, or a balance that moved since
+ * the page loaded). A missing or unreadable figure is null, never 0.
+ */
+export function readRestructurePreview(raw: unknown): RestructureShortfallView {
+  const section: Record<string, unknown> = raw && typeof raw === "object" ? { ...raw } : {};
+  return {
+    restructurableBalance: figure(section.restructurable_balance),
+    principal: figure(section.principal),
+    shortfall: figure(section.shortfall),
+    remarksRequired: flag(section.remarks_required),
+    writeOffPermissionRequired: flag(section.write_off_permission_required),
+  };
 }
 
 /**
