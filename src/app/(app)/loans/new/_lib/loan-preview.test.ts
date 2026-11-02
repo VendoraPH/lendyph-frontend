@@ -24,6 +24,9 @@ import {
   loanPreviewRequest,
   loanPreviewView,
   previewDeductionAmount,
+  previewFailureText,
+  refusedCollateral,
+  refusedCollateralMessage,
   showsShortBy,
   type LoanPreviewInputs,
   type LoanPreviewOutcome,
@@ -168,8 +171,13 @@ describe("loanPreviewRequest", () => {
     assert.equal("collaterals" in request, false);
   });
 
-  test("a restructure names its source loan, so the server states the shortfall", () => {
+  test("a restructure names its source loan once a principal is entered, so the server states the shortfall", () => {
     assert.equal(loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40 })?.source_loan_id, 40);
+    for (const principalAmount of ["", "0", "abc"]) {
+      const blank = loanPreviewRequest({ ...COMPLETE, principalAmount, sourceLoanId: 40 });
+      assert.ok(blank);
+      assert.equal("source_loan_id" in blank, false, principalAmount);
+    }
     const plain = loanPreviewRequest(COMPLETE);
     assert.ok(plain);
     assert.equal("source_loan_id" in plain, false);
@@ -280,30 +288,15 @@ describe("loanPreviewFailureMessage", () => {
     );
   });
 
-  test("a refused collateral (a share capital balance the role can't see) says so, with the server's reason", () => {
-    const message = loanPreviewFailureMessage({
-      isAxiosError: true,
-      response: {
-        status: 422,
-        data: {
-          message: "The given data was invalid.",
-          errors: { "collaterals.0.collateral_id": ["You can't value this member's share capital."] },
-        },
-      },
-    });
-    assert.equal(
-      message,
-      "A collateral on this form can't be valued for your role: You can't value this member's share capital. Remove it to see the loan figures.",
-    );
+  test("a refused collateral with a readable reason shows just that reason", () => {
+    const message = loanPreviewFailureMessage(refusal("collaterals.0.collateral_id", "This collateral belongs to another member."));
+    assert.equal(message, "This collateral belongs to another member.");
   });
 
-  test("a refused collateral with no readable reason still names the collateral", () => {
-    const message = loanPreviewFailureMessage({
-      isAxiosError: true,
-      response: { status: 422, data: { errors: { collaterals: [""] } } },
-    });
-    assert.match(message, /^A collateral on this form can't be valued for your role\./);
-    assert.match(message, /Share Capital/);
+  test("a refused collateral with no readable reason names the share capital permission", () => {
+    const message = loanPreviewFailureMessage(refusal("collaterals", ""));
+    assert.match(message, /^A share capital collateral on this form can't be valued for your role/);
+    assert.match(message, /Share Capital: View/);
   });
 
   test("a 422 on another field keeps the server's own message", () => {
@@ -319,6 +312,83 @@ describe("loanPreviewFailureMessage", () => {
   test("anything else falls back to a retry hint", () => {
     assert.equal(typeof loanPreviewFailureMessage(new Error("boom")), "string");
     assert.notEqual(loanPreviewFailureMessage(new Error("boom")), "boom");
+  });
+});
+
+function refusal(field: string, reason: string) {
+  return {
+    isAxiosError: true,
+    response: { status: 422, data: { message: "The given data was invalid.", errors: { [field]: [reason] } } },
+  };
+}
+
+describe("refusedCollateral", () => {
+  test("reads which row the server refused, and its reason", () => {
+    assert.deepEqual(refusedCollateral(refusal("collaterals.2.collateral_id", "Not valued.")), {
+      index: 2,
+      reason: "Not valued.",
+    });
+    assert.deepEqual(refusedCollateral(refusal("collaterals", "Not valued.")), { index: null, reason: "Not valued." });
+  });
+
+  test("an unreadable reason (blank, or an identifier) is none", () => {
+    assert.deepEqual(refusedCollateral(refusal("collaterals.0.collateral_id", "")), { index: 0, reason: null });
+    assert.deepEqual(refusedCollateral(refusal("collaterals.0", "share_capital_hidden")), { index: 0, reason: null });
+  });
+
+  test("not a collateral refusal: none", () => {
+    assert.equal(refusedCollateral(refusal("term", "The term must be at least 1.")), null);
+    assert.equal(refusedCollateral({ isAxiosError: true, response: { status: 403, data: {} } }), null);
+    assert.equal(refusedCollateral(new Error("boom")), null);
+  });
+});
+
+describe("refusedCollateralMessage", () => {
+  test("the server's readable reason, alone, whether or not the row can be removed", () => {
+    for (const removable of [true, false]) {
+      assert.equal(refusedCollateralMessage({ index: 0, reason: "Not valued." }, removable), "Not valued.");
+    }
+  });
+
+  test("a row the user can remove: suggest removing it", () => {
+    const message = refusedCollateralMessage({ index: 0, reason: null }, true);
+    assert.match(message, /Remove it to see the loan figures\.$/);
+    assert.doesNotMatch(message, /Ask a user/);
+  });
+
+  test("a row the user can't remove: ask someone with Share Capital: View, never suggest removing it", () => {
+    const message = refusedCollateralMessage({ index: 0, reason: null }, false);
+    assert.match(message, /Ask a user with Share Capital: View to complete this loan\.$/);
+    assert.doesNotMatch(message, /Remove it/);
+  });
+});
+
+describe("previewFailureText", () => {
+  type Row = { id: number; removable: boolean };
+  const rows: Row[] = [
+    { id: 1, removable: false },
+    { id: 2, removable: true },
+  ];
+  const isRemovable = (row: Row) => row.removable;
+  const failed = (index: number | null) =>
+    ({ status: "error", message: "stock", refused: { index, reason: null } }) as const;
+
+  test("names the refused row's own removability", () => {
+    assert.match(previewFailureText(failed(0), rows, isRemovable), /Ask a user with Share Capital: View/);
+    assert.match(previewFailureText(failed(1), rows, isRemovable), /Remove it/);
+  });
+
+  test("with no row index, suggests removing only when every row can be removed", () => {
+    assert.match(previewFailureText(failed(null), rows, isRemovable), /Ask a user/);
+    assert.match(previewFailureText(failed(null), [rows[1]], isRemovable), /Remove it/);
+  });
+
+  test("an index past the rows is not removable", () => {
+    assert.match(previewFailureText(failed(5), rows, isRemovable), /Ask a user/);
+  });
+
+  test("any other failure keeps its message", () => {
+    assert.equal(previewFailureText({ status: "error", message: "Please try again." }, rows, isRemovable), "Please try again.");
   });
 });
 

@@ -89,7 +89,9 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): FormPreviewReques
   const frequency = inputs.paymentFrequency ?? undefined;
   const startDate = inputs.releaseDate ? formatDateISO(inputs.releaseDate) : undefined;
   const borrowerId = inputs.borrowerId ?? undefined;
-  const sourceLoanId = inputs.sourceLoanId ?? undefined;
+  // The shortfall needs a principal to measure, so a restructure names its
+  // source loan only once one above 0 is entered.
+  const sourceLoanId = principal !== undefined ? inputs.sourceLoanId ?? undefined : undefined;
   const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
 
   if (productId === undefined && !valuable) return null;
@@ -122,7 +124,7 @@ export type LoanPreviewView =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; preview: FormPreview }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; refused?: RefusedCollateral | null };
 
 type SettledView = Extract<LoanPreviewView, { status: "ready" | "error" }>;
 
@@ -155,47 +157,96 @@ export function loanPreviewView(
   return outcome.view;
 }
 
-const REFUSED_COLLATERAL = "A collateral on this form can't be valued for your role";
+/** A collateral the preview refused (422): which row, and the server's reason. */
+export interface RefusedCollateral {
+  /** The row's position in the request's `collaterals`, or null when the error names none. */
+  index: number | null;
+  /** The server's reason when it reads as copy for a person, else null. */
+  reason: string | null;
+}
 
-/**
- * The server's reasons for refusing a collateral (`collaterals`,
- * `collaterals.0.collateral_id`, ...), in order. Empty when no collateral was
- * refused.
- */
-function collateralErrors(err: unknown): string[] {
-  const errors = (err as { response?: { data?: ApiErrorBody } } | null)?.response?.data?.errors;
-  if (!errors || typeof errors !== "object") return [];
-  return Object.entries(errors)
-    .filter(([field]) => field === "collaterals" || field.startsWith("collaterals."))
-    .flatMap(([, messages]) => (Array.isArray(messages) ? messages : []));
+/** A sentence for a person, not a blank or an identifier such as `share_capital_hidden`. */
+function readable(message: unknown): string | null {
+  if (typeof message !== "string") return null;
+  const text = message.trim();
+  return /\s/.test(text) ? text : null;
 }
 
 /**
- * Why a preview failed, as the form says it.
- *
- * A 422 on a collateral is, in practice, a share capital collateral whose
- * balance the role may not see (`share_capital:view`): valuing it would reveal
- * the balance, so the server refuses the whole preview. It is named as such,
- * with the server's reason when it has a readable one, so the user knows which
- * row to remove rather than retrying.
+ * The collateral a 422 refused (`collaterals`, `collaterals.2.collateral_id`,
+ * ...), with the server's first reason, or null when the failure isn't a
+ * collateral refusal.
+ */
+export function refusedCollateral(err: unknown): RefusedCollateral | null {
+  if (httpStatusOf(err) !== 422) return null;
+  const errors = (err as { response?: { data?: ApiErrorBody } }).response?.data?.errors;
+  if (!errors || typeof errors !== "object") return null;
+  const entry = Object.entries(errors).find(
+    ([field]) => field === "collaterals" || field.startsWith("collaterals."),
+  );
+  if (!entry) return null;
+  const [field, messages] = entry;
+  const position = /^collaterals\.(\d+)/.exec(field);
+  const refused = Array.isArray(messages) ? messages : [];
+  return {
+    index: position ? Number(position[1]) : null,
+    reason: readable(refused[0]),
+  };
+}
+
+/**
+ * What the form says about a refused collateral. The server's reason, alone,
+ * when it gave a readable one: a 422 on a collateral isn't always about the
+ * role. Without one, it is in practice a share capital collateral whose
+ * balance the role may not see (`share_capital:view`), since valuing it would
+ * reveal the balance. Removing the row is suggested only when the user can
+ * remove it; otherwise someone who can value it has to finish the loan.
+ */
+export function refusedCollateralMessage(refused: RefusedCollateral, removable: boolean): string {
+  if (refused.reason) return refused.reason;
+  const lead =
+    "A share capital collateral on this form can't be valued for your role: it needs Share Capital: View.";
+  return removable
+    ? `${lead} Remove it to see the loan figures.`
+    : `${lead} Ask a user with Share Capital: View to complete this loan.`;
+}
+
+/**
+ * Why a preview failed, as the form says it. A refused collateral is worded
+ * as if its row can be removed; `previewFailureText` words it for the row.
  */
 export function loanPreviewFailureMessage(err: unknown): string {
-  const status = httpStatusOf(err);
-  if (status === 403) return "Your role can't preview loan terms.";
-  if (status === 422) {
-    const refused = collateralErrors(err);
-    if (refused.length > 0) {
-      // The shared reader keeps a reason only when it reads like copy for a
-      // person; otherwise it gives its stock validation line, which says
-      // nothing about the collateral.
-      const reason = getErrorMessage({ response: { status: 422, data: { errors: { collaterals: refused } } } });
-      const stock = getErrorMessage({ response: { status: 422, data: {} } });
-      return reason !== stock
-        ? `${REFUSED_COLLATERAL}: ${reason.replace(/\.$/, "")}. Remove it to see the loan figures.`
-        : `${REFUSED_COLLATERAL}. A share capital collateral needs the Share Capital: View permission; remove it to see the loan figures.`;
-    }
-  }
+  if (httpStatusOf(err) === 403) return "Your role can't preview loan terms.";
+  const refused = refusedCollateral(err);
+  if (refused) return refusedCollateralMessage(refused, true);
   return getErrorMessage(err, "Please try again.");
+}
+
+/** A failed preview's view, as `loanPreviewView` gives it. */
+export type FailedPreviewView = Extract<LoanPreviewView, { status: "error" }>;
+
+/** The failed view for a thrown preview error. */
+export function failedPreviewView(err: unknown): FailedPreviewView {
+  return { status: "error", message: loanPreviewFailureMessage(err), refused: refusedCollateral(err) };
+}
+
+/**
+ * The failure text for the form's own rows: a refused collateral says whether
+ * to remove it, by whether `isRemovable` lets the user remove that row. With
+ * no row named, removing is suggested only when every row can be removed.
+ */
+export function previewFailureText<Row>(
+  view: FailedPreviewView,
+  rows: readonly Row[],
+  isRemovable: (row: Row) => boolean,
+): string {
+  if (!view.refused) return view.message;
+  const { index } = view.refused;
+  const removable =
+    index === null
+      ? rows.length > 0 && rows.every(isRemovable)
+      : index < rows.length && isRemovable(rows[index]);
+  return refusedCollateralMessage(view.refused, removable);
 }
 
 /**

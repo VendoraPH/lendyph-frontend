@@ -142,6 +142,7 @@ import {
   interestMethodLabel,
   loanPreviewRequest,
   previewDeductionAmount,
+  previewFailureText,
   showsShortBy,
 } from "./_lib/loan-preview";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
@@ -685,6 +686,18 @@ function NewLoanApplicationInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // A collateral the preview refused is worded by whether this user can take
+  // it off the form: only when the collaterals can change, and in edit mode
+  // not one the loan already holds.
+  const heldIds = new Set(isEditMode ? (collateralResult?.attached ?? []).map((a) => a.collateral.id) : []);
+  const previewError =
+    preview.status === "error"
+      ? previewFailureText(
+          preview,
+          selectedCollaterals,
+          (row) => canEditCollaterals && !heldIds.has(row.collateral.id),
+        )
+      : null;
 
   // Picker rows: show all of the borrower's collaterals, but disable the
   // ones already selected here or locked to a different active loan.
@@ -696,9 +709,8 @@ function NewLoanApplicationInner() {
       collateral: c,
       isSelected: selectedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
-      // Not selectable: there is no value to attach it at. Refusing here is
-      // the point — the alternative is a loan secured at a figure nobody
-      // computed, which nothing downstream can tell from a real appraisal.
+      // Not selectable: the server won't value it for this role (the preview
+      // answers 422), so the form could show no total or security for it.
       isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
@@ -1600,7 +1612,7 @@ function NewLoanApplicationInner() {
                         <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
                         We couldn&rsquo;t load the collateral preview.
                       </p>
-                      <p className="text-xs text-muted-foreground">{preview.message}</p>
+                      <p className="text-xs text-muted-foreground">{previewError}</p>
                       <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                         <RefreshCw className="mr-2 size-4" />
                         Retry
@@ -1909,7 +1921,7 @@ function NewLoanApplicationInner() {
                 <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
                 We couldn&rsquo;t load the deductions preview.
               </p>
-              <span className="text-xs text-muted-foreground">{preview.message}</span>
+              <span className="text-xs text-muted-foreground">{previewError}</span>
               <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                 <RefreshCw className="mr-2 size-4" />
                 Retry
@@ -1946,7 +1958,7 @@ function NewLoanApplicationInner() {
                 <p className="font-medium">
                   We couldn&rsquo;t load the schedule preview.
                 </p>
-                <p className="text-muted-foreground">{preview.message}</p>
+                <p className="text-muted-foreground">{previewError}</p>
                 <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                   <RefreshCw className="mr-2 size-4" />
                   Retry

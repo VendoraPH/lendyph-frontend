@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { postLoanFormPreview } from "../_lib/form-preview-api";
 import {
+  failedPreviewView,
   type FormPreviewRequest,
-  loanPreviewFailureMessage,
   loanPreviewKey,
   loanPreviewView,
   type LoanPreviewOutcome,
@@ -40,11 +40,7 @@ export function useLoanPreview(
         })
         .catch((err: unknown) => {
           if (controller.signal.aborted) return;
-          setOutcome({
-            key,
-            attempt,
-            view: { status: "error", message: loanPreviewFailureMessage(err) },
-          });
+          setOutcome({ key, attempt, view: failedPreviewView(err) });
         });
     }, DEBOUNCE_MS);
     return () => {

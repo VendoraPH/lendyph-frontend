@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { notifyError, notifyValidation } from "@/lib/notify";
+import { notifyError, notifyInfo, notifyValidation } from "@/lib/notify";
 import {
   AlertCircle,
   AlertTriangle,
@@ -89,14 +89,19 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatCurrencyExact, formatDateObj, formatDateISO } from "@/lib/format";
+import { formatCurrency, formatDateObj, formatDateISO } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
+  holdsWriteOff,
   readRestructurableBalance,
   readRestructurePreview,
+  restructurableBalanceShown,
+  restructureShortfallState,
+  restructureSubmitCheck,
+  writeOffNotice,
   PROCESSING_FEE_LABEL,
   SERVICE_FEE_LABEL,
 } from "@/lib/loan-restructure";
@@ -105,6 +110,7 @@ import {
   interestMethodLabel,
   loanPreviewRequest,
   previewDeductionAmount,
+  previewFailureText,
 } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
 import {
@@ -183,7 +189,7 @@ const ELIGIBLE_STATUSES: LoanStatus[] = ["released", "ongoing"];
 
 function RestructureLoanInner() {
   const router = useRouter();
-  const { can } = usePermission();
+  const { can, permissions } = usePermission();
   // Attaching a collateral is `POST /loans/{loan}/collaterals`, which needs
   // both of these. A role that can only restructure still gets the source
   // loan's collaterals (the server carries them over) but cannot add others.
@@ -194,6 +200,7 @@ function RestructureLoanInner() {
   const canListMembers = can("borrowers:view");
   const canListCollaterals = can("collaterals:view");
   const canReadShareCapital = can("share_capital:view");
+  const canWriteOff = holdsWriteOff(permissions);
 
   // ── Seed data ──
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
@@ -589,15 +596,23 @@ function RestructureLoanInner() {
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
 
   // Restructuring for less than the restructurable balance writes the
-  // difference off, so the API requires remarks explaining it. The shortfall
-  // and both requirements are the server's, from the same preview (it names
-  // the source loan); nothing is subtracted here. Unknown while the preview
-  // loads or after it failed: no figure, and the server still checks on save.
+  // difference off, so the API requires remarks explaining it, and the
+  // Loans: Write off permission. The shortfall and both requirements are the
+  // server's, from the same preview (it names the source loan once a
+  // principal is entered); nothing is subtracted here. Unknown while the
+  // preview loads or after it failed: no figure, and the server still checks
+  // on save.
   const restructure = readRestructurePreview(
     preview.status === "ready" ? preview.preview.restructure : null,
   );
-  const remarksRequired = restructure.remarksRequired === true;
-  const writeOffPermissionRequired = restructure.writeOffPermissionRequired === true;
+  const shortfallState = restructureShortfallState(principal, restructure, canWriteOff);
+  const remarksRequired = shortfallState.remarksRequired;
+  // The amount hint's one balance: the preview's, the summary's until then.
+  const hintBalance = restructurableBalanceShown(restructure, sourceOutstanding);
+  const previewError =
+    preview.status === "error"
+      ? previewFailureText(preview, selectedCollaterals, (row) => !row.carried)
+      : null;
 
   const productFrequencies = useMemo<string[]>(() => {
     if (!selectedProduct) return [];
@@ -618,7 +633,8 @@ function RestructureLoanInner() {
       isSelected: selectedIds.has(c.id),
       isCarried: carriedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
-      // No value to snapshot onto the replacement loan, so it cannot be picked.
+      // The server won't value it for this role (the preview answers 422),
+      // so it cannot be picked.
       isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
@@ -696,11 +712,27 @@ function RestructureLoanInner() {
     if (paymentFrequency === null) missing.push("Payment frequency");
     if (!(rate > 0)) missing.push("Interest rate");
     if (restructureDate === undefined) missing.push("Restructure date");
-    // A principal below the outstanding balance writes debt off — the API
-    // rejects it (422) unless the reason is stated.
-    if (remarksRequired && !remarks.trim()) missing.push("Remarks");
+    // The shortfall rules are the server's: wait for its figures, then require
+    // what it says a principal below the restructurable balance needs.
+    const check = restructureSubmitCheck({
+      previewStatus: preview.status,
+      principal,
+      restructure,
+      remarks,
+      canWriteOff,
+      summaryBalance: sourceOutstanding,
+    });
+    if (check.wait) {
+      notifyInfo(check.wait);
+      return;
+    }
+    missing.push(...check.missing);
     if (missing.length > 0) {
       notifyValidation(missing);
+      return;
+    }
+    if (check.writeOff) {
+      toast.error(check.writeOff);
       return;
     }
     if (!restructureDate || !sourceLoanId || !borrowerId || paymentFrequency === null) return;
@@ -1103,9 +1135,9 @@ function RestructureLoanInner() {
                       placeholder="0.00"
                       value={principalAmount}
                       onChange={(e) => setPrincipalAmount(e.target.value)}
-                      aria-describedby={sourceOutstanding !== null ? "principal-hint" : undefined}
+                      aria-describedby={hintBalance !== null ? "principal-hint" : undefined}
                     />
-                    {sourceOutstanding !== null && (
+                    {hintBalance !== null && (
                       <p
                         id="principal-hint"
                         className={cn(
@@ -1115,9 +1147,9 @@ function RestructureLoanInner() {
                             : "text-muted-foreground",
                         )}
                       >
-                        {remarksRequired
-                          ? `${currencyOrDash(restructure.shortfall)} below the restructurable balance of ${currencyOrDash(restructure.restructurableBalance)} — remarks required.`
-                          : `Restructurable balance: ${formatCurrencyExact(sourceOutstanding)} (any insurance premium owed carries over to the new loan separately)`}
+                        {shortfallState.showsShortfall
+                          ? `${currencyOrDash(restructure.shortfall)} below the restructurable balance of ${currencyOrDash(hintBalance)} — remarks required.`
+                          : `Restructurable balance: ${currencyOrDash(hintBalance)} (any insurance premium owed carries over to the new loan separately)`}
                       </p>
                     )}
                   </div>
@@ -1573,7 +1605,7 @@ function RestructureLoanInner() {
                       <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
                       We couldn&rsquo;t load the preview.
                     </p>
-                    <span className="text-xs text-muted-foreground">{preview.message}</span>
+                    <span className="text-xs text-muted-foreground">{previewError}</span>
                     <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
                       <RefreshCw className="mr-2 size-4" />
                       Retry
@@ -1589,20 +1621,24 @@ function RestructureLoanInner() {
                 <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {remarksRequired && (
+                {shortfallState.showsShortfall && (
                   <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <div className="space-y-1">
-                      <p>
-                        The new principal is {currencyOrDash(restructure.shortfall)}{" "}
-                        below this loan&rsquo;s restructurable balance of{" "}
-                        {currencyOrDash(restructure.restructurableBalance)}. The difference is
-                        written off, so a reason is required.
-                      </p>
-                      {writeOffPermissionRequired && (
-                        <p>Writing off the difference needs the Loans: Write off permission.</p>
-                      )}
-                    </div>
+                    <p>
+                      The new principal is {currencyOrDash(restructure.shortfall)}{" "}
+                      below this loan&rsquo;s restructurable balance of{" "}
+                      {currencyOrDash(hintBalance)}. The difference is written off, so a
+                      reason is required.
+                    </p>
+                  </div>
+                )}
+                {shortfallState.blockedByWriteOff && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                    <p>{writeOffNotice(restructure, sourceOutstanding)}</p>
                   </div>
                 )}
 

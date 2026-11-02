@@ -6,7 +6,7 @@
 // created loan matching the amortization preview the user just approved.
 
 import { isEverReleasedLoanStatus } from "@/constants/loan-status";
-import { toNumber } from "@/lib/report-format";
+import { currencyOrDash, toNumber } from "@/lib/report-format";
 
 export type LoanDeductionType = "fixed" | "percentage";
 
@@ -150,6 +150,122 @@ export function readRestructurePreview(raw: unknown): RestructureShortfallView {
     shortfall: figure(section.shortfall),
     remarksRequired: flag(section.remarks_required),
     writeOffPermissionRequired: flag(section.write_off_permission_required),
+  };
+}
+
+/**
+ * The restructurable balance the amount hint quotes: the preview's, which is
+ * the server's figure for the terms on screen, with the loan summary's (read
+ * when the loan was picked) only until the preview has one. Null with neither.
+ */
+export function restructurableBalanceShown(
+  restructure: RestructureShortfallView,
+  summaryBalance: number | null,
+): number | null {
+  return restructure.restructurableBalance ?? summaryBalance;
+}
+
+/**
+ * Whether the user holds Loans: Write off (`loans:write_off`), which the
+ * restructure needs to take a principal below the restructurable balance.
+ * Read from the permission list by name: the shared `Permission` type does
+ * not list the `write_off` action, though the backend seeds it.
+ */
+export function holdsWriteOff(permissions: readonly string[]): boolean {
+  return permissions.includes("loans:write_off");
+}
+
+/** What the restructure page shows and requires for the server's shortfall. */
+export interface RestructureShortfallState {
+  /** The shortfall notice and the "remarks required" hint are shown. */
+  showsShortfall: boolean;
+  /** Submit needs remarks. */
+  remarksRequired: boolean;
+  /**
+   * The restructure writes debt off, which needs Loans: Write off, and this
+   * user doesn't hold it: the server would refuse it, so Submit is blocked.
+   */
+  blockedByWriteOff: boolean;
+}
+
+/**
+ * The server's shortfall flags as the page applies them. Each is a presence
+ * check, never arithmetic: nothing applies until a principal above 0 is
+ * entered (the preview names no source loan before then), and
+ * `write_off_permission_required` states what the restructure needs, so it
+ * blocks only a user without `loans:write_off`.
+ */
+export function restructureShortfallState(
+  principal: number,
+  restructure: RestructureShortfallView,
+  canWriteOff: boolean,
+): RestructureShortfallState {
+  const applies = principal > 0;
+  const remarksRequired = applies && restructure.remarksRequired === true;
+  return {
+    showsShortfall: remarksRequired,
+    remarksRequired,
+    blockedByWriteOff: applies && restructure.writeOffPermissionRequired === true && !canWriteOff,
+  };
+}
+
+/**
+ * Why a user without Loans: Write off can't restructure for less, in the
+ * server's own wording (`LoanService::assertRestructureInvariants`), quoting
+ * the balance to restructure instead: the preview's, else the summary's, else
+ * a dash.
+ */
+export function writeOffNotice(
+  restructure: RestructureShortfallView,
+  summaryBalance: number | null,
+): string {
+  const balance = currencyOrDash(restructurableBalanceShown(restructure, summaryBalance));
+  return (
+    "Writing off part of the balance requires the Loans: Write off permission. " +
+    `Restructure the full restructurable balance of ${balance} instead.`
+  );
+}
+
+export interface RestructureSubmitInputs {
+  previewStatus: "idle" | "loading" | "ready" | "error";
+  principal: number;
+  restructure: RestructureShortfallView;
+  remarks: string;
+  canWriteOff: boolean;
+  /** The loan summary's restructurable balance, for the write-off notice's fallback. */
+  summaryBalance?: number | null;
+}
+
+export interface RestructureSubmitCheck {
+  /** Set while the preview's figures are loading: Submit waits, saying this. */
+  wait: string | null;
+  /** Fields still to complete, for the validation pop-up. */
+  missing: string[];
+  /** Set when the write-off is one the user can't make: Submit is blocked, saying this. */
+  writeOff: string | null;
+}
+
+/**
+ * Whether Submit may go ahead, on the server's figures. It waits while the
+ * preview loads, since the shortfall and its requirements aren't known yet. A
+ * failed preview blocks nothing: the restructure applies the same rule and
+ * refuses with its own message.
+ */
+export function restructureSubmitCheck(inputs: RestructureSubmitInputs): RestructureSubmitCheck {
+  if (inputs.previewStatus === "loading") {
+    return {
+      wait: "The loan figures are still loading. Submit again once they appear.",
+      missing: [],
+      writeOff: null,
+    };
+  }
+  const state = restructureShortfallState(inputs.principal, inputs.restructure, inputs.canWriteOff);
+  return {
+    wait: null,
+    missing: state.remarksRequired && !inputs.remarks.trim() ? ["Remarks"] : [],
+    writeOff: state.blockedByWriteOff
+      ? writeOffNotice(inputs.restructure, inputs.summaryBalance ?? null)
+      : null,
   };
 }
 

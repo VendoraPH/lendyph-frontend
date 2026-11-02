@@ -4,9 +4,39 @@ import {
   buildLoanDeductions,
   readRestructurableBalance,
   readRestructurePreview,
+  holdsWriteOff,
+  restructurableBalanceShown,
+  restructureShortfallState,
+  restructureSubmitCheck,
+  writeOffNotice,
+  type RestructureShortfallView,
   restructureSuccessor,
 } from "./loan-restructure";
 import type { RestructuredIntoLoan } from "@/types/loan";
+
+const SHORT: RestructureShortfallView = {
+  restructurableBalance: 70800,
+  principal: 50000,
+  shortfall: 20800,
+  remarksRequired: true,
+  writeOffPermissionRequired: true,
+};
+
+const COVERED: RestructureShortfallView = {
+  restructurableBalance: 59000,
+  principal: 59000,
+  shortfall: 0,
+  remarksRequired: false,
+  writeOffPermissionRequired: false,
+};
+
+const UNKNOWN: RestructureShortfallView = {
+  restructurableBalance: null,
+  principal: null,
+  shortfall: null,
+  remarksRequired: null,
+  writeOffPermissionRequired: null,
+};
 
 test("percentage fees carry their percent, not the peso amount", () => {
   assert.deepEqual(
@@ -214,4 +244,97 @@ test("without the server's restructurable balance there is none, not the outstan
   );
   assert.equal(readRestructurableBalance({ restructurable_balance: "abc" }, null), null);
   assert.equal(readRestructurableBalance(null, null), null);
+});
+
+// ── restructureShortfallState: what the page shows and requires ────────────
+
+test("a shortfall the server states needs remarks; the write-off blocks only a user without the permission", () => {
+  assert.deepEqual(restructureShortfallState(50000, SHORT, false), {
+    showsShortfall: true,
+    remarksRequired: true,
+    blockedByWriteOff: true,
+  });
+  assert.deepEqual(restructureShortfallState(50000, SHORT, true), {
+    showsShortfall: true,
+    remarksRequired: true,
+    blockedByWriteOff: false,
+  });
+});
+
+test("no principal yet: no shortfall notice, nothing required, whatever the server's flags say", () => {
+  assert.deepEqual(restructureShortfallState(0, SHORT, false), {
+    showsShortfall: false,
+    remarksRequired: false,
+    blockedByWriteOff: false,
+  });
+});
+
+test("no shortfall, or no figures yet: nothing shown, nothing required", () => {
+  for (const view of [COVERED, UNKNOWN]) {
+    assert.deepEqual(restructureShortfallState(50000, view, false), {
+      showsShortfall: false,
+      remarksRequired: false,
+      blockedByWriteOff: false,
+    });
+  }
+});
+
+// ── restructureSubmitCheck: when Submit goes ahead ─────────────────────────
+
+const check = (overrides: Partial<Parameters<typeof restructureSubmitCheck>[0]>) =>
+  restructureSubmitCheck({
+    previewStatus: "ready",
+    principal: 50000,
+    restructure: SHORT,
+    remarks: "Hardship",
+    canWriteOff: true,
+    ...overrides,
+  });
+
+test("while the figures load, Submit waits and says so", () => {
+  const result = check({ previewStatus: "loading", remarks: "" });
+  assert.match(result.wait ?? "", /figures/);
+  assert.deepEqual(result.missing, []);
+  assert.equal(result.writeOff, null);
+});
+
+test("a failed preview does not block: the server still checks on save", () => {
+  assert.deepEqual(check({ previewStatus: "error", restructure: UNKNOWN, remarks: "", canWriteOff: false }), {
+    wait: null,
+    missing: [],
+    writeOff: null,
+  });
+});
+
+test("remarks are missing only when the server requires them", () => {
+  assert.deepEqual(check({ remarks: "  " }).missing, ["Remarks"]);
+  assert.deepEqual(check({}).missing, []);
+  assert.deepEqual(check({ restructure: COVERED, remarks: "" }).missing, []);
+});
+
+test("a write-off the user can't make blocks Submit with the server's wording; one they can make does not", () => {
+  const blocked = check({ canWriteOff: false });
+  assert.equal(blocked.writeOff, writeOffNotice(SHORT, null));
+  assert.equal(check({ canWriteOff: true }).writeOff, null);
+});
+
+test("the write-off notice quotes the full balance to restructure instead, or a dash without it", () => {
+  assert.match(writeOffNotice(SHORT, null), /^Writing off part of the balance requires the Loans: Write off permission\./);
+  assert.match(writeOffNotice(SHORT, null), /70,800\.00 instead\.$/);
+  assert.match(writeOffNotice(UNKNOWN, 41000), /41,000\.00 instead\.$/);
+  assert.match(writeOffNotice(UNKNOWN, null), /— instead\.$/);
+});
+
+// ── restructurableBalanceShown: one source for the amount hint ─────────────
+
+test("the hint shows the preview's restructurable balance, the summary's only as a fallback", () => {
+  assert.equal(restructurableBalanceShown(SHORT, 70000), 70800);
+  assert.equal(restructurableBalanceShown(UNKNOWN, 70000), 70000);
+  assert.equal(restructurableBalanceShown(UNKNOWN, null), null);
+});
+
+test("holding Loans: Write off is read from the user's permissions by its exact name", () => {
+  assert.equal(holdsWriteOff(["loans:view", "loans:write_off"]), true);
+  assert.equal(holdsWriteOff(["loans:view", "loans:restructure"]), false);
+  assert.equal(holdsWriteOff([]), false);
 });
