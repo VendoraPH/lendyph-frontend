@@ -137,6 +137,22 @@ test("each release-deduction role defaults to the account the backend seeds, of 
   }
 });
 
+test("each tax role defaults to the payable account the backend seeds under 2200 Taxes Payable", () => {
+  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
+  const expected = {
+    documentary_stamp_tax_payable: ["2230", "Documentary Stamp Tax Payable"],
+    other_taxes_payable: ["2220", "Other Taxes Payable"],
+  } as const;
+  for (const [role, [code, name]] of Object.entries(expected)) {
+    assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES[role as keyof typeof expected], code, role);
+    const seed = byCode.get(code)!;
+    assert.equal(seed.name, name, role);
+    assert.equal(seed.type, "liability", role);
+    assert.equal(seed.parent, "2200", role);
+    assert.equal(seed.is_group ?? false, false, role);
+  }
+});
+
 test("insurance premium collected from payments has no receivable role: it goes to Insurance Premium Payable", () => {
   // Decision 2 (2026-11-01): the release journal is unchanged, so the owed
   // part is never booked as a receivable; a payment that collects it credits
