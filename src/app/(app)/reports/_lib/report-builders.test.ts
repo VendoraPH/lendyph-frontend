@@ -2301,6 +2301,65 @@ test("the branch rows are loan cash only and say so rather than appearing wrong"
   assert.ok(noteText(doc));
 });
 
+// Decision 5c: the server puts share capital paid in and out into the row of
+// each member's branch, and a member with no branch into an "Unassigned" row
+// (`branch_id` null), so the branch rows add up to the statement totals.
+const CASH_FLOW_WITH_SHARE_BY_BRANCH = {
+  ...CASH_FLOW_PAYLOAD,
+  by_branch: [
+    ...CASH_FLOW_PAYLOAD.by_branch,
+    {
+      branch_id: null,
+      branch_name: "Unassigned",
+      inflow_repayments: 0,
+      inflow_share_capital: 1500,
+      inflow_total: 1500,
+      outflow_net_proceeds: 0,
+      outflow_share_capital: 500,
+      outflow_total: 500,
+      net_movement: 1000,
+    },
+  ],
+};
+
+test("cash flow lists members without a branch in an Unassigned row", () => {
+  const table = namedTable(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE), "Breakdown by Branch");
+  const unassigned = table.rows[2];
+
+  assert.equal(table.rows.length, 3);
+  assert.equal(unassigned.branch_name, "Unassigned");
+  assert.equal(unassigned.inflows, 1500);
+  assert.equal(unassigned.outflows, 500);
+  assert.equal(unassigned.net, 1000);
+});
+
+test("a branch row with a null branch_id and no name still reads Unassigned", () => {
+  const table = namedTable(
+    buildCashFlowDoc(
+      {
+        ...CASH_FLOW_PAYLOAD,
+        by_branch: [{ branch_id: null, branch_name: null, inflow_total: 1500, outflow_total: 500, net_movement: 1000 }],
+      },
+      RANGE
+    ),
+    "Breakdown by Branch"
+  );
+  assert.equal(table.rows[0].branch_name, "Unassigned");
+});
+
+test("without the server's note, the branch note says share capital is in the members' branch rows", () => {
+  const { note, ...shareWithoutNote } = CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital;
+  void note;
+  const doc = buildCashFlowDoc({ ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: shareWithoutNote }, RANGE);
+  const text = noteText(doc);
+
+  assert.ok(text, "expected the branch breakdown note");
+  assert.match(text!, /branch each member belongs to/);
+  assert.match(text!, /Unassigned/);
+  // The old claim is gone: share capital is no longer left out of the rows.
+  assert.doesNotMatch(text!, /cannot be attributed|loan collections and releases only|add the share capital lines back/);
+});
+
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
   // The server leaves a payment's build-up out of the share capital lines (it
   // is already cash inside the repayment's overpayment) and reports it apart,

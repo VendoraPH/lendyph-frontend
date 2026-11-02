@@ -1752,21 +1752,20 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
         totalCell("net", serverFigure(branchTotals, "net_movement")),
       ],
     });
-    // The branch rows are loan cash ONLY: they sum to the repayment and
-    // net-proceeds lines, not to the statement totals.
+    // Each branch row holds that branch's loan cash plus the share capital
+    // paid in and out by its members (by the member's branch); a member with
+    // no branch is in the server's "Unassigned" row (`branch_id` null).
     //
-    // The server's wording wins because it is now scope-dependent — with a
-    // branch filter applied, share capital IS scoped through the member's
-    // branch (matching the Share Capital report), and only the unfiltered case
-    // is organisation-wide. What never changes is that share capital is
-    // excluded from `by_branch`, so the fallback claims only that.
+    // The server's wording wins because it is scope-dependent: with a branch
+    // filter applied, share capital is scoped through the member's branch
+    // (matching the Share Capital report), and only the unfiltered case is
+    // organisation-wide. The fallback claims only what holds in both.
     sections.push({
       kind: "note",
       text: String(
         pick(shareBlock, ["note"]) ??
-          "Share capital cannot be attributed to a branch row, so the branch breakdown " +
-            "covers loan collections and releases only; add the share capital lines back " +
-            "to reach the totals above."
+          "Share capital paid in and out is in the row of the branch each member belongs to; " +
+            "members with no branch are under Unassigned."
       ),
     });
   }
