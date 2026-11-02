@@ -34,6 +34,7 @@ import type { DailyDuesSummary } from "@/types";
 import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
+import { insuranceCollected } from "./_lib/insurance-collected";
 
 // ---------------------------------------------------------------------------
 // Backend response shapes
@@ -50,7 +51,10 @@ type SparklineKey = "portfolio" | "active_loans" | "collected" | "overdue";
 interface DashboardStats {
   total_portfolio?: number;
   active_loans?: number;
+  /** Collected over the period, the insurance premium left out. */
   total_collected?: number;
+  /** The insurance premium collected over the same period, on its own. */
+  insurance_collected?: number | string | null;
   overdue_count?: number;
   share_capital_total?: number;
   sparklines?: Partial<Record<SparklineKey, SparklinePoint[]>>;
@@ -303,6 +307,10 @@ function DashboardContent() {
     overdue: stats?.overdue_count != null ? String(stats.overdue_count) : "—",
     share_capital: shareCapitalTotal,
   };
+  // The premium the Collected figure leaves out, as the server sent it.
+  const insuranceCollectedAmount = insuranceCollected(stats);
+  const insuranceCollectedLabel =
+    insuranceCollectedAmount === null ? "—" : formatCompactCurrency(insuranceCollectedAmount);
 
   const dueItems = dailyDues;
   const transactions = recentTransactions;
@@ -341,6 +349,11 @@ function DashboardContent() {
                     <div>
                       <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
                       <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
+                      {kpi.key === "collected" && (
+                        <p className="text-[10px] text-muted-foreground tabular-nums">
+                          Insurance premium collected: {insuranceCollectedLabel}
+                        </p>
+                      )}
                     </div>
                   </div>
                   {(() => {

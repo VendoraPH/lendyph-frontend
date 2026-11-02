@@ -20,16 +20,26 @@ export interface BorrowerBranch {
 }
 
 /**
- * GET /borrowers/{id}/loan-summary: the Member Overview's loan totals, all
- * from the server. `total_borrowed` counts released loans only and leaves out
- * restructured ones (their successor carries the rolled-over balance);
- * `total_outstanding` counts released, ongoing and defaulted loans.
- * `current_loans` is released plus ongoing; `counts` has every status.
+ * GET /borrowers/{id}/loan-summary: the member's loan totals, all from the
+ * server. `total_borrowed` counts released loans only and leaves out
+ * restructured ones (their successor carries the rolled-over balance).
+ * Over released, ongoing and defaulted loans:
+ * - `total_outstanding` is everything owed: principal, interest, penalty and
+ *   the insurance premium owed (it used to be principal + premium only);
+ * - `outstanding_principal` is the principal alone;
+ * - `overdue_amount` is only what is past due, not a late loan's whole balance.
+ * `total_paid` is everything the member paid, premium included, and
+ * `insurance_paid` is the premium part of it. `current_loans` is released plus
+ * ongoing; `counts` has every status. The newer figures are optional so an
+ * older server shows a dash rather than a wrong number.
  */
 export interface BorrowerLoanSummary {
   total_borrowed: number;
   total_outstanding: number;
+  outstanding_principal?: number;
+  overdue_amount?: number;
   total_paid: number;
+  insurance_paid?: number;
   current_loans: number;
   counts: Record<string, number>;
 }
