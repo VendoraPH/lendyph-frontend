@@ -94,8 +94,10 @@ export interface GCashNonMember {
   id: number;
   full_name: string;
   mobile_number: string;
-  id_type: string;
-  id_number: string;
+  /** Null when the walk-in gave no ID; set together with id_number. */
+  id_type: string | null;
+  /** Null when the walk-in gave no ID; set together with id_type. */
+  id_number: string | null;
   remarks?: string | null;
   transaction_count?: number;
   created_at: string;
@@ -105,9 +107,15 @@ export interface GCashNonMember {
 export type GCashNonMemberInput = {
   full_name: string;
   mobile_number: string;
-  id_type: string;
-  id_number: string;
+  /** Optional: both ID fields or neither. */
+  id_type: string | null;
+  id_number: string | null;
   remarks?: string | null;
+  /**
+   * Saves a walk-in without an ID even though another walk-in has the same
+   * name and mobile number (the server's `possible_duplicate` warning).
+   */
+  acknowledge_possible_duplicate?: boolean;
 };
 
 export type GCashNonMemberFilters = {

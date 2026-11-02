@@ -1,10 +1,11 @@
 import { borrowerParty, nonMemberParty } from "@/lib/gcash-party";
 import type { Borrower, GCashNonMember, GCashParty } from "@/types";
+import { walkInIdLabel } from "./walk-in-display";
 
 /** What a picker needs about one selectable party, already flattened. */
 export interface GCashPartyOption {
   party: GCashParty;
-  /** Second line in the list row — member code, or the presented ID. */
+  /** Second line in the list row — member code, or the presented ID (null when none). */
   hint: string | null;
   /** Shown in the dialog's read-only Number field. */
   contactNumber: string | null;
@@ -43,9 +44,7 @@ export function memberOption(borrower: Borrower): GCashPartyOption {
 export function walkInOption(nonMember: GCashNonMember): GCashPartyOption {
   return {
     party: nonMemberParty(nonMember),
-    hint: nonMember.id_type
-      ? `${nonMember.id_type} · ${nonMember.id_number}`
-      : null,
+    hint: walkInIdLabel(nonMember),
     contactNumber: nonMember.mobile_number ?? null,
     nonMember,
   };

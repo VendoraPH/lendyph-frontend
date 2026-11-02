@@ -385,6 +385,140 @@ test("disclosure: a provisional line says it may change until release", () => {
   assert.ok(lines.some((l) => l.label === "b. Notarial Fee"));
 });
 
+/**
+ * Before release the server adds the catalog fees the release will charge,
+ * each `provisional`, and its totals and net proceeds already include them:
+ * ₱100,000 less ₱3,000 stated fees, a ₱2,000 catalog fee and a ₱50 tax, less
+ * the notarial fee, premium and share capital, is ₱93,050. Deliberately not
+ * what the lines add up to, so a browser sum would show.
+ */
+const PRE_RELEASE = {
+  ...PAYLOAD,
+  totals: { ...PAYLOAD.totals, total_deductions: 6950, net_proceeds: 93050, total_finance_charges: 12000.01 },
+  finance_charges: {
+    interest: 7000,
+    items: [
+      { name: "Processing Fee", amount: 2000 },
+      { name: "Service Fee", amount: 1000 },
+      { name: "Release Fee", amount: 2000, provisional: true, provisional_reason: "release_fee" },
+    ],
+    total: 12000,
+  },
+  non_finance_charges: {
+    items: [
+      { name: "Notarial Fee", amount: 500, deducted: 500, owed: 0 },
+      { name: "Documentary Stamp Tax", amount: 50, deducted: 50, owed: 0, provisional: true, provisional_reason: "release_fee" },
+    ],
+    total: 550.01,
+  },
+  proceeds: {
+    principal: 100000,
+    finance_charges_deducted: 5000,
+    non_finance_charges_deducted: 950,
+    share_capital: 1000,
+    net_proceeds: 93050.01,
+  },
+};
+
+test("disclosure: a catalog fee the release will charge says so, in either section", () => {
+  const doc = buildDisclosureDoc(PRE_RELEASE);
+
+  assert.deepEqual(
+    chargesBlock(doc, "III. Finance Charges").lines.map((l) => [l.label, l.amount]),
+    [
+      ["a. Interest", formatCurrency(7000)],
+      ["b. Processing Fee", formatCurrency(2000)],
+      ["c. Service Fee", formatCurrency(1000)],
+      ["d. Release Fee (to be charged at release)", formatCurrency(2000)],
+      ["2. Total Finance Charges", formatCurrency(12000.01)],
+    ]
+  );
+  assert.deepEqual(
+    chargesBlock(doc, "IV. Non-Finance Charges").lines.map((l) => [l.label, l.amount]),
+    [
+      ["a. Notarial Fee", formatCurrency(500)],
+      ["b. Documentary Stamp Tax (to be charged at release)", formatCurrency(50)],
+      ["3. Total Non-Finance Charges", formatCurrency(550.01)],
+    ]
+  );
+});
+
+test("disclosure: before release the net proceeds and deductions are the server's, never summed here", () => {
+  const doc = buildDisclosureDoc(PRE_RELEASE);
+
+  assert.deepEqual(
+    chargesBlock(doc, "V. Net Proceeds").lines.map((l) => [l.label, l.amount]),
+    [
+      ["Principal Loan Amount", formatCurrency(100000)],
+      ["Less: Finance Charges Deducted", `(${formatCurrency(5000)})`],
+      ["Less: Non-Finance Charges Deducted", `(${formatCurrency(950)})`],
+      [SHARE_CAPITAL_LABEL, `(${formatCurrency(1000)})`],
+      [NET_PROCEEDS_LABEL, formatCurrency(93050.01)],
+    ]
+  );
+});
+
+test("disclosure: each provisional line's wording follows the server's reason, not its figures", () => {
+  const doc = buildDisclosureDoc({
+    ...PRE_RELEASE,
+    non_finance_charges: {
+      items: [
+        // A fee typed as insurance is deducted at release yet owes nothing;
+        // the carried premium is all owed. The reason decides, not `owed`.
+        { name: "Insurance Premium", amount: 300, deducted: 300, owed: 0, provisional: true, provisional_reason: "release_fee" },
+        {
+          name: "Insurance premium carried from the previous loan",
+          amount: 400,
+          deducted: 0,
+          owed: 400,
+          provisional: true,
+          provisional_reason: "carried_premium",
+        },
+        { name: "Documentary Stamp Tax", amount: 50, deducted: 50, owed: 0, provisional: true, provisional_reason: "release_fee" },
+        { name: "Notarial Fee", amount: 500, deducted: 500, owed: 0 },
+      ],
+      total: 1250,
+    },
+  });
+
+  assert.deepEqual(
+    chargesBlock(doc, "IV. Non-Finance Charges").lines.map((l) => [l.label, l.amount]),
+    [
+      ["a. Insurance Premium (to be charged at release)", formatCurrency(300)],
+      ["b. Insurance premium carried from the previous loan (subject to change until release)", formatCurrency(400)],
+      ["all owed on the loan — interest-free, collected first", ""],
+      ["c. Documentary Stamp Tax (to be charged at release)", formatCurrency(50)],
+      ["d. Notarial Fee", formatCurrency(500)],
+      ["3. Total Non-Finance Charges", formatCurrency(1250)],
+    ]
+  );
+});
+
+test("disclosure: a provisional line with a reason the printable doesn't know says it may change", () => {
+  const doc = buildDisclosureDoc({
+    ...PRE_RELEASE,
+    finance_charges: {
+      ...PRE_RELEASE.finance_charges,
+      items: [{ name: "Release Fee", amount: 2000, provisional: true, provisional_reason: "something_new" }],
+    },
+  });
+
+  assert.ok(hasChargeLine(doc, "b. Release Fee (subject to change until release)"));
+});
+
+test("disclosure: a line the server did not mark provisional carries no note", () => {
+  const doc = buildDisclosureDoc({
+    ...PRE_RELEASE,
+    finance_charges: {
+      ...PRE_RELEASE.finance_charges,
+      items: [{ name: "Release Fee", amount: 2000, provisional: false }],
+    },
+  });
+
+  assert.ok(hasChargeLine(doc, "b. Release Fee"));
+  assert.ok(!hasChargeLine(doc, "b. Release Fee (to be charged at release)"));
+});
+
 test("disclosure: net proceeds reconcile from the server's proceeds", () => {
   const doc = buildDisclosureDoc(PAYLOAD);
 
