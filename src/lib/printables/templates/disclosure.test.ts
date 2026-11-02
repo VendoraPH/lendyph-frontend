@@ -400,6 +400,17 @@ test("disclosure: net proceeds reconcile from the server's proceeds", () => {
   );
 });
 
+test("disclosure: no share capital line when the server's share capital deduction is zero", () => {
+  for (const zero of [0, "0.00"]) {
+    const doc = buildDisclosureDoc({
+      ...PAYLOAD,
+      proceeds: { ...PAYLOAD.proceeds, share_capital: zero, net_proceeds: 96100 },
+    });
+    assert.ok(!hasChargeLine(doc, SHARE_CAPITAL_LABEL));
+    assert.equal(chargeAmount(doc, NET_PROCEEDS_LABEL), formatCurrency(96100));
+  }
+});
+
 test("disclosure: finance charges and net proceeds are printed as the server sent them", () => {
   const sent = buildDisclosureDoc({
     ...PAYLOAD,

@@ -12,7 +12,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { creditEntryPaid } from "./ledger-rows";
+import { creditEntryPaid, creditEntryRefNo, repaymentRefNo } from "./ledger-rows";
 
 test("an extension collection shows its repayment's amount paid and premium", () => {
   // ₱1,800 interest + ₱400 premium taken in one payment of ₱2,200.
@@ -36,4 +36,17 @@ test("no premium collected shows none", () => {
 test("without a readable linked repayment the entry's own amount stands, with no premium", () => {
   assert.deepEqual(creditEntryPaid(1800, null), { totalPaid: 1800, insuranceApplied: null });
   assert.deepEqual(creditEntryPaid(1800, { insurance_applied: 400 }), { totalPaid: 1800, insuranceApplied: null });
+});
+
+test("a repayment row's Ref No is its receipt number", () => {
+  assert.equal(repaymentRefNo({ id: 12, receipt_number: "OR-2026-0042" }), "OR-2026-0042");
+  assert.equal(repaymentRefNo({ id: 12, receipt_number: null }), "OR-000012");
+});
+
+test("an extension collection's Ref No is its linked repayment's receipt number", () => {
+  assert.equal(creditEntryRefNo({ id: 12, receipt_number: "OR-2026-0042" }), "OR-2026-0042");
+});
+
+test("an entry with no readable linked repayment has no Ref No", () => {
+  assert.equal(creditEntryRefNo(null), "—");
 });

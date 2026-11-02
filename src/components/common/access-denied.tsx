@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { ShieldX } from "lucide-react";
 
 import { usePermission } from "@/hooks";
-import { ROLES } from "@/constants/rbac";
+import { useRoleLabel } from "@/hooks/use-role-label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,10 +19,7 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
   const titleCase = (name: string) =>
     name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-  // A role made on the roles screen has no entry in ROLES; its own name is
-  // still a better answer than "Unknown".
-  const roleConfig = role ? ROLES[role] : null;
-  const roleLabel = roleConfig?.label ?? (role ? titleCase(role) : "Unknown");
+  const roleLabel = useRoleLabel(role) || "Unknown";
 
   const accessibleModules = permissions
     .filter((p) => p.endsWith(":view"))

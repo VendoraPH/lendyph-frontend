@@ -62,7 +62,9 @@ import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
-import { creditEntryPaid } from "./_lib/ledger-rows";
+import { creditEntryPaid, creditEntryRefNo, repaymentRefNo } from "./_lib/ledger-rows";
+import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
+import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import { collectNowParts } from "./_lib/extension-preview";
 import {
   dueNowHasOpenPeriod,
@@ -711,7 +713,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Statement of Account dialog state
   const [soaOpen, setSoaOpen] = useState(false);
   const [soaLoading, setSoaLoading] = useState(false);
-  const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
+  const [soaDoc, setSoaDoc] = useState<ReportDocument | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(true);
   const [approvalStepsOpen, setApprovalStepsOpen] = useState(true);
   const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(true);
@@ -1217,7 +1219,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       key: `repayment-${r.id}`,
       date: r.payment_date,
       createdAt: r.created_at,
-      refNo: (r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`,
+      refNo: repaymentRefNo(r as Repayment & { receipt_number?: string | null }),
       remarks: r.remarks || "payment",
       principalPaid: r.principal_paid,
       interestCredit: r.interest_paid,
@@ -1239,15 +1241,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
       // above), so it belongs in Total Paid too; a debit moves no cash. The
       // twin's own amount paid and premium are shown, so a premium the same
       // payment collected first is on the row and the parts add up.
-      const paid =
-        e.type === "credit"
-          ? creditEntryPaid(e.amount, e.repayment_id != null ? repaymentsById.get(e.repayment_id) ?? null : null)
-          : null;
+      const linked =
+        e.type === "credit" && e.repayment_id != null ? repaymentsById.get(e.repayment_id) ?? null : null;
+      const paid = e.type === "credit" ? creditEntryPaid(e.amount, linked) : null;
       return {
         key: `ledger-${e.id}`,
         date: e.entry_date,
         createdAt: e.created_at,
-        refNo: "—",
+        refNo: creditEntryRefNo(linked as (Repayment & { receipt_number?: string | null }) | null),
         remarks: e.description,
         interestDebit: e.type === "debit" ? e.amount : undefined,
         interestCredit: e.type === "credit" ? e.amount : undefined,
@@ -2180,16 +2181,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (!loan) return;
     setSoaOpen(true);
     setSoaLoading(true);
-    setSoaData(null);
+    setSoaDoc(null);
     try {
-      const res = await reportService.statementOfAccount(loan.id);
-      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+      // The Reports screen's own Statement of Account, loaded on open so the
+      // report builders stay out of this page's bundle. Every figure in it is
+      // the server's; a total the server did not send shows a dash.
+      const [res, { buildStatementOfAccountDoc }] = await Promise.all([
+        reportService.statementOfAccount(loan.id),
+        import("@/app/(app)/reports/_lib/report-builders"),
+      ]);
+      const payload = res && typeof res === "object" && "data" in (res as Record<string, unknown>)
         ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
-      setSoaData(payload ?? {});
+        : res;
+      setSoaDoc(buildStatementOfAccountDoc(payload ?? {}, { from: "", to: todayISO() }));
     } catch {
       toast.error("We couldn't load the statement of account. Please try again.");
-      setSoaData(null);
+      setSoaDoc(null);
     } finally {
       setSoaLoading(false);
     }
@@ -3933,11 +3940,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
-          ) : soaData ? (
-            <div className="space-y-3 pt-2">
-              <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
-                {JSON.stringify(soaData, null, 2)}
-              </pre>
+          ) : soaDoc ? (
+            <div className="pt-2">
+              <ReportPreview doc={soaDoc} />
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">

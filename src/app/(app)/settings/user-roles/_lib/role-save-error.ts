@@ -71,3 +71,23 @@ export function otherRoleSaveErrors(err: unknown): string[] {
     .flatMap(([, messages]) => (Array.isArray(messages) ? messages : []))
     .filter((m): m is string => typeof m === "string" && m.length > 0);
 }
+
+const PERMISSION_ITEM = /^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/;
+
+/**
+ * A server message with its parenthesised permission keys in plain words:
+ * "You can't grant permissions you do not hold yourself (loans:approve)."
+ * reads "… (Loans: Approve)." Only a list made wholly of permission keys
+ * (and the server's trailing "…") is rewritten; anything else is unchanged.
+ */
+export function readablePermissionKeys(
+  message: string,
+  describe: (permission: string) => string = describePermission
+): string {
+  return message.replace(/\(([^()]*)\)/g, (whole, list: string) => {
+    const items = list.split(",").map((item) => item.trim());
+    const keys = items.filter((item) => item !== "…");
+    if (keys.length === 0 || !keys.every((item) => PERMISSION_ITEM.test(item))) return whole;
+    return `(${items.map((item) => (item === "…" ? item : describe(item))).join(", ")})`;
+  });
+}

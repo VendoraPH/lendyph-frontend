@@ -43,40 +43,37 @@ import {
   ArrowRight,
   Monitor,
   X,
+  Cog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
-import type { AuditLog, AuditAction, AuditModule } from "@/types";
+import type { AuditLog, AuditAction } from "@/types";
+import {
+  AUDIT_MODULE_OPTIONS,
+  auditActionLabel,
+  auditDescription,
+  auditFieldLabel,
+  auditModuleLabel,
+  auditUserName,
+  auditUserRole,
+} from "./_lib/audit-labels";
 
 // ── Constants ──
 
-const ACTION_CONFIG: Record<
-  AuditAction,
-  { label: string; color: string }
-> = {
-  login: { label: "Login", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
-  logout: { label: "Logout", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
-  created: { label: "Created", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  updated: { label: "Updated", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
-  deleted: { label: "Deleted", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  voided: { label: "Voided", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  released: { label: "Released", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  printed: { label: "Printed", color: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700" },
-  reset_password: { label: "Reset Password", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
-  status_changed: { label: "Status Changed", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
-};
-
-const MODULE_CONFIG: Record<AuditModule, { label: string }> = {
-  auth: { label: "Auth" },
-  borrowers: { label: "Borrowers" },
-  loans: { label: "Loans" },
-  payments: { label: "Payments" },
-  collections: { label: "Collections" },
-  users: { label: "Users" },
-  reports: { label: "Reports" },
+const ACTION_COLOR: Record<AuditAction, string> = {
+  login: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  logout: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  created: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  updated: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  deleted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  voided: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  approved: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  released: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  printed: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  reset_password: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  status_changed: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
 };
 
 const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
@@ -94,19 +91,20 @@ const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
   { value: "status_changed", label: "Status Changed" },
 ];
 
-const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
-  { value: "auth", label: "Auth" },
-  { value: "borrowers", label: "Borrowers" },
-  { value: "loans", label: "Loans" },
-  { value: "payments", label: "Payments" },
-  { value: "collections", label: "Collections" },
-  { value: "users", label: "Users" },
-  { value: "reports", label: "Reports" },
-];
+// Each filter's options, "all" first. The same list is the Select's `items`,
+// which is what lets the closed trigger show the label, not the raw value.
+const MODULE_FILTER_ITEMS = [{ value: "all", label: "All Modules" }, ...AUDIT_MODULE_OPTIONS];
+const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...ACTION_OPTIONS];
+
 
 
 // ── Helpers ──
 
+/** A user's initials, or a system mark for a row no user made. */
+function AuditAvatarContent({ log, iconClassName }: { log: AuditLog; iconClassName: string }) {
+  if (!log.user?.full_name?.trim()) return <Cog className={iconClassName} aria-hidden="true" />;
+  return <>{getInitials(log.user.full_name)}</>;
+}
 
 // ── Detail Drawer ──
 
@@ -119,7 +117,7 @@ function AuditDetailDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
+  const actionColor = ACTION_COLOR[log.action] ?? "";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -138,12 +136,12 @@ function AuditDetailDrawer({
           {/* User Info */}
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-orange text-white text-sm font-semibold">
-              {getInitials(log.user?.full_name)}
+              <AuditAvatarContent log={log} iconClassName="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm">{log.user?.full_name ?? "System"}</p>
+              <p className="font-medium text-sm">{auditUserName(log)}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                {auditUserRole(log)}
               </p>
             </div>
           </div>
@@ -156,14 +154,14 @@ function AuditDetailDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Action</p>
-                <Badge variant="outline" className={actionCfg.color}>
-                  {actionCfg.label}
+                <Badge variant="outline" className={actionColor}>
+                  {auditActionLabel(log.action)}
                 </Badge>
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Module</p>
                 <p className="text-sm font-medium">
-                  {MODULE_CONFIG[log.module]?.label ?? log.module}
+                  {auditModuleLabel(log)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -183,7 +181,7 @@ function AuditDetailDrawer({
               Description
             </h4>
             <p className="text-sm rounded-lg bg-muted/50 p-3">
-              {log.description}
+              {auditDescription(log)}
             </p>
           </div>
 
@@ -219,7 +217,7 @@ function AuditDetailDrawer({
                   >
                     <div className="bg-muted/50 px-3 py-1.5">
                       <p className="text-xs font-medium capitalize">
-                        {change.field.replace("_", " ")}
+                        {auditFieldLabel(change.field)}
                       </p>
                     </div>
                     <div className="px-3 py-2 space-y-1">
@@ -312,7 +310,7 @@ function AuditTrailContent() {
       setLoading(true);
       const params: Record<string, unknown> = { page, per_page: perPage };
       if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      if (moduleFilter !== "all") params.module = moduleFilter;
       // Whole-day bounds on `created_at`, applied by `buildQuery()`. Sent as
       // the calendar strings themselves — shifting either end by a day here to
       // reinterpret the window would put the screen and the CSV, which sends
@@ -434,7 +432,7 @@ function AuditTrailContent() {
       const params: Record<string, unknown> = {};
       if (search) params.search = search;
       if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
+      if (moduleFilter !== "all") params.module = moduleFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       const blob = await auditService.export(params);
@@ -560,26 +558,24 @@ function AuditTrailContent() {
                 aria-label="Search audit logs"
               />
             </div>
-            <Select value={moduleFilter} onValueChange={changeModuleFilter}>
+            <Select value={moduleFilter} onValueChange={changeModuleFilter} items={MODULE_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Module" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Modules</SelectItem>
-                {MODULE_OPTIONS.map((m) => (
+                {MODULE_FILTER_ITEMS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={changeActionFilter}>
+            <Select value={actionFilter} onValueChange={changeActionFilter} items={ACTION_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Action" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Actions</SelectItem>
-                {ACTION_OPTIONS.map((a) => (
+                {ACTION_FILTER_ITEMS.map((a) => (
                   <SelectItem key={a.value} value={a.value}>
                     {a.label}
                   </SelectItem>
@@ -627,7 +623,7 @@ function AuditTrailContent() {
               </TableHeader>
               <TableBody>
                 {logs.map((log) => {
-                  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
+                  const actionColor = ACTION_COLOR[log.action] ?? "";
                   return (
                     <TableRow
                       key={log.id}
@@ -655,14 +651,14 @@ function AuditTrailContent() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            {getInitials(log.user?.full_name)}
+                            <AuditAvatarContent log={log} iconClassName="h-4 w-4" />
                           </div>
                           <div>
                             <p className="text-sm font-medium">
-                              {log.user?.full_name ?? "System"}
+                              {auditUserName(log)}
                             </p>
                             <p className="text-xs text-muted-foreground capitalize">
-                              {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                              {auditUserRole(log)}
                             </p>
                           </div>
                         </div>
@@ -670,19 +666,19 @@ function AuditTrailContent() {
                       <TableCell>
                         <Badge
                           variant="outline"
-                          className={cn(actionCfg.color)}
+                          className={cn(actionColor)}
                         >
-                          {actionCfg.label}
+                          {auditActionLabel(log.action)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {MODULE_CONFIG[log.module]?.label ?? log.module}
+                          {auditModuleLabel(log)}
                         </span>
                       </TableCell>
                       <TableCell>
                         <p className="text-sm text-muted-foreground truncate max-w-xs">
-                          {log.description}
+                          {auditDescription(log)}
                         </p>
                       </TableCell>
                       <TableCell>

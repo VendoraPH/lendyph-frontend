@@ -245,11 +245,11 @@ function VoidPaymentDialog({
             </div>
             <Separator />
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Balance Before</span>
+              <span className="text-muted-foreground">Principal Balance Before</span>
               <span>{formatPHP(payment.balance_before)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Balance After Void</span>
+              <span className="text-muted-foreground">Principal Balance After Void</span>
               <span className="text-brand-orange font-medium">
                 {formatPHP(payment.balance_before)}
               </span>
@@ -277,8 +277,16 @@ function VoidPaymentDialog({
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
               This action requires admin authorization and cannot be undone. The
-              loan balance will be restored to{" "}
-              <strong>{formatPHP(payment.balance_before)}</strong>.
+              loan&apos;s principal balance will be restored to{" "}
+              <strong>{formatPHP(payment.balance_before)}</strong>
+              {payment.insurance_applied > 0 ? (
+                <>
+                  , and the <strong>{formatPHP(payment.insurance_applied)}</strong> insurance
+                  premium this payment collected will be owed again.
+                </>
+              ) : (
+                "."
+              )}
             </p>
           </div>
 

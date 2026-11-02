@@ -20,28 +20,11 @@ import { ChangePasswordForm } from "@/components/common/change-password-form";
 import { getInitials } from "@/lib/initials";
 import { userBranches } from "@/lib/user-branches";
 import { useAuth } from "@/hooks/use-auth";
+import { useRoleLabel } from "@/hooks/use-role-label";
 import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
 
 // ── Helpers ──
-
-const ROLE_LABELS: Record<Role, string> = {
-  admin: "Administrator",
-  loan_officer: "Loan Officer",
-  loan_processor: "Loan Processor",
-  cashier: "Cashier",
-  general_bookkeeper: "General Bookkeeper",
-  collector: "Collector",
-  viewer: "Viewer",
-  manager: "Manager",
-  bod1: "BOD1",
-  bod2: "BOD2",
-  bod3: "BOD3",
-  bod4: "BOD4",
-  bod5: "BOD5",
-  bod6: "BOD6",
-  bod7: "BOD7",
-};
 
 const ROLE_BADGE_CLASS: Record<Role, string> = {
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
@@ -65,11 +48,11 @@ const ROLE_BADGE_CLASS: Record<Role, string> = {
 
 function ProfileCard() {
   const { user } = useAuth();
+  const primaryRole = user?.roles?.[0] ?? "";
+  const roleLabel = useRoleLabel(primaryRole);
   if (!user) return null;
 
   const initials = getInitials(user.full_name);
-  const primaryRole = user.roles?.[0] ?? "";
-  const roleLabel = (ROLE_LABELS as Record<string, string>)[primaryRole] ?? primaryRole;
   const roleBadgeClass = (ROLE_BADGE_CLASS as Record<string, string>)[primaryRole] ?? "";
 
   return (

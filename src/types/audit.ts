@@ -19,7 +19,10 @@ export type AuditModule =
   | "payments"
   | "collections"
   | "users"
-  | "reports";
+  | "roles"
+  | "accounting"
+  | "gcash"
+  | "system";
 
 export interface AuditChange {
   field: string;
