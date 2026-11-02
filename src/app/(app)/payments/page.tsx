@@ -521,8 +521,8 @@ function PaymentsContent() {
           label="Overdue"
           value={statsKnown && overdueCount !== null ? String(overdueCount) : null}
           detail={
-            statsKnown && overdueCount !== null
-              ? `${currencyOrDash(overdueAmount)} overdue`
+            statsKnown && overdueCount !== null && overdueAmount !== null
+              ? `${formatCurrency(overdueAmount)} overdue`
               : undefined
           }
           icon={<AlertCircle className="size-5 text-destructive" />}

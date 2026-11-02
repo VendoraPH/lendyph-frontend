@@ -6,7 +6,7 @@ import { toNumber } from "@/lib/report-format";
  * Null when the server sent no readable figure, so the line shows a dash.
  */
 export function insuranceCollected(
-  stats: { total_collected?: unknown; insurance_collected?: unknown } | null | undefined,
+  stats: { insurance_collected?: unknown } | null | undefined,
 ): number | null {
   return toNumber(stats?.insurance_collected);
 }

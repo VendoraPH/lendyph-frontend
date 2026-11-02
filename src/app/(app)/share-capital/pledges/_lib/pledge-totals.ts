@@ -31,3 +31,19 @@ export async function drainPledgesWithTotal(
   });
   return { drain, totalAmount };
 }
+
+/**
+ * Numbers each request so only the newest one's answer is used. Two quick
+ * pledge edits fire two total refreshes; if the older answers last, its total
+ * is stale and must be dropped.
+ */
+export function createLatestGate(): { begin: () => number; isLatest: (id: number) => boolean } {
+  let latest = 0;
+  return {
+    begin: () => {
+      latest += 1;
+      return latest;
+    },
+    isLatest: (id) => id === latest,
+  };
+}

@@ -19,8 +19,20 @@ test("a decimal string from the server reads as a number", () => {
   assert.equal(loanOutstandingCell(row({ total_outstanding: "1500.50" })), "₱1,500.50");
 });
 
-test("nothing owed reads Paid", () => {
-  assert.equal(loanOutstandingCell(row({ total_outstanding: 0 })), "Paid");
+test("a completed loan that owes nothing reads Paid", () => {
+  assert.equal(loanOutstandingCell(row({ status: "completed", total_outstanding: 0 })), "Paid");
+});
+
+// Draft, for-review, approved, rejected and restructured loans owe 0 too, and
+// none of them was paid. Zero is a real figure, so they show ₱0.00.
+test("a draft that owes nothing shows ₱0.00, not Paid", () => {
+  assert.equal(loanOutstandingCell(row({ status: "draft", total_outstanding: 0 })), "₱0.00");
+});
+
+test("Paid only for a completed loan: restructured, rejected and approved show the figure", () => {
+  for (const status of ["for_review", "approved", "rejected", "restructured"]) {
+    assert.equal(loanOutstandingCell(row({ status, total_outstanding: 0 })), "₱0.00", status);
+  }
 });
 
 test("a figure the server did not send shows a dash, never the old field", () => {

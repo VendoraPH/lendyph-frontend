@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
@@ -52,7 +52,7 @@ import { formatCurrency, todayISO } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { notifyError } from "@/lib/notify";
 import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
-import { drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
+import { createLatestGate, drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
 interface LocalPledge {
   id: number;
@@ -111,8 +111,12 @@ function PledgeEntryContent() {
   // GET /pledges `meta.totals.amount`: the server's total over every pledge.
   // Null when it sent none, shown as a dash.
   const [totalAmount, setTotalAmount] = useState<number | null>(null);
+  // Every request that sets `totalAmount` takes a ticket; only the newest
+  // answer is used, so a slow older one can't overwrite a newer total.
+  const totalGate = useRef(createLatestGate());
 
   const fetchPledges = useCallback(async () => {
+    const ticket = totalGate.current.begin();
     try {
       setLoading(true);
       // Drained across pages. `per_page: 9999` was clamped to 100, so on a
@@ -124,12 +128,12 @@ function PledgeEntryContent() {
       );
       const { rows, truncated, total } = drain;
       setPledges(rows.map(toLocalPledge));
-      setTotalAmount(serverTotal);
+      if (totalGate.current.isLatest(ticket)) setTotalAmount(serverTotal);
       setShortfall(truncated ? { shown: rows.length, total } : null);
       setFailed(false);
     } catch {
       setShortfall(null);
-      setTotalAmount(null);
+      if (totalGate.current.isLatest(ticket)) setTotalAmount(null);
       setFailed(true);
       toast.error("We couldn't load the pledges. Please try again.");
     } finally {
@@ -277,10 +281,15 @@ function PledgeEntryContent() {
       toast.success("Pledge amount updated");
       // The total is the server's, so ask it again rather than adjust it here.
       // One one-row page is enough: `meta.totals` covers every pledge.
+      const ticket = totalGate.current.begin();
       shareCapitalService
         .pledgeList({ page: 1, per_page: 1 })
-        .then((res) => setTotalAmount(readPledgeTotalAmount(res)))
-        .catch(() => setTotalAmount(null));
+        .then((res) => {
+          if (totalGate.current.isLatest(ticket)) setTotalAmount(readPledgeTotalAmount(res));
+        })
+        .catch(() => {
+          if (totalGate.current.isLatest(ticket)) setTotalAmount(null);
+        });
     } catch (err) {
       notifyError(err, "We couldn't update the pledge amount. Please try again.");
     }
