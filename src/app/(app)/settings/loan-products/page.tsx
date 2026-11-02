@@ -71,6 +71,7 @@ import {
   INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
+import { customFormulaFeesError, FORMULA_FEE_HELP } from "@/lib/fee-form";
 import { formatCurrency } from "@/lib/format";
 import {
   EMPTY_FEE,
@@ -195,8 +196,11 @@ function productToForm(p: LoanProduct): ProductForm {
     max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
     custom_fees: rawFees.map((f) => ({
       name: String(f.name ?? ""),
-      type: (f.type as "fixed" | "percentage") ?? "fixed",
+      type: (f.type as CustomFeeEntry["type"]) ?? "fixed",
       value: String(f.value ?? ""),
+      per_month: Boolean(f.per_month),
+      min_amount: f.min_amount != null ? String(f.min_amount) : "",
+      max_amount: f.max_amount != null ? String(f.max_amount) : "",
       term_days_gt: f.term_days_gt ? String(f.term_days_gt) : "",
       term_days_lt: f.term_days_lt ? String(f.term_days_lt) : "",
       term_days_eq: f.term_days_eq ? String(f.term_days_eq) : "",
@@ -251,7 +255,7 @@ function ProductFormDialog({
     if (expandedFee === idx) setExpandedFee(null);
   };
 
-  const updateFee = (idx: number, field: keyof CustomFeeEntry, value: string) => {
+  const updateFee = (idx: number, field: keyof CustomFeeEntry, value: string | boolean) => {
     setForm((prev) => ({
       ...prev,
       custom_fees: prev.custom_fees.map((f, i) =>
@@ -262,6 +266,11 @@ function ProductFormDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const feeError = customFormulaFeesError(form.custom_fees);
+    if (feeError) {
+      toast.error(feeError);
+      return;
+    }
     onSubmit(form);
     if (!initialData) setForm(EMPTY_FORM);
     onOpenChange(false);
@@ -780,7 +789,7 @@ function ProductFormDialog({
                               {(v: string | null) =>
                                 v === "fixed" ? "Fixed (PHP)"
                                 : v === "percentage" ? "Percentage (%)"
-                                : v === "formula" ? "Formula (Soon)"
+                                : v === "formula" ? "Formula (%)"
                                 : v ?? ""
                               }
                             </SelectValue>
@@ -788,9 +797,7 @@ function ProductFormDialog({
                           <SelectContent>
                             <SelectItem value="fixed">Fixed (PHP)</SelectItem>
                             <SelectItem value="percentage">Percentage (%)</SelectItem>
-                            <SelectItem value="formula" disabled>
-                              Formula (Soon)
-                            </SelectItem>
+                            <SelectItem value="formula">Formula (%)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -819,6 +826,47 @@ function ProductFormDialog({
                         </Button>
                       </div>
                     </div>
+
+                    {fee.type === "formula" && (
+                      <div className="space-y-2 rounded-md border p-2.5">
+                        <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={fee.per_month}
+                            onChange={(e) => updateFee(idx, "per_month", e.target.checked)}
+                            className="rounded border-input"
+                          />
+                          Per month of term
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Minimum (₱)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="None"
+                              value={fee.min_amount}
+                              onChange={(e) => updateFee(idx, "min_amount", e.target.value)}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Maximum (₱)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="None"
+                              value={fee.max_amount}
+                              onChange={(e) => updateFee(idx, "max_amount", e.target.value)}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Expandable conditions */}
                     <button

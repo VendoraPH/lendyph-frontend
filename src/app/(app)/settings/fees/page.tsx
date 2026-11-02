@@ -25,7 +25,9 @@ import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatCurrencyExact, formatRate } from "@/lib/format";
 import { decimalInputValue } from "@/lib/percent";
-import { buildFeePayload } from "@/lib/fee-form";
+import {
+  buildFeePayload, describeFormulaFee, EMPTY_FORMULA_FIELDS, FORMULA_FEE_HELP, type FormulaFieldsInput,
+} from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { usePermission } from "@/hooks";
@@ -41,7 +43,10 @@ import { completeRows } from "@/lib/paginate";
 const FEE_TYPE_ITEMS: { value: FeeType; label: string }[] = [
   { value: "fixed", label: "Fixed Amount" },
   { value: "percentage", label: "Percentage" },
+  { value: "formula", label: "Formula" },
 ];
+
+const FEE_TYPE_BADGES: Record<FeeType, string> = { fixed: "Fixed", percentage: "Percentage", formula: "Formula" };
 
 interface FeeFormDialogProps {
   open: boolean;
@@ -58,6 +63,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   const [value, setValue] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [conditions, setConditions] = useState<FeeConditions>({});
+  const [formula, setFormula] = useState<FormulaFieldsInput>(EMPTY_FORMULA_FIELDS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -67,12 +73,18 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       setValue(decimalInputValue(fee.value));
       setSelectedProducts(fee.applicable_product_ids ?? []);
       setConditions(fee.conditions ?? {});
+      setFormula({
+        perMonth: Boolean(fee.per_month),
+        minAmount: fee.min_amount != null ? decimalInputValue(fee.min_amount) : "",
+        maxAmount: fee.max_amount != null ? decimalInputValue(fee.max_amount) : "",
+      });
     } else {
       setName("");
       setType("fixed");
       setValue("");
       setSelectedProducts([]);
       setConditions({});
+      setFormula(EMPTY_FORMULA_FIELDS);
     }
   }, [fee, open]);
 
@@ -97,7 +109,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const result = buildFeePayload({ name, type, value, productIds: selectedProducts, conditions });
+    const result = buildFeePayload({ name, type, value, productIds: selectedProducts, conditions, formula });
     if ("error" in result) {
       toast.error(result.error);
       return;
@@ -158,6 +170,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
                 <SelectContent>
                   <SelectItem value="fixed">Fixed Amount</SelectItem>
                   <SelectItem value="percentage">Percentage</SelectItem>
+                  <SelectItem value="formula">Formula</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -179,6 +192,47 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               required
             />
           </div>
+
+          {type === "formula" && (
+            <div className="space-y-3 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formula.perMonth}
+                  onChange={(e) => setFormula((prev) => ({ ...prev, perMonth: e.target.checked }))}
+                  className="rounded border-input"
+                />
+                Per month of term
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fee-min-amount">Minimum (₱)</Label>
+                  <Input
+                    id="fee-min-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="None"
+                    value={formula.minAmount}
+                    onChange={(e) => setFormula((prev) => ({ ...prev, minAmount: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fee-max-amount">Maximum (₱)</Label>
+                  <Input
+                    id="fee-max-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="None"
+                    value={formula.maxAmount}
+                    onChange={(e) => setFormula((prev) => ({ ...prev, maxAmount: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Applicable Loan Products</Label>
@@ -355,6 +409,7 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 
 function formatFeeValue(fee: Fee): string {
   if (fee.type === "percentage") return `${formatRate(fee.value)}%`;
+  if (fee.type === "formula") return describeFormulaFee(fee);
   // Same reason as formatConditions below: this is the amount that will be
   // deducted, and a ₱250.50 notarial fee must not be listed as ₱251.
   return formatCurrencyExact(fee.value);
@@ -433,7 +488,8 @@ function FeesContent() {
   });
 
   const fixedCount = fees.filter((f) => f.type === "fixed").length;
-  const percentageCount = fees.filter((f) => f.type === "percentage").length;
+  // A formula fee is a percentage of the principal too, so it counts here.
+  const percentageCount = fees.filter((f) => f.type !== "fixed").length;
 
   function handleAdd() {
     setEditFee(null);
@@ -568,7 +624,7 @@ function FeesContent() {
                                 : "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30"
                             )}
                           >
-                            {fee.type === "fixed" ? "Fixed" : "Percentage"}
+                            {FEE_TYPE_BADGES[fee.type] ?? fee.type}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right tabular-nums font-medium">

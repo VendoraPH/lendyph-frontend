@@ -3,10 +3,16 @@
  * page so the payload can be unit-tested in a plain node process.
  */
 
+import { buildFormulaFields } from "@/lib/fee-form";
+
 export interface CustomFeeEntry {
   name: string;
-  type: "fixed" | "percentage";
+  type: "fixed" | "percentage" | "formula";
   value: string;
+  /** A formula fee's own fields (see `@/lib/fee-form`); unused by the other types. */
+  per_month: boolean;
+  min_amount: string;
+  max_amount: string;
   term_days_gt: string;
   term_days_lt: string;
   term_days_eq: string;
@@ -19,6 +25,9 @@ export const EMPTY_FEE: CustomFeeEntry = {
   name: "",
   type: "fixed",
   value: "",
+  per_month: false,
+  min_amount: "",
+  max_amount: "",
   term_days_gt: "",
   term_days_lt: "",
   term_days_eq: "",
@@ -92,10 +101,14 @@ export function formToApiPayload(form: ProductForm) {
       if (f.loan_amount_gt) conditions.loan_amount_gt = Number(f.loan_amount_gt);
       if (f.loan_amount_lt) conditions.loan_amount_lt = Number(f.loan_amount_lt);
       if (f.loan_amount_eq) conditions.loan_amount_eq = Number(f.loan_amount_eq);
+      const formula = f.type === "formula"
+        ? buildFormulaFields({ perMonth: f.per_month, minAmount: f.min_amount, maxAmount: f.max_amount })
+        : null;
       return {
         name: f.name,
         type: f.type,
         value: Number(f.value),
+        ...(formula && "fields" in formula ? formula.fields : {}),
         ...(Object.keys(conditions).length > 0 ? { conditions } : {}),
       };
     });
