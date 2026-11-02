@@ -8,6 +8,7 @@ import {
   togglePermission,
   type RoleItem,
 } from "./role-item";
+import { MODULE_ACTIONS, moduleToggleActions } from "./permission-matrix";
 
 // A role holding permissions the matrix shows, the retired collections:* the
 // matrix hides, and grants that simply have no checkbox.
@@ -62,6 +63,27 @@ test("unticking a module only revokes the actions the matrix offers for it", () 
   const form = setModulePermissions(new Set(apiRole.permissions as Permission[]), "loans", false);
   assert.ok(form.has("loans:extend" as Permission), "loans:extend has no checkbox and must survive");
   assert.ok(!form.has("loans:view" as Permission));
+});
+
+// loans:write_off writes off a restructure's shortfall: it is its own
+// checkbox, never swept in (or out) by the Loans module toggle.
+test("the Loans module toggle never grants write_off", () => {
+  const form = setModulePermissions(new Set<Permission>(), "loans", true);
+  assert.ok(form.has("loans:restructure" as Permission));
+  assert.ok(!form.has("loans:write_off" as Permission));
+});
+
+test("the Loans module toggle never revokes write_off either", () => {
+  const start = new Set<Permission>(["loans:view", "loans:write_off"] as Permission[]);
+  const form = setModulePermissions(start, "loans", false);
+  assert.ok(!form.has("loans:view" as Permission));
+  assert.ok(form.has("loans:write_off" as Permission));
+});
+
+test("write_off still has its own checkbox", () => {
+  assert.ok(MODULE_ACTIONS.loans.includes("write_off"));
+  assert.ok(!moduleToggleActions("loans").includes("write_off"));
+  assert.deepEqual(moduleToggleActions("fees"), MODULE_ACTIONS.fees);
 });
 
 test("togglePermission flips only the one permission", () => {

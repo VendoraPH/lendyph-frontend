@@ -25,7 +25,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import type { Action, Permission } from "@/types";
-import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
+import { MODULE_ACTIONS, moduleToggleActions, type UIModule } from "./_lib/permission-matrix";
 import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
 import {
   roleItemFromApi,
@@ -74,6 +74,7 @@ import { notifyValidation } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { roleConflictMessage } from "./_lib/role-conflict";
+import { canToggleActive, roleActivationError } from "./_lib/role-activation";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -321,7 +322,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reject: { label: "Reject", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
-  write_off: { label: "Write off", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  write_off: { label: "Write off restructure shortfall", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
@@ -515,7 +516,12 @@ function RoleFormDialog({
                 const grantedCount = actions.filter((a) =>
                   permissions.has(`${mod}:${a}` as Permission)
                 ).length;
-                const allSelected = grantedCount === actions.length;
+                // The header toggle covers every action but the own-checkbox
+                // ones (write_off), so it reads checked when those are all on.
+                const toggleActions = moduleToggleActions(mod);
+                const allSelected = toggleActions.every((a) =>
+                  permissions.has(`${mod}:${a}` as Permission)
+                );
                 const someSelected = grantedCount > 0 && !allSelected;
 
                 return (
@@ -722,8 +728,13 @@ function UserRolesContent() {
       }
       await loadRoles();
       await maybeRefreshCurrentUser(role.key);
-    } catch {
-      toast.error("We couldn't update the role status. Please try again.");
+    } catch (err) {
+      // A 422 (deactivating a role you hold, reactivating one carrying a
+      // permission you don't hold) says what to do; a 409 means the role was
+      // deleted meanwhile, so the list is reloaded.
+      const { message, reload } = roleActivationError(err, "We couldn't update the role status. Please try again.");
+      toast.error(readablePermissionKeys(message, describeMatrixPermission));
+      if (reload) await loadRoles();
     } finally {
       setActionLoading(false);
     }
@@ -940,27 +951,29 @@ function UserRolesContent() {
                                 Edit
                               </Button>
                             </PermissionGate>
-                            <PermissionGate permission="settings:update">
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0"
-                                  title={r.isActive ? "Deactivate role" : "Reactivate role"}
-                                  disabled={actionLoading}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleActive(r);
-                                  }}
-                                >
-                                  {r.isActive ? (
-                                    <PowerOff className="h-3 w-3" />
-                                  ) : (
-                                    <Power className="h-3 w-3" />
-                                  )}
-                                </Button>
-                              </>
-                            </PermissionGate>
+                            {canToggleActive(r.key) && (
+                              <PermissionGate permission="settings:update">
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
+                                    disabled={actionLoading}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleActive(r);
+                                    }}
+                                  >
+                                    {r.isActive ? (
+                                      <PowerOff className="h-3 w-3" />
+                                    ) : (
+                                      <Power className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </>
+                              </PermissionGate>
+                            )}
                             <PermissionGate permission="settings:delete">
                               <Button
                                 variant="outline"

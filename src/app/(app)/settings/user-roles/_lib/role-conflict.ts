@@ -3,10 +3,11 @@ import { getErrorMessage } from "@/lib/api-error";
 const CONFLICT_FALLBACK = "This role was changed or deleted by another request. Reload and try again.";
 
 /**
- * The message for a role save or delete that lost to another request.
+ * The message for a role write that lost to another request.
  *
- * `PUT /roles/{id}` and `DELETE /roles/{id}` answer 409 when the role was
- * deleted while the request waited, having written nothing. The server's own
+ * `PUT /roles/{id}`, `DELETE /roles/{id}`, `PATCH /roles/{id}/deactivate` and
+ * `PATCH /roles/{id}/reactivate` answer 409 when the role was deleted while
+ * the request waited, having written nothing. The server's own
  * sentence says so; a 409 without a readable one gets the same wording here
  * rather than the generic "conflicts with the current state". Any other error
  * returns null and keeps its own handling.

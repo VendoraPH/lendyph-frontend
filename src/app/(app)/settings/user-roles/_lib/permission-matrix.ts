@@ -28,8 +28,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   fees: ["view", "create", "update", "delete"],
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
-  // `write_off` is seeded for admin and super_admin; the API's grant guard
-  // still refuses it to anyone who doesn't hold it themselves.
+  // `write_off` (writing off a restructure's shortfall) is seeded for admin
+  // and super_admin; the API's grant guard still refuses it to anyone who
+  // doesn't hold it themselves. It's left out of the module toggle (below).
   loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure", "write_off"],
   // `manage` only: creating, editing and deleting products. Viewing them needs
   // `loans:view`, so there is no `loan_products:view` to offer.
@@ -62,3 +63,18 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // the human decision verb, an action on the borrower profile, not a page.
   credit_scoring: ["view", "override", "settings"],
 };
+
+/**
+ * Actions offered with their own checkbox only. The module's "toggle all"
+ * neither grants nor revokes them: writing off a restructure's shortfall
+ * destroys debt, so it's never swept in with the rest of Loans.
+ */
+const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
+  loans: ["write_off"],
+};
+
+/** The actions a module's "toggle all" checkbox covers. */
+export function moduleToggleActions(mod: UIModule): Action[] {
+  const own = OWN_CHECKBOX_ONLY[mod] ?? [];
+  return MODULE_ACTIONS[mod].filter((act) => !own.includes(act));
+}

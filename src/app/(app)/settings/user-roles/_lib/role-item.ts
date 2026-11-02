@@ -2,7 +2,7 @@ import { ROLES } from "@/constants/rbac";
 import type { Permission } from "@/types";
 import type { ApiRole, RolePayload } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
-import { MODULE_ACTIONS, type UIModule } from "./permission-matrix";
+import { moduleToggleActions, type UIModule } from "./permission-matrix";
 
 /** A role as the roles screen holds it. */
 export interface RoleItem {
@@ -89,7 +89,7 @@ export function setModulePermissions(
   enable: boolean
 ): Set<Permission> {
   const next = new Set(current);
-  for (const act of MODULE_ACTIONS[mod]) {
+  for (const act of moduleToggleActions(mod)) {
     const perm = `${mod}:${act}` as Permission;
     if (enable) next.add(perm);
     else next.delete(perm);
