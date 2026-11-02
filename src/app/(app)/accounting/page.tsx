@@ -10,7 +10,7 @@ import {
   FileText,
   Landmark,
   ListTree,
-  Receipt,
+  ReceiptText,
   Scale,
   Smartphone,
   TrendingDown,
@@ -39,7 +39,7 @@ import {
 /** Where a loan officer actually goes from here. */
 const SHORTCUTS = [
   { href: "/accounting/journals", label: "Journal Entries", icon: ListTree },
-  { href: "/accounting/expenses", label: "Record an expense", icon: Receipt },
+  { href: "/accounting/expenses", label: "Record an expense", icon: ReceiptText },
   { href: "/accounting/cash-bank", label: "Cash & Bank", icon: Wallet },
   { href: "/accounting/statements", label: "Financial Statements", icon: FileText },
   { href: "/accounting/chart-of-accounts", label: "Chart of Accounts", icon: BookOpen },
@@ -200,7 +200,7 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
           <Figure
             label="Total liabilities"
             value={data.total_liabilities}
-            icon={Receipt}
+            icon={ReceiptText}
           />
           <Figure label="Total equity" value={data.total_equity} icon={Landmark} />
         </div>

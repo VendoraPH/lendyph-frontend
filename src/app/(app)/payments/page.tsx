@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/table";
 import {
   Search,
-  Receipt,
+  PhilippinePeso,
+  ReceiptText,
   Banknote,
   CreditCard,
   CalendarIcon,
@@ -481,7 +482,7 @@ function PaymentsContent() {
             onClick={() => router.push(`/payments/${lastReceiptId}`)}
             className="gap-2"
           >
-            <Receipt className="size-4" />
+            <ReceiptText className="size-4" />
             View Last Receipt
           </Button>
         )}
@@ -542,7 +543,7 @@ function PaymentsContent() {
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Receipt className="size-4" />
+            <ReceiptText className="size-4" />
             Borrowers with Active Loans
           </CardTitle>
           <div className="relative w-full sm:w-72">
@@ -970,7 +971,7 @@ function PaymentsContent() {
                     <div className="rounded-lg border overflow-hidden">
                       <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
                         <p className="text-xs font-medium flex items-center gap-1.5">
-                          <Receipt className="size-3.5" />
+                          <ReceiptText className="size-3.5" />
                           Schedule Periods Covered
                         </p>
                         <span className="text-[10px] text-muted-foreground">
@@ -1159,7 +1160,7 @@ function PaymentsContent() {
                   </>
                 ) : (
                   <>
-                    <Receipt className="size-4" />
+                    <PhilippinePeso className="size-4" />
                     Post Payment
                   </>
                 )}

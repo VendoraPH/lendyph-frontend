@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
+import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
 import { formatCurrency, formatDateFull } from "@/lib/format";
 import { shareCapitalService } from "@/services";
@@ -122,7 +122,7 @@ type TransactionView = {
 const KPI_CARD_STRUCTURE = [
   { key: "portfolio" as const, sparkKey: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
   { key: "active_loans" as const, sparkKey: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", href: "/loans" },
-  { key: "collected" as const, sparkKey: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", href: "/payments" },
+  { key: "collected" as const, sparkKey: "collected" as const, icon: PhilippinePeso, label: "Collected", color: "#10b981", href: "/payments" },
   // `/collections` is not a route — it never existed, so this card 404'd on
   // click and on Next's prefetch. `/loans/past-due` is the purpose-built Past
   // Due Loans report, which is exactly what this card counts.

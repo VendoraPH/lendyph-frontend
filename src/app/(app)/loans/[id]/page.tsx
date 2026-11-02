@@ -169,12 +169,12 @@ import {
   CalendarIcon,
   CalendarPlus,
   Plus,
-  DollarSign,
+  PhilippinePeso,
   ChevronDown,
   ChevronUp,
   Pencil,
   AlertTriangle,
-  Receipt,
+  ReceiptText,
   CreditCard,
   Loader2,
   BookOpen,
@@ -3906,7 +3906,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
-              <DollarSign className="h-5 w-5 shrink-0" />
+              <PhilippinePeso className="h-5 w-5 shrink-0" />
               <span>Record Payment</span>
               {paymentMode === "advance" && (
                 <Badge className="bg-blue-600 hover:bg-blue-600 text-white">
@@ -4534,7 +4534,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div className="rounded-lg border overflow-hidden">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                       <p className="text-xs font-medium flex items-center gap-1.5">
-                        <Receipt className="size-3.5 shrink-0" />
+                        <ReceiptText className="size-3.5 shrink-0" />
                         Schedule Periods Covered
                       </p>
                       <span className="text-[10px] text-muted-foreground">
@@ -4684,7 +4684,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </>
               ) : (
                 <>
-                  <DollarSign className="mr-2 h-4 w-4" />
+                  <PhilippinePeso className="mr-2 h-4 w-4" />
                   Record Payment
                 </>
               )}
