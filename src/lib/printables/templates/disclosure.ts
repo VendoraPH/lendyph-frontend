@@ -21,6 +21,10 @@
  *   interest rates from `rates`; none is annualised or solved here.
  * A figure the server did not send prints as a dash.
  *
+ * Before release the server adds the catalog fees the release will charge,
+ * each marked `provisional`, and its totals and net proceeds already include
+ * them; such a line says "(to be charged at release)". Nothing is summed here.
+ *
  * Two things the port fixes rather than preserves:
  *
  * 1. **The payload.** `LoanDisclosure` in `src/types/loan-document.ts` is flat
@@ -96,6 +100,18 @@ function readChargeItems(block: Record<string, unknown> | null): ChargeItem[] {
     owed: toNumber(pick(item, ["owed"])),
     provisional: pick(item, ["provisional"]) === true,
   }));
+}
+
+/**
+ * What a provisional line says. A premium carried from the loan a restructure
+ * closes is owed and still moves with payments on that loan until release; a
+ * catalog fee is deducted when the loan is released.
+ */
+function provisionalNote(item: ChargeItem): string {
+  if (!item.provisional) return "";
+  return item.owed !== null && item.owed > 0
+    ? " (subject to change until release)"
+    : " (to be charged at release)";
 }
 
 /** a., b., c. … — the statute's lettered enumeration under a heading. */
@@ -186,7 +202,7 @@ export function buildDisclosureDoc(
    * deductions list does not itemise), then the server's total.
    */
   const financeLines: PrintChargeLine[] = readChargeItems(financeBlock).map((item, index) => ({
-    label: `${letter(index + 1)}. ${item.name}`,
+    label: `${letter(index + 1)}. ${item.name}${provisionalNote(item)}`,
     amount: currencyOrDash(item.amount),
     indent: true,
   }));
@@ -200,7 +216,7 @@ export function buildDisclosureDoc(
    */
   const nonFinanceLines: PrintChargeLine[] = readChargeItems(nonFinanceBlock).flatMap((item, index) => {
     const line: PrintChargeLine = {
-      label: `${letter(index)}. ${item.name}${item.provisional ? " (subject to change until release)" : ""}`,
+      label: `${letter(index)}. ${item.name}${provisionalNote(item)}`,
       amount: currencyOrDash(item.amount),
       indent: true,
     };
