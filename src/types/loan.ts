@@ -625,6 +625,56 @@ export interface LoanSummary {
   next_due_amount?: number;
 }
 
+/** What a Ledger row is; the server may add kinds later. */
+export type LoanLedgerKind =
+  | "release"
+  | "repayment"
+  | "extension_payment"
+  | "extension_charge"
+  | "penalty_charge"
+  | "adjustment"
+  | "void";
+
+/** Balances after a Ledger row, insurance premium owed left out. */
+export interface LoanLedgerBalances {
+  principal: number;
+  interest: number;
+  penalty: number;
+  /** Build-up the schedule still awaits, never below 0. */
+  scb: number;
+}
+
+/**
+ * One row of `GET /loans/{id}/ledger`. Payment, void and charge rows state
+ * positive figures and `kind` says which way they move the balances; an
+ * `adjustment` row's figures are the signed change it made.
+ */
+export interface LoanLedgerRow {
+  date: string;
+  kind: LoanLedgerKind | (string & {});
+  repayment_id: number | null;
+  loan_adjustment_id: number | null;
+  description: string;
+  principal: number;
+  interest: number;
+  penalty: number;
+  /** The insurance premium a payment collected. */
+  insurance: number;
+  /** The release row's total build-up; a payment or void row's share capital credited. */
+  scb: number;
+  balances: LoanLedgerBalances;
+}
+
+/**
+ * `GET /loans/{id}/ledger` (`loans:view`): every event that moved what the
+ * loan owes, in date then posting order, with the running balances the server
+ * worked out. `closing` equals the summary's outstanding figures.
+ */
+export interface LoanLedger {
+  rows: LoanLedgerRow[];
+  closing: LoanLedgerBalances;
+}
+
 /**
  * A single debit/credit posting against the loan — currently only ever
  * raised by Extend Loan (a debit for the interest the extension accrues,

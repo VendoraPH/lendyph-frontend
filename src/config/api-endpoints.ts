@@ -100,6 +100,7 @@ export const API_ENDPOINTS = {
     CO_MAKERS: (id: number) => `/loans/${id}/co-makers`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
     LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
+    LEDGER: (id: number) => `/loans/${id}/ledger`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
