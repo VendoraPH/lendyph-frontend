@@ -82,14 +82,6 @@ export function buildLoanDeductions({
 }
 
 /**
- * How far a restructure's new principal falls short of the source loan's
- * outstanding balance. A shortfall writes debt off, so the API rejects it (422)
- * unless `remarks` explain why — 0 means no explanation is required.
- *
- * The comparison is deliberately exact (no rounding) so the form demands
- * remarks in precisely the cases the API would reject.
- */
-/**
  * What a restructure starts from and measures its shortfall against: the
  * server's `restructurable_balance`, from the loan summary or, when that read
  * failed, the loan. It leaves out the insurance premium owed, which a
@@ -109,6 +101,14 @@ export function readRestructurableBalance(
   return null;
 }
 
+/**
+ * How far a restructure's new principal falls short of the source loan's
+ * restructurable balance. A shortfall writes debt off, so the API rejects it (422)
+ * unless `remarks` explain why — 0 means no explanation is required.
+ *
+ * The comparison is deliberately exact (no rounding) so the form demands
+ * remarks in precisely the cases the API would reject.
+ */
 export function calcRestructureShortfall(
   principal: number,
   outstandingBalance: number | null,
