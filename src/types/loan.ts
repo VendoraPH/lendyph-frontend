@@ -465,11 +465,14 @@ export interface Loan {
   /**
    * The loan's pledged collateral against its principal, from the server
    * (`GET /loans/{id}`). Null when the relation isn't loaded, as on lists.
+   * `total_value` and `short_by` are null, with `value_unknown` true, when
+   * the viewer may not see a share capital balance pledged to the loan.
    */
   collateral_summary?: {
-    total_value: number;
+    total_value: number | null;
     security_status: SecurityStatus;
-    short_by: number;
+    short_by: number | null;
+    value_unknown?: boolean;
   } | null;
   purpose?: string;
   collateral?: string;

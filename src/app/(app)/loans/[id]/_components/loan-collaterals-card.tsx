@@ -12,7 +12,7 @@ import type { CollateralType, LoanCollateral } from "@/types";
 import type { Loan } from "@/types/loan";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/lib/utils";
-import { attachedCollateralValue } from "../_lib/collateral-display";
+import { attachedCollateralValue, collateralSummaryFigures } from "../_lib/collateral-display";
 
 interface LoanCollateralsCardProps {
   loanId: number;
@@ -81,6 +81,8 @@ export function LoanCollateralsCard({
   }, [loanId, canListCollaterals]);
 
   const status = summary?.security_status ?? null;
+  // A share capital value the viewer may not see leaves both figures null: a dash.
+  const { totalValue, shortBy, valueHidden } = collateralSummaryFigures(summary);
 
   return (
     <CollapsibleCard
@@ -146,14 +148,19 @@ export function LoanCollateralsCard({
                   Total Collateral Value
                 </p>
                 <p className="text-lg font-bold tabular-nums">
-                  {summary ? formatCurrency(summary.total_value) : "—"}
+                  {totalValue === null ? "—" : formatCurrency(totalValue)}
                 </p>
+                {valueHidden && (
+                  <p className="text-xs text-muted-foreground">
+                    Share capital value hidden for your role
+                  </p>
+                )}
               </div>
               {summary && summary.security_status !== "secured" && (
                 <p className="text-xs text-muted-foreground">
                   Short by{" "}
                   <span className="font-medium text-foreground">
-                    {formatCurrency(summary.short_by)}
+                    {shortBy === null ? "—" : formatCurrency(shortBy)}
                   </span>{" "}
                   vs. principal
                 </p>
