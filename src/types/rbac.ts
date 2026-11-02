@@ -125,6 +125,8 @@ export type Action =
   // Restructuring closes a loan and opens a replacement, so the API gates it
   // behind its own permission rather than plain `loans:create`.
   | "restructure"
+  // Writing off a loan's remaining balance; seeded as `loans:write_off`.
+  | "write_off"
   | "void"
   | "mark_collected"
   | "export"
