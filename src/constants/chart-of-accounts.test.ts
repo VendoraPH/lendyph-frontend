@@ -141,6 +141,7 @@ test("each tax role defaults to the payable account the backend seeds under 2200
   const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
   const expected = {
     documentary_stamp_tax_payable: ["2230", "Documentary Stamp Tax Payable"],
+    withholding_tax_payable: ["2210", "Withholding Tax Payable"],
     other_taxes_payable: ["2220", "Other Taxes Payable"],
   } as const;
   for (const [role, [code, name]] of Object.entries(expected)) {

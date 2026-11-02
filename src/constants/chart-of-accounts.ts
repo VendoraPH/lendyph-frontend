@@ -160,14 +160,6 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
 ];
 
 /**
- * The tax roles the backend books release deductions to (decision 4b,
- * 2026-11-02): a Documentary Stamp Tax to 2230, any other tax to 2220. Declared
- * here because `AccountMapping` does not list them yet; the Default Accounts
- * screen does not offer them, so they keep these defaults.
- */
-export type TaxPayableRole = "documentary_stamp_tax_payable" | "other_taxes_payable";
-
-/**
  * Which seeded account each posting role points at by default.
  *
  * The posting engine never hard-codes an account — it resolves through this
@@ -201,6 +193,7 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   other_fee_income: "4080",
   // Taxes withheld at release are owed to the government, never income.
   documentary_stamp_tax_payable: "2230",
+  withholding_tax_payable: "2210",
   other_taxes_payable: "2220",
   credit_loss_expense: "5140",
   allowance_credit_losses: "1200",
@@ -209,7 +202,7 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // payable is owed to a supplier, and one account for both makes a payables
   // ageing report unreadable.
   borrower_advances: "2300",
-} as const satisfies Record<keyof AccountMapping | TaxPayableRole, string>;
+} as const satisfies Record<keyof AccountMapping, string>;
 
 /** The normal balance a seed row implies, for building the account record. */
 export function seedNormalBalance(seed: SeedAccount): NormalBalance {
