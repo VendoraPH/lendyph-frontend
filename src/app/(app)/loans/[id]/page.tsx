@@ -83,6 +83,7 @@ import {
   extensionCycleUnit,
   extensionCyclesLabel,
   extensionCyclesSentence,
+  extensionMoveDescription,
   freshInterestLabel,
 } from "./_lib/extension-preview";
 import { checkPaymentAmount } from "@/app/(app)/payments/_lib/payment-amount";
@@ -4452,7 +4453,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             );
           })()}
 
-          {paymentRefusal !== null && Number(paymentAmount) > 0 && (
+          {paymentRefusal !== null && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <p
               role="alert"
               className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
@@ -4462,7 +4463,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           )}
 
           {/* Allocation Preview */}
-          {paymentPreview && Number(paymentAmount) > 0 && (
+          {paymentPreview && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <>
               <Separator />
               <div className="space-y-4">
@@ -4677,7 +4678,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
                   <span className="text-muted-foreground">Total Recorded</span>
                   <span className="font-bold tabular-nums">
-                    {formatCurrency(Number(paymentAmount) || 0)}
+                    {formatCurrency(paymentAmountCheck.amount ?? 0)}
                   </span>
                 </div>
               </div>
@@ -4735,10 +4736,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
               Extend Loan
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This moves the loan&apos;s due date to its first due date after today, which
-              can be more than one {extendCycleUnit} ahead when the loan is overdue. Each{" "}
-              {extendCycleUnit} moved is charged interest. The principal and any remaining
-              balance are unchanged.{" "}
+              {extensionMoveDescription(extendPreview.preview?.cycles ?? null, extendCycleUnit)} The
+              principal and any remaining balance are unchanged.{" "}
               {extendInterestOption === "pay"
                 ? "The amount below will be collected as a payment before the loan extends."
                 : "The interest due below stays unpaid and is added to the new period's interest."}
@@ -4775,12 +4774,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   )}
                 </p>
                 {(() => {
-                  const sentence = extensionCyclesSentence(extendPreview.preview.cycles, extendCycleUnit);
-                  return sentence === null ? null : (
-                    <p className="mt-1 text-xs font-medium text-emerald-900 dark:text-emerald-200">{sentence}</p>
-                  );
-                })()}
-                {(() => {
                   // The server's parts, premium owed first, then penalty,
                   // then interest; only when there is more than interest.
                   const parts = collectNowParts(extendPreview.preview.collectNow);
@@ -4814,6 +4807,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <dt className="font-semibold">New period&apos;s total due</dt>
                   <dd className="text-right font-semibold tabular-nums">{formatCurrency(extendPreview.preview.newTotalDue)}</dd>
                 </dl>
+                {(() => {
+                  // With the new period's figures, not under what "pay"
+                  // collects now: these months' interest is owed later.
+                  const sentence = extensionCyclesSentence(extendPreview.preview.cycles, extendCycleUnit);
+                  return sentence === null ? null : (
+                    <p className="mt-1 text-xs font-medium text-emerald-900 dark:text-emerald-200">{sentence}</p>
+                  );
+                })()}
               </>
             )}
           </div>

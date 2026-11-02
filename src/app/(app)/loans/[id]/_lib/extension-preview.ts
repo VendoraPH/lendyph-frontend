@@ -130,13 +130,26 @@ export function extensionCyclesLabel(cycles: number | null, unit: ExtensionCycle
 }
 
 /**
- * What the extension moves and charges, from the server's cycle count, or
- * null when the server sent none (the dialog then says nothing about it).
+ * What the extension moves and adds to the new period, from the server's
+ * cycle count, or null when the server sent none (the dialog then says
+ * nothing about it). Shown with the new period's figures, never under what
+ * "pay" collects now: that interest is owed later, not collected now.
  */
 export function extensionCyclesSentence(cycles: number | null, unit: ExtensionCycleUnit): string | null {
   if (cycles === null) return null;
   const moved = extensionCyclesLabel(cycles, unit);
-  return `Moves the due date ${moved}: interest for ${moved} is charged.`;
+  return `Moves the due date ${moved}: interest for ${moved} is added to the new period.`;
+}
+
+/**
+ * The dialog's opening line. The due date always moves at least one cycle,
+ * even on a loan not yet due. The overdue clause shows only once the server
+ * sends `cycles`, so it can't describe a move a server without it won't make.
+ */
+export function extensionMoveDescription(cycles: number | null, unit: ExtensionCycleUnit): string {
+  const base = `This moves the loan's due date one ${unit} forward.`;
+  if (cycles === null) return base;
+  return `${base} When the loan is overdue, it moves as many ${unit}s as needed to land after today, and each ${unit} moved is charged interest.`;
 }
 
 /** The label of the fresh interest row: the cycles it covers, when sent. */
