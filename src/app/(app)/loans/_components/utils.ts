@@ -70,12 +70,14 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "for_review", label: "For Approval" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
-  { value: "released", label: "Released" },
-  // Labelled "Current" but filtered as `ongoing`, matching LOAN_STATUS_LABELS,
-  // which renders an `ongoing` row's badge as "Current". The tab used to filter
-  // `status=current` — a value no row can hold — so it read 0 and returned
-  // nothing while rows badged "Current" sat in the table underneath it.
-  { value: "ongoing", label: "Current" },
+  // "Current" is `released` and `ongoing` together: LOAN_STATUS_LABELS badges
+  // both "Current" (decision 5a), so the tab sends the API's own `active`
+  // shorthand (Loan::ACTIVE_STATUSES) and its badge reads `meta.stats.active`.
+  // It is the same set the Active Loans card selects. There is no separate
+  // Released tab: it would list rows badged "Current" under another name.
+  // The tab once filtered `status=current`, a value no row can hold, so it
+  // read 0 while rows badged "Current" sat in the table underneath it.
+  { value: "active", label: "Current" },
   // Past due is a FILTER, not a status — see VIRTUAL_TAB_VALUES. It sends
   // `status=past_due`, which the API resolves through Loan::scopePastDue(), and
   // its badge reads `meta.stats.past_due`, which is counted through that same
@@ -88,7 +90,7 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   // tab documented above. The value looks identical; what changed is that there
   // is now something on the other end of it.
   //
-  // It deliberately overlaps Released, Current and the Active card, and it
+  // It deliberately overlaps Current and the Active card, and it
   // reaches `defaulted` loans that no other tab shows. The tab counts are not a
   // partition and never were.
   { value: "past_due", label: "Past Due" },
@@ -103,16 +105,17 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
 export const TAB_VALUES: FilterTab[] = [
   "all",
   "active",
-  ...FILTER_TABS.filter((t) => t.value !== "all").map((t) => t.value),
+  ...FILTER_TABS.filter((t) => t.value !== "all" && t.value !== "active").map((t) => t.value),
 ];
 
 /**
  * `?tab=` values this screen used to accept, mapped to what they mean now.
  *
  * The page keeps its whole state in the URL, so those URLs are bookmarked and
- * shared and cannot simply stop working. `current` was a rename, not a removal
- * — it points at `ongoing`, the status that was always behind the "Current"
- * label, so an old link lands on the tab it meant rather than on All.
+ * shared and cannot simply stop working. `current` was a rename, not a removal,
+ * and so were the `ongoing` and `released` tabs when both statuses came to read
+ * "Current": all three point at `active`, the Current tab, so an old link lands
+ * on the tab it meant rather than on All.
  *
  * `past_due` is deliberately NOT aliased, and its absence now means the
  * opposite of what it used to. It was absent because there was nothing to point
@@ -122,7 +125,9 @@ export const TAB_VALUES: FilterTab[] = [
  * Due, which is where it always meant to go.
  */
 const LEGACY_TAB_ALIASES: Record<string, FilterTab> = {
-  current: "ongoing",
+  current: "active",
+  ongoing: "active",
+  released: "active",
 };
 
 /**

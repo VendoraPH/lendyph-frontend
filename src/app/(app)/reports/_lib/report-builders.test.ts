@@ -318,7 +318,8 @@ test("borrower list labels the latest loan's status the way the loans screens do
   const table = namedTable(doc, "Borrowers with Loans Released");
 
   assert.equal(table.columns.find((c) => c.key === "latest_loan_status")?.header, "Latest Loan Status");
-  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Released"]);
+  // Decision 5a: `released` and `ongoing` both read "Current".
+  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Current"]);
 });
 
 test("borrower list shows a dash for a borrower whose loans carry no number", () => {
@@ -610,6 +611,8 @@ test("daily collection renders whole-percent rates verbatim", () => {
       total_collected: 73900.25,
       collection_rate: 87.5,
       uncollected: 10600.25,
+      penalty_collected: 412.5,
+      total_received: 74312.75,
       generated_at: "2026-08-06 09:15:00",
     },
     RANGE
@@ -618,6 +621,73 @@ test("daily collection renders whole-percent rates verbatim", () => {
   assertNoDashes(doc);
   assert.equal(kpiValue(doc, "Collection Rate"), "87.5%");
   assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
+});
+
+// Decision 6: the three collected figures are the server's own. Deliberately
+// not consistent with each other, so a browser sum of any two cannot pass.
+const DAILY_COLLECTION_PAYLOAD = {
+  date: "2026-08-06",
+  total_due: 84500.5,
+  total_collected: 73900.25,
+  collection_rate: 87.5,
+  uncollected: 10600.25,
+  penalty_collected: 412.5,
+  total_received: 90000.1,
+};
+
+test("daily collection shows collected principal and interest, penalty collected and total received as sent", () => {
+  const doc = buildDailyCollectionDoc(DAILY_COLLECTION_PAYLOAD, RANGE);
+
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), "₱73,900.25");
+  assert.equal(kpiValue(doc, "Penalty Collected"), "₱412.50");
+  assert.equal(kpiValue(doc, "Total Received"), "₱90,000.10");
+  assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
+  assert.equal(kpiValue(doc, "Collection Rate"), "87.5%");
+  assert.equal(kpiValue(doc, "Uncollected"), "₱10,600.25");
+});
+
+test("daily collection no longer labels principal and interest as the total collected", () => {
+  const doc = buildDailyCollectionDoc(DAILY_COLLECTION_PAYLOAD, RANGE);
+  const labels = doc.sections.flatMap((s) => (s.kind === "kpi_grid" ? s.items.map((i) => i.label) : []));
+
+  assert.equal(labels.includes("Total Collected"), false);
+  assert.deepEqual(labels, [
+    "Total Due",
+    "Collected (Principal + Interest)",
+    "Penalty Collected",
+    "Total Received",
+    "Collection Rate",
+    "Uncollected",
+  ]);
+});
+
+test("daily collection shows a dash for a figure the server did not send, never a sum", () => {
+  const { penalty_collected, total_received, ...older } = DAILY_COLLECTION_PAYLOAD;
+  void penalty_collected;
+  void total_received;
+  const doc = buildDailyCollectionDoc(older, RANGE);
+
+  assert.equal(kpiValue(doc, "Penalty Collected"), DASH);
+  // Not total_collected + penalty: Total Received is a server figure only.
+  assert.equal(kpiValue(doc, "Total Received"), DASH);
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), "₱73,900.25");
+});
+
+test("daily collection shows a zero penalty and zero received as ₱0.00, not a dash", () => {
+  const doc = buildDailyCollectionDoc(
+    { ...DAILY_COLLECTION_PAYLOAD, penalty_collected: 0, total_received: 0 },
+    RANGE
+  );
+
+  assert.equal(kpiValue(doc, "Penalty Collected"), "₱0.00");
+  assert.equal(kpiValue(doc, "Total Received"), "₱0.00");
+});
+
+test("daily collection reads only total_collected for principal and interest", () => {
+  // `total_amount` and `collected` were loose aliases; neither is the
+  // principal-plus-interest figure the label promises.
+  const doc = buildDailyCollectionDoc({ total_due: 1000, total_amount: 900, collected: 800 }, RANGE);
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), DASH);
 });
 
 const COLLECTION_ROWS = [
@@ -856,8 +926,8 @@ test("releases list maps LoanResource rows and shows a dash, not a page sum, whe
 test("releases list labels each loan's status as the loans screens do", () => {
   const rows = tableRows(buildReleasesListDoc({ data: RELEASE_ROWS, meta: { total: 2 } }, RANGE));
 
-  assert.equal(rows[0].status, "Released");
-  // `ongoing` is the legacy spelling of `current`: reports say "Current".
+  // Decision 5a: a `released` loan and an `ongoing` one both read "Current".
+  assert.equal(rows[0].status, "Current");
   assert.equal(rows[1].status, "Current");
 });
 
@@ -1472,6 +1542,65 @@ test("statement of account reads the summary block for its balances", () => {
   assert.equal(kpiValue(doc, "Total Paid"), "₱9,500.00");
   assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
   assert.equal(kpiValue(doc, "Past Due"), "₱5,450.50");
+});
+
+test("statement of account says what the Outstanding Balance is made of", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(
+    kpi(doc, "Outstanding Balance").hint,
+    "Principal, interest, penalty and insurance premium still owed"
+  );
+});
+
+test("statement of account's Past Due is the server's summary.overdue_amount only", () => {
+  // The grace-rule figure. The loose aliases are other figures, so a summary
+  // without overdue_amount shows a dash rather than one of them.
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_PAYLOAD,
+      summary: { total_paid: 9500, outstanding_balance: 34500.25, past_due_amount: 1, total_overdue: 2 },
+    },
+    RANGE
+  );
+  assert.equal(kpiValue(doc, "Past Due"), DASH);
+
+  const zero = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, summary: { ...SOA_PAYLOAD.summary, overdue_amount: 0 } },
+    RANGE
+  );
+  assert.equal(kpiValue(zero, "Past Due"), "₱0.00");
+});
+
+test("statement of account's transaction Reference is the payment's receipt number", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  const column = table.columns.find((c) => c.key === "reference")!;
+
+  assert.equal(table.rows[0].reference, "OR-1001");
+  assert.equal(formatCell(table.rows[0], column), "OR-1001");
+});
+
+test("statement of account's schedule Balance is the server's amount_remaining only", () => {
+  const [first, second] = SOA_PAYLOAD.amortization_schedule;
+  const { amount_remaining, ...withoutRemaining } = second;
+  void amount_remaining;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        // `balance` and `remaining_balance` are not the period's remaining
+        // amount; a row without amount_remaining shows a dash.
+        amortization_schedule: [first, { ...withoutRemaining, balance: 1, remaining_balance: 2 }],
+      },
+      RANGE
+    ),
+    "Amortization Schedule"
+  );
+  const column = table.columns.find((c) => c.key === "balance")!;
+
+  assert.equal(table.rows[0].balance, 0);
+  assert.equal(formatCell(table.rows[0], column), "₱0.00");
+  assert.equal(table.rows[1].balance, null);
+  assert.equal(formatCell(table.rows[1], column), DASH);
 });
 
 test("the amortization schedule shows each period's paid figure as the server sent it", () => {

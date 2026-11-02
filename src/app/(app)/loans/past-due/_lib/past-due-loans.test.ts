@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  PAST_DUE_REQUEST_PARAMS,
   aggregateByLoan,
   mapRow,
   readPastDueTotals,
@@ -169,4 +170,11 @@ test("summary money is the server's totals, never a sum of the loans", () => {
   const absent = summarizePastDue(loans, null);
   assert.equal(absent.pastDueAmount, null);
   assert.equal(absent.totalOutstanding, null);
+});
+
+// Decision 2b: the page asks GET /reports/due-past-due for rows past grace
+// only, so a loan still inside its grace period is not listed, and the
+// server's totals (the money cards) follow the same filter.
+test("the page requests only rows past grace", () => {
+  assert.deepEqual(PAST_DUE_REQUEST_PARAMS, { past_due_only: 1 });
 });

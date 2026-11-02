@@ -53,7 +53,9 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   for_review: "For Approval",
   approved: "Approved",
   rejected: "Rejected",
-  released: "Released",
+  // A released loan reads "Current", the same as `ongoing` (decision 5a).
+  // `loans.status` keeps both values; only the wording is shared.
+  released: "Current",
   current: "Current",
   past_due: "Past Due",
   // Legacy — older backend versions may still emit "ongoing" for a loan
@@ -106,7 +108,8 @@ export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
   for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
   approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
   rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
+  // Styled as `ongoing`: both read "Current", so one word has one colour.
+  released: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   current: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   past_due: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",

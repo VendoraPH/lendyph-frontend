@@ -25,8 +25,26 @@ test("a live tab value resolves to itself", () => {
 
 test("legacy ?tab=current lands on the tab it meant, not on All", () => {
   // The Current tab was renamed, not removed: it filtered `status=current`,
-  // which no row can hold, and now filters `ongoing`.
-  assert.equal(tabFromParam("current"), "ongoing");
+  // which no row can hold, then `ongoing`, and now `active`.
+  assert.equal(tabFromParam("current"), "active");
+});
+
+test("the Current tab requests status=active, released and ongoing together (decision 5a)", () => {
+  // Both statuses read "Current", so the tab sends the API's own `active`
+  // shorthand (Loan::ACTIVE_STATUSES), never one of the two statuses.
+  const current = FILTER_TABS.filter((t) => t.label === "Current");
+  assert.deepEqual(current, [{ value: "active", label: "Current" }]);
+  assert.ok(!FILTER_TABS.some((t) => t.value === "ongoing" || t.value === "released"));
+  assert.ok(!FILTER_TABS.some((t) => t.label === "Released"));
+});
+
+test("old ?tab=ongoing and ?tab=released links land on the Current tab", () => {
+  assert.equal(tabFromParam("ongoing"), "active");
+  assert.equal(tabFromParam("released"), "active");
+});
+
+test("TAB_VALUES lists each value once", () => {
+  assert.equal(new Set(TAB_VALUES).size, TAB_VALUES.length);
 });
 
 test("?tab=past_due lands on the Past Due tab again", () => {
