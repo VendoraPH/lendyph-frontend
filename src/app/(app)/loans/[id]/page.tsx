@@ -45,16 +45,19 @@ import {
 } from "./_lib/server-schedule";
 import { ledgerInterestPaid, ledgerOpening, walkLedgerBalances } from "./_lib/ledger-balances";
 import {
-  offeredAdvancePresets,
   outstandingPrincipal,
+  presetButtons,
   previewOutstandingAfter,
   previewOutstandingBefore,
-  readAdvancePresets,
-  readPayoffAmount,
   totalOutstanding,
   totalPayableFigures,
 } from "./_lib/loan-figures";
-import { PARTIAL_EXTEND_LABELS, partialExtendOutcome, type PartialExtendChoice } from "./_lib/partial-extend";
+import {
+  PARTIAL_EXTEND_LABELS,
+  dispatchPartialExtend,
+  partialExtendOnOpenChange,
+  type PartialExtendChoice,
+} from "./_lib/partial-extend";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -1961,20 +1964,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
-  // The "Extend loan?" prompt's three buttons. Every choice closes it and
-  // clears the pending payment; Cancel records nothing, "Record partial
-  // payment" records it without extending, and "Yes, extend" records it and
-  // extends.
-  const handlePartialExtendChoice = async (choice: PartialExtendChoice) => {
-    const payload = pendingPayment;
-    setPartialExtendOpen(false);
-    setPendingPayment(null);
-    const outcome = partialExtendOutcome(choice);
-    if (!payload || !outcome.recordPayment) return;
-    if (!outcome.extend) {
-      await submitRepayment(payload);
-      return;
-    }
+  // "Yes, extend" on the partial-payment prompt: record the payment, then extend.
+  const recordPaymentAndExtend = async (payload: NonNullable<typeof pendingPayment>) => {
     // Pay first — this posts the cashier's originally-entered amount against
     // the CURRENT period (before it rolls over), then extend. Reversing this
     // order (as the old code did) posted the payment against the already-
@@ -2007,6 +1998,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
       ]);
       setActionLoading(false);
     }
+  };
+
+  // The "Extend loan?" prompt's three buttons. Every choice closes it and
+  // clears the pending payment; what runs is dispatchPartialExtend's: Cancel
+  // nothing, "Record partial payment" the payment only, "Yes, extend" both.
+  const handlePartialExtendChoice = async (choice: PartialExtendChoice) => {
+    const payload = pendingPayment;
+    setPartialExtendOpen(false);
+    setPendingPayment(null);
+    await dispatchPartialExtend(choice, payload, {
+      record: (payment) => submitRepayment(payment),
+      recordAndExtend: recordPaymentAndExtend,
+    });
   };
 
   // ── Auto Pay (Upon Maturity) ──
@@ -3032,12 +3036,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   {currencyOrDash(loanTotalPayable)}
                 </p>
               </div>
-              {loanContractTotal !== null && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Contract Total</p>
-                  <p className="text-sm font-semibold">{formatCurrency(loanContractTotal)}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Contract Total</p>
+                <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
+              </div>
               <div>
                 <p className="text-xs text-muted-foreground">Net Proceeds</p>
                 <p className="text-sm font-semibold">
@@ -4474,9 +4476,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
             // Only the presets the server sent (one on a Share Capital
-            // Build-Up loan).
-            const presets = offeredAdvancePresets(readAdvancePresets(loanSummary), [1, 2, 3, 6]);
-            const payoffAmount = readPayoffAmount(loanSummary);
+            // Build-Up loan), then "Pay all remaining" with its payoff amount.
+            const buttons = presetButtons(loanSummary, unpaid.length);
             const fillAmount = (periods: number, amount: number | null) => {
               setAdvancePeriods(periods);
               setPaymentAmount(amount !== null && amount > 0 ? amount.toFixed(2) : "");
@@ -4492,42 +4493,26 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {presets.map(({ periods: n, amount }) => (
+                  {buttons.map((b) => (
                     <Button
-                      key={n}
+                      key={b.label}
                       type="button"
-                      variant={advancePeriods === n ? "default" : "outline"}
+                      variant={advancePeriods === b.periods ? "default" : "outline"}
                       size="sm"
                       className={cn(
                         "h-8 text-xs whitespace-nowrap",
-                        advancePeriods === n &&
+                        advancePeriods === b.periods &&
                           "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      onClick={() => fillAmount(n, amount)}
+                      disabled={b.disabled}
+                      onClick={() => fillAmount(b.periods, b.amount)}
                     >
-                      {n} period{n === 1 ? "" : "s"}
+                      {b.label}
                       <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                        ({formatCurrency(amount)})
+                        ({currencyOrDash(b.amount)})
                       </span>
                     </Button>
                   ))}
-                  <Button
-                    type="button"
-                    variant={advancePeriods === unpaid.length ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-8 text-xs whitespace-nowrap",
-                      advancePeriods === unpaid.length &&
-                        "bg-blue-600 hover:bg-blue-700 text-white"
-                    )}
-                    disabled={payoffAmount === null}
-                    onClick={() => fillAmount(unpaid.length, payoffAmount)}
-                  >
-                    Pay all remaining
-                    <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                      ({currencyOrDash(payoffAmount)})
-                    </span>
-                  </Button>
                 </div>
                 <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 break-words">
                   Tap a preset to auto-fill the amount. You can still edit it
@@ -5163,8 +5148,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       <AlertDialog
         open={partialExtendOpen}
         onOpenChange={(open) => {
-          // Closing it any other way (Escape, outside click) is Cancel.
-          if (!open) void handlePartialExtendChoice("cancel");
+          const choice = partialExtendOnOpenChange(open);
+          if (choice !== null) void handlePartialExtendChoice(choice);
         }}
       >
         <AlertDialogContent>

@@ -67,6 +67,40 @@ export function offeredAdvancePresets(presets: readonly AdvancePreset[], choices
   });
 }
 
+/** The period counts the Record Payment dialog offers a preset for, when the server sent one. */
+export const ADVANCE_PRESET_CHOICES: readonly number[] = [1, 2, 3, 6];
+
+export interface PresetButton {
+  label: string;
+  /** The period count the payment's remark states. */
+  periods: number;
+  /** The server's amount; null (a dash) when not sent. */
+  amount: number | null;
+  disabled: boolean;
+}
+
+/**
+ * The Record Payment dialog's "Pay ahead by" buttons: one per preset the
+ * server sent among `ADVANCE_PRESET_CHOICES`, then "Pay all remaining" with
+ * `payoff_amount` (disabled, a dash, when not sent). `unpaidCount` is the
+ * open periods on the schedule, for that button's remark only.
+ */
+export function presetButtons(summary: unknown, unpaidCount: number): PresetButton[] {
+  const presets = offeredAdvancePresets(readAdvancePresets(summary), ADVANCE_PRESET_CHOICES).map(
+    ({ periods, amount }) => ({
+      label: `${periods} period${periods === 1 ? "" : "s"}`,
+      periods,
+      amount,
+      disabled: false,
+    }),
+  );
+  const payoff = readPayoffAmount(summary);
+  return [
+    ...presets,
+    { label: "Pay all remaining", periods: unpaidCount, amount: payoff, disabled: payoff === null },
+  ];
+}
+
 /** The summary's `payoff_amount`, null when not sent. */
 export function readPayoffAmount(summary: unknown): number | null {
   return figure(record(summary)?.payoff_amount);

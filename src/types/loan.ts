@@ -105,7 +105,21 @@ export interface LoanFormPreviewRequest {
   frequency?: string;
   start_date?: string;
   scb_amount?: number;
-  collaterals?: { collateral_id: number; snapshot_value: number }[];
+  /**
+   * The member the loan is for: collateral rows are read within their
+   * collaterals, and the server values each one itself.
+   */
+  borrower_id?: number;
+  /**
+   * The loan being restructured. When sent, the answer carries a
+   * `restructure` block for it.
+   */
+  source_loan_id?: number;
+  collaterals?: {
+    collateral_id: number;
+    /** @deprecated The server ignores it and values the collateral itself. */
+    snapshot_value?: number;
+  }[];
   /**
    * The deduction inputs exactly as the create, update or restructure payload
    * states them: a percentage's rate, a fixed item's pesos. Absent, the server
@@ -184,6 +198,17 @@ export interface LoanFormPreview {
       share_capital_build_up: number;
       total_payment: number;
     };
+  } | null;
+  /**
+   * Present only when the request sent `source_loan_id`: what the restructure
+   * carries over from that loan and how far the new principal falls short.
+   */
+  restructure?: {
+    restructurable_balance: number;
+    principal: number;
+    shortfall: number;
+    remarks_required: boolean;
+    write_off_permission_required: boolean;
   } | null;
 }
 

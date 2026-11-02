@@ -93,7 +93,7 @@ describe("loanService.preview", () => {
     frequency: "monthly",
     start_date: "2026-10-03",
     scb_amount: 100,
-    collaterals: [{ collateral_id: 7, snapshot_value: 25000.5 }],
+    collaterals: [{ collateral_id: 7 }],
     deductions: [
       { name: "Processing Fee", amount: 1.5, type: "percentage" as const },
       { name: "Notarial", amount: 250.5, type: "fixed" as const },

@@ -30,3 +30,24 @@ export function partialExtendOutcome(choice: PartialExtendChoice): PartialExtend
       return { recordPayment: true, extend: true };
   }
 }
+
+/** The prompt closing on its own (Escape, outside click) is Cancel; opening needs no choice. */
+export function partialExtendOnOpenChange(open: boolean): PartialExtendChoice | null {
+  return open ? null : "cancel";
+}
+
+/**
+ * Runs the choice on the pending payment: Cancel runs nothing, "Record
+ * partial payment" only records it, "Yes, extend" records it and extends.
+ * Nothing runs when no payment is pending.
+ */
+export async function dispatchPartialExtend<P>(
+  choice: PartialExtendChoice,
+  payment: P | null,
+  actions: { record: (payment: P) => Promise<unknown>; recordAndExtend: (payment: P) => Promise<unknown> },
+): Promise<void> {
+  const outcome = partialExtendOutcome(choice);
+  if (payment === null || !outcome.recordPayment) return;
+  if (outcome.extend) await actions.recordAndExtend(payment);
+  else await actions.record(payment);
+}

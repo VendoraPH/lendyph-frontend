@@ -20,6 +20,7 @@ import {
   advancePresetAmount,
   offeredAdvancePresets,
   outstandingPrincipal,
+  presetButtons,
   previewOutstandingAfter,
   previewOutstandingBefore,
   readAdvancePresets,
@@ -154,4 +155,38 @@ test("previewOutstanding reads total_outstanding_before/after, not balance_befor
   assert.equal(previewOutstandingAfter({ balance_after: 60000 }), null);
   assert.equal(previewOutstandingBefore(null), null);
   assert.equal(previewOutstandingAfter({ total_outstanding_after: "0.00" }), 0);
+});
+
+test("presetButtons: one button per preset the server sent, then Pay all remaining", () => {
+  const summary = {
+    advance_presets: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ periods: n, amount: n * 100 })),
+    payoff_amount: "70800.00",
+  };
+  assert.deepEqual(presetButtons(summary, 7), [
+    { label: "1 period", periods: 1, amount: 100, disabled: false },
+    { label: "2 periods", periods: 2, amount: 200, disabled: false },
+    { label: "3 periods", periods: 3, amount: 300, disabled: false },
+    { label: "6 periods", periods: 6, amount: 600, disabled: false },
+    { label: "Pay all remaining", periods: 7, amount: 70800, disabled: false },
+  ]);
+});
+
+test("presetButtons on a Share Capital Build-Up loan: only the 1-period preset and payoff", () => {
+  const summary = { advance_presets: [{ periods: 1, amount: 11900 }], payoff_amount: 70800 };
+  assert.deepEqual(
+    presetButtons(summary, 6).map((b) => [b.label, b.amount]),
+    [
+      ["1 period", 11900],
+      ["Pay all remaining", 70800],
+    ],
+  );
+});
+
+test("presetButtons: Pay all remaining reads payoff_amount, a dash and disabled when not sent", () => {
+  const buttons = presetButtons({ advance_presets: [{ periods: 1, amount: 100 }] }, 3);
+  assert.deepEqual(buttons.at(-1), { label: "Pay all remaining", periods: 3, amount: null, disabled: true });
+  // Never the presets added up, never the last preset standing in.
+  assert.deepEqual(presetButtons(null, 2), [
+    { label: "Pay all remaining", periods: 2, amount: null, disabled: true },
+  ]);
 });
