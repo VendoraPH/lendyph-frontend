@@ -28,7 +28,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   fees: ["view", "create", "update", "delete"],
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
+  // `write_off` is seeded for admin and super_admin; the API's grant guard
+  // still refuses it to anyone who doesn't hold it themselves.
+  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure", "write_off"],
   // `manage` only: creating, editing and deleting products. Viewing them needs
   // `loans:view`, so there is no `loan_products:view` to offer.
   loan_products: ["manage"],

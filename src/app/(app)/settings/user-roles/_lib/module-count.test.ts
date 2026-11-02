@@ -68,6 +68,13 @@ test("a module counts only when the role holds an action the matrix offers in it
   assert.equal(roleModuleCount(["loans:extend", "loans:view"]), 1);
 });
 
+// The matrix offers `loans:write_off` now, so holding it alone puts a role in
+// the Loans module, like any other action with a checkbox.
+test("loans:write_off has a checkbox and counts the loans module", () => {
+  assert.ok(MODULE_ACTIONS.loans.includes("write_off"));
+  assert.equal(roleModuleCount(["loans:write_off"]), 1);
+});
+
 test("several permissions in one module count it once", () => {
   assert.equal(roleModuleCount(["fees:view", "fees:create", "dashboard:view"]), 2);
 });

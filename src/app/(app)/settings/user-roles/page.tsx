@@ -73,6 +73,7 @@ import { toast } from "sonner";
 import { notifyValidation } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
+import { roleConflictMessage } from "./_lib/role-conflict";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -320,6 +321,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reject: { label: "Reject", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  write_off: { label: "Write off", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
@@ -680,6 +682,15 @@ function UserRolesContent() {
         await maybeRefreshCurrentUser(item.key);
       }
     } catch (err) {
+      // The role was deleted by another request while this save waited:
+      // nothing was written, so close the form and show the current list.
+      const conflict = roleConflictMessage(err);
+      if (conflict) {
+        toast.error(conflict);
+        setFormOpen(false);
+        await loadRoles();
+        return;
+      }
       // A permission the server doesn't seed comes back as a raw
       // "permissions.N is invalid"; name the permission instead.
       const refused = roleSaveErrorMessage(err, item.permissions, describeMatrixPermission);
@@ -728,7 +739,16 @@ function UserRolesContent() {
       setDeleteTarget(null);
       await loadRoles();
       await maybeRefreshCurrentUser(affected);
-    } catch {
+    } catch (err) {
+      // Already deleted by another request: nothing was written, so close the
+      // dialog and show the current list.
+      const conflict = roleConflictMessage(err);
+      if (conflict) {
+        toast.error(conflict);
+        setDeleteTarget(null);
+        await loadRoles();
+        return;
+      }
       toast.error("We couldn't delete the role. Please try again.");
     } finally {
       setActionLoading(false);
