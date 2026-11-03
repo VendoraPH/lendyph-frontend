@@ -66,6 +66,7 @@ import {
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
 import { fetchAllActiveLoans, type ActiveLoanTotals } from "./_lib/active-loans";
+import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
   postPaymentErrorMessage,
   previewAllocation,
@@ -330,9 +331,14 @@ function PaymentsContent() {
   // amount on this date will record; the page no longer estimates either.
   // Kept with the request it answers, so a slow reply for an earlier amount
   // can never stand in for the current one.
+  // The amount typed, checked for centavos: more than two decimals shows a
+  // message and sends neither the preview nor the payment (the server
+  // refuses it too). `sendAmount` is what may be sent, null otherwise.
+  const amountCheck = checkPaymentAmount(amountPaid);
+  const sendAmount = amountCheck.amount !== null && amountCheck.amount > 0 ? amountCheck.amount : null;
   const previewKey =
-    selectedLoan && typeof amountPaid === "number" && amountPaid > 0 && paymentDate
-      ? `${selectedLoan.id}|${amountPaid}|${paymentDate}`
+    selectedLoan && sendAmount !== null && paymentDate
+      ? `${selectedLoan.id}|${sendAmount}|${paymentDate}`
       : null;
   const [previewResult, setPreviewResult] = useState<{
     key: string;
@@ -363,11 +369,11 @@ function PaymentsContent() {
   );
 
   useEffect(() => {
-    if (!previewKey || !selectedLoan || typeof amountPaid !== "number") return;
+    if (!previewKey || !selectedLoan || sendAmount === null) return;
     let cancelled = false;
     const handle = setTimeout(() => {
       repaymentService
-        .preview(selectedLoan.id, { amount_paid: amountPaid, payment_date: paymentDate })
+        .preview(selectedLoan.id, { amount_paid: sendAmount, payment_date: paymentDate })
         .then((preview) => {
           if (!cancelled) setPreviewResult({ key: previewKey, preview: preview ?? null, error: null });
         })
@@ -381,7 +387,7 @@ function PaymentsContent() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [previewKey, selectedLoan, amountPaid, paymentDate]);
+  }, [previewKey, selectedLoan, sendAmount, paymentDate]);
 
   function handleSelectLoan(loan: ActiveLoan) {
     setSelectedLoan(loan);
@@ -407,7 +413,7 @@ function PaymentsContent() {
   }
 
   async function handleSubmit() {
-    if (!selectedLoan || !amountPaid || amountPaid <= 0) return;
+    if (!selectedLoan || sendAmount === null) return;
     setIsSubmitting(true);
 
     // Backend only stores payment_date/amount_paid/remarks — fold the cashier
@@ -422,7 +428,7 @@ function PaymentsContent() {
     try {
       const repayment = await repaymentService.create(selectedLoan.id, {
         payment_date: paymentDate,
-        amount_paid: amountPaid,
+        amount_paid: sendAmount,
         remarks: composedRemarks,
       });
 
@@ -432,8 +438,8 @@ function PaymentsContent() {
       const scbCredited = repayment?.scb_paid ?? 0;
       toast.success("Payment posted", {
         description: scbCredited > 0
-          ? `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
-          : `${formatCurrency(amountPaid)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
+          ? `${formatCurrency(sendAmount)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
+          : `${formatCurrency(sendAmount)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
         action: receiptId
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
           : undefined,
@@ -822,7 +828,14 @@ function PaymentsContent() {
                   onChange={(e) =>
                     setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))
                   }
+                  aria-invalid={amountCheck.error !== null}
+                  aria-describedby={amountCheck.error !== null ? "amount-paid-error" : undefined}
                 />
+                {amountCheck.error !== null && (
+                  <p id="amount-paid-error" role="alert" className="text-xs text-destructive">
+                    {amountCheck.error}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -1147,8 +1160,7 @@ function PaymentsContent() {
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2"
                 disabled={
                   isSubmitting ||
-                  !amountPaid ||
-                  amountPaid <= 0 ||
+                  sendAmount === null ||
                   (needsReference && !referenceNumber.trim())
                 }
                 onClick={handleSubmit}

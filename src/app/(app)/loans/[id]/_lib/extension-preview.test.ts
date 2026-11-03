@@ -18,7 +18,12 @@ import {
   extensionPreviewAnswer,
   extensionPreviewKey,
   collectNowParts,
+  extensionCycleUnit,
+  extensionCyclesLabel,
+  extensionCyclesSentence,
+  extensionMoveDescription,
   extensionPreviewState,
+  freshInterestLabel,
   readExtensionPreview,
 } from "./extension-preview";
 
@@ -54,6 +59,7 @@ test("pay shows what is collected now, its penalty part, and the new period, as 
     newInterestDue: 2100.01,
     newTotalDue: 72100.05,
     newDueDate: "2026-12-31",
+    cycles: null,
   });
 });
 
@@ -117,6 +123,7 @@ test("defer collects nothing now and shows the carried and fresh interest", () =
     newInterestDue: 6000.5,
     newTotalDue: 76000.5,
     newDueDate: "2027-01-31",
+    cycles: null,
   });
 });
 
@@ -144,6 +151,74 @@ test("an incomplete or unreadable answer shows nothing, never a figure worked ou
   for (const junk of [undefined, null, "ok", [], 42]) {
     assert.equal(readExtensionPreview(junk, "pay"), null);
   }
+});
+
+// ── how far the due date moves (decision 4a) ─────────────────────────────
+
+test("the server's cycle count and new due date are shown as sent", () => {
+  // An overdue loan anchored on the 27th, due 27 May and extended on 2 Nov,
+  // moves six cycles to 27 Nov (the backend's own example).
+  const view = readExtensionPreview({ ...PAY, cycles: 6, new_due_date: "2026-11-27" }, "pay");
+  assert.equal(view?.cycles, 6);
+  assert.equal(view?.newDueDate, "2026-11-27");
+  assert.equal(readExtensionPreview({ ...DEFER, cycles: "1" }, "defer")?.cycles, 1);
+});
+
+test("an answer without cycles still shows its figures, with a dash for the cycles", () => {
+  const view = readExtensionPreview({ ...PAY, cycles: null }, "pay");
+  assert.equal(view?.cycles, null);
+  assert.equal(extensionCyclesLabel(view?.cycles ?? null, "month"), "—");
+  assert.equal(extensionCyclesSentence(null, "month"), null);
+  assert.equal(freshInterestLabel(null, "month"), "New interest charged");
+});
+
+test("cycles sent but unreadable shows nothing, never a count worked out here", () => {
+  for (const junk of [0, -1, 1.5, "abc", "", true, {}]) {
+    assert.equal(readExtensionPreview({ ...PAY, cycles: junk }, "pay"), null, String(junk));
+  }
+});
+
+test("months for monthly and upon-maturity loans, cycles for any other frequency", () => {
+  assert.equal(extensionCycleUnit("upon_maturity"), "month");
+  assert.equal(extensionCycleUnit("monthly"), "month");
+  assert.equal(extensionCycleUnit("weekly"), "cycle");
+  assert.equal(extensionCycleUnit("semi_monthly"), "cycle");
+  assert.equal(extensionCycleUnit(undefined), "cycle");
+});
+
+test("the wording names the months moved and the interest they add to the new period", () => {
+  // Added to the new period, never "collected": on "pay" the sentence must
+  // not read as six months of interest taken now.
+  assert.equal(extensionCyclesLabel(1, "month"), "1 month");
+  assert.equal(extensionCyclesLabel(6, "month"), "6 months");
+  assert.equal(
+    extensionCyclesSentence(6, "month"),
+    "Moves the due date 6 months: interest for 6 months is added to the new period.",
+  );
+  assert.equal(
+    extensionCyclesSentence(1, "month"),
+    "Moves the due date 1 month: interest for 1 month is added to the new period.",
+  );
+  assert.equal(
+    extensionCyclesSentence(3, "cycle"),
+    "Moves the due date 3 cycles: interest for 3 cycles is added to the new period.",
+  );
+  assert.equal(freshInterestLabel(6, "month"), "Interest for 6 months");
+  assert.equal(freshInterestLabel(1, "cycle"), "Interest for 1 cycle");
+});
+
+test("the opening line says one cycle forward; the overdue clause waits for the server's cycles", () => {
+  // A loan not yet due still moves one cycle (27 Nov to 27 Dec), so the line
+  // never says "the first due date after today".
+  assert.equal(extensionMoveDescription(null, "month"), "This moves the loan's due date one month forward.");
+  assert.equal(
+    extensionMoveDescription(1, "month"),
+    "This moves the loan's due date one month forward. When the loan is overdue, it moves as many months as needed to land after today, and each month moved is charged interest.",
+  );
+  assert.equal(
+    extensionMoveDescription(6, "cycle"),
+    "This moves the loan's due date one cycle forward. When the loan is overdue, it moves as many cycles as needed to land after today, and each cycle moved is charged interest.",
+  );
 });
 
 // ── which answer the dialog shows ─────────────────────────────────────────
