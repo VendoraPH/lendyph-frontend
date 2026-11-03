@@ -10,6 +10,7 @@ import {
   dateOrNull,
   numOrNull,
   clampOneOf,
+  offersAutoPay,
 } from "./utils";
 
 // The loans screen keeps its entire state in the URL, so `?tab=` is a public,
@@ -25,8 +26,26 @@ test("a live tab value resolves to itself", () => {
 
 test("legacy ?tab=current lands on the tab it meant, not on All", () => {
   // The Current tab was renamed, not removed: it filtered `status=current`,
-  // which no row can hold, and now filters `ongoing`.
-  assert.equal(tabFromParam("current"), "ongoing");
+  // which no row can hold, then `ongoing`, and now `active`.
+  assert.equal(tabFromParam("current"), "active");
+});
+
+test("the Current tab requests status=active, released and ongoing together (decision 5a)", () => {
+  // Both statuses read "Current", so the tab sends the API's own `active`
+  // shorthand (Loan::ACTIVE_STATUSES), never one of the two statuses.
+  const current = FILTER_TABS.filter((t) => t.label === "Current");
+  assert.deepEqual(current, [{ value: "active", label: "Current" }]);
+  assert.ok(!FILTER_TABS.some((t) => t.value === "ongoing" || t.value === "released"));
+  assert.ok(!FILTER_TABS.some((t) => t.label === "Released"));
+});
+
+test("old ?tab=ongoing and ?tab=released links land on the Current tab", () => {
+  assert.equal(tabFromParam("ongoing"), "active");
+  assert.equal(tabFromParam("released"), "active");
+});
+
+test("TAB_VALUES lists each value once", () => {
+  assert.equal(new Set(TAB_VALUES).size, TAB_VALUES.length);
 });
 
 test("?tab=past_due lands on the Past Due tab again", () => {
@@ -134,4 +153,13 @@ test("clampOneOf falls back rather than passing a value through", () => {
   assert.equal(clampOneOf("asc", ["asc", "desc"], "desc"), "asc");
   assert.equal(clampOneOf("sideways", ["asc", "desc"], "desc"), "desc");
   assert.equal(clampOneOf(999, [10, 20, 50], 10), 10);
+});
+
+test("every Current loan offers auto-pay, released or ongoing", () => {
+  // Both read "Current" and the backend's auto-pay covers both.
+  assert.equal(offersAutoPay("released"), true);
+  assert.equal(offersAutoPay("ongoing"), true);
+  for (const status of ["draft", "for_review", "approved", "completed", "defaulted", "restructured", "void", "current", "", null, undefined]) {
+    assert.equal(offersAutoPay(status), false, String(status));
+  }
 });

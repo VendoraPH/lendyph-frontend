@@ -1,6 +1,14 @@
 import { toNumber } from "@/lib/report-format";
 import { mergeLoanFigure, readRowOutstanding } from "./past-due-outstanding";
 
+/**
+ * The filters the page sends to GET /reports/due-past-due. `past_due_only=1`
+ * keeps only periods past their grace period (the server's grace rule), so a
+ * loan still inside its grace window is not listed, and the report's `totals`
+ * (the money cards) follow the same filter.
+ */
+export const PAST_DUE_REQUEST_PARAMS = { past_due_only: 1 } as const;
+
 /** One loan on the Past Due Loans page. Every money figure is the server's. */
 export interface PastDueLoan {
   loanId: number;
