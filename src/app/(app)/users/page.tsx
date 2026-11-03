@@ -84,6 +84,7 @@ import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
+import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -963,10 +964,13 @@ function UserActionsCell({
   // deactivate: the API refuses a caller without `branches:view_all` any target
   // who also works in a branch the caller doesn't hold.
   const isBranchLocked = worksOutsideCallerBranches(user, caller, viewAll);
-  const cannotManageTarget = isSuperAdminLocked || isBranchLocked;
-  const lockReason = isSuperAdminLocked
-    ? "Only a super_admin can change this account."
-    : "This user also works in a branch you don't manage.";
+  // The server's `can_manage` applies the same rule as those requests,
+  // including the permissions the target holds, which the client can't see;
+  // the two locks above only decide when the row doesn't carry it.
+  const { locked: cannotManageTarget, reason: lockReason } = userManageLock(user, {
+    superAdminLocked: isSuperAdminLocked,
+    branchLocked: isBranchLocked,
+  });
 
   return (
     <>

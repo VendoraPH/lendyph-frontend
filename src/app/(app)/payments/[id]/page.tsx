@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, ReceiptText, Ban, Loader2 } from "lucide-react";
 import { usePrintables } from "@/hooks";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -258,14 +258,16 @@ function PaymentReceiptContent({
 
         <div className="flex gap-2">
           {receipt.status === "completed" && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip="Your role doesn't have permission to void payments"
               variant="destructive"
               size="sm"
               onClick={() => setShowVoidConfirm(true)}
             >
               <Ban className="mr-2 h-4 w-4" />
               Void Payment
-            </Button>
+            </PermissionButton>
           )}
           {/* Both buttons open the same document, and that is deliberate: an
               Official Receipt is issued under the payment's own receipt number,

@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { reportService } from "@/services";
+import { REPORT_TITLES } from "@/lib/page-titles";
 import {
   LIST_PAGE_SIZE,
   buildAgingDoc,
@@ -121,7 +122,7 @@ const ACCENT = {
 export const REPORT_CATALOG: ReportDefinition[] = [
   {
     id: "daily_collection",
-    title: "Daily Collection Report",
+    title: REPORT_TITLES.daily_collection,
     description: "Today's collections versus the schedule.",
     category: "operations",
     icon: ClipboardList,
@@ -142,7 +143,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "repayments_list",
-    title: "Repayments List",
+    title: REPORT_TITLES.repayments_list,
     description: "Every repayment recorded in the period.",
     category: "operations",
     icon: ReceiptText,
@@ -152,7 +153,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "collection_efficiency",
-    title: "Collection Efficiency",
+    title: REPORT_TITLES.collection_efficiency,
     description: "Amounts due against collected, by branch and by month.",
     category: "performance",
     icon: Gauge,
@@ -165,7 +166,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "performance",
-    title: "Officer / Branch Performance",
+    title: REPORT_TITLES.performance,
     description: "Releases, collections, and risk per account officer.",
     category: "performance",
     icon: Target,
@@ -175,7 +176,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "cash_flow",
-    title: "Cash Flow Statement",
+    title: REPORT_TITLES.cash_flow,
     description: "Cash received against cash paid out for the period.",
     category: "financial",
     icon: ArrowLeftRight,
@@ -185,7 +186,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "share_capital",
-    title: "Share Capital Report",
+    title: REPORT_TITLES.share_capital,
     description: "Member share capital movement and subscription status.",
     category: "financial",
     icon: PiggyBank,
@@ -198,7 +199,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "provisioning",
-    title: "Loan Loss Provisioning",
+    title: REPORT_TITLES.provisioning,
     description: "Required allowance for probable losses by aging bucket.",
     category: "financial",
     icon: ShieldAlert,
@@ -208,7 +209,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "portfolio_summary",
-    title: "Portfolio Summary",
+    title: REPORT_TITLES.portfolio_summary,
     description: "Active loans, outstanding balance, portfolio at risk.",
     category: "portfolio",
     icon: PieChart,
@@ -218,7 +219,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "income_report",
-    title: "Income Report",
+    title: REPORT_TITLES.income_report,
     description: "Interest, processing fees, and penalty income.",
     category: "portfolio",
     icon: TrendingUp,
@@ -239,7 +240,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "aging_report",
-    title: "Aging Report",
+    title: REPORT_TITLES.aging_report,
     description: "Overdue balances by 1–30, 31–60, 61–90, and 90+ buckets.",
     category: "portfolio",
     icon: Clock,
@@ -249,7 +250,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "portfolio_by_product",
-    title: "Loan Portfolio by Product",
+    title: REPORT_TITLES.portfolio_by_product,
     description: "Released, outstanding, and risk for each loan product.",
     category: "portfolio",
     icon: Layers,
@@ -259,7 +260,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "due_past_due_list",
-    title: "Due / Past Due List",
+    title: REPORT_TITLES.due_past_due_list,
     description: "Schedules due or overdue as of the selected period.",
     category: "portfolio",
     icon: AlertTriangle,
@@ -269,7 +270,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "borrower_report",
-    title: "Borrower Report",
+    title: REPORT_TITLES.borrower_report,
     description: "Active, new, and repeat borrower counts.",
     category: "member",
     icon: Users,
@@ -290,7 +291,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "disbursement_report",
-    title: "Disbursement Summary",
+    title: REPORT_TITLES.disbursement_report,
     description: "Totals for releases during the period.",
     category: "disbursement",
     icon: Banknote,
@@ -312,7 +313,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "releases_list",
-    title: "Releases List",
+    title: REPORT_TITLES.releases_list,
     description: "Every loan released in the period with key terms.",
     category: "disbursement",
     icon: ListChecks,
@@ -322,7 +323,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "statement_of_account",
-    title: "Statement of Account",
+    title: REPORT_TITLES.statement_of_account,
     description: "Full schedule, payments, and balance for one loan.",
     category: "member",
     icon: FileText,
@@ -335,7 +336,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "subsidiary_ledger",
-    title: "Subsidiary Ledger",
+    title: REPORT_TITLES.subsidiary_ledger,
     description: "Every loan and payment for one borrower.",
     category: "member",
     icon: BookOpen,

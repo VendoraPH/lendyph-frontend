@@ -8,16 +8,14 @@ import {
   combineFeedPages,
   createMutationGate,
   createTrailingCall,
-  createUnreadPoller,
-  isUnauthorizedError,
   listReplyOutcome,
   markAllRead,
   markOneRead,
   needsReadTopUp,
   revertReadAt,
   type TrailingCall,
-  type UnreadPoller,
 } from "@/lib/notification-feed";
+import { createUnreadPoller, isUnauthorizedError, type UnreadPoller } from "@/lib/session-poller";
 import type { AppNotification } from "@/types/notification";
 
 export type NotificationListStatus = "idle" | "loading" | "ready" | "error";
