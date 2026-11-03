@@ -67,6 +67,7 @@ import {
   Wallet,
   Gauge,
   Package,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -191,6 +192,15 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Create new users",
       "Update user roles, branches, and credentials",
       "Deactivate users",
+    ],
+  },
+  branches: {
+    label: "Branch Access",
+    description: "Which branches' records a user can see.",
+    icon: Building2,
+    features: [
+      "Without this, a user sees only the branches they are assigned to",
+      "See every branch's members, loans, payments and reports",
     ],
   },
   settings: {
@@ -339,6 +349,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

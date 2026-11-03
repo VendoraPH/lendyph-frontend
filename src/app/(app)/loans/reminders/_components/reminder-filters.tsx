@@ -4,6 +4,8 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useBranches } from "@/hooks";
+import { branchPicker } from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { CHANNEL_LABELS } from "@/lib/reminders";
 import type { ReminderChannel, ReminderListFilters } from "@/types/reminder";
 import { useLoanProducts } from "../_hooks/use-loan-products";
@@ -27,6 +29,11 @@ const idOrUndefined = (v: string) => (v ? Number(v) : undefined);
 
 export function ReminderFilters<F extends SharedFilters>({ value, onChange, dates, children }: ReminderFiltersProps<F>) {
   const { branches } = useBranches();
+  // Without `branches:view_all` the API answers 403 to a branch outside the
+  // caller's own, so only theirs are offered (branchPicker).
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const picker = branchPicker(branches, caller, viewAll);
   const { products, error: productsError } = useLoanProducts();
   const set = (patch: Partial<SharedFilters>) => onChange({ ...value, ...patch, page: 1 });
 
@@ -79,8 +86,8 @@ export function ReminderFilters<F extends SharedFilters>({ value, onChange, date
         value={value.branch_id ?? ""}
         onChange={(e) => set({ branch_id: idOrUndefined(e.target.value) })}
       >
-        <NativeSelectOption value="">All branches</NativeSelectOption>
-        {branches.map((b) => (
+        <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+        {picker.branches.map((b) => (
           <NativeSelectOption key={b.id} value={b.id}>
             {b.name}
           </NativeSelectOption>

@@ -40,6 +40,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   collaterals: ["view", "create", "update", "delete"],
   reports: ["view", "export"],
   users: ["view", "create", "update", "delete"],
+  // `view_all` only: every branch's data. Without it a user sees just the
+  // branches they are assigned to; there is no other branch verb to offer.
+  branches: ["view_all"],
   settings: ["view", "update"],
   audit_logs: ["view", "export"],
   auto_pay: ["view", "process", "toggle"],

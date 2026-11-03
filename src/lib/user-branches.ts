@@ -83,6 +83,128 @@ export function withUserBranches<T>(user: T): T {
   return { ...(user as object), branches: userBranches(bearing) } as T;
 }
 
+/**
+ * Who is looking at a branch list: the branches they are assigned to, and
+ * whether they hold `branches:view_all`.
+ *
+ * The API scopes every branch-bound read to the caller's own branches unless
+ * they hold `view_all` (App\Services\BranchAccess): another branch's record
+ * answers 404 and a `branch_id` filter outside their branches answers 403. But
+ * `GET /branches` still lists every branch, so the browser has to narrow the
+ * pickers itself, or it offers choices the server will refuse.
+ */
+export interface BranchViewer {
+  viewAll: boolean;
+  branchIds: readonly number[];
+}
+
+/**
+ * The viewer for a signed-in user. `viewAll` is passed in, not read from
+ * `user.permissions`, so this stays free of the auth store: callers hand it
+ * `can("branches:view_all")`.
+ */
+export function branchViewer(
+  user: BranchBearing | null | undefined,
+  viewAll: boolean,
+): BranchViewer {
+  return { viewAll, branchIds: userBranchIds(user) };
+}
+
+/**
+ * The branches a viewer may pick or filter by: all of them with `view_all`,
+ * otherwise only their own, in the order the list gave them.
+ *
+ * No viewer means no narrowing, so callers that already pass the user's own
+ * branches (the member form) need no change.
+ */
+export function visibleBranches<T extends { id: number }>(
+  branches: readonly T[],
+  viewer?: BranchViewer,
+): T[] {
+  if (!viewer || viewer.viewAll) return [...branches];
+  const own = new Set(viewer.branchIds);
+  return branches.filter((b) => own.has(b.id));
+}
+
+/**
+ * True when the API will show this user no branch data at all: they are
+ * assigned to no branch and do not hold `branches:view_all`. The screens say
+ * so instead of rendering empty lists that read as "no loans yet".
+ *
+ * A null user (before the auth store rehydrates, or on a public page) is not
+ * this case: nothing is known yet, so nothing is claimed.
+ */
+export function lacksBranchAccess(
+  user: BranchBearing | null | undefined,
+  viewAll: boolean,
+): boolean {
+  if (!user || viewAll) return false;
+  return userBranches(user).length === 0;
+}
+
+/** What a branch picker renders for one signed-in user. */
+export interface BranchPicker<T> {
+  viewer: BranchViewer;
+  /** The branches to offer (`visibleBranches`). */
+  branches: T[];
+  /** The label of the "every branch" option (`allBranchesLabel`). */
+  allLabel: string;
+}
+
+/**
+ * Everything a branch picker needs, from the raw inputs a component has: the
+ * loaded branch list, the signed-in user, and `can("branches:view_all")`.
+ *
+ * One call per picker, so every picker builds its viewer the same way and the
+ * options and the "all" label can't disagree.
+ */
+export function branchPicker<T extends { id: number }>(
+  branches: readonly T[],
+  user: BranchBearing | null | undefined,
+  viewAll: boolean,
+): BranchPicker<T> {
+  const viewer = branchViewer(user, viewAll);
+  return { viewer, branches: visibleBranches(branches, viewer), allLabel: allBranchesLabel(viewer) };
+}
+
+/**
+ * The name of the branch a picker has selected, or, with none selected, what
+ * "every branch" covers for this viewer: `viewAllLabel` with
+ * `branches:view_all`, otherwise the picker's own label ("All my branches"),
+ * because the API then reads no `branch_id` as the caller's branches only.
+ *
+ * A selected id the picker doesn't offer falls back the same way: the label
+ * never names a branch the viewer can't pick.
+ */
+export function pickedBranchLabel<T extends { id: number; name: string }>(
+  picker: BranchPicker<T>,
+  branchId: number | null,
+  viewAllLabel = "All branches",
+): string {
+  const picked = branchId === null ? undefined : picker.branches.find((b) => b.id === branchId);
+  if (picked) return picked.name;
+  return picker.viewer.viewAll ? viewAllLabel : picker.allLabel;
+}
+
+/**
+ * True when the API will refuse to act on `target` (edit, reset password,
+ * deactivate) because they also work in a branch the caller doesn't hold. It
+ * answers that refusal as a 404, the same as a missing user, so the page has
+ * to know before the click.
+ *
+ * Never for a caller with `view_all`, for the caller's own account, or before
+ * the caller is known.
+ */
+export function worksOutsideCallerBranches(
+  target: BranchBearing & { id: number },
+  caller: (BranchBearing & { id: number }) | null | undefined,
+  viewAll: boolean,
+): boolean {
+  if (!caller || viewAll || caller.id === target.id) return false;
+  const own = new Set(userBranchIds(caller));
+  return userBranchIds(target).some((id) => !own.has(id));
+}
+
 /** One option of a Base UI `<Select items>` list. */
 export interface BranchSelectItem {
   value: string;
@@ -92,18 +214,38 @@ export interface BranchSelectItem {
 /**
  * The `items` for a branch `<Select>`. Base UI resolves the trigger's label
  * from `items`, so without them the closed select shows the raw value.
+ *
+ * Pass the viewer to offer only the branches they may pick (`visibleBranches`).
  */
-export function branchSelectItems(branches: readonly UserBranch[]): BranchSelectItem[] {
-  return branches.map((b) => ({ value: String(b.id), label: b.name }));
+export function branchSelectItems(
+  branches: readonly UserBranch[],
+  viewer?: BranchViewer,
+): BranchSelectItem[] {
+  return visibleBranches(branches, viewer).map((b) => ({ value: String(b.id), label: b.name }));
+}
+
+/**
+ * The label of a branch filter's "every branch" option. For a viewer without
+ * `view_all` it means every branch of THEIRS (the API reads no `branch_id` as
+ * all of the caller's branches), so it says so.
+ */
+export function allBranchesLabel(viewer?: BranchViewer): string {
+  return viewer && !viewer.viewAll ? "All my branches" : "All branches";
 }
 
 /**
  * The `items` for a branch filter `<Select>` whose `allValue` means "every
  * branch". Without an item for that value the closed select shows it raw.
+ *
+ * Pass the viewer to offer only the branches they may filter by.
  */
 export function branchFilterItems(
   branches: readonly UserBranch[],
   allValue: string,
+  viewer?: BranchViewer,
 ): BranchSelectItem[] {
-  return [{ value: allValue, label: "All branches" }, ...branchSelectItems(branches)];
+  return [
+    { value: allValue, label: allBranchesLabel(viewer) },
+    ...branchSelectItems(branches, viewer),
+  ];
 }

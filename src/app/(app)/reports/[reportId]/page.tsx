@@ -10,6 +10,7 @@ import { RouteGuard } from "@/components/common";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
+import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,6 +104,8 @@ const EXPORT_FORMATS: {
 
 /** Sentinel for "no branch filter" — Select needs a string, not null. */
 const ALL_BRANCHES = "all";
+/** What an unfiltered report is labelled for a caller with `branches:view_all`. */
+const ALL_BRANCHES_LABEL = "All Branches";
 
 type Preset =
   | "today"
@@ -188,7 +191,10 @@ function ReportDetailContent() {
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
   const { branches } = useBranches();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  // Without `branches:view_all` the API answers 403 to a branch outside the
+  // caller's own, so the picker offers only theirs.
+  const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -244,8 +250,10 @@ function ReportDetailContent() {
     }
   }
 
+  // The "Branch:" line on screen and in every export. Without `view_all` an
+  // unfiltered report covers only the caller's branches, so it says so.
   const branchLabel = report.supportsBranch
-    ? (branches.find((b) => b.id === branchId)?.name ?? "All Branches")
+    ? pickedBranchLabel(picker, branchId, ALL_BRANCHES_LABEL)
     : null;
 
   // Subject-scoped reports cannot run against nothing.
@@ -525,9 +533,9 @@ function ReportDetailContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>
-                        All Branches
+                        {pickedBranchLabel(picker, null, ALL_BRANCHES_LABEL)}
                       </SelectItem>
-                      {branches.map((b) => (
+                      {picker.branches.map((b) => (
                         <SelectItem key={b.id} value={String(b.id)}>
                           {b.name}
                         </SelectItem>
