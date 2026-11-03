@@ -238,12 +238,16 @@ function SectionRenderer({ section }: { section: ReportSection }) {
           <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
         )}
         <dl className="grid gap-x-8 gap-y-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 rounded-md border bg-muted/20 px-4 py-3">
+          {/* A value is never truncated: when the label and the value don't
+              fit on one line (Cash Flow's "Net movement for the period" at
+              1200px), the value moves to its own line, right-aligned, and only
+              text longer than the whole cell breaks inside it. */}
           {section.items.map((item, i) => (
-            <div key={i} className="flex items-baseline justify-between gap-3">
-              <dt className="text-xs text-muted-foreground shrink-0">
+            <div key={i} className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <dt className="text-xs text-muted-foreground min-w-0">
                 {item.label}
               </dt>
-              <dd className="text-sm font-medium text-right tabular-nums min-w-0 truncate">
+              <dd className="ml-auto max-w-full text-sm font-medium text-right tabular-nums break-words">
                 {item.value}
               </dd>
             </div>

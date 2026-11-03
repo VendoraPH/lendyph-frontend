@@ -2,12 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  allBranchesLabel,
   branchFilterItems,
+  branchPicker,
   branchSelectItems,
+  branchViewer,
+  lacksBranchAccess,
+  pickedBranchLabel,
   primaryBranchId,
   userBranchIds,
   userBranches,
+  visibleBranches,
   withUserBranches,
+  worksOutsideCallerBranches,
 } from "./user-branches";
 import type { User } from "@/types";
 
@@ -150,4 +157,187 @@ test("branch filter items still offer all branches when none loaded", () => {
   assert.deepEqual(branchFilterItems([], "all"), [
     { value: "all", label: "All branches" },
   ]);
+});
+
+// ── Branch access (`branches:view_all`, backend #211) ──
+//
+// `GET /branches` lists every branch, but the API answers 403 to a `branch_id`
+// filter outside the caller's branches and refuses to assign one to a user. So
+// a caller without `view_all` is offered only their own.
+
+const south = { id: 12, name: "South", code: "SO" };
+const allBranches = [main, north, south];
+const northOnly = { branches: [north] } as unknown as User;
+
+test("a viewer reads their own branch ids, in either shape", () => {
+  assert.deepEqual(branchViewer(newShape, false), { viewAll: false, branchIds: [3, 9] });
+  assert.deepEqual(branchViewer(oldShape, true), { viewAll: true, branchIds: [3] });
+  assert.deepEqual(branchViewer(null, false), { viewAll: false, branchIds: [] });
+});
+
+test("without view_all only the viewer's own branches are visible, in list order", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(newShape, false)), [main, north]);
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(northOnly, false)), [north]);
+});
+
+test("view_all sees every branch", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(northOnly, true)), allBranches);
+});
+
+test("no viewer means no narrowing", () => {
+  assert.deepEqual(visibleBranches(allBranches), allBranches);
+});
+
+test("a viewer with no branch and no view_all sees no branch", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer({} as User, false)), []);
+});
+
+test("visible branches is a copy, never the caller's array", () => {
+  const list = [main, north];
+  assert.notEqual(visibleBranches(list), list);
+});
+
+test("branch select items offer only the viewer's branches without view_all", () => {
+  assert.deepEqual(branchSelectItems(allBranches, branchViewer(northOnly, false)), [
+    { value: "9", label: "North" },
+  ]);
+  assert.equal(branchSelectItems(allBranches, branchViewer(northOnly, true)).length, 3);
+});
+
+test("branch filter items offer only the viewer's branches without view_all", () => {
+  assert.deepEqual(branchFilterItems(allBranches, "all", branchViewer(northOnly, false)), [
+    { value: "all", label: "All my branches" },
+    { value: "9", label: "North" },
+  ]);
+});
+
+test("branch filter items keep \"All branches\" and every branch with view_all", () => {
+  const items = branchFilterItems(allBranches, "all", branchViewer(northOnly, true));
+  assert.deepEqual(items[0], { value: "all", label: "All branches" });
+  assert.equal(items.length, 4);
+});
+
+test("the all-branches label says whose branches it means", () => {
+  assert.equal(allBranchesLabel(), "All branches");
+  assert.equal(allBranchesLabel(branchViewer(northOnly, true)), "All branches");
+  assert.equal(allBranchesLabel(branchViewer(northOnly, false)), "All my branches");
+});
+
+test("no branch and no view_all lacks branch access", () => {
+  assert.equal(lacksBranchAccess({ branches: [] } as unknown as User, false), true);
+  assert.equal(lacksBranchAccess({} as User, false), true);
+});
+
+test("a branch, or view_all, is branch access", () => {
+  assert.equal(lacksBranchAccess(northOnly, false), false);
+  assert.equal(lacksBranchAccess(oldShape, false), false);
+  assert.equal(lacksBranchAccess({ branches: [] } as unknown as User, true), false);
+});
+
+test("an unknown user (before rehydration) is not reported as lacking access", () => {
+  assert.equal(lacksBranchAccess(null, false), false);
+  assert.equal(lacksBranchAccess(undefined, false), false);
+});
+
+// The accounting BranchFilter renders its options from `visibleBranches` and
+// hands Base UI `branchFilterItems` for the trigger label. Both read the same
+// viewer, so the two lists must name the same branches in the same order.
+test("filter items and visible branches agree for a scoped and an unscoped viewer", () => {
+  for (const viewer of [branchViewer(newShape, false), branchViewer(northOnly, true)]) {
+    assert.deepEqual(
+      branchFilterItems(allBranches, "all", viewer).map((i) => i.value),
+      ["all", ...visibleBranches(allBranches, viewer).map((b) => String(b.id))],
+    );
+    assert.equal(branchFilterItems(allBranches, "all", viewer)[0].label, allBranchesLabel(viewer));
+  }
+});
+
+// The accounting filter's own ApiBranch rows carry more than UserBranch does.
+test("visible branches keeps the caller's row type", () => {
+  const rows = [{ ...main, is_active: true }, { ...north, is_active: true }];
+  const shown = visibleBranches(rows, branchViewer(northOnly, false));
+  assert.deepEqual(shown, [{ ...north, is_active: true }]);
+});
+
+// ── branchPicker: the one call every picker makes ──
+//
+// Each picker hands this its loaded list, the signed-in user and
+// `can("branches:view_all")`. These pin that the viewer is built from both.
+
+test("a picker for a caller without view_all offers only their branches", () => {
+  const picker = branchPicker(allBranches, northOnly, false);
+  assert.deepEqual(picker.branches, [north]);
+  assert.equal(picker.allLabel, "All my branches");
+  assert.deepEqual(picker.viewer, { viewAll: false, branchIds: [9] });
+});
+
+test("a picker for a caller with view_all offers every branch", () => {
+  const picker = branchPicker(allBranches, northOnly, true);
+  assert.deepEqual(picker.branches, allBranches);
+  assert.equal(picker.allLabel, "All branches");
+});
+
+test("a picker reads the caller's branches in the legacy shape too", () => {
+  assert.deepEqual(branchPicker(allBranches, oldShape, false).branches, [main]);
+});
+
+test("a picker for a caller with no branch and no view_all offers none", () => {
+  assert.deepEqual(branchPicker(allBranches, {} as User, false).branches, []);
+});
+
+// ── worksOutsideCallerBranches (users page: Edit, Reset Password, Deactivate) ──
+
+const caller = { id: 1, branches: [main, north] } as unknown as User;
+
+test("a target in a branch the caller doesn't hold is out of reach", () => {
+  const target = { id: 2, branches: [north, south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, false), true);
+});
+
+test("a target inside the caller's branches is in reach", () => {
+  const target = { id: 2, branches: [north] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, false), false);
+  assert.equal(worksOutsideCallerBranches({ id: 3, branch: main } as unknown as User, caller, false), false);
+});
+
+test("view_all reaches every target", () => {
+  const target = { id: 2, branches: [south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, true), false);
+});
+
+test("the caller's own account is always in reach", () => {
+  const self = { id: 1, branches: [main, north] } as unknown as User;
+  const narrowSelf = { id: 1, branches: [north] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(self, narrowSelf, false), false);
+});
+
+test("an unknown caller claims nothing", () => {
+  const target = { id: 2, branches: [south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, null, false), false);
+});
+
+test("a target with no branch is in reach", () => {
+  assert.equal(worksOutsideCallerBranches({ id: 2, branches: [] } as unknown as User, caller, false), false);
+});
+
+// ── pickedBranchLabel: the report's "Branch:" line, on screen and in exports ──
+
+test("a selected branch is labelled by its name", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), 9, "All Branches"), "North");
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), 12, "All Branches"), "South");
+});
+
+test("no branch reads the view_all label for a caller with view_all", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), null, "All Branches"), "All Branches");
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), null), "All branches");
+});
+
+test("no branch reads \"All my branches\" for a caller without view_all", () => {
+  // The report then covers only the caller's branches; "All Branches" on an
+  // exported PDF would claim the whole cooperative.
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), null, "All Branches"), "All my branches");
+});
+
+test("a selected branch the picker doesn't offer is never named", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), 12, "All Branches"), "All my branches");
 });

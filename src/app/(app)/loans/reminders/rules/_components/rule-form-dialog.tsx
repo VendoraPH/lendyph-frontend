@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { useBranches, useDialogOpening } from "@/hooks";
+import { branchPicker } from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import {
   CHANNEL_LABELS,
@@ -88,6 +90,11 @@ function toInput(rule: ReminderRule): ReminderRuleInput {
 
 export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, onSaved }: RuleFormDialogProps) {
   const { branches } = useBranches();
+  // Without `branches:view_all` the API answers 403 to a branch outside the
+  // caller's own, so only theirs are offered (branchPicker).
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const picker = branchPicker(branches, caller, viewAll);
   const { products, error: productsError } = useLoanProducts();
   const [form, setForm] = useState<ReminderRuleInput>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -226,8 +233,8 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               value={form.branch_id ?? ""}
               onChange={(e) => set("branch_id", e.target.value ? Number(e.target.value) : null)}
             >
-              <NativeSelectOption value="">All branches</NativeSelectOption>
-              {branches.map((b) => (
+              <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+              {picker.branches.map((b) => (
                 <NativeSelectOption key={b.id} value={b.id}>
                   {b.name}
                 </NativeSelectOption>

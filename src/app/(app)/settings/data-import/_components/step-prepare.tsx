@@ -9,7 +9,7 @@
  * importer keys them by name (see `file-slot.tsx`).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Building2, RotateCw } from "lucide-react";
 
@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useBranches } from "@/hooks";
+import { branchPicker } from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
 import type { ImportRunStatus } from "@/types/data-import";
 
@@ -93,7 +95,16 @@ function BranchGate({
   onRetry: () => void;
   children: React.ReactNode;
 }) {
-  const { branches, loading, error } = useBranches();
+  const { branches: loaded, loading, error } = useBranches();
+  // Without `branches:view_all` only the caller's own branches can take the
+  // import (the API refuses any other), so only those are offered. Memoised:
+  // the one-branch preselect below depends on this list.
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const branches = useMemo(
+    () => branchPicker(loaded, caller, viewAll).branches,
+    [loaded, caller, viewAll],
+  );
 
   // binhs-coop production has exactly one branch. Pre-selecting it removes a
   // click that has no decision in it — but the control stays on screen and
@@ -116,13 +127,19 @@ function BranchGate({
 
   if (error || branches.length === 0) {
     const noBranches = !error && branches.length === 0;
+    // A caller without `view_all` sees only their own branches, so an empty
+    // list means none of THEIRS is active, and adding a branch is not theirs
+    // to do.
+    const noOwnBranches = noBranches && !viewAll;
     return (
       <Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>
-          {noBranches
-            ? "No active branch to import into"
-            : "Branches could not be loaded"}
+          {noOwnBranches
+            ? "None of your branches is active. Ask an administrator."
+            : noBranches
+              ? "No active branch to import into"
+              : "Branches could not be loaded"}
         </AlertTitle>
         <AlertDescription className="space-y-3">
           <p>
@@ -138,15 +155,17 @@ function BranchGate({
                 Try again
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              nativeButton={false}
-              render={<Link href="/settings/branches" />}
-            >
-              <Building2 className="size-3.5" aria-hidden="true" />
-              {noBranches ? "Add a branch" : "Open branch settings"}
-            </Button>
+            {!noOwnBranches && (
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/settings/branches" />}
+              >
+                <Building2 className="size-3.5" aria-hidden="true" />
+                {noBranches ? "Add a branch" : "Open branch settings"}
+              </Button>
+            )}
           </div>
         </AlertDescription>
       </Alert>
@@ -182,9 +201,13 @@ function BranchGate({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {branches.length === 1
-            ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
-            : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`}
+          {viewAll
+            ? branches.length === 1
+              ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`
+            : branches.length === 1
+              ? "1 of your branches is active, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} of your branches are active. Every imported member and loan lands in the one you pick.`}
         </p>
       </div>
 
