@@ -7,8 +7,10 @@
  * figures to show.
  *
  * WHAT THIS PROVES: every figure shown is the one the server sent, the
- * collection appears only for "pay" (its penalty part only when above zero),
- * and an answer that is incomplete or for the other option shows nothing.
+ * collection appears only for "pay" (premium, penalty, interest and total,
+ * the premium only when above ₱0.00, each a dash when missing), Confirm waits
+ * for the total, and an answer whose new-period figures are incomplete, or
+ * that is for the other option, shows nothing.
  * WHAT IT DOES NOT PROVE: the figures; those are the backend's preview tests.
  */
 import { test } from "node:test";
@@ -17,7 +19,8 @@ import { getErrorMessage } from "@/lib/api-error";
 import {
   extensionPreviewAnswer,
   extensionPreviewKey,
-  collectNowParts,
+  canConfirmExtension,
+  collectNowRows,
   extensionCycleUnit,
   extensionCyclesLabel,
   extensionCyclesSentence,
@@ -53,7 +56,7 @@ const DEFER = {
 test("pay shows what is collected now, its penalty part, and the new period, as sent", () => {
   assert.deepEqual(readExtensionPreview(PAY, "pay"), {
     option: "pay",
-    collectNow: { amount: 3412.37, penaltyPart: 112.37, interestPart: 3300, insurancePart: null },
+    collectNow: { amount: 3412.37, penaltyPart: 112.37, interestPart: 3300, insurancePart: 0 },
     carryInterest: 0,
     freshInterest: 2100.01,
     newInterestDue: 2100.01,
@@ -63,12 +66,12 @@ test("pay shows what is collected now, its penalty part, and the new period, as 
   });
 });
 
-test("a collection with no penalty shows no penalty part", () => {
+test("a collection with no penalty shows the penalty as ₱0.00, as sent", () => {
   const view = readExtensionPreview(
     { ...PAY, collect_now: { amount: 3300, penalty_part: 0, interest_part: 3300 } },
     "pay",
   );
-  assert.deepEqual(view?.collectNow, { amount: 3300, penaltyPart: null, interestPart: 3300, insurancePart: null });
+  assert.deepEqual(view?.collectNow, { amount: 3300, penaltyPart: 0, interestPart: 3300, insurancePart: 0 });
 });
 
 test("pay shows the insurance premium it collects first, as sent", () => {
@@ -86,32 +89,71 @@ test("pay shows the insurance premium it collects first, as sent", () => {
   );
 });
 
-test("no insurance part when none is owed or the server sent none", () => {
-  for (const insurance_part of [0, "0.00", undefined]) {
+test("no insurance premium when none is owed or the server sent none", () => {
+  for (const insurance_part of [0, "0.00", undefined, null]) {
     const view = readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, insurance_part } }, "pay");
-    assert.equal(view?.collectNow?.insurancePart, null, String(insurance_part));
+    assert.equal(view?.collectNow?.insurancePart, 0, String(insurance_part));
   }
 });
 
-test("an unreadable insurance part shows nothing, never a figure worked out here", () => {
-  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, insurance_part: "abc" } }, "pay"), null);
+test("a part missing or unreadable is a dash, never a figure worked out here", () => {
+  // Backend #213: a total of ₱3,412.37 sent without its interest part. The
+  // interest is not the total minus the penalty here; it is a dash.
+  const noInterest = readExtensionPreview(
+    { ...PAY, collect_now: { amount: 3412.37, penalty_part: 112.37 } },
+    "pay",
+  );
+  assert.deepEqual(noInterest?.collectNow, { amount: 3412.37, penaltyPart: 112.37, interestPart: null, insurancePart: 0 });
+  const junk = readExtensionPreview(
+    { ...PAY, collect_now: { amount: "abc", insurance_part: "abc", penalty_part: "", interest_part: {} } },
+    "pay",
+  );
+  assert.deepEqual(junk?.collectNow, { amount: null, penaltyPart: null, interestPart: null, insurancePart: null });
+  const none = readExtensionPreview({ ...PAY, collect_now: undefined }, "pay");
+  assert.deepEqual(none?.collectNow, { amount: null, penaltyPart: null, interestPart: null, insurancePart: 0 });
 });
 
-test("the collection's parts, premium first, only when there is more than interest", () => {
+test("the collection's rows: premium only when above ₱0.00, then penalty and interest, as sent", () => {
   assert.deepEqual(
-    collectNowParts({ amount: 3812.37, insurancePart: 400, penaltyPart: 112.37, interestPart: 3300 }),
+    collectNowRows({ amount: 3812.37, insurancePart: 400, penaltyPart: 112.37, interestPart: 3300 }),
     [
-      { label: "insurance premium", amount: 400 },
-      { label: "late penalty", amount: 112.37 },
-      { label: "interest", amount: 3300 },
+      { label: "Insurance premium", amount: 400 },
+      { label: "Late penalty", amount: 112.37 },
+      { label: "Interest", amount: 3300 },
     ],
   );
-  assert.deepEqual(collectNowParts({ amount: 3700, insurancePart: 400, penaltyPart: null, interestPart: 3300 }), [
-    { label: "insurance premium", amount: 400 },
-    { label: "interest", amount: 3300 },
+  assert.deepEqual(collectNowRows({ amount: 3300, insurancePart: 0, penaltyPart: 0, interestPart: 3300 }), [
+    { label: "Late penalty", amount: 0 },
+    { label: "Interest", amount: 3300 },
   ]);
-  assert.deepEqual(collectNowParts({ amount: 3300, insurancePart: null, penaltyPart: null, interestPart: 3300 }), []);
-  assert.deepEqual(collectNowParts(null), []);
+  // Sent but unreadable premium: a dash on its own row, not left out.
+  assert.deepEqual(collectNowRows({ amount: null, insurancePart: null, penaltyPart: null, interestPart: null }), [
+    { label: "Insurance premium", amount: null },
+    { label: "Late penalty", amount: null },
+    { label: "Interest", amount: null },
+  ]);
+  assert.deepEqual(collectNowRows(null), []);
+});
+
+test("Confirm waits for the total collected on pay; defer needs only the preview", () => {
+  assert.equal(canConfirmExtension(readExtensionPreview(PAY, "pay")), true);
+  assert.equal(canConfirmExtension(readExtensionPreview(DEFER, "defer")), true);
+  assert.equal(
+    canConfirmExtension(readExtensionPreview({ ...PAY, collect_now: { penalty_part: 0, interest_part: 3300 } }, "pay")),
+    false,
+  );
+  // A missing part only shows a dash; the total is what is collected.
+  assert.equal(
+    canConfirmExtension(readExtensionPreview({ ...PAY, collect_now: { amount: 3300, interest_part: 3300 } }, "pay")),
+    true,
+  );
+  assert.equal(canConfirmExtension(null), false);
+});
+
+test("defer reads without a collection: it collects nothing", () => {
+  const rest: Record<string, unknown> = { ...DEFER };
+  delete rest.collect_now;
+  assert.equal(readExtensionPreview(rest, "defer")?.collectNow, null);
 });
 
 test("defer collects nothing now and shows the carried and fresh interest", () => {
@@ -127,6 +169,18 @@ test("defer collects nothing now and shows the carried and fresh interest", () =
   });
 });
 
+test("only plain decimal strings are read; hex, exponent and other strings show a dash", () => {
+  // Number() would read "0x10" as 16 and "1e3" as 1,000: figures the server
+  // never sent.
+  for (const junk of ["0x10", "1e3", "Infinity", " 12.50", "12.", ".5", "+5", "1,000.00"]) {
+    const view = readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, interest_part: junk } }, "pay");
+    assert.equal(view?.collectNow?.interestPart, null, junk);
+  }
+  assert.equal(readExtensionPreview({ ...PAY, new_total_due: "1e3" }, "pay"), null);
+  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, amount: "-0.50" } }, "pay")?.collectNow?.amount, -0.5);
+  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, amount: Infinity } }, "pay")?.collectNow?.amount, null);
+});
+
 test("decimal strings, as a decimal cast sends them, are read as their figures", () => {
   const view = readExtensionPreview({ ...DEFER, new_total_due: "76000.50" }, "defer");
   assert.equal(view?.newTotalDue, 76000.5);
@@ -140,12 +194,11 @@ test("an answer for the other option is not shown", () => {
 });
 
 test("an incomplete or unreadable answer shows nothing, never a figure worked out here", () => {
-  for (const key of ["carry_interest", "fresh_interest", "new_interest_due", "new_total_due", "new_due_date", "collect_now"] as const) {
+  for (const key of ["carry_interest", "fresh_interest", "new_interest_due", "new_total_due", "new_due_date"] as const) {
     const rest: Record<string, unknown> = { ...PAY };
     delete rest[key];
     assert.equal(readExtensionPreview(rest, "pay"), null, key);
   }
-  assert.equal(readExtensionPreview({ ...PAY, collect_now: { amount: 1 } }, "pay"), null);
   assert.equal(readExtensionPreview({ ...PAY, new_due_date: "next month" }, "pay"), null);
   assert.equal(readExtensionPreview({ ...PAY, new_total_due: "abc" }, "pay"), null);
   for (const junk of [undefined, null, "ok", [], 42]) {

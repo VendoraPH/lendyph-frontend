@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, use } from "react";
+import { Fragment, useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -79,7 +79,8 @@ import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import {
-  collectNowParts,
+  canConfirmExtension,
+  collectNowRows,
   extensionCycleUnit,
   extensionCyclesLabel,
   extensionCyclesSentence,
@@ -1796,7 +1797,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       });
       toast.success(
         extendInterestOption === "pay"
-          ? "Interest collected and loan extended"
+          ? "Payment collected and loan extended"
           : "Loan extended — interest carried forward",
       );
       setExtendOpen(false);
@@ -4769,32 +4770,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     : "Interest Due — carried into the new period"}
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-                  {formatCurrency(
+                  {currencyOrDash(
                     extendPreview.preview.collectNow
                       ? extendPreview.preview.collectNow.amount
                       : extendPreview.preview.carryInterest,
                   )}
                 </p>
-                {(() => {
-                  // The server's parts, premium owed first, then penalty,
-                  // then interest; only when there is more than interest.
-                  const parts = collectNowParts(extendPreview.preview.collectNow);
-                  if (parts.length === 0) return null;
-                  return (
-                    <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-                      Includes{" "}
-                      {parts.map((part, index) => (
-                        <span key={part.label}>
-                          {index > 0 && (index === parts.length - 1 ? " and " : ", ")}
-                          <span className="font-semibold tabular-nums">{formatCurrency(part.amount)}</span>{" "}
-                          {part.label}
-                        </span>
-                      ))}
-                      .
-                    </p>
-                  );
-                })()}
-                {extendPreview.preview.collectNow?.insurancePart != null && (
+                {extendPreview.preview.collectNow && (
+                  // Each part the server collects, in the order it takes
+                  // them, and its total: as sent, a dash when missing,
+                  // never added up here.
+                  <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs text-emerald-900 dark:text-emerald-200">
+                    {collectNowRows(extendPreview.preview.collectNow).map((row) => (
+                      <Fragment key={row.label}>
+                        <dt>{row.label}</dt>
+                        <dd className="text-right tabular-nums">{currencyOrDash(row.amount)}</dd>
+                      </Fragment>
+                    ))}
+                    <dt className="font-semibold">Total collected now</dt>
+                    <dd className="text-right font-semibold tabular-nums">
+                      {currencyOrDash(extendPreview.preview.collectNow.amount)}
+                    </dd>
+                  </dl>
+                )}
+                {(extendPreview.preview.collectNow?.insurancePart ?? 0) > 0 && (
                   <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
                     The insurance premium still owed on the loan is collected first (interest-free).
                   </p>
@@ -4830,15 +4829,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 {/* Render function, else the trigger shows the raw value */}
                 <SelectValue>
                   {(value: string | null) =>
-                    value === "defer" ? "Defer Outstanding Interest" : "Pay Outstanding Interest"
+                    value === "defer" ? "Defer Outstanding Interest" : "Pay what's owed now"
                   }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pay">
-                  <span className="font-medium">Pay Outstanding Interest</span>
+                  <span className="font-medium">Pay what&apos;s owed now</span>
                   <span className="block text-xs text-muted-foreground">
-                    Pay the accrued interest before extension
+                    Pay the premium owed, late penalty and interest before extension
                   </span>
                 </SelectItem>
                 <SelectItem value="defer">
@@ -4885,7 +4884,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleExtendLoan}
-              disabled={actionLoading || extendPreview.preview === null}
+              disabled={actionLoading || !canConfirmExtension(extendPreview.preview)}
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (
