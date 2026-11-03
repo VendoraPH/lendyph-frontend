@@ -22,6 +22,7 @@
  * openable document, it just has to be named by its id.
  */
 
+import { env } from "@/config/env";
 import type { JournalEntry, JournalPostableType } from "@/types/accounting";
 
 /** The source document, resolved for display. */
@@ -58,6 +59,13 @@ const POSTABLE_ROUTES: Record<string, ((id: number) => string) | undefined> = {
   // A repayment's detail page is the receipt, keyed by the repayment id —
   // which is exactly what `postable_id` carries.
   repayment: (id) => `/payments/${id}`,
+  // Savings routes exist only where the module is built in; elsewhere they 404.
+  ...(env.features.savings
+    ? {
+        savings_transaction: (id: number) => `/savings/transactions/${id}`,
+        savings_account: (id: number) => `/savings/accounts/${id}`,
+      }
+    : {}),
 };
 
 /**
@@ -70,6 +78,8 @@ const POSTABLE_NAMES: Record<string, string | undefined> = {
   repayment: "Payment",
   expense: "Expense",
   expense_payment: "Expense payment",
+  savings_transaction: "Savings transaction",
+  savings_account: "Savings account",
 };
 
 /** "expense_payment" → "expense payment". Matches how the register renders `source`. */

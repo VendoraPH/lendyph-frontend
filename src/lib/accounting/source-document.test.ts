@@ -133,3 +133,13 @@ test("id 0 is an id, not a missing one", () => {
   assert.equal(doc?.text, "Loan #0");
   assert.equal(doc?.href, "/loans/0");
 });
+
+test("a savings posting is named in the app's words, and links only where the module is built in", () => {
+  // Unit tests run without NEXT_PUBLIC_ENABLE_SAVINGS, so the route would 404:
+  // the entry names the transaction but does not link to it.
+  const doc = sourceDocument(
+    entry({ postable_type: "savings_transaction", postable_id: 55, postable_label: "SV-DEP-000123" }),
+  );
+  assert.equal(doc?.text, "Savings transaction SV-DEP-000123");
+  assert.equal(doc?.href, null);
+});

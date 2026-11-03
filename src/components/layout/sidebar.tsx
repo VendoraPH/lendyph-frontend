@@ -98,7 +98,7 @@ function NavLink({
   /** Count shown on a child link, keyed by its href. */
   childBadges?: Record<string, number>;
 }) {
-  const { can } = usePermission();
+  const { can, canAny } = usePermission();
   // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
   // gates the top-level item on ITS permission, which for Settings is
   // `settings:view` — so a child that guards on something stricter used to be
@@ -106,7 +106,9 @@ function NavLink({
   // AccessDenied. A child with no `permission` of its own inherits the
   // parent's, which is why every pre-existing child is untouched by this.
   const visibleChildren = useMemo(
-    () => (item.children ?? []).filter((c) => !c.permission || can(c.permission)),
+    () => (item.children ?? []).filter(
+      (c) => !c.permission || (Array.isArray(c.permission) ? canAny(c.permission) : can(c.permission))
+    ),
     // `can` reads the auth store through a fresh closure on every render, so it
     // is not referentially stable; depending on it would rebuild this array
     // every render and defeat the memo. The permissions it reads only change

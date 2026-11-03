@@ -65,6 +65,7 @@ export type {
   PaymentAllocation,
   PostingEvent,
   AccountMapping,
+  SavingsMappingKey,
   PeriodStatus,
   AccountingPeriod,
   ReconciliationMatch,

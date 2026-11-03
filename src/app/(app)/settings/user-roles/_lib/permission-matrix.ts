@@ -20,8 +20,14 @@ import type { Action, Module } from "@/types";
  * endpoints are built. An API that predates that refuses a save naming one
  * with a 422; the roles page then names the permission (`role-save-error.ts`).
  * Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
+ *
+ * - `savings` and `savings_products` are UI-only until the backend seeds them
+ *   (`docs/SAVINGS_BACKEND_HANDOFF.md`). Offer them here once it does.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "reminders">;
+export type UIModule = Exclude<
+  Module,
+  "collections" | "loan_adjustments" | "reminders" | "savings" | "savings_products"
+>;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
