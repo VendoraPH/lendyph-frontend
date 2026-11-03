@@ -21,6 +21,8 @@ interface ConfirmActionDialogProps {
   /** Resolve to close; a rejection is shown as a toast and keeps it open. */
   onConfirm: () => Promise<void>;
   errorFallback: string;
+  /** Keep the confirm button off, e.g. until a required reason is entered. */
+  confirmDisabled?: boolean;
   children?: ReactNode;
 }
 
@@ -37,12 +39,13 @@ export function ConfirmActionDialog({
   destructive,
   onConfirm,
   errorFallback,
+  confirmDisabled,
   children,
 }: ConfirmActionDialogProps) {
   const [busy, setBusy] = useState(false);
 
   const confirm = () => {
-    if (busy) return;
+    if (busy || confirmDisabled) return;
     setBusy(true);
     onConfirm()
       .then(() => onOpenChange(false))
@@ -64,7 +67,7 @@ export function ConfirmActionDialog({
           </Button>
           <Button
             onClick={confirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={
               destructive
                 ? "bg-destructive text-white hover:bg-destructive/90"

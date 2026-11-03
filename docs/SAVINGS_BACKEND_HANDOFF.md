@@ -33,13 +33,13 @@ The frontend is built behind `NEXT_PUBLIC_ENABLE_SAVINGS`. It is typed against t
 | DELETE `/savings/products/{id}` | savings_products:manage | 422 if any account was ever opened on it. |
 | GET `/savings/products/{id}/history` | savings_products:manage | Change log: action, field, old and new value, user, time. |
 | GET · PUT `/savings/settings` | savings:settings | Account-number prefix, include-branch flag and padding; `day_count_basis` 365\|actual; reversal and interest approval toggles; inactive-member opening; dormancy days. |
-| GET `/savings/accounts` | savings:view | Paged. Filters: account_number, member_id, product_id, branch_id, status, opened_from/to. `meta.stats` per status. |
-| GET `/savings/accounts/next-number` | savings:create | Preview of the next number from the settings format. The real number is assigned on create. |
+| GET `/savings/accounts` | savings:view | Paged. Filters: `search` (account number, member name or code), `savings_product_id`, `branch_id`, `status`, `opened_from`/`opened_to`. `meta.stats` = per-status counts plus `total`, ignoring the status filter. Branch-scoped like loans. |
+| GET `/savings/accounts/next-number` | savings:create | `?branch_id=` (the member's branch). Preview of the next number from the settings format. The real number is assigned on create. |
 | POST `/savings/accounts` | savings:create | Product must be active. Initial deposit ≥ product minimum. One account per member per product unless `allow_multiple_accounts`. Creates the account plus an `opening_deposit` transaction atomically and returns both. |
 | GET `/savings/accounts/{id}` · PUT (remarks only) | savings:view / savings:update | Member, product, branch, available and ledger balance, rate, `rate_override`, accrued interest. |
 | PATCH `/savings/accounts/{id}/status` | savings:update | `{status, reason}`. Allowed moves: active→frozen\|closed, dormant→active\|frozen, frozen→active. Write a status-history row. |
-| GET `/savings/accounts/{id}/closing-quote` · POST `…/close` | savings:update | The quote is balance plus accrued interest to date. Close posts the interest, then a `closing_withdrawal` for the full balance, and sets status closed, all in one DB transaction. |
-| GET `/savings/accounts/{id}/transactions` | savings:view | Paged, filtered by date. `meta.totals`, `meta.opening_balance` and `meta.closing_balance` for the range. |
+| GET `/savings/accounts/{id}/closing-quote` · POST `…/close` | savings:update | Quote: `{ledger_balance, accrued_interest, pending_transactions, payout_amount, can_close, blockers[]}`. Close takes `{reason, payment_method}` plus `Idempotency-Key`; it posts the interest, then a `closing_withdrawal` for the full balance, and sets status closed, all in one DB transaction. |
+| GET `/savings/accounts/{id}/transactions` | savings:view | Paged, `date_from`/`date_to`. Each row carries the server's `running_balance`. `meta.totals`, `meta.opening_balance` and `meta.closing_balance` for the range. |
 | GET `/savings/accounts/{id}/status-history` · `/audit` | savings:view | Status changes and the audit trail. |
 | POST `/savings/deposits` | savings:deposit | Refused if the account is closed or frozen, or the product disallows deposits. Returns the transaction with previous and new balance. |
 | POST `/savings/withdrawals` | savings:withdraw | Refused if closed, frozen or dormant. amount ≤ available − maintaining balance and ≤ the product's per-withdrawal cap. |
