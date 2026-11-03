@@ -70,6 +70,7 @@ import {
   userBranchIds,
   userBranches,
   visibleBranches,
+  worksOutsideCallerBranches,
 } from "@/lib/user-branches";
 import {
   countUsersWithRole,
@@ -198,9 +199,10 @@ function RoleSelector({
 // not just one, so this has to allow selecting several.
 //
 // A caller without `branches:view_all` may only assign their own branches (the
-// API refuses any other with a 422), so only those are offered. A branch the
-// edited user already holds outside them still shows as a badge, by name, from
-// the full list, and can be removed.
+// API refuses any other with a 422), so only those are offered. Badges read the
+// full list. A user who also works in a branch the caller doesn't hold can't be
+// edited by them at all (the API answers 404), so the row disables Edit before
+// this dialog opens; see UserActionsCell.
 
 function BranchMultiSelect({
   value,
@@ -933,6 +935,8 @@ function UserActionsCell({
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = user.status === "active";
   const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 
   // Only a super_admin may act on a super_admin. The API enforces this and now
   // answers the same 404 a missing id gives, rather than a 422 naming the
@@ -953,8 +957,16 @@ function UserActionsCell({
   // team's role, not a client one, so it is not a value client code is meant to
   // name. This is the one place that has to.
   const targetIsSuperAdmin = user.roles?.includes("super_admin") ?? false;
-  const cannotManageTarget =
+  const isSuperAdminLocked =
     targetIsSuperAdmin && !currentUserRoles.includes("super_admin");
+  // Same masked 404, for the same reason, on edit, reset password and
+  // deactivate: the API refuses a caller without `branches:view_all` any target
+  // who also works in a branch the caller doesn't hold.
+  const isBranchLocked = worksOutsideCallerBranches(user, caller, viewAll);
+  const cannotManageTarget = isSuperAdminLocked || isBranchLocked;
+  const lockReason = isSuperAdminLocked
+    ? "Only a super_admin can change this account."
+    : "This user also works in a branch you don't manage.";
 
   return (
     <>
@@ -966,7 +978,7 @@ function UserActionsCell({
           {cannotManageTarget && (
             <>
               <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                Only a super_admin can change this account.
+                {lockReason}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
             </>

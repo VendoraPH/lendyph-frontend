@@ -142,6 +142,50 @@ export function lacksBranchAccess(
   return userBranches(user).length === 0;
 }
 
+/** What a branch picker renders for one signed-in user. */
+export interface BranchPicker<T> {
+  viewer: BranchViewer;
+  /** The branches to offer (`visibleBranches`). */
+  branches: T[];
+  /** The label of the "every branch" option (`allBranchesLabel`). */
+  allLabel: string;
+}
+
+/**
+ * Everything a branch picker needs, from the raw inputs a component has: the
+ * loaded branch list, the signed-in user, and `can("branches:view_all")`.
+ *
+ * One call per picker, so every picker builds its viewer the same way and the
+ * options and the "all" label can't disagree.
+ */
+export function branchPicker<T extends { id: number }>(
+  branches: readonly T[],
+  user: BranchBearing | null | undefined,
+  viewAll: boolean,
+): BranchPicker<T> {
+  const viewer = branchViewer(user, viewAll);
+  return { viewer, branches: visibleBranches(branches, viewer), allLabel: allBranchesLabel(viewer) };
+}
+
+/**
+ * True when the API will refuse to act on `target` (edit, reset password,
+ * deactivate) because they also work in a branch the caller doesn't hold. It
+ * answers that refusal as a 404, the same as a missing user, so the page has
+ * to know before the click.
+ *
+ * Never for a caller with `view_all`, for the caller's own account, or before
+ * the caller is known.
+ */
+export function worksOutsideCallerBranches(
+  target: BranchBearing & { id: number },
+  caller: (BranchBearing & { id: number }) | null | undefined,
+  viewAll: boolean,
+): boolean {
+  if (!caller || viewAll || caller.id === target.id) return false;
+  const own = new Set(userBranchIds(caller));
+  return userBranchIds(target).some((id) => !own.has(id));
+}
+
 /** One option of a Base UI `<Select items>` list. */
 export interface BranchSelectItem {
   value: string;

@@ -10,6 +10,7 @@ import { RouteGuard } from "@/components/common";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
+import { branchPicker } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -188,7 +189,10 @@ function ReportDetailContent() {
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
   const { branches } = useBranches();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  // Without `branches:view_all` the API answers 403 to a branch outside the
+  // caller's own, so the picker offers only theirs.
+  const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -521,13 +525,15 @@ function ReportDetailContent() {
                     }}
                   >
                     <SelectTrigger className="h-9 w-56">
-                      <SelectValue>{() => branchLabel}</SelectValue>
+                      <SelectValue>
+                        {() => (branchId === null ? picker.allLabel : branchLabel)}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>
-                        All Branches
+                        {picker.allLabel}
                       </SelectItem>
-                      {branches.map((b) => (
+                      {picker.branches.map((b) => (
                         <SelectItem key={b.id} value={String(b.id)}>
                           {b.name}
                         </SelectItem>

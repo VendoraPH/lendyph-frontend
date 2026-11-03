@@ -63,9 +63,10 @@ export function JournalEntryDialog({
 
   return (
     <Dialog open onOpenChange={close}>
-      {/* `size="lg"`: a bare `max-w-3xl` lost to the default `sm:max-w-md`,
-          and at that width the Credit column was cut off. */}
-      <DialogContent size="lg">
+      {/* 768px. A bare `max-w-3xl` lost to the default size's `sm:max-w-md`,
+          which cut off the Credit column; the `sm:` prefix wins over it. No
+          size preset is this width (lg is 672px, xl 896px). */}
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {entry.reference || `Entry #${entry.id}`}

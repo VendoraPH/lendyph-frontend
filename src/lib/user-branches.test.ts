@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   allBranchesLabel,
   branchFilterItems,
+  branchPicker,
   branchSelectItems,
   branchViewer,
   lacksBranchAccess,
@@ -12,6 +13,7 @@ import {
   userBranches,
   visibleBranches,
   withUserBranches,
+  worksOutsideCallerBranches,
 } from "./user-branches";
 import type { User } from "@/types";
 
@@ -254,4 +256,65 @@ test("visible branches keeps the caller's row type", () => {
   const rows = [{ ...main, is_active: true }, { ...north, is_active: true }];
   const shown = visibleBranches(rows, branchViewer(northOnly, false));
   assert.deepEqual(shown, [{ ...north, is_active: true }]);
+});
+
+// ── branchPicker: the one call every picker makes ──
+//
+// Each picker hands this its loaded list, the signed-in user and
+// `can("branches:view_all")`. These pin that the viewer is built from both.
+
+test("a picker for a caller without view_all offers only their branches", () => {
+  const picker = branchPicker(allBranches, northOnly, false);
+  assert.deepEqual(picker.branches, [north]);
+  assert.equal(picker.allLabel, "All my branches");
+  assert.deepEqual(picker.viewer, { viewAll: false, branchIds: [9] });
+});
+
+test("a picker for a caller with view_all offers every branch", () => {
+  const picker = branchPicker(allBranches, northOnly, true);
+  assert.deepEqual(picker.branches, allBranches);
+  assert.equal(picker.allLabel, "All branches");
+});
+
+test("a picker reads the caller's branches in the legacy shape too", () => {
+  assert.deepEqual(branchPicker(allBranches, oldShape, false).branches, [main]);
+});
+
+test("a picker for a caller with no branch and no view_all offers none", () => {
+  assert.deepEqual(branchPicker(allBranches, {} as User, false).branches, []);
+});
+
+// ── worksOutsideCallerBranches (users page: Edit, Reset Password, Deactivate) ──
+
+const caller = { id: 1, branches: [main, north] } as unknown as User;
+
+test("a target in a branch the caller doesn't hold is out of reach", () => {
+  const target = { id: 2, branches: [north, south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, false), true);
+});
+
+test("a target inside the caller's branches is in reach", () => {
+  const target = { id: 2, branches: [north] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, false), false);
+  assert.equal(worksOutsideCallerBranches({ id: 3, branch: main } as unknown as User, caller, false), false);
+});
+
+test("view_all reaches every target", () => {
+  const target = { id: 2, branches: [south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, caller, true), false);
+});
+
+test("the caller's own account is always in reach", () => {
+  const self = { id: 1, branches: [main, north] } as unknown as User;
+  const narrowSelf = { id: 1, branches: [north] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(self, narrowSelf, false), false);
+});
+
+test("an unknown caller claims nothing", () => {
+  const target = { id: 2, branches: [south] } as unknown as User;
+  assert.equal(worksOutsideCallerBranches(target, null, false), false);
+});
+
+test("a target with no branch is in reach", () => {
+  assert.equal(worksOutsideCallerBranches({ id: 2, branches: [] } as unknown as User, caller, false), false);
 });

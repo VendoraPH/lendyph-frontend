@@ -9,7 +9,7 @@
  * importer keys them by name (see `file-slot.tsx`).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Building2, RotateCw } from "lucide-react";
 
@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useBranches } from "@/hooks";
+import { branchPicker } from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
 import type { ImportRunStatus } from "@/types/data-import";
 
@@ -93,7 +95,16 @@ function BranchGate({
   onRetry: () => void;
   children: React.ReactNode;
 }) {
-  const { branches, loading, error } = useBranches();
+  const { branches: loaded, loading, error } = useBranches();
+  // Without `branches:view_all` only the caller's own branches can take the
+  // import (the API refuses any other), so only those are offered. Memoised:
+  // the one-branch preselect below depends on this list.
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const branches = useMemo(
+    () => branchPicker(loaded, caller, viewAll).branches,
+    [loaded, caller, viewAll],
+  );
 
   // binhs-coop production has exactly one branch. Pre-selecting it removes a
   // click that has no decision in it — but the control stays on screen and

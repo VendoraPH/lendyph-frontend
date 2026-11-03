@@ -1,12 +1,7 @@
 "use client";
 
 import { useBranches } from "@/hooks";
-import {
-  allBranchesLabel,
-  branchFilterItems,
-  branchViewer,
-  visibleBranches,
-} from "@/lib/user-branches";
+import { branchFilterItems, branchPicker } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,8 +28,7 @@ export function BranchFilter({ value, onChange }: BranchFilterProps) {
   // theirs. `items` and the rendered options read the same viewer.
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
-  const viewer = branchViewer(caller, viewAll);
-  const shown = visibleBranches(branches, viewer);
+  const picker = branchPicker(branches, caller, viewAll);
 
   return (
     <div className="space-y-1.5">
@@ -43,14 +37,14 @@ export function BranchFilter({ value, onChange }: BranchFilterProps) {
       <Select
         value={value}
         onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
-        items={branchFilterItems(branches, ALL_BRANCHES, viewer)}
+        items={branchFilterItems(branches, ALL_BRANCHES, picker.viewer)}
       >
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL_BRANCHES}>{allBranchesLabel(viewer)}</SelectItem>
-          {shown.map((branch) => (
+          <SelectItem value={ALL_BRANCHES}>{picker.allLabel}</SelectItem>
+          {picker.branches.map((branch) => (
             <SelectItem key={branch.id} value={String(branch.id)}>
               {branch.name}
             </SelectItem>
