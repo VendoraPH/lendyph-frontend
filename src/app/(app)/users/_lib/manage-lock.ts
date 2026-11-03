@@ -18,10 +18,11 @@ export interface ManageLock {
 
 /**
  * Whether edit, reset password, deactivate and activate are locked on a row,
- * and why. The server's `can_manage` decides when the row carries it (it
- * applies the same rule as those requests, which answer a masked 404). The
- * client's own locks only name the reason when they match, and decide on their
- * own when `can_manage` is missing (an API that hasn't shipped it).
+ * and why. The client's own locks (super_admin target, a branch the caller
+ * doesn't hold) always apply. The server's `can_manage` can only add a lock:
+ * `false` (the same rule as those requests, which answer a masked 404, and it
+ * also sees permissions the client can't) locks the row, with the client's
+ * reason when it has one. `true` or a missing value leaves the client's answer.
  */
 export function userManageLock(user: Pick<User, "can_manage">, client: ClientManageLocks): ManageLock {
   const clientReason = client.superAdminLocked
@@ -30,7 +31,6 @@ export function userManageLock(user: Pick<User, "can_manage">, client: ClientMan
       ? BRANCH_LOCK_REASON
       : null;
 
-  if (user.can_manage === true) return { locked: false, reason: null };
   if (user.can_manage === false) return { locked: true, reason: clientReason ?? PERMISSION_LOCK_REASON };
   return { locked: clientReason !== null, reason: clientReason };
 }

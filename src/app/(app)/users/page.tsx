@@ -964,9 +964,9 @@ function UserActionsCell({
   // deactivate: the API refuses a caller without `branches:view_all` any target
   // who also works in a branch the caller doesn't hold.
   const isBranchLocked = worksOutsideCallerBranches(user, caller, viewAll);
-  // The server's `can_manage` applies the same rule as those requests,
-  // including the permissions the target holds, which the client can't see;
-  // the two locks above only decide when the row doesn't carry it.
+  // The two locks above always apply. The server's `can_manage: false` adds
+  // the cases the client can't see (permissions the target holds); it never
+  // lifts a client lock.
   const { locked: cannotManageTarget, reason: lockReason } = userManageLock(user, {
     superAdminLocked: isSuperAdminLocked,
     branchLocked: isBranchLocked,

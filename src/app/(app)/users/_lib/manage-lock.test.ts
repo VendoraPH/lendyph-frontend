@@ -29,11 +29,19 @@ describe("userManageLock", () => {
     );
   });
 
-  test("can_manage: true leaves the row open, whatever the client would guess", () => {
+  test("can_manage: true never lifts a client lock", () => {
     assert.deepEqual(
       userManageLock({ can_manage: true }, { superAdminLocked: true, branchLocked: true }),
-      { locked: false, reason: null },
+      { locked: true, reason: SUPER_ADMIN_LOCK_REASON },
     );
+    assert.deepEqual(
+      userManageLock({ can_manage: true }, { superAdminLocked: false, branchLocked: true }),
+      { locked: true, reason: BRANCH_LOCK_REASON },
+    );
+  });
+
+  test("can_manage: true with no client lock leaves the row open", () => {
+    assert.deepEqual(userManageLock({ can_manage: true }, none), { locked: false, reason: null });
   });
 
   test("without can_manage the client locks still apply", () => {
