@@ -43,6 +43,7 @@ export function borrowerParty(borrower: Borrower): GCashParty {
     id: borrower.id,
     full_name: borrower.full_name ?? "",
     borrower_code: borrower.borrower_code ?? undefined,
+    contact_number: borrower.contact_number ?? null,
   };
 }
 

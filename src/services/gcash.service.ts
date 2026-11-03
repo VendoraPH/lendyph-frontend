@@ -12,6 +12,7 @@ import type {
   CreateGCashTransactionData,
   GCashListFilters,
   GCashNonMember,
+  GCashNonMemberCreateInput,
   GCashNonMemberInput,
   GCashNonMemberFilters,
   PaginatedResponse,
@@ -76,7 +77,7 @@ export const gcashService = {
       gcashService.listNonMembers({ ...params, page, per_page }),
     ),
 
-  createNonMember: (data: GCashNonMemberInput) =>
+  createNonMember: (data: GCashNonMemberCreateInput) =>
     api.post<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_CREATE, data),
 
   updateNonMember: (id: number, data: GCashNonMemberInput) =>
