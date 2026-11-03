@@ -1,74 +1,24 @@
 /**
  * The loan product form's shape and the body it is saved as. Kept out of the
- * page so the payload can be unit-tested in a plain node process.
+ * page so the payload can be unit-tested in a plain node process. The body
+ * never carries `custom_fees` (see `retiredCustomFeesNotice`).
  */
-
-import { buildFormulaFields } from "@/lib/fee-form";
-
-export interface CustomFeeEntry {
-  name: string;
-  type: "fixed" | "percentage" | "formula";
-  value: string;
-  /** A formula fee's own fields (see `@/lib/fee-form`); unused by the other types. */
-  per_month: boolean;
-  min_amount: string;
-  max_amount: string;
-  term_days_gt: string;
-  term_days_lt: string;
-  term_days_eq: string;
-  loan_amount_gt: string;
-  loan_amount_lt: string;
-  loan_amount_eq: string;
-}
-
-export const EMPTY_FEE: CustomFeeEntry = {
-  name: "",
-  type: "fixed",
-  value: "",
-  per_month: false,
-  min_amount: "",
-  max_amount: "",
-  term_days_gt: "",
-  term_days_lt: "",
-  term_days_eq: "",
-  loan_amount_gt: "",
-  loan_amount_lt: "",
-  loan_amount_eq: "",
-};
-
-const CONDITION_KEYS = [
-  "term_days_gt",
-  "term_days_lt",
-  "term_days_eq",
-  "loan_amount_gt",
-  "loan_amount_lt",
-  "loan_amount_eq",
-] as const;
 
 /**
- * A product's saved custom fees as the form's entries. Conditions are read
- * from each fee's `conditions` object, the shape `formToApiPayload` saves
- * them in, so editing a product keeps them (they were read from top-level
- * keys the API never returns, and a re-save dropped them). A zero condition
- * is kept as "0".
+ * The read-only notice for a product that still holds stored `custom_fees`.
+ * Product "Additional Fees" are retired: no code ever charged them, and Fees
+ * settings (scoped by product) is the single place fees are set up. The form
+ * never sends `custom_fees`, so the stored list stays as it is; this only
+ * tells staff it exists. Null when there are none.
  */
-export function customFeeEntriesFromApi(rawFees: readonly Record<string, unknown>[]): CustomFeeEntry[] {
-  return rawFees.map((f) => {
-    const conditions = (f.conditions && typeof f.conditions === "object" ? f.conditions : {}) as Record<string, unknown>;
-    const entry: CustomFeeEntry = {
-      ...EMPTY_FEE,
-      name: String(f.name ?? ""),
-      type: (f.type as CustomFeeEntry["type"]) ?? "fixed",
-      value: String(f.value ?? ""),
-      per_month: Boolean(f.per_month),
-      min_amount: f.min_amount != null ? String(f.min_amount) : "",
-      max_amount: f.max_amount != null ? String(f.max_amount) : "",
-    };
-    for (const key of CONDITION_KEYS) {
-      if (conditions[key] != null) entry[key] = String(conditions[key]);
-    }
-    return entry;
+export function retiredCustomFeesNotice(rawFees: unknown): string | null {
+  if (!Array.isArray(rawFees) || rawFees.length === 0) return null;
+  const names = rawFees.map((fee) => {
+    const name = fee && typeof fee === "object" ? (fee as Record<string, unknown>).name : undefined;
+    return typeof name === "string" && name.trim() ? name.trim() : "Unnamed fee";
   });
+  const count = names.length;
+  return `${count} retired additional ${count === 1 ? "fee" : "fees"} (${names.join(", ")}). They were never charged. Recreate any you need in Settings → Fees.`;
 }
 
 export interface ProductForm {
@@ -95,7 +45,6 @@ export interface ProductForm {
   scb_required: boolean;
   min_scb: string;
   max_scb: string;
-  custom_fees: CustomFeeEntry[];
 }
 
 export const EMPTY_FORM: ProductForm = {
@@ -122,29 +71,9 @@ export const EMPTY_FORM: ProductForm = {
   scb_required: false,
   min_scb: "",
   max_scb: "",
-  custom_fees: [],
 };
 
 export function formToApiPayload(form: ProductForm) {
-  const custom_fees = form.custom_fees
-    .filter((f) => f.name.trim() && f.value.trim())
-    .map((f) => {
-      const conditions: Record<string, number> = {};
-      for (const key of CONDITION_KEYS) {
-        if (f[key].trim() !== "") conditions[key] = Number(f[key]);
-      }
-      const formula = f.type === "formula"
-        ? buildFormulaFields({ perMonth: f.per_month, minAmount: f.min_amount, maxAmount: f.max_amount })
-        : null;
-      return {
-        name: f.name,
-        type: f.type,
-        value: Number(f.value),
-        ...(formula && "fields" in formula ? formula.fields : {}),
-        ...(Object.keys(conditions).length > 0 ? { conditions } : {}),
-      };
-    });
-
   return {
     name: form.name,
     min_interest_rate: Number(form.min_interest_rate),
@@ -174,6 +103,5 @@ export function formToApiPayload(form: ProductForm) {
     scb_required: form.scb_required,
     min_scb: form.scb_required && form.min_scb ? Number(form.min_scb) : undefined,
     max_scb: form.scb_required && form.max_scb ? Number(form.max_scb) : undefined,
-    ...(custom_fees.length > 0 ? { custom_fees } : {}),
   };
 }
