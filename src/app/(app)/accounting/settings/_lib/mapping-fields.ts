@@ -1,3 +1,4 @@
+import { env } from "@/config/env";
 import type { AccountMapping, AccountType } from "@/types";
 
 export interface MappingField {
@@ -18,7 +19,43 @@ export interface MappingField {
  * does not — and because a wrong default that cannot be corrected would
  * silently misstate income for as long as nobody noticed.
  */
-export const GROUPS: { title: string; description: string; fields: MappingField[] }[] = [
+export interface MappingGroup {
+  title: string;
+  description: string;
+  fields: MappingField[];
+}
+
+/**
+ * Savings & Deposits roles. Shown only where the module is on
+ * (NEXT_PUBLIC_ENABLE_SAVINGS): elsewhere the backend has no savings postings
+ * to route. They have no seeded default; the backend handoff proposes them.
+ */
+export const SAVINGS_GROUP: MappingGroup = {
+  title: "Savings & Deposits",
+  description: "Where members' savings and the interest paid on them are booked.",
+  fields: [
+    {
+      key: "savings_deposits",
+      label: "Savings deposits",
+      hint: "Members' savings balances: money the business holds for them. Credited on deposit, debited on withdrawal.",
+      types: ["liability"],
+    },
+    {
+      key: "savings_interest_expense",
+      label: "Interest expense on savings",
+      hint: "The cost of interest credited to savings accounts.",
+      types: ["expense"],
+    },
+    {
+      key: "savings_interest_payable",
+      label: "Interest payable on savings",
+      hint: "Interest accrued on savings but not yet credited to the accounts.",
+      types: ["liability"],
+    },
+  ],
+};
+
+export const GROUPS: MappingGroup[] = [
   {
     title: "Where money is held",
     description: "Which account each settlement method debits or credits.",
@@ -158,4 +195,5 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
       },
     ],
   },
+  ...(env.features.savings ? [SAVINGS_GROUP] : []),
 ];

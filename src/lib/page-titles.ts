@@ -39,6 +39,7 @@ export const PRINTABLE_TITLES: Readonly<Record<PrintableId, string>> = {
   official_receipt: "Official Receipt",
   share_capital_certificate: "Share Capital Certificate",
   member_ledger_card: "Member Ledger Card",
+  savings_receipt: "Savings Transaction Receipt",
 };
 
 /** Fixed sub-pages, whatever section they sit under. */
@@ -53,10 +54,14 @@ const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
   "user-roles": "Role and Permissions",
 };
 
-/** Sections whose second segment is a catalog id. */
+/**
+ * Sections whose second segment is a catalog id, or that name a shared
+ * segment their own way (`/savings/products` are not loan products).
+ */
 const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   reports: REPORT_TITLES,
   printables: PRINTABLE_TITLES,
+  savings: { products: "Savings Products" },
 };
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {

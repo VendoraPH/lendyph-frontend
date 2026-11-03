@@ -43,10 +43,10 @@ The frontend is built behind `NEXT_PUBLIC_ENABLE_SAVINGS`. It is typed against t
 | GET `/savings/accounts/{id}/status-history` · `/audit` | savings:view | Status changes and the audit trail. |
 | POST `/savings/deposits` | savings:deposit | Refused if the account is closed or frozen, or the product disallows deposits. Returns the transaction with previous and new balance. |
 | POST `/savings/withdrawals` | savings:withdraw | Refused if closed, frozen or dormant. amount ≤ available − maintaining balance and ≤ the product's per-withdrawal cap. |
-| POST `/savings/transfers` | savings:transfer | Different accounts. Withdrawal rules on the source, deposit rules on the destination. One DB transaction writes `transfer_out` and `transfer_in`. |
-| GET `/savings/transactions` · `/{id}` | savings:view | Global history. Filters: account, member, type, status, branch, dates. `meta.totals`. Show returns the receipt payload. |
-| POST `/savings/transactions/{id}/reverse` | savings:reverse | `{reason}` is required. If approval is on, the reversal goes to `pending_approval`; otherwise it posts at once. Interest and already-reversed rows can't be reversed here. |
-| POST `/savings/reversals/{id}/approve\|reject` | savings:approve | Maker ≠ checker. Approve posts the reversal; reject records the reason. |
+| POST `/savings/transfers` | savings:transfer | Different accounts. Withdrawal rules on the source, deposit rules on the destination. One DB transaction writes `transfer_out` and `transfer_in`. Returns `{reference_number, debit, credit}`, both legs as full transactions. |
+| GET `/savings/transactions` · `/{id}` | savings:view | Global history. Filters: account, member, type, status, branch, dates. `meta.totals`. Show returns the receipt payload: `previous_balance`, `running_balance`, `processed_by`, `branch`, `counterparty` (transfer legs), `reversal_of` / `reversed_by` and `pending_reversal {id, reason, requested_by}`. |
+| POST `/savings/transactions/{id}/reverse` | savings:reverse | `{reason}` is required. If approval is on, the reversal goes to `pending_approval`; otherwise it posts at once. Not reversible here: interest (reverse the batch), `closing_withdrawal`, a reversal, a reversed row, or one with a reversal already pending. Record `requested_by`. |
+| POST `/savings/reversals/{id}/approve\|reject` | savings:approve | Maker ≠ checker: 403 when the approver is the `requested_by` user. Approve posts the reversal; reject takes `{reason}` and records it. |
 | POST `/savings/interest/preview` | savings:post | `{product_id?, period_start, period_end}` → per-account rows plus totals. Nothing is saved. |
 | POST/GET `/savings/interest/batches` · GET `/{id}` | savings:post | One batch per product per period (unique; 422 on a duplicate). Store the inputs per row: average daily balance, eligible days, rate and basis. |
 | POST `/savings/interest/batches/{id}/approve\|reject` | savings:approve | Maker ≠ checker. Only allowed when approval is required. |
@@ -98,3 +98,11 @@ The postings are:
   - leap-year 366 under `actual`;
   - days below the minimum balance earn nothing.
 - **Isolation:** branch scoping and tenant isolation on every endpoint.
+
+## Journal source documents
+
+Post savings GL entries with `postable_type = savings_transaction` (`postable_id` = the transaction id, `postable_label` = its reference). Use `savings_account` for postings that belong to the account as a whole. The journal screens link both to `/savings/transactions/{id}` and `/savings/accounts/{id}`.
+
+## Open question
+
+Deposit, withdrawal and transfer screens need `savings:view` to look up the account. If a teller role gets `savings:deposit` without `savings:view`, the screen explains this instead of searching. Either seed `savings:view` alongside, or allow the lookup (`GET /savings/accounts?search=`) for any `savings:deposit|withdraw|transfer` holder.

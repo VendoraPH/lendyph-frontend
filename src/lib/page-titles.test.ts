@@ -37,7 +37,9 @@ describe("the title map covers both catalogs", () => {
   });
 
   test("every printable title belongs to a printable in the catalog", () => {
-    const ids = new Set<string>(PRINTABLE_CATALOG.map((p) => p.id));
+    // The savings receipt prints from the transaction screens, not from the
+    // subject picker, so it has a title (the tab's) but no catalog entry.
+    const ids = new Set<string>([...PRINTABLE_CATALOG.map((p) => p.id), "savings_receipt"]);
     assert.deepEqual(
       Object.keys(PRINTABLE_TITLES).filter((id) => !ids.has(id)),
       [],
@@ -86,4 +88,10 @@ describe("humanizeSegment", () => {
     assert.equal(humanizeSegment("dashboard"), "Dashboard");
     assert.equal(humanizeSegment(""), "");
   });
+});
+
+test("savings products are not loan products", () => {
+  assert.equal(subPageTitle("savings", "products"), "Savings Products");
+  assert.equal(subPageTitle("settings", "products"), "Loan Products");
+  assert.equal(subPageTitle("savings", "deposits"), "Deposits");
 });

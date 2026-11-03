@@ -90,11 +90,49 @@ export const TRANSACTION_STATUS_TONE: Record<SavingsTransactionStatus, BadgeTone
   rejected: "danger",
 };
 
-/** A posted, not-yet-reversed transaction that isn't itself a reversal. */
+/**
+ * Types a teller may not reverse one by one: a reversal is final, interest is
+ * undone by reversing its whole batch, and a closing payout closed the account.
+ */
+const NOT_REVERSIBLE: ReadonlySet<SavingsTransactionType> = new Set(["reversal", "interest", "closing_withdrawal"]);
+
+/** A posted, not-yet-reversed transaction of a type that is reversed on its own. */
 export function isReversible(tx: {
   status: SavingsTransactionStatus;
   type: SavingsTransactionType;
   pending_reversal?: unknown;
 }): boolean {
-  return tx.status === "posted" && tx.type !== "reversal" && !tx.pending_reversal;
+  return tx.status === "posted" && !NOT_REVERSIBLE.has(tx.type) && !tx.pending_reversal;
+}
+
+/** What one transaction row offers this user. */
+export interface TransactionRowActions {
+  reverse: boolean;
+  /** A pending reversal this user may approve or reject, if any. */
+  review: { reversalId: number; ownRequest: boolean } | null;
+}
+
+/**
+ * Reverse needs `savings:reverse`; approving needs `savings:approve`. The one
+ * who asked for a reversal can't approve it (maker ≠ checker): the action is
+ * still listed, marked as theirs, so the screen can say why it is disabled.
+ * The server refuses it as well.
+ */
+export function transactionRowActions(
+  tx: Parameters<typeof isReversible>[0] & {
+    pending_reversal?: { id: number; requested_by: { id: number } | null } | null;
+  },
+  user: { canReverse: boolean; canApprove: boolean; userId: number | null },
+): TransactionRowActions {
+  const pending = tx.pending_reversal ?? null;
+  return {
+    reverse: user.canReverse && isReversible(tx),
+    review:
+      user.canApprove && pending
+        ? {
+            reversalId: pending.id,
+            ownRequest: user.userId !== null && pending.requested_by?.id === user.userId,
+          }
+        : null,
+  };
 }

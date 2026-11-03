@@ -358,7 +358,18 @@ export interface AccountMapping {
    * chart already carries, so this adds a role without adding an account.
    */
   borrower_advances: number;
+  /**
+   * Savings & Deposits (NEXT_PUBLIC_ENABLE_SAVINGS). Optional: a backend
+   * without the savings module neither sends nor accepts them, and they have
+   * no seeded default until it does (docs/SAVINGS_BACKEND_HANDOFF.md).
+   */
+  savings_deposits?: number;
+  savings_interest_expense?: number;
+  savings_interest_payable?: number;
 }
+
+/** The savings roles, which are not seeded in the default chart. */
+export type SavingsMappingKey = "savings_deposits" | "savings_interest_expense" | "savings_interest_payable";
 
 /** Accounting periods lock the books once an accountant signs them off. */
 export type PeriodStatus = "open" | "closed";

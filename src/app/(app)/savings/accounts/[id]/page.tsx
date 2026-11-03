@@ -13,6 +13,7 @@ import { savingsAccountService } from "@/services/savings-account.service";
 import { ACCOUNT_STATUS_LABEL, ACCOUNT_STATUS_TONE } from "../../_lib/account-status";
 import { ToneBadge } from "../../_components/tone-badge";
 import { AccountActions } from "./_components/account-actions";
+import { AccountMoneyLinks } from "./_components/account-money-links";
 import { AccountSummary } from "./_components/account-summary";
 import { AccountTransactions } from "./_components/account-transactions";
 import { AuditLog, StatusHistory } from "./_components/account-history";
@@ -40,6 +41,7 @@ function AccountDetailContent({ accountId }: { accountId: number }) {
               actions={
                 <>
                   <ToneBadge tone={ACCOUNT_STATUS_TONE[account.status]}>{ACCOUNT_STATUS_LABEL[account.status]}</ToneBadge>
+                  <AccountMoneyLinks account={account} />
                   <AccountActions account={account} onChanged={resource.refetch} />
                 </>
               }
@@ -52,7 +54,7 @@ function AccountDetailContent({ accountId }: { accountId: number }) {
                 <TabsTrigger value="audit">Audit trail</TabsTrigger>
               </TabsList>
               <TabsContent value="transactions" className="pt-4">
-                <AccountTransactions accountId={account.id} />
+                <AccountTransactions accountId={account.id} onChanged={resource.refetch} />
               </TabsContent>
               <TabsContent value="status" className="pt-4">
                 <StatusHistory accountId={account.id} />

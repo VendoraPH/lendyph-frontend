@@ -24,7 +24,9 @@ export type PrintableId =
   | "demand_letter"
   | "amortization_schedule"
   | "share_capital_certificate"
-  | "member_ledger_card";
+  | "member_ledger_card"
+  /** Savings deposit, withdrawal, transfer or interest; opened from the savings screens. */
+  | "savings_receipt";
 
 /**
  * What a template needs picked before it can run. Mirrors the reports'

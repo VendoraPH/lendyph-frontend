@@ -17,6 +17,10 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsAccountService } from "@/services/savings-account.service";
 import type { Money } from "@/types/savings";
+import { ReversalDialogs, type ReversalTarget } from "../../../_components/reversal-dialogs";
+import { TransactionRowActions } from "../../../_components/transaction-row-actions";
+import { useSavingsReceipt } from "../../../_hooks/use-savings-receipt";
+import { useTransactionPermissions } from "../../../_hooks/use-transaction-permissions";
 import { TRANSACTION_STATUS_LABEL, TRANSACTION_STATUS_TONE, TRANSACTION_TYPE_LABEL } from "../../../_lib/account-status";
 import { ToneBadge } from "../../../_components/tone-badge";
 
@@ -24,12 +28,16 @@ const amount = (v: Money) => (Number(v) ? formatCurrency(v) : "");
 
 /**
  * The account's statement: one page at a time, running balance and totals
- * from the server (never summed here), filtered by date.
+ * from the server (never summed here), filtered by date. Each row prints its
+ * receipt and offers reversal (and its approval) to those allowed.
  */
-export function AccountTransactions({ accountId }: { accountId: number }) {
+export function AccountTransactions({ accountId, onChanged }: { accountId: number; onChanged: () => void }) {
   const [range, setRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
+  const [target, setTarget] = useState<ReversalTarget | null>(null);
+  const user = useTransactionPermissions();
+  const receipt = useSavingsReceipt();
 
   const fetcher = useCallback(
     () =>
@@ -97,6 +105,9 @@ export function AccountTransactions({ accountId }: { accountId: number }) {
                         <TableHead className="text-right">Balance</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Processed by</TableHead>
+                        <TableHead className="w-0">
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -121,6 +132,15 @@ export function AccountTransactions({ accountId }: { accountId: number }) {
                             </ToneBadge>
                           </TableCell>
                           <TableCell>{tx.processed_by?.name ?? "—"}</TableCell>
+                          <TableCell>
+                            <TransactionRowActions
+                              tx={tx}
+                              user={user}
+                              onPrint={receipt.print}
+                              printing={receipt.printing}
+                              onAction={(action, row) => setTarget({ action, tx: row })}
+                            />
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -141,6 +161,15 @@ export function AccountTransactions({ accountId }: { accountId: number }) {
           </div>
         )}
       </DataState>
+      <ReversalDialogs
+        target={target}
+        onClose={() => setTarget(null)}
+        onDone={() => {
+          setTarget(null);
+          resource.refetch();
+          onChanged();
+        }}
+      />
     </div>
   );
 }

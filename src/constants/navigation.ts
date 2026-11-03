@@ -121,6 +121,9 @@ export const SIDEBAR_NAV: NavItem[] = [
           children: [
             { title: "Accounts", href: "/savings/accounts", permission: "savings:view" },
             { title: "Open Account", href: "/savings/accounts/new", permission: "savings:create" },
+            { title: "Deposits", href: "/savings/deposits", permission: "savings:deposit" },
+            { title: "Withdrawals", href: "/savings/withdrawals", permission: "savings:withdraw" },
+            { title: "Transfers", href: "/savings/transfers", permission: "savings:transfer" },
             { title: "Products", href: "/savings/products", permission: "savings_products:manage" },
             { title: "Settings", href: "/savings/settings", permission: "savings:settings" },
           ],
