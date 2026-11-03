@@ -12,6 +12,7 @@ import {
   createTrailingCall,
   createUnreadPoller,
   formatRelativeTime,
+  isUnauthorizedError,
   listReplyOutcome,
   SETTLE_REFRESH_DELAY_MS,
   markAllRead,
@@ -41,8 +42,9 @@ function row(over: Partial<AppNotification> & { id: string }): AppNotification {
 
 // ── The poller, driven by a fake clock and fake timers ──────────────────────
 
-function harness(opts: { hidden?: boolean; fail?: boolean } = {}) {
+function harness(opts: { hidden?: boolean; fail?: boolean; failWith?: unknown; signedIn?: boolean } = {}) {
   let hidden = opts.hidden ?? false;
+  let signedIn = opts.signedIn ?? true;
   let now = NOW;
   let loads = 0;
   let pending: (() => void)[] = [];
@@ -52,10 +54,18 @@ function harness(opts: { hidden?: boolean; fail?: boolean } = {}) {
     load: () => {
       loads += 1;
       return new Promise<void>((resolve, reject) => {
-        pending.push(() => (opts.fail ? reject(new Error("offline")) : resolve()));
+        pending.push(() =>
+          opts.failWith !== undefined
+            ? reject(opts.failWith)
+            : opts.fail
+              ? reject(new Error("offline"))
+              : resolve(),
+        );
       });
     },
     isHidden: () => hidden,
+    hasSession: () => signedIn,
+    isSessionEnded: isUnauthorizedError,
     now: () => now,
     setInterval: (fn, ms) => {
       const id = nextId++;
@@ -76,6 +86,9 @@ function harness(opts: { hidden?: boolean; fail?: boolean } = {}) {
     },
     setHidden: (h: boolean) => {
       hidden = h;
+    },
+    setSignedIn: (v: boolean) => {
+      signedIn = v;
     },
     advance: (ms: number) => {
       now += ms;
@@ -204,6 +217,77 @@ describe("createUnreadPoller", () => {
     h.tick();
     h.tick();
     assert.equal(h.loads, 1);
+  });
+
+  test("no access token: nothing reads and nothing is scheduled", async () => {
+    const h = harness({ signedIn: false });
+    h.poller.start();
+    h.poller.handleFocus();
+    h.poller.handleVisibilityChange();
+    h.poller.refresh();
+    await h.settle();
+    assert.equal(h.loads, 0);
+    assert.equal(h.timers.length, 0);
+  });
+
+  test("the token is cleared (session expired): the next tick stops the poll; focus doesn't restart it", async () => {
+    const h = harness();
+    h.poller.start();
+    await h.settle();
+    h.setSignedIn(false);
+    h.advance(UNREAD_POLL_MS);
+    h.tick();
+    assert.equal(h.loads, 1, "no read without a token");
+    assert.equal(h.timers.length, 0, "the interval stopped");
+    h.advance(UNREAD_POLL_MS);
+    h.poller.handleFocus();
+    h.setHidden(true);
+    h.poller.handleVisibilityChange();
+    h.setHidden(false);
+    h.poller.handleVisibilityChange();
+    await h.settle();
+    assert.equal(h.loads, 1);
+    assert.equal(h.timers.length, 0);
+  });
+
+  test("a 401 halts the poll for good, even if a token shows up again", async () => {
+    const h = harness({ failWith: { response: { status: 401 } } });
+    h.poller.start();
+    await h.settle();
+    assert.equal(h.timers.length, 0, "halted");
+    h.advance(UNREAD_POLL_MS);
+    h.tick();
+    h.poller.handleFocus();
+    h.poller.handleVisibilityChange();
+    h.poller.refresh();
+    h.poller.start();
+    await h.settle();
+    assert.equal(h.loads, 1);
+    assert.equal(h.timers.length, 0);
+  });
+
+  test("other failures (500, offline) keep polling", async () => {
+    const h = harness({ failWith: { response: { status: 500 } } });
+    h.poller.start();
+    await h.settle();
+    h.advance(UNREAD_POLL_MS);
+    h.tick();
+    await h.settle();
+    assert.equal(h.loads, 2);
+    assert.equal(h.timers.length, 1);
+  });
+
+  test("halt (a 401 from the list) stops the count poll too", async () => {
+    const h = harness();
+    h.poller.start();
+    await h.settle();
+    h.poller.halt();
+    h.advance(UNREAD_POLL_MS);
+    h.tick();
+    h.poller.handleFocus();
+    await h.settle();
+    assert.equal(h.loads, 1);
+    assert.equal(h.timers.length, 0);
   });
 
   test("after dispose (signed out) nothing reads, even a late event", async () => {
@@ -400,6 +484,18 @@ describe("revertReadAt", () => {
   test("a row read again since (a newer stamp) is left alone", () => {
     const next = revertReadAt([row({ id: "a", read_at: "2026-11-03T05:00:00Z" })], new Set(["a"]), "2026-11-03T04:00:00Z");
     assert.equal(next[0].read_at, "2026-11-03T05:00:00Z");
+  });
+});
+
+describe("isUnauthorizedError", () => {
+  test("only a 401 response counts", () => {
+    assert.equal(isUnauthorizedError({ response: { status: 401 } }), true);
+    assert.equal(isUnauthorizedError({ response: { status: 403 } }), false);
+    assert.equal(isUnauthorizedError({ response: { status: 500 } }), false);
+    assert.equal(isUnauthorizedError({ code: "ECONNABORTED" }), false);
+    assert.equal(isUnauthorizedError(new Error("offline")), false);
+    assert.equal(isUnauthorizedError(null), false);
+    assert.equal(isUnauthorizedError("401"), false);
   });
 });
 

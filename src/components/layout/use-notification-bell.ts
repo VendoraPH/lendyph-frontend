@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notificationService, NOTIFICATION_FEED_SIZE } from "@/services/notification.service";
 import { notifyError } from "@/lib/notify";
+import { tokenManager } from "@/lib/axios-client";
 import {
   FEED_LIMIT,
   SETTLE_REFRESH_DELAY_MS,
@@ -8,6 +9,7 @@ import {
   createMutationGate,
   createTrailingCall,
   createUnreadPoller,
+  isUnauthorizedError,
   listReplyOutcome,
   markAllRead,
   markOneRead,
@@ -37,6 +39,9 @@ export type NotificationListStatus = "idle" | "loading" | "ready" | "error";
  *
  * The header keys the bell on the signed-in user (`bellOwnerKey`), so signing
  * out or switching user remounts it with an empty count, list and status.
+ * Once the session ends (no access token stored, or a 401 from a count or
+ * list read) the poll stops while the "Session Expired" dialog shows, and the
+ * remount on the next sign-in starts it again.
  */
 export function useNotificationBell(enabled: boolean) {
   const [count, setCount] = useState<number | null>(null);
@@ -60,6 +65,8 @@ export function useNotificationBell(enabled: boolean) {
         });
       },
       isHidden: () => document.hidden,
+      hasSession: () => tokenManager.getAccessToken() !== null,
+      isSessionEnded: isUnauthorizedError,
       now: () => Date.now(),
       setInterval: (fn, ms) => window.setInterval(fn, ms),
       clearInterval: (handle) => window.clearInterval(handle as number),
@@ -82,6 +89,10 @@ export function useNotificationBell(enabled: boolean) {
   const loadList = useCallback(() => {
     if (!enabled) return;
     const seq = ++listSeq.current;
+    if (tokenManager.getAccessToken() === null) {
+      setStatus("error");
+      return;
+    }
     const token = gate.token();
     listStale.current = false;
     setStatus((prev) => (prev === "ready" ? "ready" : "loading"));
@@ -108,7 +119,8 @@ export function useNotificationBell(enabled: boolean) {
         setLoadedAt(Date.now());
         setStatus("ready");
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (isUnauthorizedError(err)) pollerRef.current?.halt();
         if (seq !== listSeq.current) return;
         setStatus("error");
       });

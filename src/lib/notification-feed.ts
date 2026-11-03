@@ -31,6 +31,17 @@ export interface UnreadPollerDeps {
    */
   load: () => Promise<unknown>;
   isHidden: () => boolean;
+  /**
+   * Whether there is a session to read with (an access token is stored).
+   * Without one nothing reads and the interval stops: once a session has
+   * ended, every read would be a 401.
+   */
+  hasSession?: () => boolean;
+  /**
+   * Whether a failed read means the session is over (a 401). The poller then
+   * halts for good; the header remounts the bell when a user signs in again.
+   */
+  isSessionEnded?: (err: unknown) => boolean;
   now: () => number;
   setInterval: (fn: () => void, ms: number) => unknown;
   clearInterval: (handle: unknown) => void;
@@ -53,6 +64,8 @@ export interface UnreadPoller {
    * change, and the mutation gate drops it.
    */
   refresh: () => void;
+  /** The session ended (a 401 from any of the bell's reads): stops for good. */
+  halt: () => void;
   /** Stops for good: nothing reads after this, even a late event. */
   dispose: () => void;
 }
@@ -60,7 +73,9 @@ export interface UnreadPoller {
 /**
  * The unread-count schedule. The hook creates one only while a user is
  * signed in and disposes of it on sign-out, so a signed-out header makes no
- * reads; a hidden tab makes none either.
+ * reads; a hidden tab makes none either. Nor does a tab whose session has
+ * ended: with no access token stored, or after a 401, it stops, and focus and
+ * visibility changes don't restart it.
  */
 export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
   const intervalMs = deps.intervalMs ?? UNREAD_POLL_MS;
@@ -69,9 +84,24 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
   let inFlight = 0;
   let lastStartedAt: number | null = null;
   let disposed = false;
+  const hasSession = deps.hasSession ?? (() => true);
+
+  const stop = () => {
+    if (handle !== null) deps.clearInterval(handle);
+    handle = null;
+  };
+
+  const halt = () => {
+    disposed = true;
+    stop();
+  };
 
   const read = (respectGap: boolean, force: boolean) => {
     if (disposed || deps.isHidden()) return;
+    if (!hasSession()) {
+      stop();
+      return;
+    }
     if (inFlight > 0 && !force) return;
     const now = deps.now();
     if (respectGap && lastStartedAt !== null && now - lastStartedAt < minGapMs) return;
@@ -84,20 +114,17 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
       pending = Promise.reject(err);
     }
     pending
-      .catch(() => undefined)
+      .catch((err: unknown) => {
+        if (deps.isSessionEnded?.(err)) halt();
+      })
       .finally(() => {
         inFlight -= 1;
       });
   };
 
-  const stop = () => {
-    if (handle !== null) deps.clearInterval(handle);
-    handle = null;
-  };
-
   const schedule = () => {
     stop();
-    if (disposed || deps.isHidden()) return;
+    if (disposed || deps.isHidden() || !hasSession()) return;
     handle = deps.setInterval(() => read(false, false), intervalMs);
   };
 
@@ -115,11 +142,16 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
     },
     handleFocus: resume,
     refresh: () => read(false, true),
-    dispose: () => {
-      disposed = true;
-      stop();
-    },
+    halt,
+    dispose: halt,
   };
+}
+
+/** Whether a failed request was a 401: the session it carried is over. */
+export function isUnauthorizedError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const response = (err as { response?: { status?: unknown } }).response;
+  return response?.status === 401;
 }
 
 // ---------------------------------------------------------------------------
