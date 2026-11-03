@@ -87,7 +87,9 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
         ? Promise.resolve({ options: [], truncated: false, shown: 0, total: 0 })
         : subject === "loan"
         ? loanService
-            .listAll({ status: "released" })
+            // `active` is released and ongoing together: both read "Current",
+            // so a statement can be picked for either.
+            .listAll({ status: "active" })
             .then(({ rows, truncated, total }) => ({
               options: rows.map((loan: Loan) => ({
                 id: loan.id,

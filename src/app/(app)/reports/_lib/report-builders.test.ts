@@ -318,7 +318,8 @@ test("borrower list labels the latest loan's status the way the loans screens do
   const table = namedTable(doc, "Borrowers with Loans Released");
 
   assert.equal(table.columns.find((c) => c.key === "latest_loan_status")?.header, "Latest Loan Status");
-  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Released"]);
+  // Decision 5a: `released` and `ongoing` both read "Current".
+  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Current"]);
 });
 
 test("borrower list shows a dash for a borrower whose loans carry no number", () => {
@@ -610,6 +611,8 @@ test("daily collection renders whole-percent rates verbatim", () => {
       total_collected: 73900.25,
       collection_rate: 87.5,
       uncollected: 10600.25,
+      penalty_collected: 412.5,
+      total_received: 74312.75,
       generated_at: "2026-08-06 09:15:00",
     },
     RANGE
@@ -618,6 +621,73 @@ test("daily collection renders whole-percent rates verbatim", () => {
   assertNoDashes(doc);
   assert.equal(kpiValue(doc, "Collection Rate"), "87.5%");
   assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
+});
+
+// Decision 6: the three collected figures are the server's own. Deliberately
+// not consistent with each other, so a browser sum of any two cannot pass.
+const DAILY_COLLECTION_PAYLOAD = {
+  date: "2026-08-06",
+  total_due: 84500.5,
+  total_collected: 73900.25,
+  collection_rate: 87.5,
+  uncollected: 10600.25,
+  penalty_collected: 412.5,
+  total_received: 90000.1,
+};
+
+test("daily collection shows collected principal and interest, penalty collected and total received as sent", () => {
+  const doc = buildDailyCollectionDoc(DAILY_COLLECTION_PAYLOAD, RANGE);
+
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), "₱73,900.25");
+  assert.equal(kpiValue(doc, "Penalty Collected"), "₱412.50");
+  assert.equal(kpiValue(doc, "Total Received"), "₱90,000.10");
+  assert.equal(kpiValue(doc, "Total Due"), "₱84,500.50");
+  assert.equal(kpiValue(doc, "Collection Rate"), "87.5%");
+  assert.equal(kpiValue(doc, "Uncollected"), "₱10,600.25");
+});
+
+test("daily collection no longer labels principal and interest as the total collected", () => {
+  const doc = buildDailyCollectionDoc(DAILY_COLLECTION_PAYLOAD, RANGE);
+  const labels = doc.sections.flatMap((s) => (s.kind === "kpi_grid" ? s.items.map((i) => i.label) : []));
+
+  assert.equal(labels.includes("Total Collected"), false);
+  assert.deepEqual(labels, [
+    "Total Due",
+    "Collected (Principal + Interest)",
+    "Penalty Collected",
+    "Total Received",
+    "Collection Rate",
+    "Uncollected",
+  ]);
+});
+
+test("daily collection shows a dash for a figure the server did not send, never a sum", () => {
+  const { penalty_collected, total_received, ...older } = DAILY_COLLECTION_PAYLOAD;
+  void penalty_collected;
+  void total_received;
+  const doc = buildDailyCollectionDoc(older, RANGE);
+
+  assert.equal(kpiValue(doc, "Penalty Collected"), DASH);
+  // Not total_collected + penalty: Total Received is a server figure only.
+  assert.equal(kpiValue(doc, "Total Received"), DASH);
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), "₱73,900.25");
+});
+
+test("daily collection shows a zero penalty and zero received as ₱0.00, not a dash", () => {
+  const doc = buildDailyCollectionDoc(
+    { ...DAILY_COLLECTION_PAYLOAD, penalty_collected: 0, total_received: 0 },
+    RANGE
+  );
+
+  assert.equal(kpiValue(doc, "Penalty Collected"), "₱0.00");
+  assert.equal(kpiValue(doc, "Total Received"), "₱0.00");
+});
+
+test("daily collection reads only total_collected for principal and interest", () => {
+  // `total_amount` and `collected` were loose aliases; neither is the
+  // principal-plus-interest figure the label promises.
+  const doc = buildDailyCollectionDoc({ total_due: 1000, total_amount: 900, collected: 800 }, RANGE);
+  assert.equal(kpiValue(doc, "Collected (Principal + Interest)"), DASH);
 });
 
 const COLLECTION_ROWS = [
@@ -856,8 +926,8 @@ test("releases list maps LoanResource rows and shows a dash, not a page sum, whe
 test("releases list labels each loan's status as the loans screens do", () => {
   const rows = tableRows(buildReleasesListDoc({ data: RELEASE_ROWS, meta: { total: 2 } }, RANGE));
 
-  assert.equal(rows[0].status, "Released");
-  // `ongoing` is the legacy spelling of `current`: reports say "Current".
+  // Decision 5a: a `released` loan and an `ongoing` one both read "Current".
+  assert.equal(rows[0].status, "Current");
   assert.equal(rows[1].status, "Current");
 });
 
@@ -1472,6 +1542,81 @@ test("statement of account reads the summary block for its balances", () => {
   assert.equal(kpiValue(doc, "Total Paid"), "₱9,500.00");
   assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
   assert.equal(kpiValue(doc, "Past Due"), "₱5,450.50");
+});
+
+test("statement of account says what the Outstanding Balance is made of", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(
+    kpi(doc, "Outstanding Balance").hint,
+    "Principal, interest, penalty and insurance premium still owed"
+  );
+});
+
+test("statement of account's Past Due is the server's summary.overdue_amount only", () => {
+  // The grace-rule figure. The loose aliases are other figures, so a summary
+  // without overdue_amount shows a dash rather than one of them.
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_PAYLOAD,
+      summary: { total_paid: 9500, outstanding_balance: 34500.25, past_due_amount: 1, total_overdue: 2 },
+    },
+    RANGE
+  );
+  assert.equal(kpiValue(doc, "Past Due"), DASH);
+
+  const zero = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, summary: { ...SOA_PAYLOAD.summary, overdue_amount: 0 } },
+    RANGE
+  );
+  assert.equal(kpiValue(zero, "Past Due"), "₱0.00");
+});
+
+test("statement of account's transaction Reference is the payment's receipt number", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  const column = table.columns.find((c) => c.key === "reference")!;
+
+  assert.equal(table.rows[0].reference, "OR-1001");
+  assert.equal(formatCell(table.rows[0], column), "OR-1001");
+});
+
+test("a transaction without a receipt number shows a dash, never the row's id", () => {
+  const { receipt_number, ...withoutReceipt } = SOA_PAYLOAD.transactions[0];
+  void receipt_number;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_PAYLOAD, transactions: [{ ...withoutReceipt, id: 42 }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "reference")!;
+
+  assert.equal(table.rows[0].reference, null);
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
+test("statement of account's schedule Balance is the server's amount_remaining only", () => {
+  const [first, second] = SOA_PAYLOAD.amortization_schedule;
+  const { amount_remaining, ...withoutRemaining } = second;
+  void amount_remaining;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        // `balance` and `remaining_balance` are not the period's remaining
+        // amount; a row without amount_remaining shows a dash.
+        amortization_schedule: [first, { ...withoutRemaining, balance: 1, remaining_balance: 2 }],
+      },
+      RANGE
+    ),
+    "Amortization Schedule"
+  );
+  const column = table.columns.find((c) => c.key === "balance")!;
+
+  assert.equal(table.rows[0].balance, 0);
+  assert.equal(formatCell(table.rows[0], column), "₱0.00");
+  assert.equal(table.rows[1].balance, null);
+  assert.equal(formatCell(table.rows[1], column), DASH);
 });
 
 test("the amortization schedule shows each period's paid figure as the server sent it", () => {
@@ -2126,34 +2271,132 @@ test("a negative net movement is toned as a loss, a positive one as a gain", () 
   assert.equal(kpi(buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE), "Net Movement").tone, "positive");
 });
 
-test("cash flow breaks down by branch and says why it will not reconcile", () => {
-  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
+// Decision 5c: the server puts share capital paid in and out into the row of
+// each member's branch, and a member with no branch into an "Unassigned" row
+// (`branch_id` null), so the branch rows add up to the statement totals:
+// cash in ₱1,013,651.50 loan cash + ₱96,500.00 share capital = ₱1,110,151.50,
+// cash out ₱742,800.40 + ₱31,500.00 = ₱774,300.40.
+const CASH_FLOW_WITH_SHARE_BY_BRANCH = {
+  ...CASH_FLOW_PAYLOAD,
+  share_capital: {
+    ...CASH_FLOW_PAYLOAD.share_capital,
+    // The server's wording is for developers (field names, formulas) and is
+    // never printed on the report.
+    note:
+      "No branch filter applied, so these figures are organisation-wide. In by_branch, share capital paid in and out on its own is in the row of the branch each member belongs to (inflow_share_capital, outflow_share_capital, inside inflow_total and outflow_total).",
+  },
+  by_branch: [
+    {
+      ...CASH_FLOW_PAYLOAD.by_branch[0],
+      inflow_repayments: 720450.25,
+      inflow_share_capital: 60000,
+      inflow_total: 780450.25,
+      outflow_share_capital: 20000,
+      outflow_total: 532800.4,
+      share_capital_count: 25,
+      net_movement: 247649.85,
+    },
+    {
+      ...CASH_FLOW_PAYLOAD.by_branch[1],
+      inflow_repayments: 293201.25,
+      inflow_share_capital: 35000,
+      inflow_total: 328201.25,
+      outflow_share_capital: 11000,
+      outflow_total: 241000,
+      share_capital_count: 14,
+      net_movement: 87201.25,
+    },
+    {
+      branch_id: null,
+      branch_name: "Unassigned",
+      inflow_repayments: 0,
+      inflow_share_capital: 1500,
+      inflow_total: 1500,
+      repayment_count: 0,
+      outflow_net_proceeds: 0,
+      outflow_share_capital: 500,
+      outflow_total: 500,
+      release_count: 0,
+      share_capital_count: 2,
+      net_movement: 1000,
+    },
+  ],
+  by_branch_totals: {
+    inflow_share_capital: 96500,
+    inflow_total: 1110151.5,
+    outflow_share_capital: 31500,
+    outflow_total: 774300.4,
+    net_movement: 335851.1,
+  },
+};
+
+const CASH_FLOW_BRANCH_NOTE =
+  "Share capital paid in and out is in the row of the branch each member belongs to; " +
+  "members with no branch are under Unassigned.";
+
+test("cash flow breaks down by branch, members' share capital included, in plain words", () => {
+  const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
   const table = namedTable(doc, "Breakdown by Branch");
 
-  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows.length, 3);
   assert.equal(table.rows[0].branch_name, "Main");
-  // Loan cash only: this equals inflows.repayments.total (1,013,651.50), NOT
-  // inflows.total (1,110,151.50) — the difference is the share capital credit.
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), "₱1,013,651.50");
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), "₱742,800.40");
-  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), "₱270,851.10");
+  // Loan cash plus the members' share capital, as the server sent each row.
+  assert.equal(table.rows[0].inflows, 780450.25);
+  assert.equal(table.rows[0].outflows, 532800.4);
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), "₱1,110,151.50");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), "₱774,300.40");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), "₱335,851.10");
 
-  // The server explains the gap in its own words; the builder prints them.
+  // The builder's own sentence, never the server's technical note.
   const note = noteText(doc);
-  assert.ok(note, "expected the share capital scoping note");
-  assert.match(note!, /no branch column/);
-  assert.equal(note, CASH_FLOW_PAYLOAD.share_capital.note);
+  assert.equal(note, CASH_FLOW_BRANCH_NOTE);
+  assert.notEqual(note, CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital.note);
+  assert.doesNotMatch(note!, /inflow_share_capital|by_branch|organisation-wide/);
 });
 
-test("the branch rows are loan cash only and say so rather than appearing wrong", () => {
-  const doc = buildCashFlowDoc(CASH_FLOW_PAYLOAD, RANGE);
-  const branchInflows = namedTableTotal(doc, "Breakdown by Branch", "inflows");
+test("the branch rows add up to the statement totals, so the footer matches the headline", () => {
+  const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
 
-  // A reader who adds the branch column and compares it to the headline must
-  // find the discrepancy explained, not left to guess at a bug.
-  assert.notEqual(branchInflows, kpiValue(doc, "Total Cash In"));
-  assert.equal(branchInflows, "₱1,013,651.50");
-  assert.ok(noteText(doc));
+  // A reader who adds the branch column and compares it to the headline finds
+  // the same figure: share capital is inside the rows, not left out of them.
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "inflows"), kpiValue(doc, "Total Cash In"));
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outflows"), kpiValue(doc, "Total Cash Out"));
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "net"), kpiValue(doc, "Net Movement"));
+  // The old caveat is gone: nothing needs adding back.
+  assert.doesNotMatch(noteText(doc)!, /cannot be attributed|loan collections and releases only|add the share capital lines back/);
+});
+
+test("cash flow lists members without a branch in an Unassigned row", () => {
+  const table = namedTable(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE), "Breakdown by Branch");
+  const unassigned = table.rows[2];
+
+  assert.equal(unassigned.branch_name, "Unassigned");
+  assert.equal(unassigned.inflows, 1500);
+  assert.equal(unassigned.outflows, 500);
+  assert.equal(unassigned.net, 1000);
+});
+
+test("a branch row with a null branch_id and no name still reads Unassigned", () => {
+  const table = namedTable(
+    buildCashFlowDoc(
+      {
+        ...CASH_FLOW_PAYLOAD,
+        by_branch: [{ branch_id: null, branch_name: null, inflow_total: 1500, outflow_total: 500, net_movement: 1000 }],
+      },
+      RANGE
+    ),
+    "Breakdown by Branch"
+  );
+  assert.equal(table.rows[0].branch_name, "Unassigned");
+});
+
+test("the branch note is the same plain sentence whether or not the server sends a note", () => {
+  const { note, ...shareWithoutNote } = CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital;
+  void note;
+  const without = buildCashFlowDoc({ ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: shareWithoutNote }, RANGE);
+
+  assert.equal(noteText(without), CASH_FLOW_BRANCH_NOTE);
+  assert.equal(noteText(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE)), CASH_FLOW_BRANCH_NOTE);
 });
 
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
