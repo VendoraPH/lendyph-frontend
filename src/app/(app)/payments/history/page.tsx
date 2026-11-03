@@ -5,7 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
@@ -163,6 +163,9 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   maya: "Maya",
   online: "Online",
 };
+
+/** Why Void is disabled for a role without `payments:void`. */
+const VOID_DENIED_TOOLTIP = "Your role doesn't have permission to void payments";
 
 // ── Void Payment Dialog ──
 
@@ -431,7 +434,10 @@ function PaymentCard({
             </Button>
           </Link>
           {!isVoided && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip={VOID_DENIED_TOOLTIP}
+              wrapperClassName="flex-1"
               variant="outline"
               size="sm"
               className="flex-1 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -439,7 +445,7 @@ function PaymentCard({
             >
               <Ban className="h-3 w-3" />
               Void
-            </Button>
+            </PermissionButton>
           )}
         </div>
       </CardContent>
@@ -563,8 +569,9 @@ function PaymentHistoryContent() {
       toast.success("Payment voided");
       fetchPayments();
       setTotalsReload((n) => n + 1);
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     }
   };
 
@@ -827,7 +834,9 @@ function PaymentHistoryContent() {
                             </Button>
                           </Link>
                           {!isVoided && (
-                            <Button
+                            <PermissionButton
+                              permission="payments:void"
+                              tooltip={VOID_DENIED_TOOLTIP}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -835,7 +844,7 @@ function PaymentHistoryContent() {
                             >
                               <Ban className="h-3 w-3" />
                               Void
-                            </Button>
+                            </PermissionButton>
                           )}
                         </div>
                       </TableCell>

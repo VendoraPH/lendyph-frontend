@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, RefreshCw } from "lucide-react";
+import { PermissionButton } from "@/components/common/permission-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -117,7 +118,10 @@ function LedgerRow({
             <Badge variant="destructive" className="shrink-0 text-[10px] px-1 py-0">voided</Badge>
           )}
           {payment.canVoid && repaymentId !== null && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip="Your role doesn't have permission to void payments"
+              wrapperClassName="shrink-0"
               variant="ghost"
               size="sm"
               className="h-5 shrink-0 px-1 text-[10px] text-destructive hover:text-destructive"
@@ -125,7 +129,7 @@ function LedgerRow({
               disabled={actionLoading}
             >
               Void
-            </Button>
+            </PermissionButton>
           )}
         </div>
       </td>

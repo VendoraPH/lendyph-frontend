@@ -18,6 +18,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -84,6 +85,7 @@ import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
+import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -963,10 +965,13 @@ function UserActionsCell({
   // deactivate: the API refuses a caller without `branches:view_all` any target
   // who also works in a branch the caller doesn't hold.
   const isBranchLocked = worksOutsideCallerBranches(user, caller, viewAll);
-  const cannotManageTarget = isSuperAdminLocked || isBranchLocked;
-  const lockReason = isSuperAdminLocked
-    ? "Only a super_admin can change this account."
-    : "This user also works in a branch you don't manage.";
+  // The two locks above always apply. The server's `can_manage: false` adds
+  // the cases the client can't see (permissions the target holds); it never
+  // lifts a client lock.
+  const { locked: cannotManageTarget, reason: lockReason } = userManageLock(user, {
+    superAdminLocked: isSuperAdminLocked,
+    branchLocked: isBranchLocked,
+  });
 
   return (
     <>
@@ -977,9 +982,13 @@ function UserActionsCell({
         <DropdownMenuContent align="end">
           {cannotManageTarget && (
             <>
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                {lockReason}
-              </DropdownMenuLabel>
+              {/* Base UI's GroupLabel needs a Group around it, or the menu
+                  throws "MenuGroupContext is missing" as it opens. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  {lockReason}
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
             </>
           )}

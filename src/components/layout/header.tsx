@@ -32,6 +32,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { humanizeSegment, subPageTitle } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
@@ -51,25 +52,7 @@ function getPageTitle(segment: string): string {
       return item.title;
     }
   }
-  return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
-}
-
-/** Map sub-segment to readable label */
-function getSubLabel(segment: string): string {
-  const labels: Record<string, string> = {
-    new: "New Application",
-    products: "Loan Products",
-    amortization: "Amortization Calculator",
-    restructure: "Restructure",
-    history: "History",
-    profile: "Profile",
-    "loan-products": "Loan Products",
-    "user-roles": "Role and Permissions",
-  };
-  return (
-    labels[segment] ||
-    segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ")
-  );
+  return humanizeSegment(segment);
 }
 
 function Breadcrumb() {
@@ -89,7 +72,7 @@ function Breadcrumb() {
 
   const subSegment = segments[1];
   const isId = /^\d+$/.test(subSegment);
-  const subLabel = isId ? "Detail" : getSubLabel(subSegment);
+  const subLabel = isId ? "Detail" : subPageTitle(firstSegment, subSegment);
 
   return (
     <div className="flex items-center gap-1.5 text-sm">
