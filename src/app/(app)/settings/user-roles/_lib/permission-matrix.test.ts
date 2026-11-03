@@ -37,3 +37,9 @@ test("the matrix offers no reminders permission", () => {
 test("the matrix offers loan_products:manage and nothing else for loan products", () => {
   assert.deepEqual(offered.filter((p) => p.startsWith("loan_products:")), ["loan_products:manage"]);
 });
+
+// The API seeds one branch permission (backend #211). Any other `branches:*`
+// would be refused whole on save (422), breaking every later save of the role.
+test("the matrix offers branches:view_all and nothing else for branches", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("branches:")), ["branches:view_all"]);
+});

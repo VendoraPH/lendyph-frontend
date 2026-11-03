@@ -48,6 +48,10 @@ export type Module =
   | "settings"
   | "fees"
   | "users"
+  // Branch access. `branches:view_all` sees every branch's data; without it
+  // the API limits a user to the branches they are assigned to (another
+  // branch's record answers 404, a `branch_id` filter outside them 403).
+  | "branches"
   | "audit_logs"
   | "share_capital"
   | "collaterals"
@@ -157,7 +161,9 @@ export type Action =
   | "send"
   | "pause"
   // Loan products: one verb for create, edit and delete, as the API seeds it.
-  | "manage";
+  | "manage"
+  // Branch access: see every branch, not only the ones a user is assigned to.
+  | "view_all";
 
 export type Permission = `${Module}:${Action}`;
 

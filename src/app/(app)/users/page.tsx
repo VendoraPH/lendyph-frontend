@@ -64,7 +64,13 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { completeRows } from "@/lib/paginate";
 import { userEditChanges, userEditPayload } from "@/lib/user-edit";
-import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
+import {
+  branchViewer,
+  primaryBranchId,
+  userBranchIds,
+  userBranches,
+  visibleBranches,
+} from "@/lib/user-branches";
 import {
   countUsersWithRole,
   filterUsers,
@@ -190,6 +196,11 @@ function RoleSelector({
 // A user can be assigned more than one branch: access to branch-scoped data
 // (loan applications included) extends to every branch they're assigned to,
 // not just one, so this has to allow selecting several.
+//
+// A caller without `branches:view_all` may only assign their own branches (the
+// API refuses any other with a 422), so only those are offered. A branch the
+// edited user already holds outside them still shows as a badge, by name, from
+// the full list, and can be removed.
 
 function BranchMultiSelect({
   value,
@@ -201,6 +212,9 @@ function BranchMultiSelect({
   branches: ApiBranch[];
 }) {
   const [open, setOpen] = useState(false);
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const options = visibleBranches(branches, branchViewer(caller, viewAll));
   const selected = branches.filter((b) => value.includes(b.id));
 
   const toggle = (branchId: number) => {
@@ -240,7 +254,7 @@ function BranchMultiSelect({
             <CommandList>
               <CommandEmpty>No branch found.</CommandEmpty>
               <CommandGroup>
-                {branches.map((branch) => (
+                {options.map((branch) => (
                   <CommandItem
                     key={branch.id}
                     value={branch.name}

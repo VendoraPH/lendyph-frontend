@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -432,6 +433,7 @@ function LoansContent() {
 
   return (
     <div className="space-y-6">
+      <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>

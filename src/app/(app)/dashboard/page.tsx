@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
 import {
   AreaChart,
@@ -560,6 +561,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
+      <NoBranchBanner className="mb-6" />
       <DashboardContent />
     </RouteGuard>
   );

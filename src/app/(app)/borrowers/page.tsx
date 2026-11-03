@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Users,
@@ -342,6 +343,7 @@ function BorrowersContent() {
 
   return (
     <div className="space-y-6">
+      <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>

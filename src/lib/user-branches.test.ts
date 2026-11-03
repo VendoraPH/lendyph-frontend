@@ -2,11 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  allBranchesLabel,
   branchFilterItems,
   branchSelectItems,
+  branchViewer,
+  lacksBranchAccess,
   primaryBranchId,
   userBranchIds,
   userBranches,
+  visibleBranches,
   withUserBranches,
 } from "./user-branches";
 import type { User } from "@/types";
@@ -150,4 +154,84 @@ test("branch filter items still offer all branches when none loaded", () => {
   assert.deepEqual(branchFilterItems([], "all"), [
     { value: "all", label: "All branches" },
   ]);
+});
+
+// ── Branch access (`branches:view_all`, backend #211) ──
+//
+// `GET /branches` lists every branch, but the API answers 403 to a `branch_id`
+// filter outside the caller's branches and refuses to assign one to a user. So
+// a caller without `view_all` is offered only their own.
+
+const south = { id: 12, name: "South", code: "SO" };
+const allBranches = [main, north, south];
+const northOnly = { branches: [north] } as unknown as User;
+
+test("a viewer reads their own branch ids, in either shape", () => {
+  assert.deepEqual(branchViewer(newShape, false), { viewAll: false, branchIds: [3, 9] });
+  assert.deepEqual(branchViewer(oldShape, true), { viewAll: true, branchIds: [3] });
+  assert.deepEqual(branchViewer(null, false), { viewAll: false, branchIds: [] });
+});
+
+test("without view_all only the viewer's own branches are visible, in list order", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(newShape, false)), [main, north]);
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(northOnly, false)), [north]);
+});
+
+test("view_all sees every branch", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer(northOnly, true)), allBranches);
+});
+
+test("no viewer means no narrowing", () => {
+  assert.deepEqual(visibleBranches(allBranches), allBranches);
+});
+
+test("a viewer with no branch and no view_all sees no branch", () => {
+  assert.deepEqual(visibleBranches(allBranches, branchViewer({} as User, false)), []);
+});
+
+test("visible branches is a copy, never the caller's array", () => {
+  const list = [main, north];
+  assert.notEqual(visibleBranches(list), list);
+});
+
+test("branch select items offer only the viewer's branches without view_all", () => {
+  assert.deepEqual(branchSelectItems(allBranches, branchViewer(northOnly, false)), [
+    { value: "9", label: "North" },
+  ]);
+  assert.equal(branchSelectItems(allBranches, branchViewer(northOnly, true)).length, 3);
+});
+
+test("branch filter items offer only the viewer's branches without view_all", () => {
+  assert.deepEqual(branchFilterItems(allBranches, "all", branchViewer(northOnly, false)), [
+    { value: "all", label: "All my branches" },
+    { value: "9", label: "North" },
+  ]);
+});
+
+test("branch filter items keep \"All branches\" and every branch with view_all", () => {
+  const items = branchFilterItems(allBranches, "all", branchViewer(northOnly, true));
+  assert.deepEqual(items[0], { value: "all", label: "All branches" });
+  assert.equal(items.length, 4);
+});
+
+test("the all-branches label says whose branches it means", () => {
+  assert.equal(allBranchesLabel(), "All branches");
+  assert.equal(allBranchesLabel(branchViewer(northOnly, true)), "All branches");
+  assert.equal(allBranchesLabel(branchViewer(northOnly, false)), "All my branches");
+});
+
+test("no branch and no view_all lacks branch access", () => {
+  assert.equal(lacksBranchAccess({ branches: [] } as unknown as User, false), true);
+  assert.equal(lacksBranchAccess({} as User, false), true);
+});
+
+test("a branch, or view_all, is branch access", () => {
+  assert.equal(lacksBranchAccess(northOnly, false), false);
+  assert.equal(lacksBranchAccess(oldShape, false), false);
+  assert.equal(lacksBranchAccess({ branches: [] } as unknown as User, true), false);
+});
+
+test("an unknown user (before rehydration) is not reported as lacking access", () => {
+  assert.equal(lacksBranchAccess(null, false), false);
+  assert.equal(lacksBranchAccess(undefined, false), false);
 });

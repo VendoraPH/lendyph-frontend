@@ -43,8 +43,24 @@ test("admin's module count never exceeds the modules offered", () => {
   );
 });
 
-test("admin holding loan_products:manage is in every offered module", () => {
-  assert.equal(roleModuleCount([...ADMIN_PERMISSIONS, "loan_products:manage"]), OFFERED_MODULE_TOTAL);
+// Admin is also granted `branches:view_all` (backend migration
+// 2026_11_02_210000), the one permission of the Branch Access module.
+test("admin holding loan_products:manage and branches:view_all is in every offered module", () => {
+  assert.equal(
+    roleModuleCount([...ADMIN_PERMISSIONS, "loan_products:manage", "branches:view_all"]),
+    OFFERED_MODULE_TOTAL,
+  );
+});
+
+test("admin without branches:view_all is one module short", () => {
+  assert.equal(
+    roleModuleCount([...ADMIN_PERMISSIONS, "loan_products:manage"]),
+    OFFERED_MODULE_TOTAL - 1,
+  );
+});
+
+test("branches:view_all has a checkbox and counts the branch access module", () => {
+  assert.equal(roleModuleCount(["branches:view_all"]), 1);
 });
 
 test("a role holding every offered permission is in every offered module", () => {
