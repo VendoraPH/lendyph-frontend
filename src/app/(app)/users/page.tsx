@@ -18,6 +18,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -981,9 +982,13 @@ function UserActionsCell({
         <DropdownMenuContent align="end">
           {cannotManageTarget && (
             <>
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                {lockReason}
-              </DropdownMenuLabel>
+              {/* Base UI's GroupLabel needs a Group around it, or the menu
+                  throws "MenuGroupContext is missing" as it opens. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  {lockReason}
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
             </>
           )}

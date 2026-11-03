@@ -121,6 +121,7 @@ function LedgerRow({
             <PermissionButton
               permission="payments:void"
               tooltip="Your role doesn't have permission to void payments"
+              wrapperClassName="shrink-0"
               variant="ghost"
               size="sm"
               className="h-5 shrink-0 px-1 text-[10px] text-destructive hover:text-destructive"

@@ -437,6 +437,7 @@ function PaymentCard({
             <PermissionButton
               permission="payments:void"
               tooltip={VOID_DENIED_TOOLTIP}
+              wrapperClassName="flex-1"
               variant="outline"
               size="sm"
               className="flex-1 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5"
