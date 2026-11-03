@@ -3,13 +3,17 @@ import { notificationService, NOTIFICATION_FEED_SIZE } from "@/services/notifica
 import { notifyError } from "@/lib/notify";
 import {
   FEED_LIMIT,
+  SETTLE_REFRESH_DELAY_MS,
   combineFeedPages,
   createMutationGate,
+  createTrailingCall,
   createUnreadPoller,
+  listReplyOutcome,
   markAllRead,
   markOneRead,
   needsReadTopUp,
   revertReadAt,
+  type TrailingCall,
   type UnreadPoller,
 } from "@/lib/notification-feed";
 import type { AppNotification } from "@/types/notification";
@@ -25,9 +29,11 @@ export type NotificationListStatus = "idle" | "loading" | "ready" | "error";
  * A failed count read keeps the last figure, so the header never breaks; a
  * failed list read shows the list's error state. Mark-read is optimistic: the
  * row and badge change at once, a failed request puts the row back, and either
- * way the count is re-read once the request settles. A count read that
- * started before or during a mark-read is dropped (the mutation gate), so a
- * stale figure can't overwrite the optimistic one.
+ * way the count is re-read once the requests settle (one refresh, 300 ms after
+ * the last). A count or list read that started before or during a mark-read
+ * is dropped (the mutation gate), so a stale reply can't overwrite the
+ * optimistic badge or put a read row back as unread; a dropped list is read
+ * again after the change settles.
  *
  * The header keys the bell on the signed-in user (`bellOwnerKey`), so signing
  * out or switching user remounts it with an empty count, list and status.
@@ -39,6 +45,8 @@ export function useNotificationBell(enabled: boolean) {
   const [loadedAt, setLoadedAt] = useState(0);
   const pollerRef = useRef<UnreadPoller | null>(null);
   const listSeq = useRef(0);
+  const listStale = useRef(false);
+  const settledRefresh = useRef<TrailingCall | null>(null);
   const [gate] = useState(createMutationGate);
 
   useEffect(() => {
@@ -74,6 +82,8 @@ export function useNotificationBell(enabled: boolean) {
   const loadList = useCallback(() => {
     if (!enabled) return;
     const seq = ++listSeq.current;
+    const token = gate.token();
+    listStale.current = false;
     setStatus((prev) => (prev === "ready" ? "ready" : "loading"));
     notificationService
       .list({ unread: true, per_page: NOTIFICATION_FEED_SIZE })
@@ -87,6 +97,13 @@ export function useNotificationBell(enabled: boolean) {
             .catch(() => []);
         }
         if (seq !== listSeq.current) return;
+        const outcome = listReplyOutcome(gate, token);
+        if (!outcome.apply) {
+          listStale.current = outcome.stale;
+          // A change still on the wire schedules the reload when it settles.
+          if (gate.idle()) settledRefresh.current?.schedule();
+          return;
+        }
         setRows(combineFeedPages(unreadRows, latestRows));
         setLoadedAt(Date.now());
         setStatus("ready");
@@ -96,7 +113,26 @@ export function useNotificationBell(enabled: boolean) {
         setStatus("error");
       });
     pollerRef.current?.refresh();
-  }, [enabled]);
+  }, [enabled, gate]);
+
+  useEffect(() => {
+    const trailing = createTrailingCall(
+      () => {
+        pollerRef.current?.refresh();
+        if (listStale.current && gate.idle()) loadList();
+      },
+      SETTLE_REFRESH_DELAY_MS,
+      {
+        setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimeout: (handle) => window.clearTimeout(handle as number),
+      },
+    );
+    settledRefresh.current = trailing;
+    return () => {
+      trailing.cancel();
+      settledRefresh.current = null;
+    };
+  }, [loadList, gate]);
 
   const markRead = useCallback((id: string) => {
     const readAt = new Date().toISOString();
@@ -112,7 +148,7 @@ export function useNotificationBell(enabled: boolean) {
       })
       .finally(() => {
         settle();
-        pollerRef.current?.refresh();
+        settledRefresh.current?.schedule();
       });
   }, [rows, gate]);
 
@@ -130,7 +166,7 @@ export function useNotificationBell(enabled: boolean) {
       })
       .finally(() => {
         settle();
-        pollerRef.current?.refresh();
+        settledRefresh.current?.schedule();
       });
   }, [rows, gate]);
 

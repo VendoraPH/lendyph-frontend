@@ -9,8 +9,11 @@ import {
   buildFeed,
   combineFeedPages,
   createMutationGate,
+  createTrailingCall,
   createUnreadPoller,
   formatRelativeTime,
+  listReplyOutcome,
+  SETTLE_REFRESH_DELAY_MS,
   markAllRead,
   markOneRead,
   needsReadTopUp,
@@ -226,6 +229,7 @@ describe("createMutationGate", () => {
   test("with no change, a read's answer is shown", () => {
     const gate = createMutationGate();
     assert.equal(gate.accepts(gate.token()), true);
+    assert.equal(gate.idle(), true);
   });
 
   test("a read that started before a mark-read is dropped, even after it settles", () => {
@@ -290,6 +294,90 @@ describe("createMutationGate", () => {
     const refresh = gate.token();
     show(refresh, 0);
     assert.equal(shown, 0);
+  });
+});
+
+describe("list replies vs. mark-reads", () => {
+  test("a list reply from before a mark-read is dropped; the read row stays read", () => {
+    const gate = createMutationGate();
+    let rows = [row({ id: "a" }), row({ id: "b" })];
+    const listToken = gate.token();
+    const settle = gate.begin();
+    rows = markOneRead(rows, "a", "2026-11-03T04:00:00Z").rows;
+    settle();
+    const reply = [row({ id: "a" }), row({ id: "b" })];
+    const outcome = listReplyOutcome(gate, listToken);
+    assert.deepEqual(outcome, { apply: false, stale: true });
+    if (outcome.apply) rows = reply;
+    assert.equal(rows[0].read_at, "2026-11-03T04:00:00Z", "the stale reply did not put it back as unread");
+    assert.equal(gate.idle(), true, "settled, so the stale list can be read again now");
+  });
+
+  test("a list reply that started during a mark-read is dropped too", () => {
+    const gate = createMutationGate();
+    const settle = gate.begin();
+    const token = gate.token();
+    assert.equal(gate.idle(), false);
+    assert.deepEqual(listReplyOutcome(gate, token), { apply: false, stale: true });
+    settle();
+    assert.deepEqual(listReplyOutcome(gate, token), { apply: false, stale: true });
+  });
+
+  test("the reload after the change settles is applied", () => {
+    const gate = createMutationGate();
+    gate.begin()();
+    assert.deepEqual(listReplyOutcome(gate, gate.token()), { apply: true, stale: false });
+  });
+});
+
+describe("createTrailingCall", () => {
+  function fakeTimers() {
+    const timers = new Map<number, { fn: () => void; ms: number }>();
+    let next = 1;
+    return {
+      timers,
+      setTimeout: (fn: () => void, ms: number) => {
+        const id = next++;
+        timers.set(id, { fn, ms });
+        return id;
+      },
+      clearTimeout: (h: unknown) => {
+        timers.delete(h as number);
+      },
+      fire: () => {
+        const due = [...timers.entries()];
+        timers.clear();
+        for (const [, t] of due) t.fn();
+      },
+    };
+  }
+
+  test("rapid mark-reads settle into one refresh, 300 ms after the last", () => {
+    const t = fakeTimers();
+    let calls = 0;
+    const trailing = createTrailingCall(() => (calls += 1), SETTLE_REFRESH_DELAY_MS, t);
+    trailing.schedule();
+    trailing.schedule();
+    trailing.schedule();
+    assert.equal(t.timers.size, 1, "one pending refresh, not three");
+    assert.equal([...t.timers.values()][0].ms, 300);
+    assert.equal(calls, 0);
+    t.fire();
+    assert.equal(calls, 1);
+    trailing.schedule();
+    t.fire();
+    assert.equal(calls, 2, "a later settle schedules again");
+  });
+
+  test("cancel (unmount) drops the pending refresh", () => {
+    const t = fakeTimers();
+    let calls = 0;
+    const trailing = createTrailingCall(() => (calls += 1), SETTLE_REFRESH_DELAY_MS, t);
+    trailing.schedule();
+    trailing.cancel();
+    t.fire();
+    assert.equal(calls, 0);
+    assert.equal(t.timers.size, 0);
   });
 });
 

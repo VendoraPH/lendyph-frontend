@@ -137,6 +137,8 @@ export interface MutationGate {
    * predate the change (a badge that jumps back up after "Mark all as read").
    */
   accepts: (token: number) => boolean;
+  /** No change is on the wire. */
+  idle: () => boolean;
 }
 
 export function createMutationGate(): MutationGate {
@@ -156,6 +158,48 @@ export function createMutationGate(): MutationGate {
     },
     token: () => seq,
     accepts: (token) => pending === 0 && token === seq,
+    idle: () => pending === 0,
+  };
+}
+
+/**
+ * What to do with a list reply whose read started at `token`. A reply the
+ * gate refuses may predate a mark-read and would put a read row back as
+ * unread, so the current rows are kept and the list is marked stale, to be
+ * read again once the change settles (and on the next open).
+ */
+export function listReplyOutcome(gate: MutationGate, token: number): { apply: boolean; stale: boolean } {
+  return gate.accepts(token) ? { apply: true, stale: false } : { apply: false, stale: true };
+}
+
+/** Rapid mark-reads settle into one refresh this long after the last one. */
+export const SETTLE_REFRESH_DELAY_MS = 300;
+
+export interface TrailingCall {
+  /** (Re)starts the delay; `fn` runs once, `delayMs` after the last call. */
+  schedule: () => void;
+  cancel: () => void;
+}
+
+export function createTrailingCall(
+  fn: () => void,
+  delayMs: number,
+  timers: { setTimeout: (fn: () => void, ms: number) => unknown; clearTimeout: (handle: unknown) => void },
+): TrailingCall {
+  let handle: unknown = null;
+  const cancel = () => {
+    if (handle !== null) timers.clearTimeout(handle);
+    handle = null;
+  };
+  return {
+    schedule: () => {
+      cancel();
+      handle = timers.setTimeout(() => {
+        handle = null;
+        fn();
+      }, delayMs);
+    },
+    cancel,
   };
 }
 
