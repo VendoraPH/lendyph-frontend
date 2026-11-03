@@ -42,12 +42,13 @@ export type InterestType = "fixed" | "diminishing" | "upon_maturity";
  * Deductions".
  *
  * `amount` is the peso figure actually withheld; `original_value` is what was
- * configured, which for a percentage fee is the rate, not the peso amount.
+ * configured, which for a percentage or formula fee is the rate, not the peso
+ * amount. A `formula` item comes from a formula fee in Settings at release.
  */
 export interface LoanDeduction {
   name: string;
   amount: number;
-  type: "fixed" | "percentage";
+  type: "fixed" | "percentage" | "formula";
   original_value: number;
   /** Set on an item charged from a fee rule in Settings, at or for release. */
   fee_id?: number;
