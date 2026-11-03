@@ -13,9 +13,9 @@ describe("userManageLock", () => {
   test("the server's can_manage: false locks the row with the permissions reason", () => {
     assert.deepEqual(userManageLock({ can_manage: false }, none), {
       locked: true,
-      reason: "This user holds permissions you don't have",
+      reason: "This user holds permissions you don't have.",
     });
-    assert.equal(PERMISSION_LOCK_REASON, "This user holds permissions you don't have");
+    assert.equal(PERMISSION_LOCK_REASON, "This user holds permissions you don't have.");
   });
 
   test("can_manage: false keeps the more specific reason the client can name", () => {

@@ -568,8 +568,9 @@ function PaymentHistoryContent() {
       toast.success("Payment voided");
       fetchPayments();
       setTotalsReload((n) => n + 1);
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     }
   };
 

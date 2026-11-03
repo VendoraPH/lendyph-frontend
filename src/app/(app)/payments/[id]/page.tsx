@@ -14,6 +14,7 @@ import { repaymentService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -204,8 +205,9 @@ function PaymentReceiptContent({
       setShowVoidConfirm(false);
       setVoidReason("");
       fetchReceipt();
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     } finally {
       setVoiding(false);
     }

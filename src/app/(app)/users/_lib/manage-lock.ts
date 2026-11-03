@@ -2,7 +2,7 @@ import type { User } from "@/types";
 
 export const SUPER_ADMIN_LOCK_REASON = "Only a super_admin can change this account.";
 export const BRANCH_LOCK_REASON = "This user also works in a branch you don't manage.";
-export const PERMISSION_LOCK_REASON = "This user holds permissions you don't have";
+export const PERMISSION_LOCK_REASON = "This user holds permissions you don't have.";
 
 export interface ClientManageLocks {
   /** The target is a super_admin and the caller isn't. */
