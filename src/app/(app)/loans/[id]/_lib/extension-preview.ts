@@ -28,6 +28,12 @@ export interface ExtensionPreviewView {
   newTotalDue: number;
   /** `YYYY-MM-DD`. */
   newDueDate: string;
+  /**
+   * How many cycles the due date moves, each charged one cycle's
+   * interest (already inside `freshInterest`). Null when the server sent
+   * none, which shows a dash.
+   */
+  cycles: number | null;
 }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,6 +72,12 @@ export function readExtensionPreview(
   const newInterestDue = figure(d.new_interest_due);
   const newTotalDue = figure(d.new_total_due);
   const newDueDate = typeof d.new_due_date === "string" && DATE_PATTERN.test(d.new_due_date) ? d.new_due_date : null;
+  // Optional: an answer without it shows a dash. Sent, it must be a whole
+  // number of cycles, at least one.
+  const rawCycles = d.cycles;
+  const sentCycles = rawCycles === undefined || rawCycles === null ? null : figure(rawCycles);
+  const cyclesUnreadable =
+    rawCycles !== undefined && rawCycles !== null && (sentCycles === null || !Number.isInteger(sentCycles) || sentCycles < 1);
   if (
     amount === null ||
     penaltyPart === null ||
@@ -75,7 +87,8 @@ export function readExtensionPreview(
     freshInterest === null ||
     newInterestDue === null ||
     newTotalDue === null ||
-    newDueDate === null
+    newDueDate === null ||
+    cyclesUnreadable
   ) {
     return null;
   }
@@ -95,7 +108,53 @@ export function readExtensionPreview(
     newInterestDue,
     newTotalDue,
     newDueDate,
+    cycles: sentCycles,
   };
+}
+
+/**
+ * What one extension cycle is called. A monthly or upon-maturity loan moves
+ * by anchored months; any other frequency moves by its own period, which is
+ * called a cycle (each still charged one cycle's interest).
+ */
+export type ExtensionCycleUnit = "month" | "cycle";
+
+export function extensionCycleUnit(frequency: string | null | undefined): ExtensionCycleUnit {
+  return frequency === "monthly" || frequency === "upon_maturity" ? "month" : "cycle";
+}
+
+/** How far the due date moves, e.g. "6 months" or "1 month"; a dash when not sent. */
+export function extensionCyclesLabel(cycles: number | null, unit: ExtensionCycleUnit): string {
+  if (cycles === null) return "—";
+  return `${cycles} ${unit}${cycles === 1 ? "" : "s"}`;
+}
+
+/**
+ * What the extension moves and adds to the new period, from the server's
+ * cycle count, or null when the server sent none (the dialog then says
+ * nothing about it). Shown with the new period's figures, never under what
+ * "pay" collects now: that interest is owed later, not collected now.
+ */
+export function extensionCyclesSentence(cycles: number | null, unit: ExtensionCycleUnit): string | null {
+  if (cycles === null) return null;
+  const moved = extensionCyclesLabel(cycles, unit);
+  return `Moves the due date ${moved}: interest for ${moved} is added to the new period.`;
+}
+
+/**
+ * The dialog's opening line. The due date always moves at least one cycle,
+ * even on a loan not yet due. The overdue clause shows only once the server
+ * sends `cycles`, so it can't describe a move a server without it won't make.
+ */
+export function extensionMoveDescription(cycles: number | null, unit: ExtensionCycleUnit): string {
+  const base = `This moves the loan's due date one ${unit} forward.`;
+  if (cycles === null) return base;
+  return `${base} When the loan is overdue, it moves as many ${unit}s as needed to land after today, and each ${unit} moved is charged interest.`;
+}
+
+/** The label of the fresh interest row: the cycles it covers, when sent. */
+export function freshInterestLabel(cycles: number | null, unit: ExtensionCycleUnit): string {
+  return cycles === null ? "New interest charged" : `Interest for ${extensionCyclesLabel(cycles, unit)}`;
 }
 
 /**

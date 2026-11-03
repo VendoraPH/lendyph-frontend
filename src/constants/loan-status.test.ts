@@ -96,6 +96,15 @@ test("the legacy `ongoing` status is still labelled and styled", () => {
   assert.equal(LOAN_STATUS_COLORS.ongoing, LOAN_STATUS_COLORS.current);
 });
 
+test("a released loan reads Current, the same as an ongoing one (decision 5a)", () => {
+  // `loans.status` keeps both values; only the wording is shared, and so is
+  // the pill, so one word never comes in two colours.
+  assert.equal(LOAN_STATUS_LABELS.released, "Current");
+  assert.equal(loanStatusLabel("released"), "Current");
+  assert.equal(LOAN_STATUS_LABELS.released, LOAN_STATUS_LABELS.ongoing);
+  assert.equal(LOAN_STATUS_COLORS.released, LOAN_STATUS_COLORS.ongoing);
+});
+
 // ── the active / inactive partition ────────────────────────────────────────
 //
 // The printables loan picker filters a member's loans by it, and "active" is
@@ -214,5 +223,5 @@ test("a step without a Status falls back to the step name", () => {
 
 test("a step Status never relabels a loan that is not under approval", () => {
   assert.equal(loanStatusLabel("approved", "Manager", "Credit Check"), "Approved");
-  assert.equal(loanStatusLabel("released", null, "Credit Check"), "Released");
+  assert.equal(loanStatusLabel("released", null, "Credit Check"), "Current");
 });

@@ -336,6 +336,15 @@ export interface AccountMapping {
   insurance_premium_payable: number;
   share_capital: number;
   other_fee_income: number;
+  /**
+   * Where each tax withheld at release is credited, as a liability owed to
+   * the government: a Documentary Stamp Tax (2230), a withholding tax (2210),
+   * and any other tax (2220). Without 2230 or 2210, the backend falls back to
+   * `other_taxes_payable`.
+   */
+  documentary_stamp_tax_payable: number;
+  withholding_tax_payable: number;
+  other_taxes_payable: number;
   credit_loss_expense: number;
   allowance_credit_losses: number;
   accounts_payable: number;
