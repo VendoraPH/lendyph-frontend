@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFeePayload } from "./fee-form";
+import { buildFeePayload, buildFormulaFields, describeFormulaFee, FORMULA_FEE_HELP } from "./fee-form";
 
 const form = { name: " Release fee ", type: "fixed" as const, value: "500", productIds: [7], conditions: {} };
 
@@ -86,4 +86,71 @@ test("satisfiable gt/lt/eq combinations still save", () => {
     { loan_amount_gt: 1000, loan_amount_lt: 5000 },
     { term_days_gt: 30, loan_amount_lt: 5000 },
   ]) assert.ok("payload" in buildFeePayload({ ...form, conditions }), JSON.stringify(conditions));
+});
+
+// Fee type "formula" (decision 5e): a rate of the principal, optionally per
+// month of the term, kept between optional peso bounds. The server computes
+// the amount; the form only sends the rule.
+const formula = { perMonth: true, minAmount: "150", maxAmount: "1500.50" };
+
+test("a formula fee sends its rate, per-month flag and peso bounds", () => {
+  assert.deepEqual(buildFeePayload({ ...form, type: "formula", value: "1.5", formula }), {
+    payload: {
+      name: "Release fee", type: "formula", value: 1.5,
+      per_month: true, min_amount: 150, max_amount: 1500.5,
+      applicable_product_ids: [7], conditions: null,
+    },
+  });
+});
+
+test("blank formula bounds are sent as none", () => {
+  const result = buildFeePayload({ ...form, type: "formula", value: "1", formula: { perMonth: false, minAmount: " ", maxAmount: "" } });
+  assert.ok("payload" in result);
+  assert.equal(result.payload.per_month, false);
+  assert.equal(result.payload.min_amount, null);
+  assert.equal(result.payload.max_amount, null);
+});
+
+test("fixed and percentage fees send no formula fields", () => {
+  for (const type of ["fixed", "percentage"] as const) {
+    const result = buildFeePayload({ ...form, type, value: "2", formula });
+    assert.ok("payload" in result);
+    assert.equal("per_month" in result.payload, false, type);
+    assert.equal("min_amount" in result.payload, false, type);
+  }
+});
+
+test("a formula rate is a percentage, capped at 100%", () => {
+  const result = buildFeePayload({ ...form, type: "formula", value: "150", formula });
+  assert.ok("error" in result);
+  assert.match(result.error, /100%/);
+});
+
+test("a minimum above the maximum is refused, naming both in pesos", () => {
+  const result = buildFeePayload({ ...form, type: "formula", value: "1", formula: { perMonth: false, minAmount: "500", maxAmount: "100" } });
+  assert.ok("error" in result);
+  assert.match(result.error, /₱500\.00/);
+  assert.match(result.error, /₱100\.00/);
+  assert.ok("fields" in buildFormulaFields({ perMonth: false, minAmount: "100", maxAmount: "100" }));
+});
+
+test("bounds must be zero or more with at most two decimals", () => {
+  for (const minAmount of ["-1", "10.005", "abc", "1e3"]) {
+    assert.ok("error" in buildFormulaFields({ perMonth: false, minAmount, maxAmount: "" }), minAmount);
+  }
+  for (const maxAmount of ["-0.01", "1.234"]) {
+    assert.ok("error" in buildFormulaFields({ perMonth: false, minAmount: "", maxAmount }), maxAmount);
+  }
+  assert.deepEqual(buildFormulaFields({ perMonth: false, minAmount: "0", maxAmount: "10.5" }), {
+    fields: { per_month: false, min_amount: 0, max_amount: 10.5 },
+  });
+});
+
+test("a formula fee reads as its rule, in pesos", () => {
+  assert.equal(describeFormulaFee({ value: "1.5000", per_month: true, min_amount: 150, max_amount: "1500.50" }), "1.5% per month · min ₱150.00 · max ₱1,500.50");
+  assert.equal(describeFormulaFee({ value: 2, per_month: false, min_amount: null, max_amount: null }), "2%");
+});
+
+test("the help line says what a formula does", () => {
+  assert.equal(FORMULA_FEE_HELP, "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.");
 });

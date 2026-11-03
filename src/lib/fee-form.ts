@@ -1,4 +1,24 @@
 import type { CreateFeeData, FeeConditions, FeeType } from "@/types/fee";
+import { formatCurrency, formatRate } from "@/lib/format";
+
+/** The help line shown under a formula fee's fields, on Fees and on Loan Products. */
+export const FORMULA_FEE_HELP =
+  "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.";
+
+/** A formula fee's own fields as the form holds them: a flag and two peso inputs. */
+export interface FormulaFieldsInput {
+  perMonth: boolean;
+  minAmount: string;
+  maxAmount: string;
+}
+
+export const EMPTY_FORMULA_FIELDS: FormulaFieldsInput = { perMonth: false, minAmount: "", maxAmount: "" };
+
+export interface FormulaFieldsPayload {
+  per_month: boolean;
+  min_amount: number | null;
+  max_amount: number | null;
+}
 
 interface FeeFormInput {
   name: string;
@@ -6,6 +26,62 @@ interface FeeFormInput {
   value: string;
   productIds: number[];
   conditions: FeeConditions;
+  /** Read only when `type` is "formula". */
+  formula?: FormulaFieldsInput;
+}
+
+const PESO_PLACES = /^\d+(\.\d{1,2})?$/;
+
+function boundValue(raw: string, label: string): { value: number | null } | { error: string } {
+  const text = raw.trim();
+  if (text === "") return { value: null };
+  if (!PESO_PLACES.test(text)) {
+    return { error: `${label} must be a peso amount of zero or more, with at most two decimals.` };
+  }
+  return { value: Number(text) };
+}
+
+/**
+ * A formula fee's per-month flag and peso bounds, as the API takes them. A
+ * blank bound is none (null); a bound is zero or more with at most two
+ * decimals, as `fees.min_amount` / `max_amount` store it, and the minimum may
+ * not exceed the maximum (the API's own 422).
+ */
+export function buildFormulaFields(input: FormulaFieldsInput): { fields: FormulaFieldsPayload } | { error: string } {
+  const min = boundValue(input.minAmount, "Minimum");
+  if ("error" in min) return min;
+  const max = boundValue(input.maxAmount, "Maximum");
+  if ("error" in max) return max;
+  if (min.value !== null && max.value !== null && min.value > max.value) {
+    return { error: `The minimum (${formatCurrency(min.value)}) cannot be more than the maximum (${formatCurrency(max.value)}).` };
+  }
+  return { fields: { per_month: input.perMonth, min_amount: min.value, max_amount: max.value } };
+}
+
+/**
+ * The first problem with a loan product's custom formula fees, named by fee,
+ * or null when every one is valid. Fixed and percentage entries are skipped.
+ */
+export function customFormulaFeesError(
+  fees: readonly { name: string; type: string; per_month: boolean; min_amount: string; max_amount: string }[],
+): string | null {
+  for (const fee of fees) {
+    if (fee.type !== "formula") continue;
+    const result = buildFormulaFields({ perMonth: fee.per_month, minAmount: fee.min_amount, maxAmount: fee.max_amount });
+    if ("error" in result) return `${fee.name.trim() || "Custom fee"}: ${result.error}`;
+  }
+  return null;
+}
+
+/**
+ * How a formula fee reads in a list: "1.5% per month · min ₱150.00 · max
+ * ₱1,500.00". The rule only; the amount it comes to is the server's.
+ */
+export function describeFormulaFee(fee: { value: number | string; per_month?: boolean | null; min_amount?: number | string | null; max_amount?: number | string | null }): string {
+  const parts = [`${formatRate(fee.value)}%${fee.per_month ? " per month" : ""}`];
+  if (fee.min_amount != null) parts.push(`min ${formatCurrency(fee.min_amount)}`);
+  if (fee.max_amount != null) parts.push(`max ${formatCurrency(fee.max_amount)}`);
+  return parts.join(" · ");
 }
 
 /** Human labels for the two condition families, so errors can name the field. */
@@ -41,8 +117,14 @@ export function buildFeePayload(form: FeeFormInput): { payload: CreateFeeData } 
   if (!form.value.trim() || !Number.isFinite(value) || value < 0) {
     return { error: "Enter a fee amount or rate of zero or more." };
   }
-  if (form.type === "percentage" && value > 100) {
+  if (form.type !== "fixed" && value > 100) {
     return { error: "A percentage fee cannot exceed 100% of the loan amount." };
+  }
+  let formula: FormulaFieldsPayload | null = null;
+  if (form.type === "formula") {
+    const result = buildFormulaFields(form.formula ?? EMPTY_FORMULA_FIELDS);
+    if ("error" in result) return result;
+    formula = result.fields;
   }
   for (const [key, limit] of Object.entries(form.conditions)) {
     if (limit == null) continue;
@@ -68,6 +150,8 @@ export function buildFeePayload(form: FeeFormInput): { payload: CreateFeeData } 
   const conditions = Object.fromEntries(Object.entries(form.conditions).filter(([, limit]) => limit != null));
   return { payload: {
     name: form.name.trim(), type: form.type, value,
+    // Only a formula fee sends these; the API clears them on any other type.
+    ...formula,
     applicable_product_ids: form.productIds,
     // Omitting this field on PUT preserves the old rules on the API.
     conditions: Object.keys(conditions).length ? conditions : null,
