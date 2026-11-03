@@ -5,39 +5,18 @@ import { useApiResource } from "@/hooks";
 import { TablePagination } from "@/components/common";
 import { DataState } from "@/components/common/data-state";
 import { DateRangeFilter } from "@/components/common/date-range-filter";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { savingsAccountService } from "@/services/savings-account.service";
-import type { Money } from "@/types/savings";
-import { ReversalDialogs, type ReversalTarget } from "../../../_components/reversal-dialogs";
-import { TransactionRowActions } from "../../../_components/transaction-row-actions";
-import { useSavingsReceipt } from "../../../_hooks/use-savings-receipt";
-import { useTransactionPermissions } from "../../../_hooks/use-transaction-permissions";
-import { TRANSACTION_STATUS_LABEL, TRANSACTION_STATUS_TONE, TRANSACTION_TYPE_LABEL } from "../../../_lib/account-status";
-import { ToneBadge } from "../../../_components/tone-badge";
-
-const amount = (v: Money) => (Number(v) ? formatCurrency(v) : "");
+import { TransactionTable } from "../../../_components/transaction-table";
 
 /**
  * The account's statement: one page at a time, running balance and totals
- * from the server (never summed here), filtered by date. Each row prints its
- * receipt and offers reversal (and its approval) to those allowed.
+ * from the server (never summed here), filtered by date.
  */
 export function AccountTransactions({ accountId, onChanged }: { accountId: number; onChanged: () => void }) {
   const [range, setRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
-  const [target, setTarget] = useState<ReversalTarget | null>(null);
-  const user = useTransactionPermissions();
-  const receipt = useSavingsReceipt();
 
   const fetcher = useCallback(
     () =>
@@ -89,65 +68,14 @@ export function AccountTransactions({ accountId, onChanged }: { accountId: numbe
                 </div>
               </dl>
             )}
-            <Card className="min-w-0 overflow-hidden">
-              <CardContent className="overflow-x-auto">
-                {res.data.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-muted-foreground">No transactions in this period.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Reference</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Debit</TableHead>
-                        <TableHead className="text-right">Credit</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Processed by</TableHead>
-                        <TableHead className="w-0">
-                          <span className="sr-only">Actions</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {res.data.map((tx) => (
-                        <TableRow key={tx.id}>
-                          <TableCell className="whitespace-nowrap">{formatDate(tx.transaction_date)}</TableCell>
-                          <TableCell className="font-mono text-xs">{tx.reference_number}</TableCell>
-                          <TableCell>
-                            {TRANSACTION_TYPE_LABEL[tx.type] ?? tx.type}
-                            {tx.counterparty && (
-                              <div className="text-xs text-muted-foreground">{tx.counterparty.account_number}</div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">{amount(tx.debit)}</TableCell>
-                          <TableCell className="text-right">{amount(tx.credit)}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            {tx.running_balance === null ? "—" : formatCurrency(tx.running_balance)}
-                          </TableCell>
-                          <TableCell>
-                            <ToneBadge tone={TRANSACTION_STATUS_TONE[tx.status]}>
-                              {TRANSACTION_STATUS_LABEL[tx.status]}
-                            </ToneBadge>
-                          </TableCell>
-                          <TableCell>{tx.processed_by?.name ?? "—"}</TableCell>
-                          <TableCell>
-                            <TransactionRowActions
-                              tx={tx}
-                              user={user}
-                              onPrint={receipt.print}
-                              printing={receipt.printing}
-                              onAction={(action, row) => setTarget({ action, tx: row })}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+            <TransactionTable
+              rows={res.data}
+              emptyText="No transactions in this period."
+              onChanged={() => {
+                resource.refetch();
+                onChanged();
+              }}
+            />
             <TablePagination
               page={page}
               perPage={perPage}
@@ -161,15 +89,6 @@ export function AccountTransactions({ accountId, onChanged }: { accountId: numbe
           </div>
         )}
       </DataState>
-      <ReversalDialogs
-        target={target}
-        onClose={() => setTarget(null)}
-        onDone={() => {
-          setTarget(null);
-          resource.refetch();
-          onChanged();
-        }}
-      />
     </div>
   );
 }

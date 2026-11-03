@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { usePermission } from "@/hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +15,18 @@ import type { ReportCategory, ReportDefinition } from "./_lib/types";
 
 export default function ReportsPage() {
   const [query, setQuery] = useState("");
+  // The store's own array, so the memos below only rerun when it changes.
+  const { permissions } = usePermission();
+  // Reports that need a permission beyond `reports:view` (the savings ones need
+  // `savings:export`) are left off for users without it.
+  const catalog = useMemo(
+    () => REPORT_CATALOG.filter((r) => !r.permission || permissions.includes(r.permission)),
+    [permissions]
+  );
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const filtered = REPORT_CATALOG.filter((r) => {
+    const filtered = catalog.filter((r) => {
       if (!needle) return true;
       return (
         r.title.toLowerCase().includes(needle) ||
@@ -31,7 +40,7 @@ export default function ReportsPage() {
       byCategory.set(r.category, list);
     });
     return byCategory;
-  }, [query]);
+  }, [catalog, query]);
 
   // Derived from CATEGORY_META rather than listed here, in declaration order.
   // A hardcoded list silently hides every report in a category someone forgets
@@ -70,7 +79,7 @@ export default function ReportsPage() {
                     WYSIWYG preview
                   </Badge>
                   <span className="text-muted-foreground">
-                    {REPORT_CATALOG.length} reports available
+                    {catalog.length} reports available
                   </span>
                 </div>
               </div>
@@ -100,7 +109,7 @@ export default function ReportsPage() {
               if (items.length === 0) return null;
               const meta = CATEGORY_META[cat];
               return (
-                <section key={cat}>
+                <section key={cat} id={cat} className="scroll-mt-20">
                   <div className="mb-3 flex items-baseline justify-between">
                     <div>
                       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

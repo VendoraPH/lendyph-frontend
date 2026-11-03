@@ -28,6 +28,13 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   releases_list: "Releases List",
   statement_of_account: "Statement of Account",
   subsidiary_ledger: "Subsidiary Ledger",
+  savings_register: "Savings Account Register",
+  savings_balances: "Savings Balances",
+  savings_deposits: "Savings Deposits",
+  savings_withdrawals: "Savings Withdrawals",
+  savings_transfers: "Savings Transfers",
+  savings_interest_postings: "Savings Interest Postings",
+  savings_closed_dormant: "Closed & Dormant Savings Accounts",
 };
 
 export const PRINTABLE_TITLES: Readonly<Record<PrintableId, string>> = {

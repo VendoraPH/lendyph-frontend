@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RouteGuard } from "@/components/common";
+import { AccessDenied, RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
@@ -221,6 +221,11 @@ function ReportDetailContent() {
   }, [logoUrl]);
 
   const activeRange = preset === "custom" ? range : presetRange(preset, range);
+
+  // Checked after every hook has run, so the hook order never changes.
+  if (report?.permission && !hasPermission(report.permission)) {
+    return <AccessDenied pageName={report.title} />;
+  }
 
   if (!report) {
     return (

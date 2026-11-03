@@ -6,12 +6,12 @@ import {
   humanizeSegment,
   subPageTitle,
 } from "./page-titles";
-import { REPORT_CATALOG } from "@/app/(app)/reports/_lib/report-catalog";
+import { REPORT_CATALOG, SAVINGS_REPORTS } from "@/app/(app)/reports/_lib/report-catalog";
 import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
 
 describe("the title map covers both catalogs", () => {
   test("every report has a title, and the catalog shows that title", () => {
-    for (const report of REPORT_CATALOG) {
+    for (const report of [...REPORT_CATALOG, ...SAVINGS_REPORTS]) {
       const title = REPORT_TITLES[report.id];
       assert.equal(typeof title, "string", `no title for report ${report.id}`);
       assert.notEqual(title.trim(), "", `empty title for report ${report.id}`);
@@ -20,7 +20,8 @@ describe("the title map covers both catalogs", () => {
   });
 
   test("every report title belongs to a report in the catalog", () => {
-    const ids = new Set<string>(REPORT_CATALOG.map((r) => r.id));
+    // The savings reports are catalogued only when their flag is on.
+    const ids = new Set<string>([...REPORT_CATALOG, ...SAVINGS_REPORTS].map((r) => r.id));
     assert.deepEqual(
       Object.keys(REPORT_TITLES).filter((id) => !ids.has(id)),
       [],
