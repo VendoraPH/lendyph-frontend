@@ -235,3 +235,23 @@ test("an unknown user (before rehydration) is not reported as lacking access", (
   assert.equal(lacksBranchAccess(null, false), false);
   assert.equal(lacksBranchAccess(undefined, false), false);
 });
+
+// The accounting BranchFilter renders its options from `visibleBranches` and
+// hands Base UI `branchFilterItems` for the trigger label. Both read the same
+// viewer, so the two lists must name the same branches in the same order.
+test("filter items and visible branches agree for a scoped and an unscoped viewer", () => {
+  for (const viewer of [branchViewer(newShape, false), branchViewer(northOnly, true)]) {
+    assert.deepEqual(
+      branchFilterItems(allBranches, "all", viewer).map((i) => i.value),
+      ["all", ...visibleBranches(allBranches, viewer).map((b) => String(b.id))],
+    );
+    assert.equal(branchFilterItems(allBranches, "all", viewer)[0].label, allBranchesLabel(viewer));
+  }
+});
+
+// The accounting filter's own ApiBranch rows carry more than UserBranch does.
+test("visible branches keeps the caller's row type", () => {
+  const rows = [{ ...main, is_active: true }, { ...north, is_active: true }];
+  const shown = visibleBranches(rows, branchViewer(northOnly, false));
+  assert.deepEqual(shown, [{ ...north, is_active: true }]);
+});

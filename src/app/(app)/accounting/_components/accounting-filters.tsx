@@ -1,7 +1,13 @@
 "use client";
 
 import { useBranches } from "@/hooks";
-import { branchFilterItems } from "@/lib/user-branches";
+import {
+  allBranchesLabel,
+  branchFilterItems,
+  branchViewer,
+  visibleBranches,
+} from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,6 +28,13 @@ interface BranchFilterProps {
 
 export function BranchFilter({ value, onChange }: BranchFilterProps) {
   const { branches } = useBranches();
+  // Without `branches:view_all` the API answers 403 to a `branch_id` outside
+  // the caller's branches, so only theirs are offered, and "all" means all of
+  // theirs. `items` and the rendered options read the same viewer.
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const viewer = branchViewer(caller, viewAll);
+  const shown = visibleBranches(branches, viewer);
 
   return (
     <div className="space-y-1.5">
@@ -30,14 +43,14 @@ export function BranchFilter({ value, onChange }: BranchFilterProps) {
       <Select
         value={value}
         onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
-        items={branchFilterItems(branches, ALL_BRANCHES)}
+        items={branchFilterItems(branches, ALL_BRANCHES, viewer)}
       >
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL_BRANCHES}>All branches</SelectItem>
-          {branches.map((branch) => (
+          <SelectItem value={ALL_BRANCHES}>{allBranchesLabel(viewer)}</SelectItem>
+          {shown.map((branch) => (
             <SelectItem key={branch.id} value={String(branch.id)}>
               {branch.name}
             </SelectItem>
