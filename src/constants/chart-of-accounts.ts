@@ -15,6 +15,7 @@
 import type {
   Account,
   AccountMapping,
+  SavingsMappingKey,
   AccountType,
   CashAccountKind,
   NormalBalance,
@@ -202,7 +203,7 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // payable is owed to a supplier, and one account for both makes a payables
   // ageing report unreadable.
   borrower_advances: "2300",
-} as const satisfies Record<keyof AccountMapping, string>;
+} as const satisfies Record<Exclude<keyof AccountMapping, SavingsMappingKey>, string>;
 
 /** The normal balance a seed row implies, for building the account record. */
 export function seedNormalBalance(seed: SeedAccount): NormalBalance {
