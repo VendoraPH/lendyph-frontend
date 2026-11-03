@@ -14,6 +14,8 @@ import { AddressInfo } from "node:net";
 let server: Server;
 let notificationService: typeof import("./notification.service").notificationService;
 let FEED_SIZE: number;
+let COUNT_TIMEOUT: number;
+let hangCount = false;
 const seen: { method: string; url: string }[] = [];
 let countBody: unknown = { data: { count: 3 } };
 
@@ -45,6 +47,7 @@ before(async () => {
         );
       }
       if (path === "/api/notifications/unread-count") {
+        if (hangCount) return;
         return res.end(JSON.stringify(countBody));
       }
       if (req.method === "POST" && path === `/api/notifications/${ROW.id}/read`) {
@@ -63,9 +66,11 @@ before(async () => {
   const mod = await import("./notification.service");
   notificationService = mod.notificationService;
   FEED_SIZE = mod.NOTIFICATION_FEED_SIZE;
+  COUNT_TIMEOUT = mod.UNREAD_COUNT_TIMEOUT_MS;
 });
 
 after(() => {
+  server?.closeAllConnections();
   server?.close();
 });
 
@@ -110,4 +115,17 @@ test("marking all read posts to read-all", async () => {
 
 test("another user's id is a 404 and rejects", async () => {
   await assert.rejects(() => notificationService.markRead("someone-elses-id"));
+});
+
+test("a hung unread-count read gives up after its timeout instead of holding the poller", async () => {
+  assert.equal(COUNT_TIMEOUT, 15_000);
+  hangCount = true;
+  try {
+    const started = Date.now();
+    await assert.rejects(() => notificationService.unreadCount(100));
+    assert.ok(Date.now() - started < 5_000, "rejected by the timeout, not the server");
+  } finally {
+    hangCount = false;
+  }
+  assert.equal(await notificationService.unreadCount(), 3);
 });

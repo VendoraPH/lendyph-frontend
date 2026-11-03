@@ -23,7 +23,12 @@ export const FEED_LIMIT = 20;
 // ---------------------------------------------------------------------------
 
 export interface UnreadPollerDeps {
-  /** Reads the count. A rejection is swallowed; the caller keeps its last figure. */
+  /**
+   * Reads the count. A rejection is swallowed; the caller keeps its last
+   * figure. It must settle: the caller bounds it with a request timeout, or a
+   * hung read would hold the schedule (a scheduled read is skipped while one
+   * is in flight).
+   */
   load: () => Promise<unknown>;
   isHidden: () => boolean;
   now: () => number;
@@ -42,7 +47,11 @@ export interface UnreadPoller {
   handleVisibilityChange: () => void;
   /** Window `focus`: reads again (once per gap) and restarts the interval. */
   handleFocus: () => void;
-  /** Reads now, outside the schedule (after a mark-read failure, for example). */
+  /**
+   * Reads now, outside the schedule and even with a read in flight (after a
+   * mark-read settles, for example): the older read's answer may predate the
+   * change, and the mutation gate drops it.
+   */
   refresh: () => void;
   /** Stops for good: nothing reads after this, even a late event. */
   dispose: () => void;
@@ -57,15 +66,16 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
   const intervalMs = deps.intervalMs ?? UNREAD_POLL_MS;
   const minGapMs = deps.minGapMs ?? UNREAD_MIN_GAP_MS;
   let handle: unknown = null;
-  let inFlight = false;
+  let inFlight = 0;
   let lastStartedAt: number | null = null;
   let disposed = false;
 
-  const read = (respectGap: boolean) => {
-    if (disposed || inFlight || deps.isHidden()) return;
+  const read = (respectGap: boolean, force: boolean) => {
+    if (disposed || deps.isHidden()) return;
+    if (inFlight > 0 && !force) return;
     const now = deps.now();
     if (respectGap && lastStartedAt !== null && now - lastStartedAt < minGapMs) return;
-    inFlight = true;
+    inFlight += 1;
     lastStartedAt = now;
     let pending: Promise<unknown>;
     try {
@@ -76,7 +86,7 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
     pending
       .catch(() => undefined)
       .finally(() => {
-        inFlight = false;
+        inFlight -= 1;
       });
   };
 
@@ -88,11 +98,11 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
   const schedule = () => {
     stop();
     if (disposed || deps.isHidden()) return;
-    handle = deps.setInterval(() => read(false), intervalMs);
+    handle = deps.setInterval(() => read(false, false), intervalMs);
   };
 
   const resume = () => {
-    read(true);
+    read(true, false);
     schedule();
   };
 
@@ -104,7 +114,7 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
       else resume();
     },
     handleFocus: resume,
-    refresh: () => read(false),
+    refresh: () => read(false, true),
     dispose: () => {
       disposed = true;
       stop();
@@ -113,8 +123,94 @@ export function createUnreadPoller(deps: UnreadPollerDeps): UnreadPoller {
 }
 
 // ---------------------------------------------------------------------------
+// Optimistic changes vs. reads already on the wire
+// ---------------------------------------------------------------------------
+
+export interface MutationGate {
+  /** Starts an optimistic change; call the returned function once it settles. */
+  begin: () => () => void;
+  /** The sequence a read records when it starts. */
+  token: () => number;
+  /**
+   * Whether a read that started at `token` may be shown: no change has started
+   * or settled since, and none is still on the wire. Otherwise its answer may
+   * predate the change (a badge that jumps back up after "Mark all as read").
+   */
+  accepts: (token: number) => boolean;
+}
+
+export function createMutationGate(): MutationGate {
+  let seq = 0;
+  let pending = 0;
+  return {
+    begin: () => {
+      seq += 1;
+      pending += 1;
+      let ended = false;
+      return () => {
+        if (ended) return;
+        ended = true;
+        seq += 1;
+        pending -= 1;
+      };
+    },
+    token: () => seq,
+    accepts: (token) => pending === 0 && token === seq,
+  };
+}
+
+/** Undo an optimistic mark-read on the rows it changed (`ids`, stamped `readAt`), and only those. */
+export function revertReadAt(
+  rows: readonly AppNotification[],
+  ids: ReadonlySet<string>,
+  readAt: string,
+): AppNotification[] {
+  return rows.map((row) =>
+    ids.has(String(row.id)) && row.read_at === readAt ? { ...row, read_at: null } : row,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Who the bell belongs to
+// ---------------------------------------------------------------------------
+
+/**
+ * The bell's identity: the signed-in user's id, or "signed-out". The header
+ * keys the bell on it, so signing out or switching user starts from an empty
+ * count, list and status instead of showing the previous user's.
+ */
+export function bellOwnerKey(user: { id: number | string } | null | undefined): string {
+  if (!user || user.id === undefined || user.id === null || user.id === "") return "signed-out";
+  return `user:${String(user.id)}`;
+}
+
+// ---------------------------------------------------------------------------
 // The list
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether the unread page leaves room for read rows. The bell reads the
+ * unread page first, so an older unread notification never falls off the
+ * list behind newer read ones, and tops it up with the latest rows only when
+ * fewer than `limit` are unread.
+ */
+export function needsReadTopUp(
+  unreadRows: readonly AppNotification[] | null | undefined,
+  limit: number = FEED_LIMIT,
+): boolean {
+  return !Array.isArray(unreadRows) || unreadRows.length < limit;
+}
+
+/** The unread page followed by the top-up page; `buildFeed` orders, dedupes and caps it. */
+export function combineFeedPages(
+  unreadRows: readonly AppNotification[] | null | undefined,
+  latestRows: readonly AppNotification[] | null | undefined,
+): AppNotification[] {
+  return [
+    ...(Array.isArray(unreadRows) ? unreadRows : []),
+    ...(Array.isArray(latestRows) ? latestRows : []),
+  ];
+}
 
 export type NotificationTone = "approval" | "success" | "danger" | "warning" | "info";
 

@@ -5,12 +5,17 @@ import {
   UNREAD_MIN_GAP_MS,
   UNREAD_POLL_MS,
   bellAccessibleName,
+  bellOwnerKey,
   buildFeed,
+  combineFeedPages,
+  createMutationGate,
   createUnreadPoller,
   formatRelativeTime,
   markAllRead,
   markOneRead,
+  needsReadTopUp,
   notificationTone,
+  revertReadAt,
   safeAppPath,
   unreadBadgeLabel,
 } from "./notification-feed";
@@ -37,14 +42,14 @@ function harness(opts: { hidden?: boolean; fail?: boolean } = {}) {
   let hidden = opts.hidden ?? false;
   let now = NOW;
   let loads = 0;
-  let pending: (() => void) | null = null;
+  let pending: (() => void)[] = [];
   const timers = new Map<number, { fn: () => void; ms: number }>();
   let nextId = 1;
   const poller = createUnreadPoller({
     load: () => {
       loads += 1;
       return new Promise<void>((resolve, reject) => {
-        pending = () => (opts.fail ? reject(new Error("offline")) : resolve());
+        pending.push(() => (opts.fail ? reject(new Error("offline")) : resolve()));
       });
     },
     isHidden: () => hidden,
@@ -72,10 +77,11 @@ function harness(opts: { hidden?: boolean; fail?: boolean } = {}) {
     advance: (ms: number) => {
       now += ms;
     },
-    /** Settle the read in flight and let its `finally` run. */
+    /** Settle every read in flight and let their `finally` run. */
     settle: async () => {
-      pending?.();
-      pending = null;
+      const settling = pending;
+      pending = [];
+      for (const done of settling) done();
       await new Promise((r) => setImmediate(r));
     },
     tick: () => {
@@ -177,6 +183,26 @@ describe("createUnreadPoller", () => {
     assert.equal(h.loads, 2);
   });
 
+  test("refresh starts a new read even with one in flight; a tick does not", async () => {
+    const h = harness();
+    h.poller.start();
+    h.poller.refresh();
+    assert.equal(h.loads, 2, "a mark-read settling must not wait for the older read");
+    h.tick();
+    assert.equal(h.loads, 2, "the schedule still skips while reads are in flight");
+    await h.settle();
+    h.tick();
+    assert.equal(h.loads, 3, "both reads settled, so the schedule resumes");
+  });
+
+  test("a read that never settles holds scheduled reads (why the count call has a timeout)", async () => {
+    const h = harness();
+    h.poller.start();
+    h.tick();
+    h.tick();
+    assert.equal(h.loads, 1);
+  });
+
   test("after dispose (signed out) nothing reads, even a late event", async () => {
     const h = harness();
     h.poller.start();
@@ -194,7 +220,150 @@ describe("createUnreadPoller", () => {
   });
 });
 
+// ── Optimistic changes vs. count reads already on the wire (M1) ─────────────
+
+describe("createMutationGate", () => {
+  test("with no change, a read's answer is shown", () => {
+    const gate = createMutationGate();
+    assert.equal(gate.accepts(gate.token()), true);
+  });
+
+  test("a read that started before a mark-read is dropped, even after it settles", () => {
+    const gate = createMutationGate();
+    const before = gate.token();
+    const settle = gate.begin();
+    assert.equal(gate.accepts(before), false, "mark-read on the wire");
+    settle();
+    assert.equal(gate.accepts(before), false, "the read may predate the change");
+  });
+
+  test("a read that started while a mark-read is on the wire is dropped", () => {
+    const gate = createMutationGate();
+    const settle = gate.begin();
+    const during = gate.token();
+    assert.equal(gate.accepts(during), false);
+    settle();
+    assert.equal(gate.accepts(during), false);
+  });
+
+  test("the refresh after the change settles is shown", () => {
+    const gate = createMutationGate();
+    gate.begin()();
+    assert.equal(gate.accepts(gate.token()), true);
+  });
+
+  test("overlapping changes: nothing is shown until the last settles", () => {
+    const gate = createMutationGate();
+    const settleOne = gate.begin();
+    const settleAll = gate.begin();
+    settleOne();
+    const afterFirst = gate.token();
+    assert.equal(gate.accepts(afterFirst), false, "mark all still on the wire");
+    settleAll();
+    assert.equal(gate.accepts(afterFirst), false);
+    assert.equal(gate.accepts(gate.token()), true);
+  });
+
+  test("settling twice counts once", () => {
+    const gate = createMutationGate();
+    const settleA = gate.begin();
+    const settleB = gate.begin();
+    settleA();
+    settleA();
+    assert.equal(gate.accepts(gate.token()), false, "B is still on the wire");
+    settleB();
+    assert.equal(gate.accepts(gate.token()), true);
+  });
+
+  test("the stale-badge race: mark all, then a pre-change read answers 3", () => {
+    const gate = createMutationGate();
+    let shown: number | null = 3;
+    const show = (token: number, n: number) => {
+      if (gate.accepts(token)) shown = n;
+    };
+    const staleRead = gate.token();
+    const settle = gate.begin();
+    shown = 0;
+    show(staleRead, 3);
+    assert.equal(shown, 0, "the stale 3 does not overwrite the optimistic 0");
+    settle();
+    const refresh = gate.token();
+    show(refresh, 0);
+    assert.equal(shown, 0);
+  });
+});
+
+describe("revertReadAt", () => {
+  test("puts back only the rows the change stamped", () => {
+    const stamp = "2026-11-03T04:00:00.000Z";
+    const rows = [
+      row({ id: "a", read_at: stamp }),
+      row({ id: "b", read_at: "2026-11-01T00:00:00Z" }),
+      row({ id: "c", read_at: stamp }),
+    ];
+    const next = revertReadAt(rows, new Set(["a", "b"]), stamp);
+    assert.deepEqual(
+      next.map((r) => r.read_at),
+      [null, "2026-11-01T00:00:00Z", stamp],
+    );
+    assert.equal(rows[0].read_at, stamp, "the input is not mutated");
+  });
+
+  test("a row read again since (a newer stamp) is left alone", () => {
+    const next = revertReadAt([row({ id: "a", read_at: "2026-11-03T05:00:00Z" })], new Set(["a"]), "2026-11-03T04:00:00Z");
+    assert.equal(next[0].read_at, "2026-11-03T05:00:00Z");
+  });
+});
+
+describe("bellOwnerKey (L2)", () => {
+  test("signed out, and each user, get their own key", () => {
+    assert.equal(bellOwnerKey(null), "signed-out");
+    assert.equal(bellOwnerKey(undefined), "signed-out");
+    assert.equal(bellOwnerKey({ id: 7 }), "user:7");
+    assert.notEqual(bellOwnerKey({ id: 7 }), bellOwnerKey({ id: 8 }));
+    assert.notEqual(bellOwnerKey({ id: 7 }), bellOwnerKey(null));
+  });
+});
+
 // ── The list ────────────────────────────────────────────────────────────────
+
+describe("unread first, topped up with read rows (L3)", () => {
+  const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
+
+  test("a top-up is needed only when fewer than 20 are unread", () => {
+    assert.equal(needsReadTopUp([]), true);
+    assert.equal(needsReadTopUp(null), true);
+    assert.equal(needsReadTopUp(Array.from({ length: 19 }, (_, i) => row({ id: `u${i}` }))), true);
+    assert.equal(needsReadTopUp(Array.from({ length: 20 }, (_, i) => row({ id: `u${i}` }))), false);
+  });
+
+  test("an older unread row stays on the list behind 20 newer read ones", () => {
+    const unread = [row({ id: "old", created_at: minutesAgo(3 * 24 * 60) })];
+    const latest = Array.from({ length: 20 }, (_, i) =>
+      row({ id: `r${i}`, created_at: minutesAgo(i + 1), read_at: minutesAgo(0) }),
+    );
+    const feed = buildFeed(combineFeedPages(unread, latest), NOW);
+    assert.equal(feed.length, 20);
+    assert.equal(feed[0].id, "old");
+    assert.equal(feed[0].unread, true);
+    assert.deepEqual(feed.slice(1).map((f) => f.id), latest.slice(0, 19).map((r) => r.id));
+  });
+
+  test("a row on both pages is listed once, as unread", () => {
+    const shared = row({ id: "s", created_at: minutesAgo(5) });
+    const feed = buildFeed(
+      combineFeedPages([shared], [shared, row({ id: "r", created_at: minutesAgo(1), read_at: minutesAgo(0) })]),
+      NOW,
+    );
+    assert.deepEqual(feed.map((f) => [f.id, f.unread]), [["s", true], ["r", false]]);
+  });
+
+  test("20 unread fill the list; a missing top-up page is just no read rows", () => {
+    const unread = Array.from({ length: 20 }, (_, i) => row({ id: `u${i}`, created_at: minutesAgo(i) }));
+    assert.equal(buildFeed(combineFeedPages(unread, null), NOW).length, 20);
+    assert.deepEqual(combineFeedPages(null, undefined), []);
+  });
+});
 
 describe("buildFeed", () => {
   test("unread first, newest first within each group", () => {

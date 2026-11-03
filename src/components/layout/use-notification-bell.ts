@@ -2,31 +2,35 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { notificationService, NOTIFICATION_FEED_SIZE } from "@/services/notification.service";
 import { notifyError } from "@/lib/notify";
 import {
+  FEED_LIMIT,
+  combineFeedPages,
+  createMutationGate,
   createUnreadPoller,
   markAllRead,
   markOneRead,
+  needsReadTopUp,
+  revertReadAt,
   type UnreadPoller,
 } from "@/lib/notification-feed";
 import type { AppNotification } from "@/types/notification";
 
 export type NotificationListStatus = "idle" | "loading" | "ready" | "error";
 
-/** Undo an optimistic mark-read on the rows it changed, and only those. */
-function revertReadAt(rows: AppNotification[], ids: Set<string>, readAt: string): AppNotification[] {
-  return rows.map((row) =>
-    ids.has(String(row.id)) && row.read_at === readAt ? { ...row, read_at: null } : row,
-  );
-}
-
 /**
  * The bell's data: the unread count, polled every 60 s and on window focus
  * while `enabled` (a user is signed in) and the tab is visible, and the latest
- * 20 notifications, read when the list opens.
+ * 20 notifications, read when the list opens: every unread one first
+ * (`unread=1`), topped up with the latest rows when fewer than 20 are unread.
  *
  * A failed count read keeps the last figure, so the header never breaks; a
  * failed list read shows the list's error state. Mark-read is optimistic: the
- * row and badge change at once, and a failed request puts the row back and
- * re-reads the count from the server.
+ * row and badge change at once, a failed request puts the row back, and either
+ * way the count is re-read once the request settles. A count read that
+ * started before or during a mark-read is dropped (the mutation gate), so a
+ * stale figure can't overwrite the optimistic one.
+ *
+ * The header keys the bell on the signed-in user (`bellOwnerKey`), so signing
+ * out or switching user remounts it with an empty count, list and status.
  */
 export function useNotificationBell(enabled: boolean) {
   const [count, setCount] = useState<number | null>(null);
@@ -35,15 +39,18 @@ export function useNotificationBell(enabled: boolean) {
   const [loadedAt, setLoadedAt] = useState(0);
   const pollerRef = useRef<UnreadPoller | null>(null);
   const listSeq = useRef(0);
+  const [gate] = useState(createMutationGate);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     const poller = createUnreadPoller({
-      load: () =>
-        notificationService.unreadCount().then((n) => {
-          if (!cancelled) setCount(n);
-        }),
+      load: () => {
+        const token = gate.token();
+        return notificationService.unreadCount().then((n) => {
+          if (!cancelled && gate.accepts(token)) setCount(n);
+        });
+      },
       isHidden: () => document.hidden,
       now: () => Date.now(),
       setInterval: (fn, ms) => window.setInterval(fn, ms),
@@ -62,17 +69,25 @@ export function useNotificationBell(enabled: boolean) {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
     };
-  }, [enabled]);
+  }, [enabled, gate]);
 
   const loadList = useCallback(() => {
     if (!enabled) return;
     const seq = ++listSeq.current;
     setStatus((prev) => (prev === "ready" ? "ready" : "loading"));
     notificationService
-      .list({ per_page: NOTIFICATION_FEED_SIZE })
-      .then((res) => {
+      .list({ unread: true, per_page: NOTIFICATION_FEED_SIZE })
+      .then(async (unreadPage) => {
+        const unreadRows = Array.isArray(unreadPage?.data) ? unreadPage.data : [];
+        let latestRows: AppNotification[] = [];
+        if (needsReadTopUp(unreadRows, FEED_LIMIT)) {
+          latestRows = await notificationService
+            .list({ per_page: NOTIFICATION_FEED_SIZE })
+            .then((res) => (Array.isArray(res?.data) ? res.data : []))
+            .catch(() => []);
+        }
         if (seq !== listSeq.current) return;
-        setRows(Array.isArray(res?.data) ? res.data : []);
+        setRows(combineFeedPages(unreadRows, latestRows));
         setLoadedAt(Date.now());
         setStatus("ready");
       })
@@ -87,25 +102,37 @@ export function useNotificationBell(enabled: boolean) {
     const readAt = new Date().toISOString();
     const { rows: next, wasUnread } = markOneRead(rows, id, readAt);
     if (!wasUnread) return;
+    const settle = gate.begin();
     setRows(next);
     setCount((c) => (c === null ? c : Math.max(0, c - 1)));
-    notificationService.markRead(id).catch(() => {
-      setRows((prev) => revertReadAt(prev, new Set([id]), readAt));
-      pollerRef.current?.refresh();
-    });
-  }, [rows]);
+    notificationService
+      .markRead(id)
+      .catch(() => {
+        setRows((prev) => revertReadAt(prev, new Set([id]), readAt));
+      })
+      .finally(() => {
+        settle();
+        pollerRef.current?.refresh();
+      });
+  }, [rows, gate]);
 
   const markAll = useCallback(() => {
     const readAt = new Date().toISOString();
     const changed = new Set(rows.filter((row) => !row.read_at).map((row) => String(row.id)));
+    const settle = gate.begin();
     setRows((prev) => markAllRead(prev, readAt));
     setCount(0);
-    notificationService.markAllRead().catch((err: unknown) => {
-      setRows((prev) => revertReadAt(prev, changed, readAt));
-      pollerRef.current?.refresh();
-      notifyError(err, "Couldn't mark notifications as read");
-    });
-  }, [rows]);
+    notificationService
+      .markAllRead()
+      .catch((err: unknown) => {
+        setRows((prev) => revertReadAt(prev, changed, readAt));
+        notifyError(err, "Couldn't mark notifications as read");
+      })
+      .finally(() => {
+        settle();
+        pollerRef.current?.refresh();
+      });
+  }, [rows, gate]);
 
   return {
     count: enabled ? count : null,

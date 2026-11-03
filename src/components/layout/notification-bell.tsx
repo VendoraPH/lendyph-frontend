@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { formatDateTime } from "@/lib/format";
 import {
   bellAccessibleName,
+  bellOwnerKey,
   buildFeed,
   unreadBadgeLabel,
   type NotificationFeedItem,
@@ -97,11 +98,18 @@ function FeedSkeleton() {
  * The header bell: the unread badge (polled), and a popover with the latest
  * 20 notifications, unread first. Title and body show exactly what the server
  * wrote, ₱ amounts included. Opening a row marks it read and goes to its page.
+ *
+ * Keyed on the signed-in user, so signing out or switching user starts from
+ * an empty bell rather than the previous user's count and list.
  */
 export function NotificationBell() {
   const { user } = useAuth();
+  return <NotificationBellPanel key={bellOwnerKey(user)} enabled={Boolean(user)} />;
+}
+
+function NotificationBellPanel({ enabled }: { enabled: boolean }) {
   const router = useRouter();
-  const bell = useNotificationBell(Boolean(user));
+  const bell = useNotificationBell(enabled);
   const [open, setOpen] = useState(false);
   const feed = useMemo(() => buildFeed(bell.rows, bell.loadedAt), [bell.rows, bell.loadedAt]);
   const badge = unreadBadgeLabel(bell.count);
@@ -180,7 +188,7 @@ export function NotificationBell() {
             <button
               type="button"
               onClick={bell.markAll}
-              className="text-xs font-medium text-brand-orange transition-colors hover:text-brand-orange-dark"
+              className="rounded-sm text-xs font-medium text-brand-orange outline-none transition-colors hover:text-brand-orange-dark focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               Mark all as read
             </button>
