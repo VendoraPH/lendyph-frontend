@@ -6,17 +6,10 @@ import { DateRangeFilter } from "@/components/common/date-range-filter";
 import { BranchFilter } from "@/components/common/branch-filter";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SavingsAccountStatus } from "@/types/savings";
 import { ACCOUNT_STATUS_LABEL } from "../../_lib/account-status";
-import { useSavingsProducts } from "../../_hooks/use-savings-products";
+import { ProductFilter } from "../../_components/product-filter";
 
 export type AccountStatusFilter = "all" | SavingsAccountStatus;
 export const ALL = "all";
@@ -58,30 +51,6 @@ interface AccountFiltersProps {
   onChange: (next: AccountFilterValues) => void;
   /** `meta.stats` from the server: global per-status counts. */
   stats?: Record<string, number>;
-}
-
-function ProductFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const products = useSavingsProducts();
-  if (!products.allowed) return null;
-  const rows = products.data?.rows ?? [];
-  const items = [{ value: ALL, label: "All products" }, ...rows.map((p) => ({ value: String(p.id), label: p.name }))];
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">Product</Label>
-      <Select value={value} onValueChange={(v) => onChange(v ?? ALL)} items={items}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 }
 
 /** Status tabs (counts from the server), search on Enter, product, branch and date opened. */

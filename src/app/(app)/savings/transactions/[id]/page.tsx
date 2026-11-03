@@ -133,6 +133,13 @@ function TransactionDetail({ tx, onChanged }: { tx: SavingsTransaction; onChange
                 </Link>
               </Field>
             )}
+            {tx.interest_batch_id && (
+              <Field label="Interest batch">
+                <Link href={`/savings/interest/${tx.interest_batch_id}`} className="underline-offset-2 hover:underline">
+                  View batch
+                </Link>
+              </Field>
+            )}
             {tx.pending_reversal && (
               <Field label="Reversal requested">
                 {tx.pending_reversal.requested_by?.name ?? "—"}: {tx.pending_reversal.reason}

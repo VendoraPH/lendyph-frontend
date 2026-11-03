@@ -330,6 +330,8 @@ export interface InterestBatch {
   product: { id: number; name: string } | null;
   branch: { id: number; name: string } | null;
   status: InterestBatchStatus;
+  /** Whether this draft must be approved before posting (savings settings at creation). */
+  requires_approval?: boolean;
   totals: InterestTotals;
   created_by: { id: number; name: string } | null;
   approved_by: { id: number; name: string } | null;
