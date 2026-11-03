@@ -411,6 +411,13 @@ export const API_ENDPOINTS = {
   LINDA: {
     CHAT: "/linda/chat",
   },
+  /** The signed-in staff user's own in-app notifications (the header bell). */
+  NOTIFICATIONS: {
+    LIST: "/notifications",
+    UNREAD_COUNT: "/notifications/unread-count",
+    READ: (id: string) => `/notifications/${encodeURIComponent(id)}/read`,
+    READ_ALL: "/notifications/read-all",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },
