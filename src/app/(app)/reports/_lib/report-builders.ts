@@ -63,7 +63,7 @@ export const LIST_PAGE_SIZE = 200;
  * filled by `applyChrome()` from branding settings — exactly the way the logo
  * already is — with `siteConfig.name` as the fallback.
  */
-function meta(
+export function meta(
   title: string,
   range: DateRange,
   subtitle?: string
@@ -77,7 +77,7 @@ function meta(
   };
 }
 
-function kpi(label: string, value: string, opts: Partial<KpiItem> = {}): KpiItem {
+export function kpi(label: string, value: string, opts: Partial<KpiItem> = {}): KpiItem {
   return { label, value, ...opts };
 }
 
@@ -208,7 +208,7 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
 // Paginated list envelopes
 // ---------------------------------------------------------------------------
 
-interface ListEnvelope {
+export interface ListEnvelope {
   rows: Record<string, unknown>[];
   /** Server-computed totals for the whole period (not just this page). */
   totals: Record<string, unknown> | null;
@@ -221,7 +221,7 @@ interface ListEnvelope {
  * ({ data, meta, totals }) survives intact — the page of rows alone can never
  * be trusted for totals.
  */
-function readListEnvelope(raw: unknown): ListEnvelope {
+export function readListEnvelope(raw: unknown): ListEnvelope {
   const obj = asRecord(raw);
   const metaBlock = asRecord(obj?.meta);
   const totals =
@@ -261,7 +261,7 @@ function breakdownHint(parts: [string, unknown][]): string | undefined {
  * the footers are dashes, so the note says so instead of calling them the
  * server's figures.
  */
-function serverTotalsTruncationNote(
+export function serverTotalsTruncationNote(
   shown: number,
   totalRows: number | null,
   noun: string,

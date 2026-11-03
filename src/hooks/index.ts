@@ -14,3 +14,5 @@ export type { ChartOfAccounts } from "./use-chart-of-accounts";
 export { useLoanApproval } from "./use-loan-approval";
 export { useDialogOpening } from "./use-dialog-opening";
 export { useIsClient } from "./use-is-client";
+export { useSubmitGuard } from "./use-submit-guard";
+export type { SubmitGuard } from "./use-submit-guard";

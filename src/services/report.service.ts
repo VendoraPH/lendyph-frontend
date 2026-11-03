@@ -211,6 +211,22 @@ export const reportService = {
   repayments: (params?: Record<string, unknown>) =>
     api.getRaw(API_ENDPOINTS.REPORTS.REPAYMENTS, { params }),
 
+  // Savings & Deposits: getRaw, so `meta.total` and the server's `totals` survive.
+  savingsRegister: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_REGISTER, { params }),
+  savingsBalances: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_BALANCES, { params }),
+  savingsDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_DEPOSITS, { params }),
+  savingsWithdrawals: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_WITHDRAWALS, { params }),
+  savingsTransfers: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_TRANSFERS, { params }),
+  savingsInterestPostings: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_INTEREST_POSTINGS, { params }),
+  savingsClosedDormant: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.SAVINGS.REPORT_CLOSED_DORMANT, { params }),
+
   statementOfAccount: (loanId: number) =>
     api.get(API_ENDPOINTS.REPORTS.STATEMENT_OF_ACCOUNT(loanId)),
 

@@ -39,6 +39,13 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   share_capital: "SCP",
   performance: "PRF",
   provisioning: "PRV",
+  savings_register: "SVR",
+  savings_balances: "SVB",
+  savings_deposits: "SVD",
+  savings_withdrawals: "SVW",
+  savings_transfers: "SVT",
+  savings_interest_postings: "SVI",
+  savings_closed_dormant: "SVC",
 };
 
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */

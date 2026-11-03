@@ -116,7 +116,22 @@ export type Module =
   // Same rule as `credit_scoring`: none of these are granted by the backend,
   // and none should be until the reminder routes exist. The server withholding
   // them is what keeps Loans → Reminders out of production.
-  | "reminders";
+  | "reminders"
+  // ── Savings & Deposits ──
+  //
+  // `savings` covers accounts and their money: `view`, `create` (open an
+  // account), `update` (maintenance: freeze, reactivate, close), `deposit`,
+  // `withdraw`, `transfer`, `reverse` (initiate), `approve` (the checker on a
+  // reversal or an interest batch), `post` (interest processing), `settings`
+  // (interest rates and module settings) and `export` (savings reports).
+  // `savings_products:manage` configures products, split out like
+  // `loan_products` because a product sets the terms of every later account.
+  //
+  // Same rule as `credit_scoring`: the backend must seed these before any role
+  // holds them (docs/SAVINGS_BACKEND_HANDOFF.md), and the whole module is also
+  // behind NEXT_PUBLIC_ENABLE_SAVINGS.
+  | "savings"
+  | "savings_products";
 
 export type Action =
   | "view"
@@ -163,7 +178,11 @@ export type Action =
   // Loan products: one verb for create, edit and delete, as the API seeds it.
   | "manage"
   // Branch access: see every branch, not only the ones a user is assigned to.
-  | "view_all";
+  | "view_all"
+  // Savings: putting money into and taking it out of an account are granted
+  // separately, because a teller who may accept deposits need not pay out.
+  | "deposit"
+  | "withdraw";
 
 export type Permission = `${Module}:${Action}`;
 

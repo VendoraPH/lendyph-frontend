@@ -5,7 +5,8 @@ import { AccessDenied } from "./access-denied";
 import type { Permission } from "@/types";
 
 interface RouteGuardProps {
-  permission: Permission;
+  /** One permission, or several of which the user needs any one. */
+  permission: Permission | Permission[];
   pageName?: string;
   children: React.ReactNode;
 }
@@ -15,9 +16,10 @@ export function RouteGuard({
   pageName,
   children,
 }: RouteGuardProps) {
-  const { can } = usePermission();
+  const { can, canAny } = usePermission();
+  const allowed = Array.isArray(permission) ? canAny(permission) : can(permission);
 
-  if (!can(permission)) {
+  if (!allowed) {
     return <AccessDenied pageName={pageName} />;
   }
 

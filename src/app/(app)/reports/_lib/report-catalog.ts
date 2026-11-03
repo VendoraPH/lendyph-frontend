@@ -1,6 +1,9 @@
 import {
   AlertTriangle,
+  Archive,
+  ArrowDownToLine,
   ArrowLeftRight,
+  ArrowUpFromLine,
   Banknote,
   BookOpen,
   ClipboardList,
@@ -9,6 +12,7 @@ import {
   Gauge,
   Layers,
   ListChecks,
+  Percent,
   PieChart,
   PiggyBank,
   ReceiptText,
@@ -16,7 +20,9 @@ import {
   Target,
   TrendingUp,
   Users,
+  Wallet,
 } from "lucide-react";
+import { env } from "@/config/env";
 import { reportService } from "@/services";
 import { REPORT_TITLES } from "@/lib/page-titles";
 import {
@@ -39,11 +45,13 @@ import {
   buildStatementOfAccountDoc,
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
+import { buildSavingsReportDoc } from "./report-builders-savings";
 import type {
   DateRange,
   ReportContext,
   ReportDefinition,
   ReportDocument,
+  SavingsReportId,
 } from "./types";
 
 /**
@@ -114,6 +122,44 @@ const ACCENT = {
   emerald: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
   amber: { text: "text-amber-600", bg: "bg-amber-50", ring: "ring-amber-200" },
 } as const;
+
+// ---------------------------------------------------------------------------
+// Savings & Deposits
+// ---------------------------------------------------------------------------
+
+function savingsReport(
+  id: SavingsReportId,
+  description: string,
+  icon: ReportDefinition["icon"],
+  accent: ReportDefinition["accent"],
+  fetcher: Fetcher
+): ReportDefinition {
+  return {
+    id,
+    title: REPORT_TITLES[id],
+    description,
+    category: "savings",
+    icon,
+    accent,
+    supportsBranch: true,
+    permission: "savings:export",
+    build: reportBuilder(fetcher, (raw, range) => buildSavingsReportDoc(id, raw, range), listParams),
+  };
+}
+
+/**
+ * Every savings report, whatever the flag. `REPORT_CATALOG` only includes
+ * them when `features.savings` is on; this list is exported for the tests.
+ */
+export const SAVINGS_REPORTS: ReportDefinition[] = [
+  savingsReport("savings_register", "Savings accounts with their status and balance.", PiggyBank, ACCENT.purple, reportService.savingsRegister),
+  savingsReport("savings_balances", "Ledger, available and accrued interest per account.", Wallet, ACCENT.blue, reportService.savingsBalances),
+  savingsReport("savings_deposits", "Every deposit posted in the period.", ArrowDownToLine, ACCENT.emerald, reportService.savingsDeposits),
+  savingsReport("savings_withdrawals", "Every withdrawal posted in the period.", ArrowUpFromLine, ACCENT.amber, reportService.savingsWithdrawals),
+  savingsReport("savings_transfers", "Transfers between savings accounts.", ArrowLeftRight, ACCENT.cyan, reportService.savingsTransfers),
+  savingsReport("savings_interest_postings", "Interest credited by posted batches, per account.", Percent, ACCENT.green, reportService.savingsInterestPostings),
+  savingsReport("savings_closed_dormant", "Accounts closed or turned dormant in the period.", Archive, ACCENT.red, reportService.savingsClosedDormant),
+];
 
 // ---------------------------------------------------------------------------
 // Exported catalog
@@ -347,4 +393,5 @@ export const REPORT_CATALOG: ReportDefinition[] = [
       buildSubsidiaryLedgerDoc
     ),
   },
+  ...(env.features.savings ? SAVINGS_REPORTS : []),
 ];

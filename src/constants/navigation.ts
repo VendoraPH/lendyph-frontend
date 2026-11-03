@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   BookOpenCheck,
   Gauge,
+  PiggyBank,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -34,8 +35,11 @@ export interface NavSubItem {
    * which a manager has, while the import itself needs `imports:process`,
    * which only an admin has. Without this the sidebar would show the link to
    * everyone who can see Settings and land them on AccessDenied.
+   *
+   * An array means any one of them is enough, matching a `RouteGuard` given
+   * the same array.
    */
-  permission?: Permission;
+  permission?: Permission | Permission[];
 }
 
 export interface NavItem {
@@ -106,6 +110,34 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
     ],
   },
+  // Savings & Deposits — gated on NEXT_PUBLIC_ENABLE_SAVINGS at build time AND
+  // on the server's `savings:*` permissions, which the backend has not seeded
+  // yet (docs/SAVINGS_BACKEND_HANDOFF.md). The routes 404 when the flag is off.
+  // The parent gates on the module's `savings:view`, which its dashboard needs.
+  ...(env.features.savings
+    ? [
+        {
+          title: "Savings & Deposits",
+          href: "/savings",
+          icon: PiggyBank,
+          permission: "savings:view",
+          children: [
+            { title: "Dashboard", href: "/savings", permission: "savings:view" },
+            { title: "Accounts", href: "/savings/accounts", permission: "savings:view" },
+            { title: "Open Account", href: "/savings/accounts/new", permission: "savings:create" },
+            { title: "Deposits", href: "/savings/deposits", permission: "savings:deposit" },
+            { title: "Withdrawals", href: "/savings/withdrawals", permission: "savings:withdraw" },
+            { title: "Transfers", href: "/savings/transfers", permission: "savings:transfer" },
+            { title: "Transaction History", href: "/savings/transactions", permission: "savings:view" },
+            { title: "Interest", href: "/savings/interest", permission: ["savings:post", "savings:approve"] },
+            // The reports page itself also needs `reports:view`.
+            { title: "Reports", href: "/reports#savings", permission: "savings:export" },
+            { title: "Products", href: "/savings/products", permission: "savings_products:manage" },
+            { title: "Settings", href: "/savings/settings", permission: "savings:settings" },
+          ],
+        } satisfies NavItem,
+      ]
+    : []),
   {
     title: "Collateral",
     href: "/collaterals",

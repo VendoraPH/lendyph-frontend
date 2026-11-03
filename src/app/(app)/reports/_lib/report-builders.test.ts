@@ -1988,6 +1988,13 @@ const ALL_REPORT_IDS: Record<ReportId, true> = {
   share_capital: true,
   performance: true,
   provisioning: true,
+  savings_register: true,
+  savings_balances: true,
+  savings_deposits: true,
+  savings_withdrawals: true,
+  savings_transfers: true,
+  savings_interest_postings: true,
+  savings_closed_dormant: true,
 };
 
 test("every report id has its own reference prefix", () => {

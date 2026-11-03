@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
 import type { FormattableColumn } from "@/lib/report-format";
+import type { Permission } from "@/types";
 
 export type ReportId =
   | "daily_collection"
@@ -19,7 +20,18 @@ export type ReportId =
   | "portfolio_by_product"
   | "share_capital"
   | "performance"
-  | "provisioning";
+  | "provisioning"
+  | SavingsReportId;
+
+/** Savings & Deposits reports: catalogued only when `features.savings` is on. */
+export type SavingsReportId =
+  | "savings_register"
+  | "savings_balances"
+  | "savings_deposits"
+  | "savings_withdrawals"
+  | "savings_transfers"
+  | "savings_interest_postings"
+  | "savings_closed_dormant";
 
 export type ReportCategory =
   | "operations"
@@ -27,7 +39,8 @@ export type ReportCategory =
   | "member"
   | "disbursement"
   | "financial"
-  | "performance";
+  | "performance"
+  | "savings";
 
 /**
  * Re-exported, not redeclared: `formatValue` in `@/lib/report-format` is what
@@ -242,6 +255,11 @@ export interface ReportDefinition {
   supportsBranch?: boolean;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
+  /**
+   * A permission needed on top of `reports:view`, which guards every report.
+   * Without it the report is left off the catalog and its page refuses.
+   */
+  permission?: Permission;
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 
@@ -272,5 +290,9 @@ export const CATEGORY_META: Record<
   performance: {
     label: "Performance",
     description: "Collection efficiency and account officer productivity",
+  },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Savings accounts, their balances, movements and interest",
   },
 };
