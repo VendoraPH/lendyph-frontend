@@ -24,7 +24,6 @@ import {
   LogOut,
   User,
   Menu,
-  Bell,
   ChevronRight,
   Settings,
   FilePlus,
@@ -37,9 +36,9 @@ import { SIDEBAR_NAV } from "@/constants";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LindaTrigger } from "@/components/linda/linda-trigger";
+import { NotificationBell } from "./notification-bell";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -101,28 +100,6 @@ function Breadcrumb() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Notifications
-// ---------------------------------------------------------------------------
-
-interface Notification {
-  id: number;
-  title: string;
-  description: string;
-  time: string;
-  read: boolean;
-  icon: React.ElementType;
-  iconColor: string;
-  iconBg: string;
-}
-
-// There is no notifications endpoint yet (neither routes/api.php nor
-// api-endpoints.ts defines one), so there is nothing real to show. This stays
-// empty — the bell renders its "No notifications" state and no unread badge —
-// until a backend feed exists to populate it. Do not reintroduce sample rows:
-// they read as real activity on a client's live dashboard.
-const INITIAL_NOTIFICATIONS: Notification[] = [];
-
 // Each carries the permission its page needs to do the action, so the palette
 // offers only what the user can finish, as the sidebar does.
 const QUICK_ACTIONS: { title: string; href: string; icon: typeof FilePlus; permission: Permission }[] = [
@@ -135,19 +112,6 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { can } = usePermission();
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const markAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
 
   // Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -218,76 +182,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <ThemeToggle />
 
           {/* Notification bell with popover */}
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="relative rounded-full text-muted-foreground hover:bg-muted/50"
-                />
-              }
-            >
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-                  {unreadCount}
-                </span>
-              )}
-              <span className="sr-only">Notifications</span>
-            </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h4 className="text-sm font-semibold">Notifications</h4>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllAsRead}
-                    className="text-xs text-brand-orange hover:text-brand-orange-dark font-medium transition-colors"
-                  >
-                    Mark all as read
-                  </button>
-                )}
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Bell className="h-8 w-8 mb-2 opacity-40" />
-                    <p className="text-sm">No notifications</p>
-                  </div>
-                ) : (
-                  notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => markAsRead(n.id)}
-                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
-                        !n.read ? "bg-brand-orange/5" : ""
-                      }`}
-                    >
-                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${n.iconBg}`}>
-                        <n.icon className={`h-4 w-4 ${n.iconColor}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className={`text-sm truncate ${!n.read ? "font-semibold" : "font-medium"}`}>
-                            {n.title}
-                          </p>
-                          {!n.read && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-orange" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {n.description}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/70 mt-1">
-                          {n.time}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <NotificationBell />
 
           {/* User avatar only */}
           <DropdownMenu>
