@@ -209,10 +209,11 @@ function LoansContent() {
   //     `grace_period_days`), so there is no set of statuses that expresses it
   //     and no way for this client to compute it from a loan row.
   //
-  // Every other tab value IS its status, so it goes as-is: the Current tab
-  // sends `status=ongoing` and its badge reads `stats.ongoing`. Nothing reads
-  // `stats.current` — that one is not a status any row can hold and is absent
-  // from `meta.stats` on purpose.
+  // The Current tab IS the `active` value: `released` and `ongoing` both read
+  // "Current", so it sends `status=active` and its badge reads `stats.active`
+  // (with the Active card's fallback). Every other tab value IS its status, so
+  // it goes as-is. Nothing reads `stats.current` — that one is not a status any
+  // row can hold and is absent from `meta.stats` on purpose.
   const statusParam = tab === "all" ? null : tab;
   const search = q.trim();
 
@@ -527,7 +528,9 @@ function LoansContent() {
                 ? "—"
                 : t.value === "all"
                   ? allCount
-                  : (stats[t.value] ?? 0)}
+                  : t.value === "active"
+                    ? activeCount
+                    : (stats[t.value] ?? 0)}
             </span>
           </button>
         ))}

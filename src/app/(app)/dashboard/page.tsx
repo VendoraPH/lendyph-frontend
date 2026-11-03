@@ -36,6 +36,12 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
+import {
+  hasSparklineData,
+  isIsolatedPoint,
+  sparklinePoints,
+  type SparklinePoint,
+} from "./_lib/sparkline";
 
 // ---------------------------------------------------------------------------
 // Backend response shapes
@@ -43,8 +49,6 @@ import { insuranceCollected } from "./_lib/insurance-collected";
 // Wire defensively (the API is tolerant about field names), but NEVER
 // substitute invented data when a response is empty or fails — an empty
 // dashboard must read as empty. See the empty/loading states below.
-
-type SparklinePoint = { v: number };
 
 /** Sparkline series returned by GET /dashboard/stats. Keys mirror KPI_CARD_STRUCTURE. */
 type SparklineKey = "portfolio" | "active_loans" | "collected" | "overdue";
@@ -135,7 +139,7 @@ const KPI_CARD_STRUCTURE = [
 // Sparkline component
 // ---------------------------------------------------------------------------
 
-function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
+function Sparkline({ data, color }: { data: SparklinePoint[]; color: string }) {
   const gradId = `spark-${color.replace("#", "")}`;
   return (
     <AreaChart width={80} height={40} data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -151,7 +155,15 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
         stroke={color}
         strokeWidth={1.5}
         fill={`url(#${gradId})`}
-        dot={false}
+        // A day without a figure (`v: null`) is a gap, never bridged or zeroed.
+        // A real point with a gap on both sides has no segment, so it gets a
+        // dot; every other point draws none.
+        dot={({ cx, cy, index, key }) =>
+          isIsolatedPoint(data, index) && cx != null && cy != null ? (
+            <circle key={key} cx={cx} cy={cy} r={1.5} fill={color} />
+          ) : null
+        }
+        connectNulls={false}
         isAnimationActive={false}
       />
     </AreaChart>
@@ -360,8 +372,8 @@ function DashboardContent() {
                   {(() => {
                     // Only draw a trend line when the backend actually sent that
                     // series — no decorative curve next to a real figure.
-                    const series = kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined;
-                    return series?.length ? <Sparkline data={series} color={kpi.color} /> : null;
+                    const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
+                    return hasSparklineData(series) ? <Sparkline data={series} color={kpi.color} /> : null;
                   })()}
                 </div>
               </CardContent>

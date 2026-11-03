@@ -301,13 +301,20 @@ export function buildDailyCollectionDoc(
 ): ReportDocument {
   const obj = asRecord(raw);
 
+  // The three collected figures are the server's own and are never added up
+  // here. They are counted on different bases, so they need not add up to
+  // each other: `total_collected` counts by period (principal plus interest
+  // paid on the periods falling due in the range), while `penalty_collected`
+  // and `total_received` are cash-basis (the penalty, and the money, taken by
+  // payments dated in the range; the premium is left out). A figure the server
+  // did not send is "—".
   const items: KpiItem[] = [
     kpi("Total Due", currencyOrDash(pick(obj, ["total_due", "due", "total_scheduled"]))),
-    kpi(
-      "Total Collected",
-      currencyOrDash(pick(obj, ["total_collected", "collected", "total_amount"])),
-      { tone: "positive" }
-    ),
+    kpi("Collected (Principal + Interest)", currencyOrDash(pick(obj, ["total_collected"])), {
+      tone: "positive",
+    }),
+    kpi("Penalty Collected", currencyOrDash(pick(obj, ["penalty_collected"]))),
+    kpi("Total Received", currencyOrDash(pick(obj, ["total_received"])), { tone: "positive" }),
     kpi("Collection Rate", percentOrDash(pick(obj, ["collection_rate", "rate"]))),
     kpi("Uncollected", currencyOrDash(pick(obj, ["uncollected", "outstanding"])), {
       tone: "negative",
@@ -773,7 +780,8 @@ const BORROWER_LIST_COLUMNS: ReportColumn[] = [
 
 /**
  * A loan status as the loans screens label it; a value they don't know, as
- * sent. Legacy `ongoing` reads "Current", the reports' word for it.
+ * sent. `released` and legacy `ongoing` both read "Current", the reports' word
+ * for a live loan.
  */
 function loanStatusText(value: unknown): unknown {
   return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
@@ -1116,7 +1124,8 @@ function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unkn
     // The server's principal_paid + interest_paid for the period; "—" when it
     // is missing, never the components added here.
     amount_paid: pick(raw, ["amount_paid"]),
-    balance: pick(raw, ["amount_remaining", "balance", "remaining_balance"]),
+    // What the period still owes, as the server worked it out; "—" without it.
+    balance: pick(raw, ["amount_remaining"]),
     status: pick(raw, ["status"]),
   };
 }
@@ -1138,7 +1147,8 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
 
   return {
     date: pick(raw, ["date", "transaction_date", "paid_at", "payment_date", "created_at"]),
-    reference: pick(raw, ["reference", "reference_no", "receipt_no", "or_number", "id"]),
+    // The receipt number; never the row's database id. "—" without one.
+    reference: pick(raw, ["receipt_number", "reference", "reference_no", "receipt_no", "or_number"]),
     particulars:
       pick(raw, ["particulars", "description", "remarks", "narration"]) ??
       (type ? type.replace(/_/g, " ") : null),
@@ -1220,12 +1230,13 @@ export function buildStatementOfAccountDoc(
     items: [
       kpi("Principal", currencyOrDash(pick(loan, ["principal_amount", "principal"]))),
       kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
-      kpi("Outstanding Balance", currencyOrDash(outstanding), { tone: "negative" }),
-      kpi(
-        "Past Due",
-        currencyOrDash(pick(summary, ["overdue_amount", "past_due_amount", "total_overdue"])),
-        { tone: "negative" }
-      ),
+      kpi("Outstanding Balance", currencyOrDash(outstanding), {
+        tone: "negative",
+        hint: "Principal, interest, penalty and insurance premium still owed",
+      }),
+      // The server's grace-rule figure, the same as the loan summary's
+      // overdue amount; "—" when it was not sent.
+      kpi("Past Due", currencyOrDash(pick(summary, ["overdue_amount"])), { tone: "negative" }),
     ],
   });
 
@@ -1741,22 +1752,18 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
         totalCell("net", serverFigure(branchTotals, "net_movement")),
       ],
     });
-    // The branch rows are loan cash ONLY: they sum to the repayment and
-    // net-proceeds lines, not to the statement totals.
+    // Each branch row holds that branch's loan cash plus the share capital
+    // paid in and out by its members (by the member's branch); a member with
+    // no branch is in the server's "Unassigned" row (`branch_id` null).
     //
-    // The server's wording wins because it is now scope-dependent — with a
-    // branch filter applied, share capital IS scoped through the member's
-    // branch (matching the Share Capital report), and only the unfiltered case
-    // is organisation-wide. What never changes is that share capital is
-    // excluded from `by_branch`, so the fallback claims only that.
+    // Always this plain sentence: the server's `share_capital.note` is written
+    // for developers (field names and formulas) and is never printed on the
+    // report. The sentence holds with or without a branch filter.
     sections.push({
       kind: "note",
-      text: String(
-        pick(shareBlock, ["note"]) ??
-          "Share capital cannot be attributed to a branch row, so the branch breakdown " +
-            "covers loan collections and releases only; add the share capital lines back " +
-            "to reach the totals above."
-      ),
+      text:
+        "Share capital paid in and out is in the row of the branch each member belongs to; " +
+        "members with no branch are under Unassigned.",
     });
   }
 

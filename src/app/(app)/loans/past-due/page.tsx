@@ -40,6 +40,7 @@ import { reportService } from "@/services";
 import { currencyOrDash } from "@/lib/report-format";
 import { compareFigure } from "./_lib/past-due-outstanding";
 import {
+  PAST_DUE_REQUEST_PARAMS,
   aggregateByLoan,
   mapRow,
   summarizePastDue,
@@ -133,7 +134,7 @@ function PastDueLoansContent() {
       // aggregateByLoan() under-reports days past due and amounts owed for any
       // loan whose periods it cannot all see.
       const { rows, complete, totals } = await reportService.duePastDueAll(
-        undefined,
+        PAST_DUE_REQUEST_PARAMS,
         (loaded, total) => setProgress({ loaded, total }),
       );
       setLoans(aggregateByLoan((rows as RawPastDueRow[]).map(mapRow)));

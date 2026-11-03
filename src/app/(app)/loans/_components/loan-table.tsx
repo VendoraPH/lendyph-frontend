@@ -22,6 +22,7 @@ import {
   loanBorrowerName,
   loanProductName,
   loanTerm,
+  offersAutoPay,
   type LoanSortKey,
   type SortDir,
 } from "./utils";
@@ -133,7 +134,7 @@ export function LoanTable({
                 {formatDate(loan.created_at)}
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
-                {["released", "current"].includes(loan.status) ? (
+                {offersAutoPay(loan.status) ? (
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"

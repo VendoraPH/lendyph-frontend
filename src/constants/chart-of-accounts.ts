@@ -91,6 +91,13 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "2200", name: "Taxes Payable", type: "liability", is_group: true, parent: "2000" },
   { code: "2210", name: "Withholding Tax Payable", type: "liability", parent: "2200" },
   { code: "2220", name: "Other Taxes Payable", type: "liability", parent: "2200" },
+  // A Documentary Stamp Tax withheld at release, owed to the BIR until remitted.
+  {
+    code: "2230",
+    name: "Documentary Stamp Tax Payable",
+    type: "liability",
+    parent: "2200",
+  },
 
   { code: "2300", name: "Other Liabilities", type: "liability", parent: "2000" },
 
@@ -184,6 +191,10 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   insurance_premium_payable: "2040",
   share_capital: "3060",
   other_fee_income: "4080",
+  // Taxes withheld at release are owed to the government, never income.
+  documentary_stamp_tax_payable: "2230",
+  withholding_tax_payable: "2210",
+  other_taxes_payable: "2220",
   credit_loss_expense: "5140",
   allowance_credit_losses: "1200",
   accounts_payable: "2010",

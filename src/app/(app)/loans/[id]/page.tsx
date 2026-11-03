@@ -78,7 +78,15 @@ import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-pre
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
-import { collectNowParts } from "./_lib/extension-preview";
+import {
+  collectNowParts,
+  extensionCycleUnit,
+  extensionCyclesLabel,
+  extensionCyclesSentence,
+  extensionMoveDescription,
+  freshInterestLabel,
+} from "./_lib/extension-preview";
+import { checkPaymentAmount } from "@/app/(app)/payments/_lib/payment-amount";
 import { previewRefusalMessage, recordPaymentErrorMessage } from "./_lib/payment-errors";
 import {
   dueNowHasOpenPeriod,
@@ -1272,6 +1280,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
   // The figure is as of today: another payment date shows a dash.
   const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The amount typed, checked for centavos: more than two decimals shows a
+  // message and sends neither the preview nor the payment (the server
+  // refuses it too).
+  const paymentAmountCheck = checkPaymentAmount(paymentAmount);
   // The server refused the amount and date typed now: posting them would be
   // refused too, so its reason shows and Record Payment waits for a change.
   const paymentRefusal =
@@ -1299,8 +1311,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       setPaymentPreview(null);
       return;
     }
-    const amt = Number(paymentAmount);
-    if (!paymentAmount || !Number.isFinite(amt) || amt <= 0) {
+    const amt = checkPaymentAmount(paymentAmount).amount;
+    if (amt === null || amt <= 0) {
       setPaymentPreview(null);
       return;
     }
@@ -1659,6 +1671,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // payload. Reimplementing it here would hide the button after one use even
   // though the API still allows more.
   const isOneMonthTermLoan = loan?.is_one_month_term ?? false;
+  // What the Extend dialog calls one cycle: a month on monthly and
+  // upon-maturity loans (anchored months), a cycle on any other frequency.
+  const extendCycleUnit = extensionCycleUnit(loan?.frequency ?? loan?.payment_frequency);
 
   // Posts a payment and, unless `refresh` is false, re-reads what it changed.
   // "Yes, extend" passes false: it extends straight afterwards and re-reads
@@ -1708,7 +1723,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || Number(paymentAmount) <= 0) return;
+    const amountPaid = checkPaymentAmount(paymentAmount).amount;
+    if (amountPaid === null || amountPaid <= 0) return;
     // Annotate the remarks so the receipt/audit log preserves the
     // cashier's intent. Backend only persists payment_date, amount_paid,
     // and remarks — no dedicated "is_advance" column — so the tag in
@@ -1724,7 +1740,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : paymentRemarks || undefined;
     const payload = {
       payment_date: formatDateISO(paymentDate),
-      amount_paid: Number(paymentAmount),
+      amount_paid: amountPaid,
       remarks: composedRemarks,
     };
 
@@ -1780,8 +1796,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       });
       toast.success(
         extendInterestOption === "pay"
-          ? "Interest collected and loan extended by one cycle"
-          : "Loan extended by one cycle — interest carried forward",
+          ? "Interest collected and loan extended"
+          : "Loan extended — interest carried forward",
       );
       setExtendOpen(false);
       setExtendRemarks("");
@@ -3089,8 +3105,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
           version={shareCapitalVersion}
         />
 
-        {/* Auto-Pay Status Card */}
-        {["released", "current"].includes(loan.status) && (
+        {/* Auto-Pay Status Card: the loans the backend's toggle accepts
+            (Loan::ACTIVE_STATUSES, released and ongoing), which both read
+            "Current". */}
+        {["released", "ongoing", "current"].includes(loan.status) && (
           <CollapsibleCard
             title="Auto-Pay"
             headerExtra={
@@ -4302,13 +4320,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 placeholder="0.00"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
+                aria-invalid={paymentAmountCheck.error !== null}
+                aria-describedby={paymentAmountCheck.error !== null ? "payment-amount-error" : undefined}
                 className="w-full"
               />
-              {paymentAmount && Number(paymentAmount) > 0 && (
+              {paymentAmountCheck.error !== null && (
+                <p id="payment-amount-error" role="alert" className="text-xs text-destructive">
+                  {paymentAmountCheck.error}
+                </p>
+              )}
+              {paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
                 <p className="text-[11px] text-muted-foreground tabular-nums">
                   Borrower will pay{" "}
                   <span className="font-semibold text-foreground">
-                    {formatCurrency(Number(paymentAmount))}
+                    {formatCurrency(paymentAmountCheck.amount)}
                   </span>
                 </p>
               )}
@@ -4430,7 +4455,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             );
           })()}
 
-          {paymentRefusal !== null && Number(paymentAmount) > 0 && (
+          {paymentRefusal !== null && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <p
               role="alert"
               className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
@@ -4440,7 +4465,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           )}
 
           {/* Allocation Preview */}
-          {paymentPreview && Number(paymentAmount) > 0 && (
+          {paymentPreview && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <>
               <Separator />
               <div className="space-y-4">
@@ -4655,7 +4680,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
                   <span className="text-muted-foreground">Total Recorded</span>
                   <span className="font-bold tabular-nums">
-                    {formatCurrency(Number(paymentAmount) || 0)}
+                    {formatCurrency(paymentAmountCheck.amount ?? 0)}
                   </span>
                 </div>
               </div>
@@ -4674,7 +4699,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
               className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRecordPayment}
               disabled={
-                actionLoading || !paymentAmount || Number(paymentAmount) <= 0 || paymentRefusal !== null
+                actionLoading ||
+                paymentAmountCheck.amount === null ||
+                paymentAmountCheck.amount <= 0 ||
+                paymentRefusal !== null
               }
             >
               {actionLoading ? (
@@ -4710,8 +4738,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
               Extend Loan
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will move the loan&apos;s due date forward by one cycle.
-              The principal and any remaining balance are unchanged.{" "}
+              {extensionMoveDescription(extendPreview.preview?.cycles ?? null, extendCycleUnit)} The
+              principal and any remaining balance are unchanged.{" "}
               {extendInterestOption === "pay"
                 ? "The amount below will be collected as a payment before the loan extends."
                 : "The interest due below stays unpaid and is added to the new period's interest."}
@@ -4774,13 +4802,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-emerald-200 pt-2 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">
                   <dt>Interest carried over</dt>
                   <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.carryInterest)}</dd>
-                  <dt>This cycle&apos;s interest</dt>
+                  <dt>{freshInterestLabel(extendPreview.preview.cycles, extendCycleUnit)}</dt>
                   <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.freshInterest)}</dd>
                   <dt>New period&apos;s interest</dt>
                   <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.newInterestDue)}</dd>
                   <dt className="font-semibold">New period&apos;s total due</dt>
                   <dd className="text-right font-semibold tabular-nums">{formatCurrency(extendPreview.preview.newTotalDue)}</dd>
                 </dl>
+                {(() => {
+                  // With the new period's figures, not under what "pay"
+                  // collects now: these months' interest is owed later.
+                  const sentence = extensionCyclesSentence(extendPreview.preview.cycles, extendCycleUnit);
+                  return sentence === null ? null : (
+                    <p className="mt-1 text-xs font-medium text-emerald-900 dark:text-emerald-200">{sentence}</p>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -4816,34 +4852,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Extension Details</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={1}
-                disabled
-                className="w-20"
-                aria-label="Extension duration"
-              />
-              <Select value="months" disabled>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Months" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="days">Days</SelectItem>
-                  <SelectItem value="months">Months</SelectItem>
-                  <SelectItem value="years">Years</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Every extension moves the due date forward by one fixed cycle.
-            </p>
-            <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-xs text-muted-foreground">New Maturity Date</p>
-              <p className="text-sm font-medium">
-                {extendPreview.preview ? formatDate(extendPreview.preview.newDueDate) : "—"}
-              </p>
-            </div>
+            {/* Both from the server's preview; a dash until it answers, and
+                for the cycles when it sent none. */}
+            <dl className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">Due Date Moves</dt>
+                <dd className="text-sm font-medium tabular-nums">
+                  {extensionCyclesLabel(extendPreview.preview?.cycles ?? null, extendCycleUnit)}
+                </dd>
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">New Due Date</dt>
+                <dd className="text-sm font-medium">
+                  {extendPreview.preview ? formatDate(extendPreview.preview.newDueDate) : "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
           <div className="space-y-2">
             <Label htmlFor="extend-remarks" className="text-xs">
