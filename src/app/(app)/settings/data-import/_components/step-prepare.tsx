@@ -127,13 +127,19 @@ function BranchGate({
 
   if (error || branches.length === 0) {
     const noBranches = !error && branches.length === 0;
+    // A caller without `view_all` sees only their own branches, so an empty
+    // list means none of THEIRS is active, and adding a branch is not theirs
+    // to do.
+    const noOwnBranches = noBranches && !viewAll;
     return (
       <Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>
-          {noBranches
-            ? "No active branch to import into"
-            : "Branches could not be loaded"}
+          {noOwnBranches
+            ? "None of your branches is active. Ask an administrator."
+            : noBranches
+              ? "No active branch to import into"
+              : "Branches could not be loaded"}
         </AlertTitle>
         <AlertDescription className="space-y-3">
           <p>
@@ -149,15 +155,17 @@ function BranchGate({
                 Try again
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              nativeButton={false}
-              render={<Link href="/settings/branches" />}
-            >
-              <Building2 className="size-3.5" aria-hidden="true" />
-              {noBranches ? "Add a branch" : "Open branch settings"}
-            </Button>
+            {!noOwnBranches && (
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/settings/branches" />}
+              >
+                <Building2 className="size-3.5" aria-hidden="true" />
+                {noBranches ? "Add a branch" : "Open branch settings"}
+              </Button>
+            )}
           </div>
         </AlertDescription>
       </Alert>
@@ -193,9 +201,13 @@ function BranchGate({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {branches.length === 1
-            ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
-            : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`}
+          {viewAll
+            ? branches.length === 1
+              ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`
+            : branches.length === 1
+              ? "1 of your branches is active, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} of your branches are active. Every imported member and loan lands in the one you pick.`}
         </p>
       </div>
 

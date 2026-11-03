@@ -10,7 +10,7 @@ import { RouteGuard } from "@/components/common";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
-import { branchPicker } from "@/lib/user-branches";
+import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,6 +104,8 @@ const EXPORT_FORMATS: {
 
 /** Sentinel for "no branch filter" — Select needs a string, not null. */
 const ALL_BRANCHES = "all";
+/** What an unfiltered report is labelled for a caller with `branches:view_all`. */
+const ALL_BRANCHES_LABEL = "All Branches";
 
 type Preset =
   | "today"
@@ -248,8 +250,10 @@ function ReportDetailContent() {
     }
   }
 
+  // The "Branch:" line on screen and in every export. Without `view_all` an
+  // unfiltered report covers only the caller's branches, so it says so.
   const branchLabel = report.supportsBranch
-    ? (branches.find((b) => b.id === branchId)?.name ?? "All Branches")
+    ? pickedBranchLabel(picker, branchId, ALL_BRANCHES_LABEL)
     : null;
 
   // Subject-scoped reports cannot run against nothing.
@@ -525,13 +529,11 @@ function ReportDetailContent() {
                     }}
                   >
                     <SelectTrigger className="h-9 w-56">
-                      <SelectValue>
-                        {() => (branchId === null ? picker.allLabel : branchLabel)}
-                      </SelectValue>
+                      <SelectValue>{() => branchLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>
-                        {picker.allLabel}
+                        {pickedBranchLabel(picker, null, ALL_BRANCHES_LABEL)}
                       </SelectItem>
                       {picker.branches.map((b) => (
                         <SelectItem key={b.id} value={String(b.id)}>

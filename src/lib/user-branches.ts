@@ -168,6 +168,25 @@ export function branchPicker<T extends { id: number }>(
 }
 
 /**
+ * The name of the branch a picker has selected, or, with none selected, what
+ * "every branch" covers for this viewer: `viewAllLabel` with
+ * `branches:view_all`, otherwise the picker's own label ("All my branches"),
+ * because the API then reads no `branch_id` as the caller's branches only.
+ *
+ * A selected id the picker doesn't offer falls back the same way: the label
+ * never names a branch the viewer can't pick.
+ */
+export function pickedBranchLabel<T extends { id: number; name: string }>(
+  picker: BranchPicker<T>,
+  branchId: number | null,
+  viewAllLabel = "All branches",
+): string {
+  const picked = branchId === null ? undefined : picker.branches.find((b) => b.id === branchId);
+  if (picked) return picked.name;
+  return picker.viewer.viewAll ? viewAllLabel : picker.allLabel;
+}
+
+/**
  * True when the API will refuse to act on `target` (edit, reset password,
  * deactivate) because they also work in a branch the caller doesn't hold. It
  * answers that refusal as a 404, the same as a missing user, so the page has

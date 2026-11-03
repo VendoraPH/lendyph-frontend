@@ -8,6 +8,7 @@ import {
   branchSelectItems,
   branchViewer,
   lacksBranchAccess,
+  pickedBranchLabel,
   primaryBranchId,
   userBranchIds,
   userBranches,
@@ -317,4 +318,26 @@ test("an unknown caller claims nothing", () => {
 
 test("a target with no branch is in reach", () => {
   assert.equal(worksOutsideCallerBranches({ id: 2, branches: [] } as unknown as User, caller, false), false);
+});
+
+// ── pickedBranchLabel: the report's "Branch:" line, on screen and in exports ──
+
+test("a selected branch is labelled by its name", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), 9, "All Branches"), "North");
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), 12, "All Branches"), "South");
+});
+
+test("no branch reads the view_all label for a caller with view_all", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), null, "All Branches"), "All Branches");
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, true), null), "All branches");
+});
+
+test("no branch reads \"All my branches\" for a caller without view_all", () => {
+  // The report then covers only the caller's branches; "All Branches" on an
+  // exported PDF would claim the whole cooperative.
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), null, "All Branches"), "All my branches");
+});
+
+test("a selected branch the picker doesn't offer is never named", () => {
+  assert.equal(pickedBranchLabel(branchPicker(allBranches, northOnly, false), 12, "All Branches"), "All my branches");
 });
