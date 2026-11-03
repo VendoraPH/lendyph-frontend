@@ -1797,7 +1797,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       });
       toast.success(
         extendInterestOption === "pay"
-          ? "Interest collected and loan extended"
+          ? "Payment collected and loan extended"
           : "Loan extended — interest carried forward",
       );
       setExtendOpen(false);
@@ -4829,13 +4829,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 {/* Render function, else the trigger shows the raw value */}
                 <SelectValue>
                   {(value: string | null) =>
-                    value === "defer" ? "Defer Outstanding Interest" : "Pay Outstanding Interest"
+                    value === "defer" ? "Defer Outstanding Interest" : "Pay what's owed now"
                   }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pay">
-                  <span className="font-medium">Pay Outstanding Interest</span>
+                  <span className="font-medium">Pay what&apos;s owed now</span>
                   <span className="block text-xs text-muted-foreground">
                     Pay the premium owed, late penalty and interest before extension
                   </span>

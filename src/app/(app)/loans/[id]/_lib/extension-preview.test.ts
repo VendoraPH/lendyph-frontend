@@ -169,6 +169,18 @@ test("defer collects nothing now and shows the carried and fresh interest", () =
   });
 });
 
+test("only plain decimal strings are read; hex, exponent and other strings show a dash", () => {
+  // Number() would read "0x10" as 16 and "1e3" as 1,000: figures the server
+  // never sent.
+  for (const junk of ["0x10", "1e3", "Infinity", " 12.50", "12.", ".5", "+5", "1,000.00"]) {
+    const view = readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, interest_part: junk } }, "pay");
+    assert.equal(view?.collectNow?.interestPart, null, junk);
+  }
+  assert.equal(readExtensionPreview({ ...PAY, new_total_due: "1e3" }, "pay"), null);
+  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, amount: "-0.50" } }, "pay")?.collectNow?.amount, -0.5);
+  assert.equal(readExtensionPreview({ ...PAY, collect_now: { ...PAY.collect_now, amount: Infinity } }, "pay")?.collectNow?.amount, null);
+});
+
 test("decimal strings, as a decimal cast sends them, are read as their figures", () => {
   const view = readExtensionPreview({ ...DEFER, new_total_due: "76000.50" }, "defer");
   assert.equal(view?.newTotalDue, 76000.5);

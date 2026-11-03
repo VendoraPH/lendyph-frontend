@@ -41,11 +41,18 @@ export interface ExtensionPreviewView {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A decimal as a decimal cast sends it: digits, an optional sign and fraction. */
+const DECIMAL_PATTERN = /^-?\d+(\.\d+)?$/;
+
+/**
+ * A figure as sent: a finite number, or a plain decimal string. Anything
+ * else ("0x10", "1e3", "Infinity", "") is unreadable and shows a dash, never
+ * a number JavaScript happens to read out of it.
+ */
 function figure(raw: unknown): number | null {
-  if (typeof raw !== "number" && typeof raw !== "string") return null;
-  if (typeof raw === "string" && raw.trim() === "") return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== "string" || !DECIMAL_PATTERN.test(raw)) return null;
+  return Number(raw);
 }
 
 function record(raw: unknown): Record<string, unknown> | null {
