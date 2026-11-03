@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   BookOpenCheck,
   Gauge,
+  PiggyBank,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -106,6 +107,25 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
     ],
   },
+  // Savings & Deposits — gated on NEXT_PUBLIC_ENABLE_SAVINGS at build time AND
+  // on the server's `savings:*` permissions, which the backend has not seeded
+  // yet (docs/SAVINGS_BACKEND_HANDOFF.md). The routes 404 when the flag is off.
+  // The parent gates on the module's `savings:view`; until the accounts pages
+  // (savings:view) and the dashboard land, its children are the only routes.
+  ...(env.features.savings
+    ? [
+        {
+          title: "Savings & Deposits",
+          href: "/savings/products",
+          icon: PiggyBank,
+          permission: "savings:view",
+          children: [
+            { title: "Products", href: "/savings/products", permission: "savings_products:manage" },
+            { title: "Settings", href: "/savings/settings", permission: "savings:settings" },
+          ],
+        } satisfies NavItem,
+      ]
+    : []),
   {
     title: "Collateral",
     href: "/collaterals",
