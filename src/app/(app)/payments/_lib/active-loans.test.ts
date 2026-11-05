@@ -1,324 +1,244 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Loan, PaginatedResponse } from "@/types";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Loan } from "@/types";
+import * as activeLoans from "./active-loans";
 import {
-  ACTIVE_STATUS,
-  LOANS_PER_PAGE,
-  fetchAllActiveLoans,
-  type LoanPageFetcher,
+  ACTIVE_LOANS_PER_PAGE,
+  ACTIVE_LOAN_SEARCH_DEBOUNCE_MS,
+  activeLoanCardParams,
+  activeLoanDueCell,
+  activeLoanListParams,
+  mapLoanToActiveLoan,
+  normaliseLoanSearch,
+  pageAfterEmptyAnswer,
+  readActiveLoanPage,
+  readLoanListTotals,
 } from "./active-loans";
 
-type RequestLog = { status: string; page: number; per_page: number }[];
-
-const loan = (id: number): Loan => ({ id }) as Loan;
-
-/**
- * A stand-in for `LoanController::index()`, reproducing the two behaviours this
- * screen depends on: `per_page` is silently clamped to 100 rather than
- * rejected, and pages past the end come back empty.
- */
-function stubApi(rows: Loan[], log: RequestLog, maxPerPage = 100): LoanPageFetcher {
-  return async ({ status, page, per_page }) => {
-    log.push({ status, page, per_page });
-    const perPage = Math.min(Math.max(per_page, 1), maxPerPage);
-    const start = (page - 1) * perPage;
-    return {
-      data: rows.slice(start, start + perPage),
-      meta: {
-        current_page: page,
-        last_page: Math.max(1, Math.ceil(rows.length / perPage)),
-        per_page: perPage,
-        total: rows.length,
-      },
-    } satisfies PaginatedResponse<Loan>;
-  };
+/** A `GET /loans?view=summary` row: the agreed fields, and no schedule. */
+function summaryRow(overrides: Record<string, unknown> = {}): Loan {
+  return {
+    id: 7,
+    application_number: "LA-7",
+    loan_account_number: "LN-7",
+    borrower: { id: 3, full_name: "Maria Santos", borrower_code: "M-3" },
+    loan_product: { id: 2, name: "Salary Loan" },
+    branch: { id: 1, name: "Main" },
+    principal_amount: 20000,
+    term: 12,
+    frequency: "monthly",
+    status: "ongoing",
+    display_status: "ongoing",
+    released_at: "2026-10-01",
+    next_due_date: "2026-11-30",
+    next_due_amount: 1833.34,
+    total_outstanding: 21000.5,
+    outstanding_principal: 18000,
+    overdue_amount: 0,
+    ...overrides,
+  } as unknown as Loan;
 }
 
-test("collects every active loan across pages, not just the first", async () => {
-  const rows = Array.from({ length: 237 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  const result = await fetchAllActiveLoans(stubApi(rows, log));
-
-  assert.equal(result.loans.length, 237);
-  assert.equal(result.total, 237);
-  assert.equal(result.truncated, false);
-  assert.deepEqual(
-    result.loans.map((l) => l.id),
-    rows.map((l) => l.id),
-  );
-});
-
-// The bug: `per_page: 500` was clamped to 100 server-side and the screen kept
-// the truncated page as if it were everything.
-test("asks for the server's documented maximum page size, so nothing is clamped away", async () => {
-  const log: RequestLog = [];
-  await fetchAllActiveLoans(stubApi([loan(1)], log));
-
-  assert.equal(LOANS_PER_PAGE, 100);
-  assert.equal(log[0].per_page, 100);
-});
-
-test("filters server-side with the virtual active status on every page", async () => {
-  const rows = Array.from({ length: 150 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  await fetchAllActiveLoans(stubApi(rows, log));
-
-  assert.equal(ACTIVE_STATUS, "active");
-  assert.deepEqual(
-    log.map((r) => r.status),
-    ["active", "active"],
-  );
-  assert.deepEqual(
-    log.map((r) => r.page),
-    [1, 2],
-  );
-});
-
-test("stops after one request when the whole set fits on one page", async () => {
-  const rows = Array.from({ length: 40 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  const result = await fetchAllActiveLoans(stubApi(rows, log));
-
-  assert.equal(log.length, 1);
-  assert.equal(result.loans.length, 40);
-});
-
-// An exact multiple of the page size is the boundary case: page 2 is full, page
-// 3 is empty, and `last_page` is what stops this rather than a short page.
-test("stops on last_page when the final page is exactly full", async () => {
-  const rows = Array.from({ length: 200 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  const result = await fetchAllActiveLoans(stubApi(rows, log));
-
-  assert.equal(result.loans.length, 200);
-  assert.equal(log.length, 2);
-  assert.equal(result.truncated, false);
-});
-
-// Regression: "is this page full?" was measured against the size we ASKED for,
-// so a server clamping harder than expected returned a page that looked short
-// and the loop stopped after one of twenty-seven pages — silently, which is the
-// exact shape of the bug this module replaces. The end of the list is the
-// server's to declare, not ours to infer from our own number.
-test("keeps paging when the server clamps per_page below the request", async () => {
-  const rows = Array.from({ length: 132 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  const result = await fetchAllActiveLoans(stubApi(rows, log, 5), {
-    maxPages: 40,
+// The screen used to drain every active loan: 32 MB raw at 2,000 loans, and it
+// stopped there. Everything it asks for now is one summary page.
+test("asks the server for one summary page of active loans", () => {
+  assert.equal(ACTIVE_LOANS_PER_PAGE, 25);
+  assert.deepEqual(activeLoanListParams({ query: "", page: 1, perPage: ACTIVE_LOANS_PER_PAGE }), {
+    status: "active",
+    view: "summary",
+    page: 1,
+    per_page: 25,
   });
-
-  assert.equal(log.length, 27); // ceil(132 / 5)
-  assert.equal(log[0].per_page, 100); // still asked for the documented maximum
-  assert.equal(result.loans.length, 132);
-  assert.equal(result.truncated, false);
 });
 
-test("reports an empty portfolio as a real zero, not as unknown", async () => {
-  const result = await fetchAllActiveLoans(stubApi([], []));
-
-  assert.deepEqual(result.loans, []);
-  assert.equal(result.total, 0);
-  assert.equal(result.truncated, false);
-});
-
-// The guard has to be loud. A silent cap is the bug it replaces.
-test("flags truncation instead of silently returning a partial list", async () => {
-  const rows = Array.from({ length: 1000 }, (_, i) => loan(i + 1));
-  const log: RequestLog = [];
-
-  const result = await fetchAllActiveLoans(stubApi(rows, log), {
-    perPage: 10,
-    maxPages: 3,
+test("the search goes to the server with the page", () => {
+  assert.deepEqual(activeLoanListParams({ query: "santos", page: 3, perPage: 50 }), {
+    status: "active",
+    view: "summary",
+    page: 3,
+    per_page: 50,
+    search: "santos",
   });
-
-  assert.equal(log.length, 3);
-  assert.equal(result.loans.length, 30);
-  assert.equal(result.truncated, true);
-  // The caller can name what is missing, because the total is the server's.
-  assert.equal(result.total, 1000);
 });
 
-test("a page count that fits exactly inside the guard is not flagged", async () => {
-  const rows = Array.from({ length: 30 }, (_, i) => loan(i + 1));
+test("the search waits for typing to pause for 300 ms", () => {
+  assert.equal(ACTIVE_LOAN_SEARCH_DEBOUNCE_MS, 300);
+});
 
-  const result = await fetchAllActiveLoans(stubApi(rows, []), {
-    perPage: 10,
-    maxPages: 3,
+test("what was typed is trimmed and inner spaces collapse", () => {
+  assert.equal(normaliseLoanSearch("  maria   santos "), "maria santos");
+  assert.equal(normaliseLoanSearch("   "), "");
+});
+
+test("the cards' own read is the smallest page of the unsearched list", () => {
+  assert.deepEqual(activeLoanCardParams(), {
+    status: "active",
+    view: "summary",
+    per_page: 1,
   });
-
-  assert.equal(result.loans.length, 30);
-  assert.equal(result.truncated, false);
 });
 
-// Talking to an API build that answers with the bare `{success, data}` envelope
-// (or that `api.get` has already unwrapped) must not spin: one full-looking
-// page with no `meta` has to terminate on the short page, not on the guard.
-test("survives a response with no meta by stopping at the first short page", async () => {
-  const log: RequestLog = [];
-  const fetchPage = (async ({ page, per_page }) => {
-    log.push({ status: ACTIVE_STATUS, page, per_page });
-    return {
-      data: page === 1 ? Array.from({ length: 100 }, (_, i) => loan(i + 1)) : [],
-    } as unknown as PaginatedResponse<Loan>;
-  }) satisfies LoanPageFetcher;
-
-  const result = await fetchAllActiveLoans(fetchPage);
-
-  assert.equal(log.length, 2);
-  assert.equal(result.loans.length, 100);
-  assert.equal(result.total, null);
-  assert.equal(result.truncated, false);
-});
-
-test("treats a bare array response as a single complete page", async () => {
-  const fetchPage = (async () =>
-    [loan(1), loan(2)] as unknown as PaginatedResponse<Loan>) satisfies LoanPageFetcher;
-
-  const result = await fetchAllActiveLoans(fetchPage);
-
-  assert.equal(result.loans.length, 2);
-  assert.equal(result.total, null);
-  assert.equal(result.truncated, false);
-});
-
-// A nonsense `last_page` must not be able to outrun the guard.
-test("a runaway last_page is bounded by the guard and reported", async () => {
-  const log: RequestLog = [];
-  const fetchPage = (async ({ page, per_page }) => {
-    log.push({ status: ACTIVE_STATUS, page, per_page });
-    return {
-      data: Array.from({ length: 10 }, (_, i) => loan(page * 100 + i)),
-      meta: {
-        current_page: page,
-        last_page: 999_999,
-        per_page: 10,
-        total: 9_999_990,
-      },
-    } satisfies PaginatedResponse<Loan>;
-  }) satisfies LoanPageFetcher;
-
-  const result = await fetchAllActiveLoans(fetchPage, {
-    perPage: 10,
-    maxPages: 5,
-  });
-
-  assert.equal(log.length, 5);
-  assert.equal(result.truncated, true);
-});
-
-test("ignores a non-numeric or zero last_page rather than stopping on it", async () => {
-  const log: RequestLog = [];
-  const fetchPage = (async ({ page, per_page }) => {
-    log.push({ status: ACTIVE_STATUS, page, per_page });
-    return {
-      data: page <= 2 ? Array.from({ length: 10 }, (_, i) => loan(page * 10 + i)) : [],
-      meta: { current_page: page, last_page: 0, per_page: 10, total: 20 },
-    } satisfies PaginatedResponse<Loan>;
-  }) satisfies LoanPageFetcher;
-
-  const result = await fetchAllActiveLoans(fetchPage, { perPage: 10 });
-
-  assert.equal(result.loans.length, 20);
-  assert.equal(log.length, 3);
-  assert.equal(result.truncated, false);
-});
-
-test("propagates a failed page rather than returning a partial list as complete", async () => {
-  const fetchPage = (async ({ page }) => {
-    if (page === 2) throw new Error("boom");
-    return {
-      data: Array.from({ length: 10 }, (_, i) => loan(i + 1)),
-      meta: { current_page: 1, last_page: 4, per_page: 10, total: 40 },
-    } satisfies PaginatedResponse<Loan>;
-  }) satisfies LoanPageFetcher;
-
-  await assert.rejects(
-    () => fetchAllActiveLoans(fetchPage, { perPage: 10 }),
-    /boom/,
-  );
-});
-
-// The cards used to add up `outstanding_balance` (principal + premium) over the
-// rows they had fetched. They now read the server's own totals, which cover
-// every active loan whether or not the drain got all of them.
-function withTotals(rows: Loan[], perPage: number, totals: unknown): LoanPageFetcher {
-  return async ({ page }) => ({
-    data: rows.slice((page - 1) * perPage, page * perPage),
+test("reads the rows, the page count, the total and the server's totals", () => {
+  const page = readActiveLoanPage({
+    data: [summaryRow()],
     meta: {
-      current_page: page,
-      last_page: Math.max(1, Math.ceil(rows.length / perPage)),
-      per_page: perPage,
-      total: rows.length,
-      totals,
+      current_page: 2,
+      last_page: 4,
+      per_page: 25,
+      total: 80,
+      totals: { total_outstanding: "141600.50", overdue_amount: 11800, overdue_count: 1 },
     },
-  }) as unknown as PaginatedResponse<Loan>;
-}
+  });
 
-test("returns the server's list totals from meta.totals", async () => {
-  const result = await fetchAllActiveLoans(
-    withTotals([loan(1), loan(2)], 100, {
-      total_outstanding: 141_600,
-      overdue_amount: 11_800,
-      overdue_count: 1,
-    }),
-  );
-
-  assert.deepEqual(result.totals, {
-    total_outstanding: 141_600,
-    overdue_amount: 11_800,
+  assert.deepEqual(page.rows.map((row) => row.id), [7]);
+  assert.equal(page.total, 80);
+  assert.equal(page.lastPage, 4);
+  assert.deepEqual(page.totals, {
+    total_outstanding: 141600.5,
+    overdue_amount: 11800,
     overdue_count: 1,
   });
 });
 
-test("reads decimal-string totals as numbers", async () => {
-  const result = await fetchAllActiveLoans(
-    withTotals([loan(1)], 100, {
-      total_outstanding: "70800.50",
-      overdue_amount: "0.00",
-      overdue_count: 0,
+test("an empty portfolio is a real zero, not unknown", () => {
+  const page = readActiveLoanPage({
+    data: [],
+    meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
+  });
+
+  assert.equal(page.total, 0);
+  assert.deepEqual(page.rows, []);
+});
+
+test("a response with no meta states no total, and is one page", () => {
+  const page = readActiveLoanPage({ data: [summaryRow()] });
+
+  assert.equal(page.total, null);
+  assert.equal(page.lastPage, 1);
+  assert.equal(page.totals, null);
+});
+
+test("a figure the server did not send is null, never 0", () => {
+  assert.deepEqual(
+    readLoanListTotals({ meta: { totals: { total_outstanding: 500, overdue_amount: null } } }),
+    { total_outstanding: 500, overdue_amount: null, overdue_count: null },
+  );
+});
+
+test("no meta.totals at all gives null totals, not a browser sum", () => {
+  assert.equal(readLoanListTotals({ data: [summaryRow()], meta: { total: 1 } }), null);
+});
+
+// A payment can settle the only loan on the last page.
+test("an empty answer past the last page steps back to the last page", () => {
+  assert.equal(pageAfterEmptyAnswer({ requested: 4, lastPage: 3, rowCount: 0 }), 3);
+});
+
+test("a page with rows, and page 1, stay where they are", () => {
+  assert.equal(pageAfterEmptyAnswer({ requested: 4, lastPage: 4, rowCount: 2 }), null);
+  assert.equal(pageAfterEmptyAnswer({ requested: 1, lastPage: 1, rowCount: 0 }), null);
+});
+
+test("a summary row maps to the table's fields", () => {
+  const loan = mapLoanToActiveLoan(summaryRow());
+
+  assert.equal(loan.id, 7);
+  assert.equal(loan.loan_account_number, "LN-7");
+  assert.equal(loan.borrower_name, "Maria Santos");
+  assert.equal(loan.loan_product_name, "Salary Loan");
+  assert.equal(loan.next_due_date, "2026-11-30");
+  assert.equal(loan.next_due_amount, 1833.34);
+  assert.equal(loan.total_outstanding, 21000.5);
+  assert.equal(loan.overdue_amount, 0);
+});
+
+test("what a summary row doesn't carry stays unknown until the full loan loads", () => {
+  const loan = mapLoanToActiveLoan(summaryRow());
+
+  assert.equal(loan.interest_rate, null);
+  assert.equal(loan.amount_due_now, null);
+});
+
+test("a full loan fills in the dialog's figures", () => {
+  const loan = mapLoanToActiveLoan(
+    summaryRow({
+      interest_rate: 1.5,
+      interest_method: "diminishing",
+      amount_due_now: {
+        amount: 2000,
+        insurance: 0,
+        penalty: 100,
+        interest: 300,
+        principal: 1600,
+        share_capital_build_up: 0,
+        period_number: 2,
+        last_period_number: 2,
+        schedule_id: 9,
+        as_of: "2026-11-05",
+      },
     }),
   );
 
-  assert.deepEqual(result.totals, {
-    total_outstanding: 70_800.5,
-    overdue_amount: 0,
-    overdue_count: 0,
-  });
+  assert.equal(loan.interest_rate, 1.5);
+  assert.equal(loan.interest_type, "diminishing");
+  assert.equal(loan.amount_due_now?.amount, 2000);
 });
 
-test("keeps the totals when the drain is truncated: they cover every row, not the rows fetched", async () => {
-  const rows = Array.from({ length: 30 }, (_, i) => loan(i + 1));
-  const result = await fetchAllActiveLoans(
-    withTotals(rows, 10, { total_outstanding: 999_999.99, overdue_amount: 5, overdue_count: 2 }),
-    { perPage: 10, maxPages: 2 },
+test("an upon-maturity loan's next due date is its maturity date when the row sends one", () => {
+  const loan = mapLoanToActiveLoan(
+    summaryRow({ frequency: "upon_maturity", maturity_date: "2027-01-31" }),
+  );
+  assert.equal(loan.next_due_date, "2027-01-31");
+});
+
+test("an upon-maturity summary row without a maturity date reads the server's next due date", () => {
+  const loan = mapLoanToActiveLoan(summaryRow({ frequency: "upon_maturity" }));
+  assert.equal(loan.next_due_date, "2026-11-30");
+});
+
+test("the Due Amount cell prefers the server's amount due now, with its notes", () => {
+  const cell = activeLoanDueCell(
+    mapLoanToActiveLoan(
+      summaryRow({
+        amount_due_now: {
+          amount: 2100,
+          insurance: 50,
+          penalty: 100,
+          interest: 300,
+          principal: 1650,
+          share_capital_build_up: 0,
+          period_number: 2,
+          last_period_number: 2,
+          schedule_id: 9,
+          as_of: "2026-11-05",
+        },
+      }),
+    ),
   );
 
-  assert.equal(result.truncated, true);
-  assert.equal(result.totals?.total_outstanding, 999_999.99);
+  assert.equal(cell.amount, "₱2,100.00");
+  assert.equal(cell.penaltyNote, "incl. ₱100.00 penalty");
+  assert.equal(cell.insuranceNote, "incl. ₱50.00 premium");
 });
 
-test("a figure the server did not send is null, never 0", async () => {
-  const result = await fetchAllActiveLoans(
-    withTotals([loan(1)], 100, { total_outstanding: 500, overdue_amount: null }),
-  );
+test("a summary row's Due Amount is the server's next_due_amount", () => {
+  const cell = activeLoanDueCell(mapLoanToActiveLoan(summaryRow()));
 
-  assert.deepEqual(result.totals, {
-    total_outstanding: 500,
-    overdue_amount: null,
-    overdue_count: null,
-  });
+  assert.equal(cell.amount, "₱1,833.34");
+  assert.equal(cell.penaltyNote, null);
+  assert.equal(cell.insuranceNote, null);
 });
 
-test("no meta.totals at all gives null totals, not a browser sum", async () => {
-  const rows = [
-    { id: 1, outstanding_balance: 60_400, total_outstanding: 70_800 },
-  ] as unknown as Loan[];
-  const result = await fetchAllActiveLoans(stubApi(rows, []));
+test("₱0.00 is a figure and shows; only a missing one is a dash", () => {
+  assert.equal(activeLoanDueCell(mapLoanToActiveLoan(summaryRow({ next_due_amount: 0 }))).amount, "₱0.00");
+  assert.equal(activeLoanDueCell(mapLoanToActiveLoan(summaryRow({ next_due_amount: undefined }))).amount, "—");
+});
 
-  assert.equal(result.totals, null);
+test("the drain is gone from the module and from the screen", () => {
+  assert.equal("fetchAllActiveLoans" in activeLoans, false);
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  assert.equal(page.includes("fetchAllActiveLoans"), false);
+  assert.equal(page.includes("This list is incomplete"), false);
 });
