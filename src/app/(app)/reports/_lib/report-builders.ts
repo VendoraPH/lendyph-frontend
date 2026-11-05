@@ -849,7 +849,7 @@ export function buildBorrowerDoc(
     sections.push({
       kind: "note",
       text:
-        "Active: at least one collectible loan as of the end of the period. New: registered in the period. Repeat: at least 2 loans released. A repeat member who is neither active nor new counts on the Repeat card but is not listed here.",
+        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. A repeat member who is neither active nor new counts on the Repeat card but is not listed here.",
     });
   }
 
@@ -1073,7 +1073,7 @@ const SOA_SCHEDULE_COLUMNS: ReportColumn[] = [
   { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
   { key: "total_due", header: "Total Due", format: "currency", align: "right", width: 130 },
-  { key: "amount_paid", header: "Paid", format: "currency", align: "right", width: 120 },
+  { key: "total_paid", header: "Paid", format: "currency", align: "right", width: 120 },
   { key: "balance", header: "Balance", format: "currency", align: "right", width: 130 },
   { key: "status", header: "Status", format: "text", width: 100 },
 ];
@@ -1110,7 +1110,7 @@ function soaScheduleColumns(hasBuildUp: boolean): ReportColumn[] {
  * it, so a line adds up to the amount received, and end on the principal
  * balance. The split is the server's: nothing here is worked out from the amount.
  */
-function soaTransactionColumns(hasBuildUp: boolean): ReportColumn[] {
+function soaTransactionColumns(hasBuildUp: boolean, hasOverpayment: boolean): ReportColumn[] {
   const money = (key: string, header: string, width: number): ReportColumn => ({
     key,
     header,
@@ -1126,6 +1126,7 @@ function soaTransactionColumns(hasBuildUp: boolean): ReportColumn[] {
     money("penalty_applied", "Penalty", 110),
     money("insurance_applied", "Insurance Premium", 140),
     ...(hasBuildUp ? [money("build_up_applied", "Build-Up", 110)] : []),
+    ...(hasOverpayment ? [money("overpayment_applied", "Overpayment", 120)] : []),
     money("principal_balance", "Principal Balance", 140),
   ];
 }
@@ -1141,9 +1142,9 @@ function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unkn
     total_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
     build_up_due: pick(raw, ["build_up_due"]),
     total_payment: pick(raw, ["total_payment"]),
-    // The server's principal_paid + interest_paid for the period; "—" when it
-    // is missing, never the components added here.
-    amount_paid: pick(raw, ["amount_paid"]),
+    // What the server says was paid on the period; "—" when it is missing, never
+    // `amount_paid` or the components added here.
+    total_paid: pick(raw, ["total_paid"]),
     // What the period still owes, as the server worked it out; "—" without it.
     balance: pick(raw, ["amount_remaining"]),
     status: pick(raw, ["status"]),
@@ -1198,6 +1199,7 @@ function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string
     penalty_applied: toNumber(pick(raw, ["penalty_applied"])),
     insurance_applied: toNumber(pick(raw, ["insurance_applied"])),
     build_up_applied: toNumber(pick(raw, ["build_up_applied"])),
+    overpayment_applied: toNumber(pick(raw, ["overpayment_applied"])),
     principal_balance: pick(raw, ["principal_balance", "balance"]),
   };
 }
@@ -1257,6 +1259,9 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
   ).map(normalizeSoaTransactionRow);
   const hasBuildUp = pick(loan, ["has_build_up"]) === true;
   const scheduleNote = pick(obj, ["schedule_note"]);
+  const hasOverpayment = transactionRows.some(
+    (row) => row.overpayment_applied !== null && row.overpayment_applied !== 0
+  );
 
   const outstanding =
     pick(summary, ["outstanding_balance", "total_balance", "balance"]) ??
@@ -1324,8 +1329,8 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
                 ]
               : []),
             {
-              column: "amount_paid",
-              value: currencyOrDash(pick(scheduleTotals, ["amount_paid"])),
+              column: "total_paid",
+              value: currencyOrDash(pick(scheduleTotals, ["total_paid"])),
             },
           ]
         : undefined,
@@ -1339,7 +1344,7 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
   sections.push({
     kind: "table",
     title: "Transaction History",
-    columns: soaTransactionColumns(hasBuildUp),
+    columns: soaTransactionColumns(hasBuildUp, hasOverpayment),
     compact: true,
     rows: transactionRows,
     totals:
@@ -1351,6 +1356,14 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
               value: currencyOrDash(pick(transactionTotals, ["debit"])),
             },
             { column: "credit", value: currencyOrDash(pick(transactionTotals, ["credit"])) },
+            ...(hasOverpayment
+              ? [
+                  {
+                    column: "overpayment_applied",
+                    value: currencyOrDash(pick(transactionTotals, ["overpayment_applied"])),
+                  },
+                ]
+              : []),
           ]
         : undefined,
     emptyText: "No transactions have been recorded against this loan.",

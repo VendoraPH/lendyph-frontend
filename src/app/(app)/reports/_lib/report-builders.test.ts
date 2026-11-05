@@ -381,6 +381,7 @@ test("member list says, under the table, how each mark is defined and who a card
 
   assert.ok(after && after.kind === "note", "expected a note right after the table");
   assert.match(after.text, /Active: at least one collectible loan/);
+  assert.match(after.text, /each loan's current status, not its status back then/);
   assert.match(after.text, /New: registered in the period/);
   assert.match(after.text, /Repeat: at least 2 loans released/);
   assert.match(after.text, /neither active nor new/);
@@ -1517,6 +1518,7 @@ const SOA_PAYLOAD = {
       principal_paid: 8000,
       interest_paid: 1500,
       amount_paid: 9500,
+      total_paid: 9615.98,
       amount_remaining: 0,
       status: "paid",
     },
@@ -1531,6 +1533,7 @@ const SOA_PAYLOAD = {
       principal_paid: 0,
       interest_paid: 0,
       amount_paid: 0,
+      total_paid: 0,
       amount_remaining: 9510,
       status: "overdue",
     },
@@ -1541,6 +1544,7 @@ const SOA_PAYLOAD = {
     penalty_amount: 250,
     total_due: 19010,
     amount_paid: 9500,
+    total_paid: 9615.98,
   },
   transactions: [
     {
@@ -1679,15 +1683,15 @@ test("statement of account's schedule Balance is the server's amount_remaining o
 test("the amortization schedule shows each period's paid figure as the server sent it", () => {
   const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Amortization Schedule");
 
-  assert.equal(table.rows[0].amount_paid, 9500);
-  assert.equal(table.rows[1].amount_paid, 0);
+  assert.equal(table.rows[0].total_paid, 9615.98);
+  assert.equal(table.rows[1].total_paid, 0);
   assert.equal(table.rows[1].balance, 9510);
 });
 
-test("a period without amount_paid shows a dash, not principal_paid + interest_paid", () => {
+test("a period without total_paid shows a dash, not amount_paid or its components added up", () => {
   const [first, second] = SOA_PAYLOAD.amortization_schedule;
-  const { amount_paid, ...withoutPaid } = first;
-  void amount_paid;
+  const { total_paid, ...withoutPaid } = first;
+  void total_paid;
   const table = namedTable(
     buildStatementOfAccountDoc(
       { ...SOA_PAYLOAD, amortization_schedule: [withoutPaid, second] },
@@ -1695,11 +1699,23 @@ test("a period without amount_paid shows a dash, not principal_paid + interest_p
     ),
     "Amortization Schedule"
   );
-  const paid = table.columns.find((c) => c.key === "amount_paid");
+  const paid = table.columns.find((c) => c.key === "total_paid");
   assert.ok(paid);
+  assert.equal(paid.header, "Paid");
 
-  assert.equal(table.rows[0].amount_paid, null);
+  assert.equal(table.rows[0].total_paid, null);
   assert.equal(formatCell(table.rows[0], paid), DASH);
+  assert.equal(table.columns.some((c) => c.key === "amount_paid"), false);
+});
+
+test("the schedule's Paid footer is total_paid, never amount_paid", () => {
+  const { total_paid, ...withoutTotal } = SOA_PAYLOAD.schedule_totals;
+  void total_paid;
+  const doc = buildStatementOfAccountDoc({ ...SOA_PAYLOAD, schedule_totals: withoutTotal }, RANGE);
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_paid"), DASH);
+
+  const sent = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(namedTableTotal(sent, "Amortization Schedule", "total_paid"), "₱9,615.98");
 });
 
 test("the schedule footer is the server's schedule_totals", () => {
@@ -1712,7 +1728,7 @@ test("the schedule footer is the server's schedule_totals", () => {
         interest_due: 7560.5,
         penalty_amount: 1250.25,
         total_due: 56810.75,
-        amount_paid: 28500,
+        total_paid: 28500,
       },
     },
     RANGE
@@ -1722,7 +1738,7 @@ test("the schedule footer is the server's schedule_totals", () => {
   assert.equal(namedTableTotal(doc, "Amortization Schedule", "interest_due"), "₱7,560.50");
   assert.equal(namedTableTotal(doc, "Amortization Schedule", "penalty_amount"), "₱1,250.25");
   assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_due"), "₱56,810.75");
-  assert.equal(namedTableTotal(doc, "Amortization Schedule", "amount_paid"), "₱28,500.00");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_paid"), "₱28,500.00");
 });
 
 test("the transaction footer is the server's transaction_totals", () => {
@@ -1741,7 +1757,7 @@ test("statement footers show dashes, not sums of the rows, without the server's 
   void transaction_totals;
   const doc = buildStatementOfAccountDoc(withoutTotals, RANGE);
 
-  for (const column of ["principal_due", "interest_due", "penalty_amount", "total_due", "amount_paid"]) {
+  for (const column of ["principal_due", "interest_due", "penalty_amount", "total_due", "total_paid"]) {
     assert.equal(namedTableTotal(doc, "Amortization Schedule", column), DASH, column);
   }
   assert.equal(namedTableTotal(doc, "Transaction History", "debit"), DASH);
@@ -2115,6 +2131,50 @@ test("finding 7: a loan without a build-up, or a server that doesn't say, gets n
     assert.equal(schedule.includes("total_payment"), false);
     assert.equal(lines.includes("build_up_applied"), false);
   }
+});
+
+test("the Overpayment column shows only when a line has a non-zero overpayment", () => {
+  const line = SOA_ADJUSTED.transactions[0];
+  const withOverpayment = buildStatementOfAccountDoc(
+    {
+      ...SOA_ADJUSTED,
+      transactions: [
+        { ...line, overpayment_applied: 150.5 },
+        { ...line, overpayment_applied: 0 },
+      ],
+      // Deliberately unlike the rows, so a sum of the rows cannot pass.
+      transaction_totals: { debit: 0, credit: 20000, overpayment_applied: 900.25 },
+    },
+    RANGE
+  );
+  const table = namedTable(withOverpayment, "Transaction History");
+  const column = table.columns.find((c) => c.key === "overpayment_applied");
+  const keys = table.columns.map((c) => c.key);
+
+  assert.equal(column?.header, "Overpayment");
+  assert.equal(column?.format, "currency");
+  assert.equal(keys.indexOf("principal_balance"), keys.indexOf("overpayment_applied") + 1);
+  assert.equal(formatCell(table.rows[0], column!), "₱150.50");
+  assert.equal(formatCell(table.rows[1], column!), "₱0.00");
+  assert.equal(namedTableTotal(withOverpayment, "Transaction History", "overpayment_applied"), "₱900.25");
+
+  for (const transactions of [
+    [{ ...line, overpayment_applied: 0 }, { ...line, overpayment_applied: "0.00" }],
+    [line],
+  ]) {
+    const none = buildStatementOfAccountDoc({ ...SOA_ADJUSTED, transactions }, RANGE);
+    const lines = namedTable(none, "Transaction History");
+    assert.equal(lines.columns.some((c) => c.key === "overpayment_applied"), false);
+    assert.equal(lines.totals?.some((t) => t.column === "overpayment_applied"), false);
+  }
+});
+
+test("the Overpayment total shows a dash when the server sends none, never a sum of the lines", () => {
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_ADJUSTED, transactions: [{ ...SOA_ADJUSTED.transactions[0], overpayment_applied: 150.5 }] },
+    RANGE
+  );
+  assert.equal(namedTableTotal(doc, "Transaction History", "overpayment_applied"), DASH);
 });
 
 test("the statement's wider tables print in the PDF's smaller type, and only those", () => {

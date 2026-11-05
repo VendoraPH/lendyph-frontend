@@ -529,7 +529,7 @@ test("statement pdf: a build-up loan's twelve columns never break a word or a fi
         ? {
             ...schedule,
             rows: [
-              { ...schedule.rows[0], beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, amount_paid: 119000.97, balance: 120211.82, status: "overdue" },
+              { ...schedule.rows[0], beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, total_paid: 119000.97, balance: 120211.82, status: "overdue" },
             ],
             // Seven figures in every footer cell are what squeeze the narrow columns.
             totals: schedule.totals?.map((t) => ({ ...t, value: "₱1,442,541.84" })),
@@ -540,6 +540,60 @@ test("statement pdf: a build-up loan's twelve columns never break a word or a fi
   const operands = pdfTextOperands(wide);
 
   for (const whole of ["Period", "overdue", "PHP 1,080,000.00", "PHP 1,442,541.84"]) {
+    assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
+  }
+});
+
+/** The statement with an overpaid line, and the server's total for it. */
+function overpaidStatementDoc(): ReportDocument {
+  return buildStatementOfAccountDoc(
+    {
+      as_of: "2026-11-05",
+      loan: { loan_account_number: "LN-000004", has_build_up: true },
+      amortization_schedule: [
+        { period_number: 1, due_date: "2026-12-05", beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, total_paid: 119000.97, amount_remaining: 120211.82, status: "overdue" },
+      ],
+      transactions: [
+        { type: "payment", date: "2026-11-05", receipt_number: "RCP-000012", payment_method: "Bank Transfer", reference_number: "GC1234567890123", particulars: "Payment RCP-000012", credit: 121211.82, principal_applied: 92000.54, interest_applied: 27000.43, penalty_applied: 1210.85, insurance_applied: 0, build_up_applied: 1000, overpayment_applied: 150.5, principal_balance: 987999.46 },
+      ],
+      transaction_totals: { debit: 0, credit: 121211.82, overpayment_applied: 900.25 },
+    },
+    { from: "2026-10-01", to: "2026-10-31" }
+  );
+}
+
+test("the Overpayment column and its total reach every export, and stay out when there is none", async () => {
+  const overpaid = overpaidStatementDoc();
+  const plain = statementDoc();
+
+  const csv = renderReportCsv(overpaid);
+  assert.ok(csv.includes("Overpayment") && csv.includes("₱150.50") && csv.includes("₱900.25"), "csv");
+  assert.ok(!renderReportCsv(plain).includes("Overpayment"), "csv without one");
+
+  const docx = await docxBody(overpaid);
+  assert.ok(docx.includes("Overpayment") && docx.includes("₱150.50") && docx.includes("₱900.25"), "docx");
+  assert.ok(!(await docxBody(plain)).includes("Overpayment"), "docx without one");
+
+  const pdf = pdfTextOperands(overpaid).join(" ");
+  assert.ok(pdf.includes("Overpayment") && pdf.includes("PHP 150.50") && pdf.includes("PHP 900.25"), "pdf");
+  assert.ok(!pdfTextOperands(plain).join(" ").includes("Overpayment"), "pdf without one");
+
+  const cellsOf = async (doc: ReportDocument) => {
+    const sheet = await readBackSheet(doc);
+    const cells: string[] = [];
+    sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+    return cells;
+  };
+  const excel = await cellsOf(overpaid);
+  assert.ok(excel.includes("Overpayment"), "excel header");
+  assert.ok(excel.includes("150.5"), "excel figure");
+  assert.ok(excel.some((c) => c.includes("900.25")), "excel total");
+  assert.ok(!(await cellsOf(plain)).includes("Overpayment"), "excel without one");
+});
+
+test("statement pdf: thirteen columns never break a word or a figure", () => {
+  const operands = pdfTextOperands(overpaidStatementDoc());
+  for (const whole of ["Overpayment", "Build-Up", "PHP 121,211.82", "PHP 987,999.46", "RCP-000012"]) {
     assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
   }
 });
