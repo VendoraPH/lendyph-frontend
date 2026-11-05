@@ -251,6 +251,17 @@ function breakdownHint(parts: [string, unknown][]): string | undefined {
   return segments.length > 0 ? segments.join(" · ") : undefined;
 }
 
+/** "Showing the first 200 of 450 members.", or null when every row is listed. */
+function truncationScope(shown: number, totalRows: number | null, noun: string): string | null {
+  const truncated =
+    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
+  if (!truncated || shown === 0) return null;
+
+  return totalRows !== null
+    ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+    : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+}
+
 /**
  * Truncation note for a table whose totals row shows only the server's
  * figures: a total the server did not send is "—", never a sum of this page.
@@ -267,14 +278,8 @@ function serverTotalsTruncationNote(
   noun: string,
   totals: Record<string, unknown> | null
 ): ReportSection | null {
-  const truncated =
-    totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
-  if (!truncated || shown === 0) return null;
-
-  const scope =
-    totalRows !== null
-      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
-      : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+  const scope = truncationScope(shown, totalRows, noun);
+  if (!scope) return null;
 
   const totalsScope = totals
     ? `The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`
@@ -542,21 +547,22 @@ export function buildPortfolioSummaryDoc(
 }
 
 // Keyed to the fields GET /reports/income/by-loan sends, so each row renders as
-// sent: the server groups the posted repayments by loan and sums every figure,
-// including each row's Total Income.
+// sent: the server works out each loan's interest, penalty and processing fee,
+// and each row's Total Income.
 const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
   { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
   { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
   { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
   { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
   { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
+  { key: "processing_fee", header: "Processing Fee", format: "currency", align: "right", width: 130 },
   { key: "total_income", header: "Total Income", format: "currency", align: "right", width: 140 },
 ];
 
 /**
- * The summary KPIs, plus the per-loan rows behind the interest and penalty
- * income when `/reports/income/by-loan` for the same window is supplied. The
- * list is left out (not shown empty) when that read failed.
+ * The summary KPIs, plus the per-loan rows behind them when
+ * `/reports/income/by-loan` for the same window is supplied. The list is left
+ * out (not shown empty) when that read failed.
  */
 export function buildIncomeDoc(
   raw: unknown,
@@ -611,6 +617,10 @@ export function buildIncomeDoc(
                 value: currencyOrDash(pick(totals, ["penalty_income"])),
               },
               {
+                column: "processing_fee",
+                value: currencyOrDash(pick(totals, ["processing_fee"])),
+              },
+              {
                 column: "total_income",
                 value: currencyOrDash(pick(totals, ["total_income"])),
               },
@@ -621,7 +631,7 @@ export function buildIncomeDoc(
     sections.push({
       kind: "note",
       text:
-        "Interest and penalty are taken from the repayments posted in the period, per loan account. Processing fees are charged at release and are not part of this list.",
+        "Interest and penalty are taken from the repayments posted in the period, and processing fees from the loans released in the period, per loan account.",
     });
   }
 
@@ -764,18 +774,17 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   };
 }
 
-// Keyed to the fields GET /reports/borrowers/released sends, so each row renders
-// as sent: the server groups the period's releases by borrower and sums every
-// figure.
-const BORROWER_LIST_COLUMNS: ReportColumn[] = [
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
-  { key: "loan_count", header: "Loans", format: "number", align: "right", width: 80 },
-  { key: "loan_account_numbers", header: "Loan #", format: "text", width: 200 },
-  { key: "total_principal", header: "Total Principal", format: "currency", align: "right", width: 150 },
-  { key: "last_released_at", header: "Last Released", format: "date", width: 120 },
-  // The status of the borrower's newest release in the period, not a status
-  // of the borrower, so the header says whose status it is.
-  { key: "latest_loan_status", header: "Latest Loan Status", format: "text", width: 140 },
+// Keyed to the fields GET /reports/borrowers/list sends, so each row renders as
+// sent. `markers` is the one cell shaped here, from the server's two flags.
+const MEMBER_LIST_COLUMNS: ReportColumn[] = [
+  { key: "borrower_code", header: "Member No.", format: "text", width: 110 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
+  { key: "branch_name", header: "Branch", format: "text", width: 140 },
+  { key: "markers", header: "New / Repeat", format: "text", width: 110 },
+  { key: "active_loans", header: "Active Loans", format: "number", align: "right", width: 110 },
+  { key: "loans_released", header: "Loans Released", format: "number", align: "right", width: 120 },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 140 },
+  { key: "last_release_date", header: "Last Release", format: "date", width: 120 },
 ];
 
 /**
@@ -789,28 +798,21 @@ function loanStatusText(value: unknown): unknown {
     : value;
 }
 
-/**
- * Display shaping only: the loan numbers array becomes one cell, and the raw
- * status its label. Every figure stays exactly as the server sent it.
- */
-function normalizeBorrowerReleasedRow(raw: Record<string, unknown>): Record<string, unknown> {
-  const numbers = raw.loan_account_numbers;
-  return {
-    ...raw,
-    loan_account_numbers: Array.isArray(numbers) ? numbers.join(", ") : numbers,
-    latest_loan_status: loanStatusText(raw.latest_loan_status),
-  };
+/** Display shaping only: every figure stays exactly as the server sent it. */
+function normalizeMemberRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const markers = [raw.is_new === true && "New", raw.is_repeat === true && "Repeat"].filter(Boolean);
+  return { ...raw, markers: markers.length > 0 ? markers.join(", ") : null };
 }
 
 /**
- * The summary KPIs, plus the borrowers released a loan in the period when
- * `/reports/borrowers/released` for the same window is supplied. The list is
- * left out (not shown empty) when that read failed.
+ * The summary KPIs, plus the members behind them when `/reports/borrowers/list`
+ * for the same window is supplied. The list is left out (not shown empty) when
+ * that read failed.
  */
 export function buildBorrowerDoc(
   raw: unknown,
   range: DateRange,
-  releasedRaw?: unknown
+  listRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
@@ -828,40 +830,26 @@ export function buildBorrowerDoc(
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  if (releasedRaw != null) {
-    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasedRaw);
-    const rows = rawRows.map(normalizeBorrowerReleasedRow);
+  if (listRaw != null) {
+    const { rows: rawRows, totalRows } = readListEnvelope(listRaw);
+    const rows = rawRows.map(normalizeMemberRow);
 
-    const note = serverTotalsTruncationNote(rows.length, totalRows, "borrowers", totals);
-    if (note) sections.push(note);
+    const scope = truncationScope(rows.length, totalRows, "members");
+    if (scope) sections.push({ kind: "note", text: scope });
 
-    // Footer figures come only from the server's period-wide `totals`; a
-    // missing one is "—", never the rows on this page added up.
+    // No footer: the server sends counts for the cards, not column totals, and
+    // rows are never added up here.
     sections.push({
       kind: "table",
-      title: "Borrowers with Loans Released",
-      columns: BORROWER_LIST_COLUMNS,
+      title: "Active and New Members",
+      columns: MEMBER_LIST_COLUMNS,
       rows,
-      totals:
-        rows.length > 0
-          ? [
-              {
-                column: "loan_count",
-                label: "Total",
-                value: countOrDash(pick(totals, ["loan_count"])),
-              },
-              {
-                column: "total_principal",
-                value: currencyOrDash(pick(totals, ["total_principal"])),
-              },
-            ]
-          : undefined,
-      emptyText: "No loans were released to any borrower in the selected period.",
+      emptyText: "No member was active or new in the selected period.",
     });
     sections.push({
       kind: "note",
       text:
-        "Active and repeat borrowers above are all-time and new borrowers go by registration date, while this list is the borrowers released a loan in the period, so the counts need not match.",
+        "Active: at least one collectible loan as of the end of the period. New: registered in the period. Repeat: at least 2 loans released. A repeat member who is neither active nor new counts on the Repeat card but is not listed here.",
     });
   }
 
@@ -1101,16 +1089,46 @@ const TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "running_balance", header: "Balance", format: "currency", align: "right", width: 140 },
 ];
 
-/**
- * The Statement of Account's lines add the insurance premium each payment
- * collected first, right before the balance: with its principal, what the
- * running balance drops by (the statement opens at principal + premium owed).
- */
-const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
-  ...TRANSACTION_COLUMNS.slice(0, -1),
-  { key: "insurance_applied", header: "Insurance Premium", format: "currency", align: "right", width: 140 },
-  ...TRANSACTION_COLUMNS.slice(-1),
+/** Added after Total Due on a loan with a Share Capital Build-Up. */
+const SOA_BUILD_UP_SCHEDULE_COLUMNS: ReportColumn[] = [
+  { key: "build_up_due", header: "Share Capital Build-Up", format: "currency", align: "right", width: 180 },
+  { key: "total_payment", header: "Total Payment", format: "currency", align: "right", width: 130 },
 ];
+
+function soaScheduleColumns(hasBuildUp: boolean): ReportColumn[] {
+  if (!hasBuildUp) return SOA_SCHEDULE_COLUMNS;
+  const afterTotalDue = SOA_SCHEDULE_COLUMNS.findIndex((c) => c.key === "total_due") + 1;
+  return [
+    ...SOA_SCHEDULE_COLUMNS.slice(0, afterTotalDue),
+    ...SOA_BUILD_UP_SCHEDULE_COLUMNS,
+    ...SOA_SCHEDULE_COLUMNS.slice(afterTotalDue),
+  ];
+}
+
+/**
+ * The Statement of Account's lines split each amount the way the server applied
+ * it, so a line adds up to the amount received, and end on the principal
+ * balance. The split is the server's: nothing here is worked out from the amount.
+ */
+function soaTransactionColumns(hasBuildUp: boolean): ReportColumn[] {
+  const money = (key: string, header: string, width: number): ReportColumn => ({
+    key,
+    header,
+    format: "currency",
+    align: "right",
+    width,
+  });
+  return [
+    // Wider than the ledger's: this one also carries the reference number.
+    ...TRANSACTION_COLUMNS.slice(0, -1).map((c) => (c.key === "method" ? { ...c, width: 190 } : c)),
+    money("principal_applied", "Principal", 120),
+    money("interest_applied", "Interest", 110),
+    money("penalty_applied", "Penalty", 110),
+    money("insurance_applied", "Insurance Premium", 140),
+    ...(hasBuildUp ? [money("build_up_applied", "Build-Up", 110)] : []),
+    money("principal_balance", "Principal Balance", 140),
+  ];
+}
 
 function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -1121,6 +1139,8 @@ function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unkn
     interest_due: pick(raw, ["interest_due", "interest"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     total_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
+    build_up_due: pick(raw, ["build_up_due"]),
+    total_payment: pick(raw, ["total_payment"]),
     // The server's principal_paid + interest_paid for the period; "—" when it
     // is missing, never the components added here.
     amount_paid: pick(raw, ["amount_paid"]),
@@ -1155,9 +1175,30 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
     method: pick(raw, ["method", "payment_method"]),
     debit: explicitDebit ?? (isDebit && !isCredit ? amount : null),
     credit: explicitCredit ?? (isCredit ? amount : null),
-    // The server's figure; a row without it is "—".
-    insurance_applied: toNumber(pick(raw, ["insurance_applied"])),
     running_balance: pick(raw, ["running_balance", "balance", "outstanding_balance"]),
+  };
+}
+
+/**
+ * One Statement of Account line: a payment or a balance adjustment. Every figure
+ * is the server's, and a line without one shows "—". `balance` is the alias of
+ * `principal_balance` the server keeps for one release; `running_balance` is
+ * another figure (principal plus premium), so it is never read for this column.
+ */
+function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const method = pick(raw, ["payment_method", "method"]);
+  const reference = pick(raw, ["reference_number"]);
+  const referenceText = reference ? `Ref. ${reference}` : null;
+
+  return {
+    ...normalizeTransactionRow(raw),
+    method: method && referenceText ? `${method} (${referenceText})` : (method ?? referenceText),
+    principal_applied: toNumber(pick(raw, ["principal_applied"])),
+    interest_applied: toNumber(pick(raw, ["interest_applied"])),
+    penalty_applied: toNumber(pick(raw, ["penalty_applied"])),
+    insurance_applied: toNumber(pick(raw, ["insurance_applied"])),
+    build_up_applied: toNumber(pick(raw, ["build_up_applied"])),
+    principal_balance: pick(raw, ["principal_balance", "balance"]),
   };
 }
 
@@ -1177,7 +1218,9 @@ function accountFields(
     ["Term", pick(loan, ["term_label", "term"]), "text"],
     ["Release Date", pick(loan, ["release_date", "released_at"]), "date"],
     ["Maturity Date", pick(loan, ["maturity_date", "end_date"]), "date"],
-    ["Status", loanStatusText(pick(loan, ["status"])), "text"],
+    // The server's label reads "Past Due" when the Past Due figure is above
+    // ₱0.00, which `status` alone can't say.
+    ["Status", pick(loan, ["status_label"]) ?? loanStatusText(pick(loan, ["status"])), "text"],
   ];
 
   // Only particulars the API actually sent — a statement padded with dashes
@@ -1190,10 +1233,13 @@ function accountFields(
     }));
 }
 
-export function buildStatementOfAccountDoc(
-  raw: unknown,
-  range: DateRange
-): ReportDocument {
+/**
+ * The range is not read: this statement covers the whole loan up to the server's
+ * `as_of`, whatever range a caller holds. The signature keeps it because the
+ * catalog's mapper type and the loan page both pass one.
+ */
+export function buildStatementOfAccountDoc(raw: unknown, range?: DateRange): ReportDocument;
+export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
   const obj = asRecord(raw);
   const loan = asRecord(pick(obj, ["loan"])) ?? obj;
   const borrower = asRecord(pick(obj, ["borrower"])) ?? asRecord(pick(loan, ["borrower"]));
@@ -1208,7 +1254,9 @@ export function buildStatementOfAccountDoc(
   ).map(normalizeScheduleRow);
   const transactionRows = asArray(
     pick(obj, ["transactions", "repayments", "payments", "ledger", "entries"])
-  ).map(normalizeTransactionRow);
+  ).map(normalizeSoaTransactionRow);
+  const hasBuildUp = pick(loan, ["has_build_up"]) === true;
+  const scheduleNote = pick(obj, ["schedule_note"]);
 
   const outstanding =
     pick(summary, ["outstanding_balance", "total_balance", "balance"]) ??
@@ -1243,7 +1291,8 @@ export function buildStatementOfAccountDoc(
   sections.push({
     kind: "table",
     title: "Amortization Schedule",
-    columns: SOA_SCHEDULE_COLUMNS,
+    columns: soaScheduleColumns(hasBuildUp),
+    compact: hasBuildUp,
     rows: scheduleRows,
     totals:
       scheduleRows.length > 0
@@ -1262,6 +1311,18 @@ export function buildStatementOfAccountDoc(
               value: currencyOrDash(pick(scheduleTotals, ["penalty_amount"])),
             },
             { column: "total_due", value: currencyOrDash(pick(scheduleTotals, ["total_due"])) },
+            ...(hasBuildUp
+              ? [
+                  {
+                    column: "build_up_due",
+                    value: currencyOrDash(pick(scheduleTotals, ["build_up_due"])),
+                  },
+                  {
+                    column: "total_payment",
+                    value: currencyOrDash(pick(scheduleTotals, ["total_payment"])),
+                  },
+                ]
+              : []),
             {
               column: "amount_paid",
               value: currencyOrDash(pick(scheduleTotals, ["amount_paid"])),
@@ -1271,10 +1332,15 @@ export function buildStatementOfAccountDoc(
     emptyText: "No amortization schedule is available for this loan.",
   });
 
+  if (typeof scheduleNote === "string" && scheduleNote !== "") {
+    sections.push({ kind: "note", text: scheduleNote });
+  }
+
   sections.push({
     kind: "table",
     title: "Transaction History",
-    columns: SOA_TRANSACTION_COLUMNS,
+    columns: soaTransactionColumns(hasBuildUp),
+    compact: true,
     rows: transactionRows,
     totals:
       transactionRows.length > 0
@@ -1292,13 +1358,15 @@ export function buildStatementOfAccountDoc(
 
   return {
     reportId: "statement_of_account",
-    meta: meta(
-      "Statement of Account",
-      range,
-      pick(loan, ["loan_account_number", "account_number"])
+    meta: {
+      title: "Statement of Account",
+      subtitle: pick(loan, ["loan_account_number", "account_number"])
         ? `Loan ${pick(loan, ["loan_account_number", "account_number"])}`
-        : "Schedule, payments, and balance for a single loan"
-    ),
+        : "Schedule, payments, and balance for a single loan",
+      asOf: formatValue(pick(obj, ["as_of"]), "date"),
+      generatedAt: formatGeneratedAt(),
+      org: "",
+    },
     sections,
   };
 }

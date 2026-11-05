@@ -25,6 +25,8 @@ import { siteConfig } from "@/config/site";
 import {
   MAX_REPORT_SPAN_YEARS,
   exceedsReportSpanCap,
+  reportScope,
+  reportScopeLine,
 } from "./types";
 import type { DateRange, FieldItem, KpiItem, ReportDocument, ReportId } from "./types";
 
@@ -287,114 +289,114 @@ test("borrower report reads total_active_borrowers", () => {
   assert.equal(kpiValue(doc, "Repeat Borrowers"), "96");
 });
 
-// GET /reports/borrowers/released: one row per borrower, every figure summed by
-// the server. The totals are deliberately not the sum of these two rows.
-const BORROWERS_RELEASED = {
+// GET /reports/borrowers/list: every member who is active or new, with the
+// server's own flags and figures. `meta.counts` equals the cards.
+const MEMBER_LIST = {
   data: [
-    { borrower_id: 5, borrower_name: "Ana Cruz", loan_count: 2, loan_account_numbers: ["LN-000001", "LN-000004"], total_principal: 130000, last_released_at: "2026-08-05", latest_loan_status: "ongoing" },
-    { borrower_id: 7, borrower_name: "Ben Reyes", loan_count: 1, loan_account_numbers: ["LN-000002"], total_principal: 80000, last_released_at: "2026-08-02", latest_loan_status: "released" },
+    { borrower_id: 5, borrower_code: "MB-0005", borrower_name: "Ana Cruz", branch_name: "Butuan", is_active: true, is_new: true, is_repeat: true, active_loans: 2, loans_released: 3, outstanding: 130000.5, last_release_date: "2026-08-05" },
+    { borrower_id: 7, borrower_code: "MB-0007", borrower_name: "Ben Reyes", branch_name: "Cabadbaran", is_active: true, is_new: false, is_repeat: true, active_loans: 1, loans_released: 2, outstanding: 80000, last_release_date: "2026-02-02" },
+    { borrower_id: 9, borrower_code: "MB-0009", borrower_name: "Cora Lim", branch_name: "Butuan", is_active: false, is_new: true, is_repeat: false, active_loans: 0, loans_released: 0, outstanding: 0, last_release_date: null },
+    { borrower_id: 11, borrower_code: "MB-0011", borrower_name: "Dan Uy", branch_name: "Butuan", is_active: true, is_new: false, is_repeat: false, active_loans: 1, loans_released: 1, outstanding: 5000, last_release_date: "2026-01-15" },
   ],
-  meta: { current_page: 1, last_page: 1, per_page: 200, total: 2 },
-  totals: { count: 2, loan_count: 3, total_principal: 210000.5 },
+  meta: { current_page: 1, last_page: 1, per_page: 200, total: 4, counts: { active: 3, new: 2, repeat: 2 } },
 };
 
-test("borrower report lists each borrower released a loan, as the server sent them", () => {
-  const doc = buildBorrowerDoc({ total_active_borrowers: 2, new_borrowers: 1 }, RANGE, BORROWERS_RELEASED);
+const MEMBERS_TABLE = "Active and New Members";
 
-  const table = namedTable(doc, "Borrowers with Loans Released");
+test("member report lists the accounts behind the cards, as the server sent them", () => {
+  const doc = buildBorrowerDoc({ total_active_borrowers: 3, new_borrowers: 2, repeat_borrowers: 2 }, RANGE, MEMBER_LIST);
+
+  const table = namedTable(doc, MEMBERS_TABLE);
   assert.deepEqual(
-    table.rows.map((r) => [r.borrower_name, r.loan_count, r.loan_account_numbers, r.total_principal, r.last_released_at]),
+    table.columns.map((c) => c.header),
+    ["Member No.", "Member", "Branch", "New / Repeat", "Active Loans", "Loans Released", "Outstanding", "Last Release"]
+  );
+  assert.deepEqual(
+    table.rows.map((r) => [r.borrower_code, r.borrower_name, r.branch_name, r.active_loans, r.loans_released, r.outstanding, r.last_release_date]),
     [
-      ["Ana Cruz", 2, "LN-000001, LN-000004", 130000, "2026-08-05"],
-      ["Ben Reyes", 1, "LN-000002", 80000, "2026-08-02"],
+      ["MB-0005", "Ana Cruz", "Butuan", 2, 3, 130000.5, "2026-08-05"],
+      ["MB-0007", "Ben Reyes", "Cabadbaran", 1, 2, 80000, "2026-02-02"],
+      ["MB-0009", "Cora Lim", "Butuan", 0, 0, 0, null],
+      ["MB-0011", "Dan Uy", "Butuan", 1, 1, 5000, "2026-01-15"],
     ]
   );
-  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "loan_count"), "3");
-  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), "₱210,000.50");
+  // The cards stay the summary's figures.
+  assert.equal(kpiValue(doc, "Total Active Borrowers"), "3");
+  assert.equal(kpiValue(doc, "New Borrowers"), "2");
+  assert.equal(kpiValue(doc, "Repeat Borrowers"), "2");
 });
 
-test("borrower list labels the latest loan's status the way the loans screens do", () => {
-  const doc = buildBorrowerDoc(null, RANGE, BORROWERS_RELEASED);
-  const table = namedTable(doc, "Borrowers with Loans Released");
+test("member list marks New and Repeat from the server's flags", () => {
+  const table = namedTable(buildBorrowerDoc(null, RANGE, MEMBER_LIST), MEMBERS_TABLE);
+  const column = table.columns.find((c) => c.key === "markers")!;
 
-  assert.equal(table.columns.find((c) => c.key === "latest_loan_status")?.header, "Latest Loan Status");
-  // Decision 5a: `released` and `ongoing` both read "Current".
-  assert.deepEqual(table.rows.map((r) => r.latest_loan_status), ["Current", "Current"]);
+  assert.deepEqual(
+    table.rows.map((r) => formatCell(r, column)),
+    ["New, Repeat", "Repeat", "New", DASH]
+  );
 });
 
-test("borrower list shows a dash for a borrower whose loans carry no number", () => {
+test("member list shows the server's outstanding, with ₱0.00 for a real zero and a dash for a missing figure", () => {
   const doc = buildBorrowerDoc(null, RANGE, {
-    data: [{ ...BORROWERS_RELEASED.data[0], loan_account_numbers: [] }],
-    meta: { total: 1 },
-    totals: BORROWERS_RELEASED.totals,
-  });
-  const table = namedTable(doc, "Borrowers with Loans Released");
-  const column = table.columns.find((c) => c.key === "loan_account_numbers")!;
-
-  assert.equal(formatCell(table.rows[0], column), DASH);
-});
-
-test("borrower list shows a dash when the newest loan has no release date", () => {
-  const doc = buildBorrowerDoc(null, RANGE, {
-    data: [{ ...BORROWERS_RELEASED.data[0], last_released_at: null }],
-    meta: { total: 1 },
-    totals: BORROWERS_RELEASED.totals,
-  });
-  const table = namedTable(doc, "Borrowers with Loans Released");
-  const column = table.columns.find((c) => c.key === "last_released_at")!;
-
-  assert.equal(formatCell(table.rows[0], column), DASH);
-});
-
-test("borrower list formats whole-peso amounts the server sends as integers", () => {
-  const doc = buildBorrowerDoc(null, RANGE, {
-    data: BORROWERS_RELEASED.data,
+    data: [MEMBER_LIST.data[2], { ...MEMBER_LIST.data[3], outstanding: undefined, last_release_date: undefined }],
     meta: { total: 2 },
-    totals: { count: 2, loan_count: 3, total_principal: 210000 },
   });
-  const table = namedTable(doc, "Borrowers with Loans Released");
-  const column = table.columns.find((c) => c.key === "total_principal")!;
+  const table = namedTable(doc, MEMBERS_TABLE);
+  const outstanding = table.columns.find((c) => c.key === "outstanding")!;
+  const lastRelease = table.columns.find((c) => c.key === "last_release_date")!;
 
-  assert.equal(formatCell(table.rows[0], column), "₱130,000.00");
-  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), "₱210,000.00");
+  assert.equal(formatCell(table.rows[0], outstanding), "₱0.00");
+  assert.equal(formatCell(table.rows[0], lastRelease), DASH);
+  assert.equal(formatCell(table.rows[1], outstanding), DASH);
+  assert.equal(formatCell(table.rows[1], lastRelease), DASH);
 });
 
-test("borrower list shows a dash, not a page sum, when the server sends no totals", () => {
-  const doc = buildBorrowerDoc(null, RANGE, { data: BORROWERS_RELEASED.data, meta: { total: 2 } });
-
-  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "loan_count"), DASH);
-  assert.equal(namedTableTotal(doc, "Borrowers with Loans Released", "total_principal"), DASH);
+test("member list has no footer: the server sends no column totals, and rows are never added up", () => {
+  const table = namedTable(buildBorrowerDoc(null, RANGE, MEMBER_LIST), MEMBERS_TABLE);
+  assert.equal(table.totals, undefined);
 });
 
-test("borrower list's truncation note counts borrowers and makes no CSV promise", () => {
+test("member list's truncation note counts members and promises no totals it doesn't show", () => {
   const doc = buildBorrowerDoc(null, RANGE, {
-    data: Array.from({ length: 200 }, (_, i) => ({ ...BORROWERS_RELEASED.data[1], borrower_id: i + 1 })),
-    meta: { current_page: 1, last_page: 3, per_page: 200, total: 450 },
-    totals: { count: 450, loan_count: 600, total_principal: 9000000 },
+    data: Array.from({ length: 200 }, (_, i) => ({ ...MEMBER_LIST.data[1], borrower_id: i + 1 })),
+    meta: { current_page: 1, last_page: 3, per_page: 200, total: 450, counts: { active: 400, new: 60, repeat: 90 } },
   });
   const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
 
-  assert.ok(notes.some((n) => /^Showing the first 200 of 450 borrowers\./.test(n)), notes.join(" | "));
-  assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
-  assert.ok(notes.every((n) => !/CSV/.test(n)));
+  assert.ok(notes.includes("Showing the first 200 of 450 members."), notes.join(" | "));
+  assert.ok(notes.every((n) => !/CSV|table totals/.test(n)), notes.join(" | "));
 });
 
-test("borrower list says, under the table, that it counts something other than the KPIs", () => {
-  const doc = buildBorrowerDoc(null, RANGE, BORROWERS_RELEASED);
-  const tableAt = doc.sections.findIndex(
-    (s) => s.kind === "table" && s.title === "Borrowers with Loans Released"
+test("member list shows no truncation note when every row is listed", () => {
+  const notes = buildBorrowerDoc(null, RANGE, MEMBER_LIST).sections.flatMap((s) =>
+    s.kind === "note" ? [s.text] : []
   );
+  assert.ok(notes.every((n) => !/Showing the first/.test(n)), notes.join(" | "));
+});
+
+test("member list says, under the table, how each mark is defined and who a card can count unlisted", () => {
+  const doc = buildBorrowerDoc(null, RANGE, MEMBER_LIST);
+  const tableAt = doc.sections.findIndex((s) => s.kind === "table" && s.title === MEMBERS_TABLE);
   const after = doc.sections[tableAt + 1];
 
   assert.ok(after && after.kind === "note", "expected a note right after the table");
-  assert.match(after.text, /all-time/);
-  assert.match(after.text, /registration date/);
-  assert.match(after.text, /released a loan in the period/);
+  assert.match(after.text, /Active: at least one collectible loan/);
+  assert.match(after.text, /New: registered in the period/);
+  assert.match(after.text, /Repeat: at least 2 loans released/);
+  assert.match(after.text, /neither active nor new/);
+  assert.doesNotMatch(after.text, /need not match/);
+  assert.doesNotMatch(after.text, /Borrower|borrower/);
 });
 
-test("borrower report omits the borrower list when its read failed", () => {
+test("member list's empty state says so, in the Member wording", () => {
+  const table = namedTable(buildBorrowerDoc(null, RANGE, { data: [], meta: { total: 0 } }), MEMBERS_TABLE);
+  assert.equal(table.rows.length, 0);
+  assert.equal(table.emptyText, "No member was active or new in the selected period.");
+});
+
+test("member report omits the member list when its read failed", () => {
   const doc = buildBorrowerDoc({ new_borrowers: 1 }, RANGE, null);
-  assert.equal(hasTable(doc, "Borrowers with Loans Released"), false);
+  assert.equal(hasTable(doc, MEMBERS_TABLE), false);
 });
 
 test("disbursement report maps every KPI to a real figure", () => {
@@ -579,12 +581,12 @@ test("income by loan never recomputes a row's total in the browser", () => {
 test("income by loan shows a dash, not a page sum, when the server sends no totals", () => {
   const doc = buildIncomeDoc(null, RANGE, { data: INCOME_BY_LOAN.data, meta: { total: 2 } });
 
-  for (const column of ["payments", "interest_income", "penalty_income", "total_income"]) {
+  for (const column of ["payments", "interest_income", "penalty_income", "processing_fee", "total_income"]) {
     assert.equal(namedTableTotal(doc, "Income by Loan Account", column), DASH, column);
   }
 });
 
-test("income by loan's truncation note counts loans, and the fee note stays", () => {
+test("income by loan's truncation note counts loans, and no caption says fees aren't listed", () => {
   const doc = buildIncomeDoc(null, RANGE, {
     data: Array.from({ length: 200 }, (_, i) => ({ ...INCOME_BY_LOAN.data[1], loan_id: i + 1 })),
     meta: { current_page: 1, last_page: 3, per_page: 200, total: 450 },
@@ -595,7 +597,60 @@ test("income by loan's truncation note counts loans, and the fee note stays", ()
   assert.ok(notes.some((n) => /^Showing the first 200 of 450 loans\./.test(n)), notes.join(" | "));
   assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
   assert.ok(notes.every((n) => !/CSV/.test(n)));
-  assert.ok(notes.some((n) => /Processing fees are charged at release and are not part of this list/.test(n)));
+  assert.ok(notes.every((n) => !/not part of this list/.test(n)), notes.join(" | "));
+  assert.ok(notes.some((n) => /processing fees from the loans released in the period/.test(n)), notes.join(" | "));
+});
+
+// D9: the same rows with the fee column the backend adds. Deliberately not the
+// sum of the rows, so a browser sum cannot pass.
+const INCOME_BY_LOAN_WITH_FEES = {
+  data: [
+    { ...INCOME_BY_LOAN.data[0], processing_fee: 400, total_income: 2515.98 },
+    // A loan whose only income in the period is its fee.
+    { loan_id: 9, loan_account_number: "LN-000009", borrower_id: 8, borrower_name: "Cora Lim", payments: 0, interest_income: 0, penalty_income: 0, processing_fee: 600, total_income: 600 },
+  ],
+  meta: { current_page: 1, last_page: 1, per_page: 200, total: 2 },
+  totals: { count: 2, payments: 3, interest_income: 5000.5, penalty_income: 115.99, processing_fee: 50, total_income: 5166.49 },
+};
+
+test("income by loan shows a Processing Fee column between the income figures and the total", () => {
+  const table = namedTable(buildIncomeDoc(null, RANGE, INCOME_BY_LOAN_WITH_FEES), "Income by Loan Account");
+
+  assert.deepEqual(
+    table.columns.map((c) => c.header),
+    ["Loan #", "Borrower", "Payments", "Interest", "Penalty", "Processing Fee", "Total Income"]
+  );
+  const column = table.columns.find((c) => c.key === "processing_fee")!;
+  assert.equal(column.format, "currency");
+  assert.deepEqual(table.rows.map((r) => formatCell(r, column)), ["₱400.00", "₱600.00"]);
+  assert.equal(table.rows[1].total_income, 600);
+});
+
+test("income by loan's footer reads the server's fee total, so the table traces to the cards", () => {
+  const doc = buildIncomeDoc(
+    { interest_income: 5000.5, processing_fees: 50, penalty_income: 115.99, total: 5166.49 },
+    RANGE,
+    INCOME_BY_LOAN_WITH_FEES
+  );
+
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "processing_fee"), kpiValue(doc, "Processing Fees"));
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "total_income"), kpiValue(doc, "Total Income"));
+});
+
+test("income by loan reads the totals from meta.totals too", () => {
+  const { totals, meta: listMeta, ...rest } = INCOME_BY_LOAN_WITH_FEES;
+  const doc = buildIncomeDoc(null, RANGE, { ...rest, meta: { ...listMeta, totals } });
+
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "processing_fee"), "₱50.00");
+});
+
+test("income by loan shows a dash when the server sends no processing fee", () => {
+  const doc = buildIncomeDoc(null, RANGE, INCOME_BY_LOAN);
+  const table = namedTable(doc, "Income by Loan Account");
+  const column = table.columns.find((c) => c.key === "processing_fee")!;
+
+  assert.equal(formatCell(table.rows[0], column), DASH);
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "processing_fee"), DASH);
 });
 
 test("income report omits the account list when its read failed", () => {
@@ -1435,6 +1490,8 @@ test("releases list carries the application number", () => {
 // ---------------------------------------------------------------------------
 
 const SOA_PAYLOAD = {
+  as_of: "2026-11-05",
+  schedule_note: null,
   loan: {
     id: 10,
     loan_account_number: "LN-2026-0001",
@@ -1495,7 +1552,7 @@ const SOA_PAYLOAD = {
       penalty_applied: 0,
       debit: null,
       credit: 9500,
-      running_balance: 42000,
+      principal_balance: 42000,
     },
   ],
   transaction_totals: { debit: 0, credit: 9500 },
@@ -1696,7 +1753,7 @@ test("a transaction row carries the server's debit and credit", () => {
 
   assert.equal(table.rows[0].credit, 9500);
   assert.equal(table.rows[0].debit, null);
-  assert.equal(table.rows[0].running_balance, 42000);
+  assert.equal(table.rows[0].principal_balance, 42000);
 });
 
 test("a transaction row shows the insurance premium it collected, so the balance's drop is explained", () => {
@@ -1707,8 +1764,8 @@ test("a transaction row shows the insurance premium it collected, so the balance
       {
         ...SOA_PAYLOAD,
         transactions: [
-          { ...SOA_PAYLOAD.transactions[0], credit: 9900, amount_paid: 9900, insurance_applied: 400, running_balance: 42000 },
-          { ...SOA_PAYLOAD.transactions[0], date: "2026-04-01", insurance_applied: 0, running_balance: 34000 },
+          { ...SOA_PAYLOAD.transactions[0], credit: 9900, amount_paid: 9900, insurance_applied: 400, principal_balance: 42000 },
+          { ...SOA_PAYLOAD.transactions[0], date: "2026-04-01", insurance_applied: 0, principal_balance: 34000 },
         ],
       },
       RANGE
@@ -1723,7 +1780,7 @@ test("a transaction row shows the insurance premium it collected, so the balance
   assert.equal(table.rows[1].insurance_applied, 0);
   // Placed right before the running balance it explains.
   const keys = table.columns.map((c) => c.key);
-  assert.equal(keys.indexOf("insurance_applied"), keys.indexOf("running_balance") - 1);
+  assert.equal(keys.indexOf("insurance_applied"), keys.indexOf("principal_balance") - 1);
 });
 
 test("a transaction row without the server's premium figure shows a dash, never a worked-out one", () => {
@@ -1748,7 +1805,7 @@ test("a typed transaction is posted to the correct side of the ledger", () => {
             reference: "OR-1001",
             method: "cash",
             amount: 9500,
-            running_balance: 42000,
+            principal_balance: 42000,
           },
         ],
       },
@@ -1784,7 +1841,8 @@ test("explicit debit/credit columns are used verbatim when the API sends them", 
 
   assert.equal(table.rows[0].debit, 50000);
   assert.equal(table.rows[0].particulars, "Loan release");
-  assert.equal(table.rows[0].running_balance, 50000);
+  // `balance` stays an alias of `principal_balance` for one release.
+  assert.equal(table.rows[0].principal_balance, 50000);
 });
 
 test("a failed statement request still renders the shell", () => {
@@ -1792,6 +1850,297 @@ test("a failed statement request still renders the shell", () => {
 
   assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
   assert.equal(namedTable(doc, "Amortization Schedule").rows.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// D3: the Statement of Account's High findings. Payloads follow the contract
+// between the backend and frontend slices of round fx.
+// ---------------------------------------------------------------------------
+
+const SOA_ADJUSTED = {
+  ...SOA_PAYLOAD,
+  as_of: "2026-11-05",
+  schedule_note: "A balance adjustment restated this schedule on Nov 3, 2026.",
+  loan: { ...SOA_PAYLOAD.loan, status: "ongoing", status_label: "Past Due", has_build_up: false },
+  transactions: [
+    {
+      type: "payment",
+      date: "2026-10-05",
+      receipt_number: "RCP-000012",
+      payment_method: "GCash",
+      reference_number: "GC12345678",
+      particulars: "Payment RCP-000012",
+      credit: 10000,
+      debit: null,
+      principal_applied: 5910.11,
+      interest_applied: 3855.03,
+      penalty_applied: 234.86,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      principal_balance: 74089.89,
+      balance: 74089.89,
+    },
+    {
+      type: "adjustment",
+      date: "2026-11-03",
+      receipt_number: null,
+      payment_method: null,
+      reference_number: null,
+      particulars: "Balance adjustment",
+      credit: 600,
+      debit: null,
+      principal_applied: null,
+      interest_applied: null,
+      penalty_applied: null,
+      insurance_applied: null,
+      build_up_applied: null,
+      principal_balance: 73489.89,
+      balance: 73489.89,
+    },
+  ],
+};
+
+const SOA_BUILD_UP = {
+  ...SOA_PAYLOAD,
+  loan: { ...SOA_PAYLOAD.loan, has_build_up: true },
+  amortization_schedule: [
+    { ...SOA_PAYLOAD.amortization_schedule[0], total_due: 4330, build_up_due: 100, total_payment: 4430 },
+  ],
+  // Deliberately unlike the row, so a sum of the rows cannot pass.
+  schedule_totals: { ...SOA_PAYLOAD.schedule_totals, total_due: 8660, build_up_due: 200, total_payment: 8860 },
+  transactions: [
+    {
+      ...SOA_ADJUSTED.transactions[0],
+      credit: 4430,
+      principal_applied: 4000,
+      interest_applied: 330,
+      penalty_applied: 0,
+      insurance_applied: 0,
+      build_up_applied: 100,
+    },
+  ],
+};
+
+test("finding 1: an adjustment is its own line, in the running balance", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE), "Transaction History");
+
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[1].particulars, "Balance adjustment");
+  assert.equal(table.rows[1].credit, 600);
+  assert.equal(table.rows[1].principal_balance, 73489.89);
+});
+
+test("finding 1: an adjustment line has no method or split, so those cells show a dash", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE), "Transaction History");
+  for (const key of ["method", "principal_applied", "interest_applied", "penalty_applied", "insurance_applied"]) {
+    const column = table.columns.find((c) => c.key === key)!;
+    assert.equal(formatCell(table.rows[1], column), DASH, key);
+  }
+});
+
+test("finding 1: the schedule shows the server's note when an adjustment restated it", () => {
+  const doc = buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE);
+  const scheduleAt = doc.sections.findIndex((s) => s.kind === "table" && s.title === "Amortization Schedule");
+  const after = doc.sections[scheduleAt + 1];
+
+  assert.ok(after && after.kind === "note", "expected a note right after the schedule");
+  assert.equal(after.text, SOA_ADJUSTED.schedule_note);
+});
+
+test("finding 1: no note when the schedule wasn't restated, or the server sent none", () => {
+  const { schedule_note, ...withoutNote } = SOA_PAYLOAD;
+  void schedule_note;
+  for (const payload of [SOA_PAYLOAD, withoutNote]) {
+    const doc = buildStatementOfAccountDoc(payload, RANGE);
+    assert.equal(doc.sections.some((s) => s.kind === "note"), false);
+  }
+});
+
+test("finding 2: the column is Principal Balance, and each line shows its split in order", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE), "Transaction History");
+
+  assert.deepEqual(
+    table.columns.map((c) => c.header),
+    ["Date", "Reference", "Particulars", "Method", "Debit", "Credit", "Principal", "Interest", "Penalty", "Insurance Premium", "Principal Balance"]
+  );
+  assert.equal(table.rows[0].principal_applied, 5910.11);
+  assert.equal(table.rows[0].interest_applied, 3855.03);
+  assert.equal(table.rows[0].penalty_applied, 234.86);
+  assert.equal(table.rows[0].insurance_applied, 0);
+  assert.equal(table.rows[0].principal_balance, 74089.89);
+});
+
+test("finding 2: the split comes as sent, never worked out from the amount", () => {
+  const { principal_applied, ...withoutPrincipal } = SOA_ADJUSTED.transactions[0];
+  void principal_applied;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_ADJUSTED, transactions: [withoutPrincipal] }, RANGE),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "principal_applied")!;
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
+test("finding 2: a line without principal_balance shows a dash, not the old principal-plus-premium figure", () => {
+  const { principal_balance, balance, ...rest } = SOA_ADJUSTED.transactions[0];
+  void principal_balance;
+  void balance;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_ADJUSTED, transactions: [{ ...rest, running_balance: 99 }] }, RANGE),
+    "Transaction History"
+  );
+  const column = table.columns.find((c) => c.key === "principal_balance")!;
+  assert.equal(formatCell(table.rows[0], column), DASH);
+});
+
+test("finding 3: Total Due and its footer are shown as the server sends them, penalty included", () => {
+  const penaltyRow = { ...SOA_PAYLOAD.amortization_schedule[1], principal_due: 6092.54, interest_due: 1706.43, penalty_amount: 121.85, total_due: 7920.82 };
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, amortization_schedule: [penaltyRow], schedule_totals: { ...SOA_PAYLOAD.schedule_totals, total_due: 94197.28 } },
+    RANGE
+  );
+  assert.equal(namedTable(doc, "Amortization Schedule").rows[0].total_due, 7920.82);
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_due"), "₱94,197.28");
+});
+
+test("finding 4: the Method column shows the stored method with the reference number", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE), "Transaction History");
+  const column = table.columns.find((c) => c.key === "method")!;
+
+  assert.equal(formatCell(table.rows[0], column), "GCash (Ref. GC12345678)");
+  // The Reference column stays the receipt number.
+  assert.equal(table.rows[0].reference, "RCP-000012");
+});
+
+test("finding 4: a cash payment shows its method alone", () => {
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_ADJUSTED, transactions: [{ ...SOA_ADJUSTED.transactions[0], payment_method: "Cash", reference_number: null }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].method, "Cash");
+});
+
+test("finding 4: the label wins over a raw method key", () => {
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_ADJUSTED, transactions: [{ ...SOA_ADJUSTED.transactions[0], method: "gcash", reference_number: null }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].method, "GCash");
+});
+
+test("finding 5: the statement reads As of the server's date, with no period", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+
+  assert.equal(doc.meta.period, undefined);
+  assert.equal(doc.meta.asOf, formatValue("2026-11-05", "date"));
+  assert.deepEqual(reportScope(doc.meta), { label: "As of", value: formatValue("2026-11-05", "date") });
+  assert.equal(reportScopeLine(doc.meta), `As of ${formatValue("2026-11-05", "date")}`);
+});
+
+test("finding 5: without the server's date, As of shows a dash, and the picked range never prints", () => {
+  const { as_of, ...withoutDate } = SOA_PAYLOAD;
+  void as_of;
+  for (const payload of [withoutDate, null]) {
+    const doc = buildStatementOfAccountDoc(payload, RANGE);
+    assert.equal(reportScopeLine(doc.meta), `As of ${DASH}`);
+  }
+});
+
+test("finding 5: every other report keeps its Period line", () => {
+  const doc = buildIncomeDoc(null, RANGE);
+  assert.equal(doc.meta.asOf, undefined);
+  assert.equal(reportScope(doc.meta).label, "Period:");
+  assert.equal(reportScopeLine(doc.meta), `Period: ${doc.meta.period}`);
+});
+
+test("finding 6: Status is the server's label, Past Due included", () => {
+  const doc = buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE);
+  assert.equal(fieldValue(doc, "Account Particulars", "Status"), "Past Due");
+});
+
+test("finding 7: a build-up loan's schedule gets the two columns, with the server's totals", () => {
+  const doc = buildStatementOfAccountDoc(SOA_BUILD_UP, RANGE);
+  const table = namedTable(doc, "Amortization Schedule");
+  const keys = table.columns.map((c) => c.key);
+
+  assert.equal(table.columns.find((c) => c.key === "build_up_due")?.header, "Share Capital Build-Up");
+  assert.equal(table.columns.find((c) => c.key === "total_payment")?.header, "Total Payment");
+  assert.equal(keys.indexOf("build_up_due"), keys.indexOf("total_due") + 1);
+  assert.equal(keys.indexOf("total_payment"), keys.indexOf("build_up_due") + 1);
+  assert.equal(table.rows[0].build_up_due, 100);
+  assert.equal(table.rows[0].total_payment, 4430);
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "build_up_due"), "₱200.00");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "total_payment"), "₱8,860.00");
+});
+
+test("finding 7: a build-up loan's lines show the build-up, so a line adds up to the amount received", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_BUILD_UP, RANGE), "Transaction History");
+  const keys = table.columns.map((c) => c.key);
+
+  assert.equal(table.columns.find((c) => c.key === "build_up_applied")?.header, "Build-Up");
+  assert.equal(keys.indexOf("build_up_applied"), keys.indexOf("insurance_applied") + 1);
+  assert.equal(keys.indexOf("principal_balance"), keys.indexOf("build_up_applied") + 1);
+  assert.equal(table.rows[0].build_up_applied, 100);
+});
+
+test("finding 7: a build-up column shows a dash where the server sent no figure, and no browser sum", () => {
+  const { build_up_due, total_payment, ...row } = SOA_BUILD_UP.amortization_schedule[0];
+  void build_up_due;
+  void total_payment;
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_BUILD_UP, amortization_schedule: [row], schedule_totals: SOA_PAYLOAD.schedule_totals },
+    RANGE
+  );
+  const table = namedTable(doc, "Amortization Schedule");
+
+  for (const key of ["build_up_due", "total_payment"]) {
+    assert.equal(formatCell(table.rows[0], table.columns.find((c) => c.key === key)!), DASH, key);
+    assert.equal(namedTableTotal(doc, "Amortization Schedule", key), DASH, key);
+  }
+});
+
+test("finding 7: a loan without a build-up, or a server that doesn't say, gets neither column", () => {
+  for (const payload of [SOA_ADJUSTED, SOA_PAYLOAD]) {
+    const doc = buildStatementOfAccountDoc(payload, RANGE);
+    const schedule = namedTable(doc, "Amortization Schedule").columns.map((c) => c.key);
+    const lines = namedTable(doc, "Transaction History").columns.map((c) => c.key);
+
+    assert.equal(schedule.includes("build_up_due"), false);
+    assert.equal(schedule.includes("total_payment"), false);
+    assert.equal(lines.includes("build_up_applied"), false);
+  }
+});
+
+test("the statement's wider tables print in the PDF's smaller type, and only those", () => {
+  const plain = buildStatementOfAccountDoc(SOA_ADJUSTED, RANGE);
+  assert.equal(namedTable(plain, "Amortization Schedule").compact, false);
+  assert.equal(namedTable(plain, "Transaction History").compact, true);
+
+  const buildUp = buildStatementOfAccountDoc(SOA_BUILD_UP, RANGE);
+  assert.equal(namedTable(buildUp, "Amortization Schedule").compact, true);
+});
+
+test("finding 7: the Outstanding Balance card stays the summary's figure, without the build-up", () => {
+  const doc = buildStatementOfAccountDoc(SOA_BUILD_UP, RANGE);
+  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
+});
+
+test("the subsidiary ledger keeps its own Balance column and running balance", () => {
+  const table = namedTable(
+    buildSubsidiaryLedgerDoc(
+      { borrower: { full_name: "Maria Santos" }, loans: [], transactions: [{ date: "2026-03-01", credit: 100, running_balance: 900 }] },
+      RANGE
+    ),
+    "Payment History"
+  );
+  assert.equal(table.columns.at(-1)?.header, "Balance");
+  assert.equal(table.rows[0].running_balance, 900);
 });
 
 const LEDGER_PAYLOAD = {

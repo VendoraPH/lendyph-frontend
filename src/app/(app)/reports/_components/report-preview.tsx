@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { formatCell } from "@/lib/report-format";
-import type { ReportDocument, ReportSection } from "../_lib/types";
+import { reportScope, type ReportDocument, type ReportSection } from "../_lib/types";
 
 interface ReportPreviewProps {
   doc: ReportDocument;
@@ -17,6 +17,7 @@ interface ReportPreviewProps {
  * on-screen and exported artifacts aligned.
  */
 export function ReportPreview({ doc }: ReportPreviewProps) {
+  const scope = reportScope(doc.meta);
   return (
     <div className="rounded-lg border bg-background shadow-sm overflow-hidden">
       {/* Brand header — letterhead: logo, org, title, reference */}
@@ -62,13 +63,13 @@ export function ReportPreview({ doc }: ReportPreviewProps) {
 
       {/* Period / scope / generated-at strip */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 bg-muted/40 border-b px-6 py-2.5">
-        <MetaItem label="Period" value={doc.meta.period ?? "—"} />
+        <MetaItem label={scope.label} value={scope.value} />
         {doc.meta.branchLabel && (
-          <MetaItem label="Branch" value={doc.meta.branchLabel} />
+          <MetaItem label="Branch:" value={doc.meta.branchLabel} />
         )}
-        <MetaItem label="Generated" value={doc.meta.generatedAt} />
+        <MetaItem label="Generated:" value={doc.meta.generatedAt} />
         {doc.meta.preparedBy && (
-          <MetaItem label="Prepared by" value={doc.meta.preparedBy} />
+          <MetaItem label="Prepared by:" value={doc.meta.preparedBy} />
         )}
       </div>
 
@@ -90,7 +91,7 @@ export function ReportPreview({ doc }: ReportPreviewProps) {
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-xs">
-      <span className="text-muted-foreground">{label}: </span>
+      <span className="text-muted-foreground">{label} </span>
       <span className="font-medium">{value}</span>
     </div>
   );
