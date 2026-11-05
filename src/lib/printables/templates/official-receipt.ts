@@ -13,6 +13,7 @@
  */
 
 import { amountInWords } from "../amount-in-words";
+import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
@@ -154,10 +155,8 @@ export function buildOfficialReceiptDoc(
         columns: 2,
         items: presentFields([
           dateTimeField("Voided on", pick(payment, ["voided_at"])),
-          field(
-            "Voided by",
-            personName(payment, "voided_by_user", ["voided_by"])
-          ),
+          // `voided_by` is the user's id, so only the loaded user names anyone.
+          field("Voided by", personName(payment, "voided_by_user")),
           field("Reason", pick(payment, ["void_reason"])),
         ]),
       }
@@ -210,7 +209,7 @@ export function buildOfficialReceiptDoc(
         field("Principal balance after payment", currencyOrDash(balanceAfter)),
         (insurance ?? 0) > 0 ? field("Insurance premium collected", formatCurrency(insurance ?? 0)) : null,
         dateField("Next due date", pick(payment, ["next_due_date"])),
-        field("Remarks", pick(payment, ["remarks"])),
+        field("Remarks", readablePaymentRemarks(pick<string>(payment, ["remarks"]))),
       ]),
     },
     {
