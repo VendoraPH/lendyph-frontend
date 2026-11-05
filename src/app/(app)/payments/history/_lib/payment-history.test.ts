@@ -21,7 +21,13 @@ import {
   readPaymentTotals,
   totalFigure,
 } from "./payment-history";
-import { firstLastNameFrom, inPaymentDateRange, matchesPaymentSearch } from "./payment-history";
+import {
+  firstLastNameFrom,
+  inPaymentDateRange,
+  matchesPaymentSearch,
+  paymentRemarks,
+  voidedByName,
+} from "./payment-history";
 
 describe("paymentAmountFigures", () => {
   test("shows amount_paid as it is: the penalty is already inside it", () => {
@@ -142,4 +148,18 @@ test("the first-last name comes from the flat field GET /repayments sends", () =
   assert.equal(firstLastNameFrom({ borrower_first_last: "Juan Dela Cruz" }), "Juan Dela Cruz");
   assert.equal(firstLastNameFrom({ loan: { borrower: { first_name: "Ana", last_name: "Reyes" } } }), "Ana Reyes");
   assert.equal(firstLastNameFrom({}), null);
+});
+
+// `voided_by` is the user's id, so the list read "Voided by 1". The name comes
+// from `voided_by_user`; without one the row shows a dash, never the id.
+test("the voider's name comes from voided_by_user, never the id", () => {
+  assert.equal(voidedByName({ voided_by: 1, voided_by_user: { id: 1, name: "Ana Cruz" } }), "Ana Cruz");
+  assert.equal(voidedByName({ voided_by: 1 }), "—");
+  assert.equal(voidedByName({ voided_by: 1, voided_by_user: null }), "—");
+});
+
+test("a legacy method line never reaches a row's remarks", () => {
+  assert.equal(paymentRemarks("[method=GCash | collected_by=Ana Cruz]"), undefined);
+  assert.equal(paymentRemarks("Paid early\n[method=Cash]"), "Paid early");
+  assert.equal(paymentRemarks(undefined), undefined);
 });

@@ -64,7 +64,8 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
     // guards a malformed call rather than an expected state.
     if (!ctx.subjectId) return build(null, { org: ctx.org });
     const raw = await fetcher(ctx.subjectId).catch(() => null);
-    return build(raw, { org: ctx.org });
+    const doc = build(raw, { org: ctx.org });
+    return raw === null ? doc : { ...doc, subjectId: ctx.subjectId };
   };
 }
 
