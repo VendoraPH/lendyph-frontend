@@ -849,14 +849,14 @@ function NewLoanApplicationInner() {
       }
 
       // Auto-forward to Manager: creating the loan IS the Loan Processor's action,
-      // so skip the redundant "Submit for Review" click on the detail page.
+      // so skip the redundant "Submit for Approval" click on the detail page.
       let forwarded = false;
       try {
         await loanService.submit(loan.id);
         forwarded = true;
       } catch {
         toast.warning(
-          "Loan created but could not be forwarded for review. Open the loan to submit it manually."
+          "Loan created but could not be forwarded for approval. Open the loan to submit it manually."
         );
       }
 

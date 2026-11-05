@@ -8,6 +8,19 @@ export type PaymentBody = CreateRepaymentData & {
 };
 
 /**
+ * The reference once the method changes: cleared, because a reference belongs to
+ * the method it was typed for. Cash doesn't require one, so one typed for GCash
+ * would otherwise go out on a Cash payment.
+ */
+export function referenceAfterMethodChange(
+  previousMethod: string,
+  nextMethod: string,
+  reference: string,
+): string {
+  return previousMethod === nextMethod ? reference : "";
+}
+
+/**
  * What Post Payment sends. The method and reference are fields, so the
  * statement reads them and the journal posts to the method's account. Remarks
  * hold only what was typed, plus who collected it when that isn't the

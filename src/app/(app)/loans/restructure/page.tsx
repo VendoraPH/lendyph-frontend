@@ -760,16 +760,16 @@ function RestructureLoanInner() {
         }
       }
 
-      // Forward it for review. Submitting a restructure application needs only
+      // Forward it for approval. Submitting a restructure application needs only
       // `loans:restructure`, the same permission as this page, so everyone
       // who gets here can. Exactly one outcome is reported.
       const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
       if (forwarded) {
         toast.success("Restructure application submitted", {
-          description: "Forwarded for review.",
+          description: "Forwarded for approval.",
         });
       } else {
-        toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
+        toast.warning("Restructure created but could not be forwarded for approval. Submit it manually from the loan detail page.");
       }
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {

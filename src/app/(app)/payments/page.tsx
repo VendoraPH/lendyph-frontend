@@ -66,7 +66,7 @@ import {
   activeLoanDueCell,
   type ActiveLoan,
 } from "./_lib/active-loans";
-import { buildPaymentBody } from "./_lib/payment-body";
+import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-body";
 import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
 import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
@@ -719,7 +719,11 @@ function PaymentsContent() {
                 <Select
                   items={PAYMENT_METHOD_LABELS}
                   value={paymentMethod}
-                  onValueChange={(value) => { if (value) setPaymentMethod(value); }}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setReferenceNumber((current) => referenceAfterMethodChange(paymentMethod, value, current));
+                    setPaymentMethod(value);
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select method" />
