@@ -10,9 +10,9 @@ import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lu
 import type { Loan, LoanSchedule } from "@/types";
 import {
   LOAN_STATUS_COLORS,
-  LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
 import { formatCurrency, formatRate } from "@/lib/format";
@@ -164,8 +164,8 @@ export function LoansTab({ loans }: LoansTabProps) {
                         {loan.maturity_date ? formatDate(loan.maturity_date) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
-                          {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loanDisplayStatus(loan)]}>
+                          {loanRowStatusLabel(loan)}
                         </Badge>
                       </TableCell>
                       <TableCell>

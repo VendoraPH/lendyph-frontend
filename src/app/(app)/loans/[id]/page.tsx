@@ -74,6 +74,20 @@ import { InsurancePremiumSection } from "./_components/insurance-premium-section
 import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-figures";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
+import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
+import type { PreviewReadState } from "./_hooks/use-preview-read";
+import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions-preview";
+import {
+  DEFAULT_PAYMENT_METHOD,
+  PAYMENT_METHOD_OPTIONS,
+  paymentMethodFields,
+  paymentMethodLabel,
+  paymentReferenceError,
+  readPaymentMethod,
+  referenceAfterMethodChange,
+  type RecordPaymentMethod,
+  type RecordPaymentPayload,
+} from "./_lib/payment-method";
 import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
 import { useExtensionPreview } from "./_hooks/use-extension-preview";
 import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
@@ -109,7 +123,7 @@ import {
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import type { LoanSchedule, LoanSummary } from "@/types/loan";
+import type { LoanDeductionsPreview, LoanSchedule, LoanSummary } from "@/types/loan";
 import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
@@ -212,6 +226,8 @@ import {
   ADJUSTMENT_STATUS_LABELS,
   isEverReleasedLoanStatus,
 } from "@/constants";
+import { loanDisplayStatus } from "@/constants/loan-status";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import type { Loan } from "@/types/loan";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 
@@ -345,14 +361,16 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                       variant="outline"
                       className={cn(
                         "text-[10px] px-1.5 py-0 h-4",
-                        bl.status === "released" || bl.status === "ongoing"
-                          ? "bg-green-500/10 text-green-700 border-green-500/30"
-                          : bl.status === "approved"
-                            ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                            : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                        loanDisplayStatus(bl) === "past_due"
+                          ? "bg-red-500/10 text-red-700 border-red-500/30"
+                          : bl.status === "released" || bl.status === "ongoing"
+                            ? "bg-green-500/10 text-green-700 border-green-500/30"
+                            : bl.status === "approved"
+                              ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                              : "bg-amber-500/10 text-amber-700 border-amber-500/30"
                       )}
                     >
-                      {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
+                      {loanStatusLabel(loanDisplayStatus(bl), bl.current_approver, bl.current_status_label)}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -536,7 +554,7 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   ) {
     events.push({
       icon: <Send className="h-4 w-4 text-amber-600" />,
-      label: "Submitted for review",
+      label: "Submitted for approval",
       date: loan.updated_at,
     });
   }
@@ -717,6 +735,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [paymentReference, setPaymentReference] = useState("");
+  // Every opening starts at Cash with no reference: what was left after Cancel
+  // must not post on a later payment under the wrong method.
+  if (useDialogOpening(recordPaymentOpen, loanId)) {
+    setPaymentMethod(DEFAULT_PAYMENT_METHOD);
+    setPaymentReference("");
+  }
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
   // The amount and date `paymentPreview` answers (previewRequestKey).
@@ -741,11 +767,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [extendOpen, setExtendOpen] = useState(false);
   const [extendRemarks, setExtendRemarks] = useState("");
   const [partialExtendOpen, setPartialExtendOpen] = useState(false);
-  const [pendingPayment, setPendingPayment] = useState<{
-    payment_date: string;
-    amount_paid: number;
-    remarks?: string;
-  } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<RecordPaymentPayload | null>(null);
   // What to do with interest already outstanding when the loan extends.
   // Defaults to "pay", which is how extension behaved before the choice
   // existed. The API performs the collection itself, so there is no longer a
@@ -1017,13 +1039,33 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // server once while the loan awaits release. The Release dialog and, for
   // whoever can release it, the Loan Information card show no deduction, total
   // or net for an approved loan that does not come from here. The endpoint
-  // needs `loans:release`, so without it the card keeps the recorded figures
-  // and nothing is asked for unless the dialog is opened.
+  // needs `loans:release`, so nothing is asked for without it unless the dialog
+  // is opened.
   const canReleaseLoan = usePermission().can("loans:release");
-  const releasePreviewOnCard = loan?.status === "approved" && canReleaseLoan;
   const { state: releasePreview, reload: reloadReleasePreview } = useReleasePreview(
     loanId,
     loan?.status === "approved" && (canReleaseLoan || releaseOpen),
+  );
+  // The card before release: the same figures for anyone who can see the loan,
+  // labelled as an estimate until it is approved. What the loan records until
+  // then leaves out the fees configured in Settings, so it is never shown.
+  const cardSource = loan ? cardDeductionsSource(loan.status, canReleaseLoan) : "recorded";
+  const { state: deductionsPreview, reload: reloadDeductionsPreview } = useDeductionsPreview(
+    loanId,
+    loan?.status,
+    cardSource === "deductions-preview",
+  );
+  const cardPreview: PreviewReadState<LoanDeductionsPreview> | null =
+    cardSource === "release-preview"
+      ? releasePreview
+      : cardSource === "deductions-preview"
+        ? deductionsPreview
+        : null;
+  const reloadCardPreview =
+    cardSource === "release-preview" ? reloadReleasePreview : reloadDeductionsPreview;
+  const cardEstimated = cardFiguresAreEstimated(
+    cardSource,
+    cardPreview?.status === "loaded" ? cardPreview.preview : null,
   );
   // The same preview with the insurance typed in the Release dialog: the
   // premium, what is left to collect, and the deductions and net after it, all
@@ -1285,6 +1327,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // message and sends neither the preview nor the payment (the server
   // refuses it too).
   const paymentAmountCheck = checkPaymentAmount(paymentAmount);
+  const paymentReferenceProblem = paymentReferenceError(paymentMethod, paymentReference);
   // The server refused the amount and date typed now: posting them would be
   // refused too, so its reason shows and Record Payment waits for a change.
   const paymentRefusal =
@@ -1531,7 +1574,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
     (isUnseededDraft ||
       (!!currentStep && currentStep.kind === "submit" && canActOnCurrentStep));
 
-  // Who may send a draft for review: `PATCH /loans/{id}/submit` takes
+  // Who may send a draft for approval: `PATCH /loans/{id}/submit` takes
   // `loans:update`, or `loans:restructure` for a restructure application.
   const canSubmitDraft = canUpdateLoan || (!!loan.is_restructure && canRestructureLoan);
 
@@ -1568,9 +1611,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
       }
       await refreshAfterStepAction();
       setStepRemarks("");
-      toast.success("Submitted for review");
+      toast.success("Submitted for approval");
     } catch (err) {
-      notifyError(err, "We couldn't submit for review. Please try again.");
+      notifyError(err, "We couldn't submit for approval. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -1680,11 +1723,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // "Yes, extend" passes false: it extends straight afterwards and re-reads
   // once for both.
   const submitRepayment = async (
-    data: {
-      payment_date: string;
-      amount_paid: number;
-      remarks?: string;
-    },
+    data: RecordPaymentPayload,
     { refresh = true }: { refresh?: boolean } = {},
   ): Promise<boolean> => {
     setActionLoading(true);
@@ -1698,6 +1737,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       setRecordPaymentOpen(false);
       setPaymentAmount("");
       setPaymentRemarks("");
+      setPaymentMethod(DEFAULT_PAYMENT_METHOD);
+      setPaymentReference("");
       setPaymentDate(new Date());
       setPaymentPreview(null);
       setPaymentMode("regular");
@@ -1726,10 +1767,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const handleRecordPayment = async () => {
     const amountPaid = checkPaymentAmount(paymentAmount).amount;
     if (amountPaid === null || amountPaid <= 0) return;
+    if (paymentReferenceProblem !== null) return;
     // Annotate the remarks so the receipt/audit log preserves the
-    // cashier's intent. Backend only persists payment_date, amount_paid,
-    // and remarks — no dedicated "is_advance" column — so the tag in
-    // remarks is the audit trail for advance payments.
+    // cashier's intent. There is no dedicated "is_advance" column, so the
+    // tag in remarks is the audit trail for advance payments.
     const tag =
       paymentMode === "advance"
         ? `[ADVANCE: ${advancePeriods} period${advancePeriods === 1 ? "" : "s"}]`
@@ -1743,6 +1784,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       payment_date: formatDateISO(paymentDate),
       amount_paid: amountPaid,
       remarks: composedRemarks,
+      ...paymentMethodFields(paymentMethod, paymentReference),
     };
 
     // Upon Maturity loans: if the server's preview for this amount and date
@@ -2093,6 +2135,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : { demand_letter: "Available once the loan falls past due" }),
   };
 
+
+  const displayStatus = loanDisplayStatus(loan);
+  // The approver only names a step while the loan is under approval; at approved
+  // the label comes from the pending Release step. Past Due is the server's.
+  const headerStatusBadge = (
+    <Badge
+      variant="outline"
+      className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[displayStatus])}
+    >
+      {loanStatusLabel(
+        displayStatus,
+        currentStep?.name ?? loan.current_approver,
+        currentStep ? currentStep.status_label : loan.current_status_label,
+      )}
+    </Badge>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2112,16 +2171,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <span className="font-mono text-xl font-bold text-brand-orange">
                   {loan.loan_account_number}
                 </span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
-                >
-                  {loanStatusLabel(
-                    loan.status,
-                    currentStep?.name ?? loan.current_approver,
-                    currentStep ? currentStep.status_label : loan.current_status_label,
-                  )}
-                </Badge>
+                {headerStatusBadge}
               </div>
             )}
             <div className="flex items-center gap-3 flex-wrap">
@@ -2131,18 +2181,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               )}>
                 {loan.application_number}
               </span>
-              {!loan.loan_account_number && (
-                <Badge
-                  variant="outline"
-                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
-                >
-                  {loanStatusLabel(
-                    loan.status,
-                    currentStep?.name ?? loan.current_approver,
-                    currentStep ? currentStep.status_label : loan.current_status_label,
-                  )}
-                </Badge>
-              )}
+              {!loan.loan_account_number && headerStatusBadge}
             </div>
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
@@ -2182,7 +2221,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           approvalUnavailable ||
           approvalSteps.length > 0 ||
           // A DRAFT has no chain yet — it is seeded on submit — but the only
-          // "Submit for Review" control lives inside this card, so suppressing
+          // "Submit for Approval" control lives inside this card, so suppressing
           // it here left a draft with no way into the chain at all: the chain
           // seeds on submit, and submit needed the chain. Any draft not
           // auto-submitted by /loans/new was unrecoverable.
@@ -2256,7 +2295,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             )}
 
             {/* A draft has no chain yet — it is seeded on submit — so this is
-                the one place Submit for Review can live. It used to sit inside
+                the one place Submit for Approval can live. It used to sit inside
                 the active-step panel, which needs a `currentStep` that a draft
                 by definition does not have, so the card was suppressed and the
                 loan had no way in. */}
@@ -2310,7 +2349,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       disabled={stepActionLoading}
                       onClick={handleStepSubmit}
                     >
-                      {stepActionLoading ? "Submitting…" : "Submit for Review"}
+                      {stepActionLoading ? "Submitting…" : "Submit for Approval"}
                     </Button>
                   )}
                 </div>
@@ -2601,7 +2640,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             disabled={stepActionLoading || !clientCanActOnCurrentStep}
                           >
                             <Send className="mr-2 h-4 w-4" />
-                            Submit for Review
+                            Submit for Approval
                           </Button>
                         </>
                       )}
@@ -2911,17 +2950,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div>
                 <p className="text-xs text-muted-foreground">Net Proceeds</p>
                 <p className="text-sm font-semibold">
-                  {releasePreviewOnCard
-                    ? releasePreview.status === "loaded"
-                      ? formatCurrencyExact(releasePreview.preview.net_proceeds)
+                  {cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? formatCurrencyExact(cardPreview.preview.net_proceeds)
                       : "—"
                     : loan.net_proceeds != null
                       ? formatCurrency(loan.net_proceeds)
                       : "N/A"}
                 </p>
-                {loan.status === "approved" && !canReleaseLoan && (
+                {cardEstimated && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Fees configured in Settings are added when the loan is released.
+                    Estimated until release
                   </p>
                 )}
               </div>
@@ -2939,14 +2978,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
             {/* Deductions */}
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              {/* Awaiting release: what the release will withhold, as the
-                  server's release preview has it (the Release dialog's figures). */}
-              {releasePreviewOnCard ? (
-                releasePreview.status === "loaded" ? (
-                  releasePreview.preview.deductions.length === 0 ? (
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
+                {cardEstimated && (
+                  <p className="text-xs text-muted-foreground">Estimated until release</p>
+                )}
+              </div>
+              {/* Before release: what the release will withhold, as the server
+                  works it out with the Release dialog's own code. */}
+              {cardPreview ? (
+                cardPreview.status === "loaded" ? (
+                  cardPreview.preview.deductions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
-                  ) : releasePreview.preview.deductions.map((item, index) => (
+                  ) : cardPreview.preview.deductions.map((item, index) => (
                     <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
                       <span className="text-sm text-muted-foreground">
                         {item.name}
@@ -2955,13 +2999,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
                     </div>
                   ))
-                ) : releasePreview.status === "loading" ? (
+                ) : cardPreview.status === "loading" ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Spinner className="size-4" />
                     Getting the release figures…
                   </div>
                 ) : (
-                  <p role="alert" className="text-sm text-destructive">{releasePreview.message}</p>
+                  <div role="alert" className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-destructive">{cardPreview.message}</p>
+                    <Button type="button" variant="outline" size="sm" onClick={reloadCardPreview}>
+                      Try again
+                    </Button>
+                  </div>
                 )
               ) : (() => {
                 // Render every backend-computed deduction as its own line —
@@ -2999,9 +3048,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Total Deductions</span>
                 <span className="text-sm font-semibold">
-                  {releasePreviewOnCard
-                    ? releasePreview.status === "loaded"
-                      ? formatCurrencyExact(releasePreview.preview.total_deductions)
+                  {cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? formatCurrencyExact(cardPreview.preview.total_deductions)
                       : "—"
                     : currencyOrDash(loan.total_deductions)}
                 </span>
@@ -4339,6 +4388,53 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </p>
               )}
             </div>
+            <div className="space-y-1.5 min-w-0">
+              <Label id="payment-method-label">
+                Payment Method <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={paymentMethod}
+                onValueChange={(value) => {
+                  const next = readPaymentMethod(value, paymentMethod);
+                  setPaymentReference(referenceAfterMethodChange(paymentMethod, next, paymentReference));
+                  setPaymentMethod(next);
+                }}
+              >
+                <SelectTrigger className="w-full" aria-labelledby="payment-method-label">
+                  <SelectValue>
+                    {(value: RecordPaymentMethod) => paymentMethodLabel(value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 min-w-0">
+              <Label htmlFor="payment-reference">
+                Reference Number
+                {paymentMethod !== "cash" && <span className="text-red-500"> *</span>}
+              </Label>
+              <Input
+                id="payment-reference"
+                placeholder={paymentMethod === "cash" ? "Optional" : "Required for this method"}
+                maxLength={100}
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                required={paymentMethod !== "cash"}
+                aria-describedby={paymentReferenceProblem !== null ? "payment-reference-hint" : undefined}
+                className="w-full"
+              />
+              {paymentReferenceProblem !== null && (
+                <p id="payment-reference-hint" className="text-xs text-muted-foreground">
+                  {paymentReferenceProblem}
+                </p>
+              )}
+            </div>
             <div className="space-y-1.5 sm:col-span-2 min-w-0">
               <Label htmlFor="payment-remarks">Remarks (optional)</Label>
               <Textarea
@@ -4703,6 +4799,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 actionLoading ||
                 paymentAmountCheck.amount === null ||
                 paymentAmountCheck.amount <= 0 ||
+                paymentReferenceProblem !== null ||
                 paymentRefusal !== null
               }
             >
