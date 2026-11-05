@@ -9,7 +9,7 @@ import { csvRow as row } from "@/lib/csv-escape";
 import { csvBlob } from "@/lib/csv";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
-import type { ReportDocument } from "./types";
+import { reportScopeLine, type ReportDocument } from "./types";
 
 /**
  * CSV export — simple, plain text. Each section is rendered as its own
@@ -27,7 +27,7 @@ export function renderReportCsv(doc: ReportDocument): string {
   lines.push(row([doc.meta.org]));
   if (doc.meta.subtitle) lines.push(row([doc.meta.subtitle]));
   if (doc.meta.reference) lines.push(row([`Reference: ${doc.meta.reference}`]));
-  lines.push(row([`Period: ${doc.meta.period ?? ""}`]));
+  lines.push(row([reportScopeLine(doc.meta)]));
   if (doc.meta.branchLabel) lines.push(row([`Branch: ${doc.meta.branchLabel}`]));
   lines.push(row([`Generated: ${doc.meta.generatedAt}`]));
   if (doc.meta.preparedBy) {

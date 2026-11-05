@@ -48,9 +48,11 @@ import {
   inPaymentDateRange,
   matchesPaymentSearch,
   paymentAmountFigures,
+  paymentRemarks,
   paymentTotalsParams,
   readPaymentTotals,
   totalFigure,
+  voidedByName,
   type PaymentTotals,
 } from "./_lib/payment-history";
 import {
@@ -147,9 +149,9 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
     balance_before: (p.balance_before as number) || 0,
     balance_after: (p.balance_after as number) || 0,
     reference_number: p.reference_number as string | undefined,
-    remarks: p.remarks || undefined,
+    remarks: paymentRemarks(p.remarks),
     void_reason: p.void_reason || undefined,
-    voided_by: p.voided_by || undefined,
+    voided_by: p.status === "voided" ? voidedByName(p) : undefined,
     voided_at: p.voided_at || undefined,
   };
 }
