@@ -119,7 +119,7 @@ import {
 
 import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import { loanMemberOptions } from "@/app/(app)/loans/new/_lib/member-picker";
-import { MemberSearchPicker } from "@/app/(app)/loans/new/_components/member-search-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
 import type { LoanProduct } from "@/types/loan";
 import {

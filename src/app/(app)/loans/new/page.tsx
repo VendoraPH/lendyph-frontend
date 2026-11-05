@@ -126,7 +126,7 @@ import {
   type SelectedCollateral,
 } from "./_lib/edit-collaterals";
 import { loanMemberOptions, memberPicker } from "./_lib/member-picker";
-import { MemberSearchPicker } from "./_components/member-search-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
 import {
   formInterestMethod,

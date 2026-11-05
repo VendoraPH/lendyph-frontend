@@ -45,6 +45,8 @@ interface Props {
   disabled?: boolean;
   /** Non-null when the drain behind `options` came up short. */
   shortfall?: GCashPartyShortfall | null;
+  /** The line under the list, e.g. that a search has more matches than it shows. */
+  status?: string;
 }
 
 /**
@@ -71,6 +73,7 @@ export function GCashPartyPicker({
   error = null,
   disabled = false,
   shortfall = null,
+  status = "",
 }: Props) {
   const [open, setOpen] = useState(false);
   const singular = noun.replace(/s$/, "");
@@ -182,6 +185,11 @@ export function GCashPartyPicker({
                 })}
               </CommandGroup>
             </CommandList>
+            {status && !searching && (
+              <p role="status" className="border-t px-2.5 py-2 text-xs text-muted-foreground">
+                {status}
+              </p>
+            )}
           </Command>
         </PopoverContent>
       </Popover>
