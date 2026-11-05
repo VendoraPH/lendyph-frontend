@@ -4,6 +4,7 @@ import type { AuditLog } from "@/types";
 import {
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
+  auditChangeValue,
   auditDescription,
   auditFieldLabel,
   auditModuleLabel,
@@ -156,4 +157,35 @@ test("a created row with no description reads Created with the record's label", 
 test("a created or deleted row's own description still wins", () => {
   assert.equal(auditDescription(log({ action: "created", target: role, description: "Role created" })), "Role created");
   assert.equal(auditDescription(log({ action: "deleted", target: role, description: "Role deleted" })), "Role deleted");
+});
+
+const loanTarget = { id: 9, type: "Loan", label: "LN-0009" };
+
+test("a loan's status change reads the app's labels, not raw keys", () => {
+  const row = log({ target: loanTarget });
+  assert.equal(auditChangeValue(row, "status", "for_review"), "For Approval");
+  assert.equal(auditChangeValue(row, "status", "ongoing"), "Current");
+  assert.equal(auditChangeValue(row, "status", "void"), "Voided");
+});
+
+test("a loan's status change in the summary line reads the same labels", () => {
+  const row = log({
+    target: loanTarget,
+    changes: [{ field: "status", old: "draft", new: "for_review" }],
+  });
+  assert.equal(auditDescription(row), "Changed status: Draft → For Approval");
+});
+
+test("only a loan's status is relabelled", () => {
+  const user = log({ target: { id: 7, type: "User", label: "Ana" } });
+  assert.equal(auditChangeValue(user, "status", "approved"), "approved");
+  const step = log({ target: { id: 3, type: "LoanApprovalStep", label: "Manager" } });
+  assert.equal(auditChangeValue(step, "status", "for_review"), "for_review");
+  assert.equal(auditChangeValue(log({ target: loanTarget }), "purpose", "for_review"), "for_review");
+});
+
+test("a status the app has no label for, or a missing value, is left alone", () => {
+  const row = log({ target: loanTarget });
+  assert.equal(auditChangeValue(row, "status", "someday"), "someday");
+  assert.equal(auditChangeValue(row, "status", null), null);
 });

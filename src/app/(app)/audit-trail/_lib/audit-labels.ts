@@ -2,6 +2,7 @@
 // description. Dependency-free so it is unit-testable under `tsx --test`.
 
 import type { AuditLog, AuditModule } from "@/types";
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { roleLabelForKey } from "@/lib/role-display-name";
 
 const MODULE_LABELS: Record<AuditModule, string> = {
@@ -76,6 +77,22 @@ export function auditFieldLabel(field: string): string {
   return field.split("_").filter(Boolean).join(" ");
 }
 
+/**
+ * A changed value as the row shows it. A loan's `status` reads the app's own
+ * label (`for_review` reads "For Approval"); any other value, including a status
+ * the app has no label for, stays as the server stored it.
+ */
+export function auditChangeValue(
+  log: Pick<AuditLog, "target">,
+  field: string,
+  value: string | null,
+): string | null {
+  if (value === null || field !== "status" || log.target?.type !== "Loan") return value;
+  return Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as keyof typeof LOAN_STATUS_LABELS]
+    : value;
+}
+
 /** Bookkeeping fields a deleted row's summary leaves out: the id and timestamps. */
 function isBookkeepingField(field: string): boolean {
   return field === "id" || field.endsWith("_at");
@@ -104,12 +121,13 @@ export function auditDescription(
   if (log.action === "deleted") {
     const kept = changes.filter((c) => !isBookkeepingField(c.field) && c.old !== null && c.old !== "");
     if (kept.length === 0) return withRecordLabel("Deleted", log.target);
-    return `Deleted: ${kept.map((c) => `${auditFieldLabel(c.field)} ${c.old}`).join(", ")}`;
+    return `Deleted: ${kept.map((c) => `${auditFieldLabel(c.field)} ${auditChangeValue(log, c.field, c.old)}`).join(", ")}`;
   }
 
   if (changes.length === 0) return "";
   const parts = changes.map(
-    (c) => `${auditFieldLabel(c.field)}: ${c.old ?? "—"} → ${c.new ?? "—"}`
+    (c) =>
+      `${auditFieldLabel(c.field)}: ${auditChangeValue(log, c.field, c.old) ?? "—"} → ${auditChangeValue(log, c.field, c.new) ?? "—"}`
   );
   return `Changed ${parts.join("; ")}`;
 }
