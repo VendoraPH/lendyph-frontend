@@ -390,7 +390,7 @@ function PaymentsContent() {
           <div className="relative w-full sm:w-72">
             <Input
               aria-label="Search active loans"
-              placeholder="Search member, code or account number..."
+              placeholder="Search member, account, or product..."
               value={list.search}
               onChange={(e) => list.setSearch(e.target.value)}
               className="pr-10"

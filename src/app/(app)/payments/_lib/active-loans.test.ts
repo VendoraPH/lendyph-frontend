@@ -48,15 +48,29 @@ test("asks the server for one summary page of active loans", () => {
   assert.deepEqual(activeLoanListParams({ query: "", page: 1, perPage: ACTIVE_LOANS_PER_PAGE }), {
     status: "active",
     view: "summary",
+    sort: "next_due",
+    dir: "asc",
     page: 1,
     per_page: 25,
   });
+});
+
+// A cashier's queue: the earliest unpaid due date first, so overdue loans lead
+// every page. The server has to sort it, since a browser sort only sees one page.
+test("every page asks the server for the earliest due date first", () => {
+  for (const query of ["", "santos"]) {
+    const params = activeLoanListParams({ query, page: 2, perPage: 25 });
+    assert.equal(params.sort, "next_due");
+    assert.equal(params.dir, "asc");
+  }
 });
 
 test("the search goes to the server with the page", () => {
   assert.deepEqual(activeLoanListParams({ query: "santos", page: 3, perPage: 50 }), {
     status: "active",
     view: "summary",
+    sort: "next_due",
+    dir: "asc",
     page: 3,
     per_page: 50,
     search: "santos",

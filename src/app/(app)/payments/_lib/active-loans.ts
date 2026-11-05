@@ -24,6 +24,13 @@ export const ACTIVE_STATUS = "active";
  */
 export const LOAN_SUMMARY_VIEW = "summary";
 
+/**
+ * GET /loans `sort=next_due`: the earliest unpaid due date first, loans with no
+ * due date last, so overdue loans lead the queue. `dir` is spelled out because
+ * the API's default direction is `desc`.
+ */
+export const ACTIVE_LOANS_SORT = { sort: "next_due", dir: "asc" } as const;
+
 /** Rows per page, until the cashier picks another size. */
 export const ACTIVE_LOANS_PER_PAGE = 25;
 
@@ -50,6 +57,7 @@ export function activeLoanListParams(request: {
   return {
     status: ACTIVE_STATUS,
     view: LOAN_SUMMARY_VIEW,
+    ...ACTIVE_LOANS_SORT,
     page: request.page,
     per_page: request.perPage,
     ...(request.query ? { search: request.query } : {}),
