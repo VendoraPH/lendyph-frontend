@@ -251,18 +251,24 @@ test("official receipt: a payment that did load is never flagged incomplete", ()
   assert.equal(chargeAmount(zero, "TOTAL AMOUNT PAID"), formatCurrency(0));
 });
 
-test("official receipt: the legacy method line is hidden from the remarks", () => {
+test("official receipt: the legacy method line prints as a clean remark", () => {
   const typed = buildOfficialReceiptDoc({
     ...PAYMENT,
     remarks: "Over the counter\n[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
   });
-  assert.equal(fieldValue(typed, "Remarks"), "Over the counter");
+  assert.equal(
+    fieldValue(typed, "Remarks"),
+    "Over the counter. Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
 
   const onlyLegacy = buildOfficialReceiptDoc({
     ...PAYMENT,
     remarks: "[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
   });
-  assert.ok(isBlankField(onlyLegacy, "Remarks"));
+  assert.equal(
+    fieldValue(onlyLegacy, "Remarks"),
+    "Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
 });
 
 test("official receipt: the voider is named, never shown as a user id", () => {

@@ -13,7 +13,7 @@
  */
 
 import { amountInWords } from "../amount-in-words";
-import { withoutLegacyPaymentMeta } from "../legacy-remarks";
+import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
@@ -209,7 +209,7 @@ export function buildOfficialReceiptDoc(
         field("Principal balance after payment", currencyOrDash(balanceAfter)),
         (insurance ?? 0) > 0 ? field("Insurance premium collected", formatCurrency(insurance ?? 0)) : null,
         dateField("Next due date", pick(payment, ["next_due_date"])),
-        field("Remarks", withoutLegacyPaymentMeta(pick<string>(payment, ["remarks"]))),
+        field("Remarks", readablePaymentRemarks(pick<string>(payment, ["remarks"]))),
       ]),
     },
     {

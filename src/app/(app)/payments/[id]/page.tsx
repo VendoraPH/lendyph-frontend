@@ -15,7 +15,8 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
-import { paymentRemarks, voidedByName } from "../history/_lib/payment-history";
+import { readablePaymentRemarks } from "@/lib/printables/legacy-remarks";
+import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     new_balance: (p.new_balance as number) || 0,
     next_due_date: (p.next_due_date as string) || "—",
     collected_by: (p.collected_by as string) || "—",
-    remarks: paymentRemarks(p.remarks) ?? "",
+    remarks: readablePaymentRemarks(p.remarks),
     voided_by: voidedByName(p),
     status: p.status,
   };
