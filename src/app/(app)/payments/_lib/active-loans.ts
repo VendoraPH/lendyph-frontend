@@ -1,5 +1,6 @@
 import type { Loan, PaginatedResponse } from "@/types";
-import { toNumber } from "@/lib/report-format";
+import { currencyOrDash, toNumber } from "@/lib/report-format";
+import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
 
 /**
  * The `status` value this screen sends.
@@ -18,39 +19,59 @@ import { toNumber } from "@/lib/report-format";
 export const ACTIVE_STATUS = "active";
 
 /**
- * The largest page the API will actually serve.
- *
- * `LoanController::index()` paginates with `min(max(per_page, 1), 100)`. A
- * larger number is not rejected, it is silently reduced — which is exactly how
- * this screen lost loans: it asked for 500, was given 100, and had no way to
- * tell. Asking for precisely the documented ceiling is the fewest round trips
- * this can take, and it is a number derived from the contract rather than
- * guessed against today's row count.
+ * GET /loans `view=summary`: rows without schedules. Draining full rows cost
+ * 32 MB raw at 2,000 loans; a loan's full data loads only when it is selected.
  */
-export const LOANS_PER_PAGE = 100;
+export const LOAN_SUMMARY_VIEW = "summary";
 
 /**
- * Runaway guard. NOT a limit on how many loans this screen can show.
- *
- * The loop is driven by the server's own `meta.last_page`; this only bounds the
- * damage when that value is missing, absurd, or the paginator never returns a
- * short page. It is the one number here that is not derived from the contract,
- * so it is built to be harmless: reaching it sets `truncated`, and the screen
- * renders that as a visible warning naming how many loans it is missing.
- *
- * That is the whole difference from the bug this replaces. `per_page: 500` was
- * a limit that lied — it silently produced 100 rows and looked complete.
- * Correctness here does not depend on this number being big enough; only the
- * cost of a pathological response does.
+ * GET /loans `sort=next_due`: the earliest unpaid due date first, loans with no
+ * due date last, so overdue loans lead the queue. `dir` is spelled out because
+ * the API's default direction is `desc`.
  */
-export const MAX_ACTIVE_LOAN_PAGES = 20;
+export const ACTIVE_LOANS_SORT = { sort: "next_due", dir: "asc" } as const;
 
-/** Fetches one page of loans. Injected so this is testable without a network. */
-export type LoanPageFetcher = (params: {
-  status: string;
+/** Rows per page, until the cashier picks another size. */
+export const ACTIVE_LOANS_PER_PAGE = 25;
+
+/** The page sizes on offer. The API clamps `per_page` to 100. */
+export const ACTIVE_LOANS_PER_PAGE_OPTIONS = [25, 50, 100] as const;
+
+/** How long typing has to pause before the server is asked. */
+export const ACTIVE_LOAN_SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * The `search` to send for what was typed: trimmed, inner whitespace collapsed,
+ * so an extra space doesn't ask the server for a different loan.
+ */
+export function normaliseLoanSearch(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+/** One page of the table: GET /loans with the search and page in hand. */
+export function activeLoanListParams(request: {
+  query: string;
   page: number;
-  per_page: number;
-}) => Promise<PaginatedResponse<Loan>>;
+  perPage: number;
+}): Record<string, unknown> {
+  return {
+    status: ACTIVE_STATUS,
+    view: LOAN_SUMMARY_VIEW,
+    ...ACTIVE_LOANS_SORT,
+    page: request.page,
+    per_page: request.perPage,
+    ...(request.query ? { search: request.query } : {}),
+  };
+}
+
+/**
+ * For the cards while a search is on. `meta.total` and `meta.totals` follow the
+ * request's search, and the cards describe every active loan, so they need an
+ * unsearched read of their own; its one row is not used.
+ */
+export function activeLoanCardParams(): Record<string, unknown> {
+  return { status: ACTIVE_STATUS, view: LOAN_SUMMARY_VIEW, per_page: 1 };
+}
 
 /**
  * GET /loans `meta.totals`: the server's figures over every row matching the
@@ -62,6 +83,16 @@ export interface ActiveLoanTotals {
   total_outstanding: number | null;
   overdue_amount: number | null;
   overdue_count: number | null;
+}
+
+function pageMeta(response: unknown): PaginatedResponse<Loan>["meta"] | null {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return null;
+  }
+  const meta = (response as { meta?: unknown }).meta;
+  return meta && typeof meta === "object"
+    ? (meta as PaginatedResponse<Loan>["meta"])
+    : null;
 }
 
 /** `meta.totals` out of a list response, or null when it carried none. */
@@ -76,130 +107,110 @@ export function readLoanListTotals(response: unknown): ActiveLoanTotals | null {
   };
 }
 
-export interface ActiveLoansResult {
-  /** Every active loan the API handed over, in the order it returned them. */
-  loans: Loan[];
-  /**
-   * `meta.total` — how many active loans EXIST, as opposed to how many are in
-   * `loans`. Null when the response carried no usable total, in which case the
-   * caller has nothing better to show than `loans.length`.
-   */
+export interface ActiveLoanPage {
+  rows: Loan[];
+  /** `meta.total`: how many loans match the request. Null when it wasn't sent. */
   total: number | null;
-  /**
-   * True when the page guard stopped the loop with pages still outstanding, so
-   * `loans` is knowingly incomplete. The caller must surface this: an
-   * incomplete list of who can pay today is the failure being fixed here, and
-   * it is only acceptable when the screen says so.
-   */
-  truncated: boolean;
-  /**
-   * The server's totals over every active loan, read from the first page that
-   * carried them. They hold even when `truncated` is true. Null when no page
-   * sent `meta.totals`.
-   */
+  lastPage: number;
+  /** The server's totals for the same filters. Null when it sent none. */
   totals: ActiveLoanTotals | null;
 }
 
-/** Rows out of a paginator body, tolerating a bare array or a missing `data`. */
-function pageRows(response: unknown): Loan[] {
-  if (Array.isArray(response)) return response as Loan[];
+/** A page out of a paginator body, tolerating a missing `data` or `meta`. */
+export function readActiveLoanPage(response: unknown): ActiveLoanPage {
   const data = (response as { data?: unknown } | null | undefined)?.data;
-  return Array.isArray(data) ? (data as Loan[]) : [];
-}
-
-function pageMeta(response: unknown): PaginatedResponse<Loan>["meta"] | null {
-  if (!response || typeof response !== "object" || Array.isArray(response)) {
-    return null;
-  }
-  const meta = (response as { meta?: unknown }).meta;
-  return meta && typeof meta === "object"
-    ? (meta as PaginatedResponse<Loan>["meta"])
-    : null;
-}
-
-/** A positive, finite integer, or null. Rejects 0, NaN and Infinity alike. */
-function positiveInt(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : null;
+  const meta = pageMeta(response);
+  const lastPage = meta?.last_page;
+  return {
+    rows: Array.isArray(data) ? (data as Loan[]) : [],
+    // 0 is a real total: "this coop has no active loans".
+    total: typeof meta?.total === "number" ? meta.total : null,
+    lastPage: typeof lastPage === "number" && lastPage > 0 ? lastPage : 1,
+    totals: readLoanListTotals(response),
+  };
 }
 
 /**
- * Every active loan, across as many pages as the API needs to hand them over.
- *
- * This screen takes payments over the counter, so it needs the whole set rather
- * than a page of it, because it orders the queue by "overdue first, then
- * earliest next due date". `overdue_amount` and `next_due_date` are not
- * columns; `LoanResource` derives them per row from the loaded amortization
- * schedules, after the page has already been selected. `?sort=` accepts no
- * equivalent key, so a server-paged page 1 would be the newest applications,
- * not the most urgent: a queue that looks sorted and is not.
- *
- * The "Overdue" and "Total Outstanding" cards do NOT depend on the drain: they
- * read the server's `meta.totals`, which cover every matching row. Never add
- * the rows up in their place.
- *
- * If the API ever grows a schedule-derived sort, this screen should page
- * properly and this function should go.
- *
- * The loop follows the server's `meta.last_page` and stops on the first short
- * page; `MAX_ACTIVE_LOAN_PAGES` only bounds a runaway, and reaching it is
- * reported rather than hidden.
+ * The page to go to after an answer, or null to stay. A payment can settle the
+ * only loan on the last page, which leaves the cashier past the end of the list.
  */
-export async function fetchAllActiveLoans(
-  fetchPage: LoanPageFetcher,
-  options: { perPage?: number; maxPages?: number } = {},
-): Promise<ActiveLoansResult> {
-  const perPage = options.perPage ?? LOANS_PER_PAGE;
-  const maxPages = options.maxPages ?? MAX_ACTIVE_LOAN_PAGES;
+export function pageAfterEmptyAnswer(answer: {
+  requested: number;
+  lastPage: number;
+  rowCount: number;
+}): number | null {
+  if (answer.rowCount > 0 || answer.requested <= answer.lastPage) return null;
+  return answer.lastPage;
+}
 
-  const loans: Loan[] = [];
-  let total: number | null = null;
-  let truncated = false;
-  let totals: ActiveLoanTotals | null = null;
-  let page = 1;
+/**
+ * One loan on this screen. The table fills from a summary row; the figures it
+ * doesn't carry (rate, amount due now) stay null until the loan's full data
+ * loads.
+ */
+export interface ActiveLoan {
+  id: number;
+  loan_account_number: string;
+  application_number: string;
+  borrower_name: string;
+  borrower_id: number;
+  loan_product_name: string;
+  interest_rate: number | null;
+  interest_type: "fixed" | "diminishing";
+  /** Everything owed (principal, interest, penalty, premium); null when not sent. */
+  total_outstanding: number | null;
+  status: string;
+  next_due_date: string;
+  /** The next open period's amount, on summary rows; null when not sent. */
+  next_due_amount: number | null;
+  overdue_amount: number;
+  /** The server's amount due now and its parts; null when it sent none. */
+  amount_due_now: AmountDueNow | null;
+}
 
-  for (;;) {
-    const response = await fetchPage({
-      status: ACTIVE_STATUS,
-      page,
-      per_page: perPage,
-    });
+/** The list row fields this screen reads that `Loan` does not declare. */
+type LoanListRow = Loan & {
+  total_outstanding?: number | string | null;
+  next_due_amount?: number | string | null;
+};
 
-    const rows = pageRows(response);
-    loans.push(...rows);
-    totals ??= readLoanListTotals(response);
+export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
+  const l = loan as LoanListRow & Record<string, unknown>;
+  // Upon-maturity loans have a single payment due at maturity, so the next due
+  // date is the maturity date — never a monthly increment off the release date.
+  const isUponMaturity =
+    (l.frequency ?? l.payment_frequency) === "upon_maturity" ||
+    (l.interest_method ?? l.interest_type) === "upon_maturity";
+  const maturityDate = (l.maturity_date as string) || "";
+  const interestType = l.interest_method ?? l.interest_type;
+  return {
+    id: l.id,
+    loan_account_number: l.loan_account_number || `LN-${l.id}`,
+    application_number: l.application_number || `LA-${l.id}`,
+    borrower_name: l.borrower?.full_name ?? l.borrower?.name ?? l.borrower_name ?? "—",
+    borrower_id: l.borrower?.id ?? l.borrower_id ?? 0,
+    loan_product_name: l.loan_product?.name ?? l.loan_product_name ?? "—",
+    interest_rate: toNumber(l.interest_rate),
+    interest_type: (interestType === "upon_maturity" ? "fixed" : (interestType ?? "fixed")) as ActiveLoan["interest_type"],
+    total_outstanding: toNumber(l.total_outstanding),
+    status: l.status,
+    next_due_date: isUponMaturity ? maturityDate || l.next_due_date || "" : l.next_due_date || "",
+    next_due_amount: toNumber(l.next_due_amount),
+    overdue_amount: (l.overdue_amount as number) || 0,
+    amount_due_now: readAmountDueNow(l.amount_due_now),
+  };
+}
 
-    const meta = pageMeta(response);
-    const metaTotal = positiveInt(meta?.total);
-    // 0 is a legitimate total and positiveInt rejects it, so read it directly
-    // rather than losing "this coop has no active loans" to the null fallback.
-    if (metaTotal !== null) total = metaTotal;
-    else if (meta?.total === 0) total = 0;
-
-    // Nothing came back: the paginator is past the end whatever it claims.
-    if (rows.length === 0) break;
-
-    const lastPage = positiveInt(meta?.last_page);
-    if (lastPage !== null) {
-      if (page >= lastPage) break;
-    } else {
-      // No `last_page` to follow, so a short page is the only end-of-list
-      // signal available. Measure "short" against the size the server actually
-      // used, NOT the size we asked for: `per_page` is clamped server-side, so
-      // a full page can be smaller than the request. Comparing against our own
-      // number is how this function stopped after one page of 5 when it had
-      // asked for 100 — the same mistake as the bug it exists to fix.
-      const effectivePerPage = positiveInt(meta?.per_page) ?? perPage;
-      if (rows.length < effectivePerPage) break;
-    }
-
-    if (page >= maxPages) {
-      truncated = true;
-      break;
-    }
-    page += 1;
-  }
-
-  return { loans, total, truncated, totals };
+/**
+ * The table's Due Amount: the server's amount due now when the row carries it
+ * (the figure the dialog shows as Total Due), otherwise a summary row's
+ * `next_due_amount`. A dash without either.
+ */
+export function activeLoanDueCell(loan: ActiveLoan): ReturnType<typeof dueAmountCell> {
+  if (loan.amount_due_now !== null) return dueAmountCell(loan.amount_due_now);
+  return {
+    amount: currencyOrDash(loan.next_due_amount),
+    penaltyNote: null,
+    insuranceNote: null,
+  };
 }

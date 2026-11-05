@@ -430,62 +430,72 @@ function ReportDetailContent() {
       <Card>
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2 min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Date Range
+            {report.noDateRange ? (
+              <p className="text-sm text-muted-foreground min-w-0 flex-1">
+                Covers the whole loan, as of the day it is generated.
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => applyPreset(p.id)}
-                    className={cn(
-                      "h-8 px-3 text-xs rounded-md border transition-colors",
-                      preset === p.id
-                        ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
-                        : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            ) : (
+              <div className="space-y-2 min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Date Range
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => applyPreset(p.id)}
+                      className={cn(
+                        "h-8 px-3 text-xs rounded-md border transition-colors",
+                        preset === p.id
+                          ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
+                          : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label htmlFor="from-date" className="text-xs">
-                  From
-                </Label>
-                <Input
-                  id="from-date"
-                  type="date"
-                  value={activeRange.from}
-                  onChange={(e) => {
-                    setPreset("custom");
-                    setRange({ ...activeRange, from: e.target.value });
-                    setDoc(null);
-                  }}
-                  className="h-9 w-40"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="to-date" className="text-xs">
-                  To
-                </Label>
-                <Input
-                  id="to-date"
-                  type="date"
-                  value={activeRange.to}
-                  onChange={(e) => {
-                    setPreset("custom");
-                    setRange({ ...activeRange, to: e.target.value });
-                    setDoc(null);
-                  }}
-                  className="h-9 w-40"
-                />
-              </div>
+              {!report.noDateRange && (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="from-date" className="text-xs">
+                      From
+                    </Label>
+                    <Input
+                      id="from-date"
+                      type="date"
+                      value={activeRange.from}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, from: e.target.value });
+                        setDoc(null);
+                      }}
+                      className="h-9 w-40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="to-date" className="text-xs">
+                      To
+                    </Label>
+                    <Input
+                      id="to-date"
+                      type="date"
+                      value={activeRange.to}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, to: e.target.value });
+                        setDoc(null);
+                      }}
+                      className="h-9 w-40"
+                    />
+                  </div>
+                </>
+              )}
               <Button
                 onClick={handleGenerate}
                 disabled={generating || missingSubject || spanTooWide}
@@ -574,7 +584,12 @@ function ReportDetailContent() {
       </Card>
 
       {/* Preview area */}
-      {!doc && !generating && <EmptyPreview reportTitle={report.title} />}
+      {!doc && !generating && (
+        <EmptyPreview
+          reportTitle={report.title}
+          pick={report.noDateRange ? `a ${report.subject}` : "a date range"}
+        />
+      )}
       {generating && (
         <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -670,7 +685,7 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
   );
 }
 
-function EmptyPreview({ reportTitle }: { reportTitle: string }) {
+function EmptyPreview({ reportTitle, pick }: { reportTitle: string; pick: string }) {
   return (
     <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
       <div className="max-w-md mx-auto text-center space-y-3">
@@ -681,7 +696,7 @@ function EmptyPreview({ reportTitle }: { reportTitle: string }) {
           Ready to generate {reportTitle}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Pick a date range above and click{" "}
+          Pick {pick} above and click{" "}
           <span className="font-medium text-foreground">Generate Preview</span>.
           What you see will match the exported Excel exactly.
         </p>

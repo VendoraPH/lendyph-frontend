@@ -24,6 +24,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import { reportScopeLine } from "./types";
 
 // Hex without # — same palette as preview/excel/pdf so the document
 // reads as a sibling artifact, not a different format.
@@ -196,7 +197,7 @@ function buildHeaderTable(report: ReportDocument): Table {
       children: paragraphs.length ? paragraphs : [new Paragraph({ children: [] })],
     });
 
-  const leftMeta = [metaLine(`Period: ${report.meta.period ?? "—"}`, AlignmentType.LEFT)];
+  const leftMeta = [metaLine(reportScopeLine(report.meta), AlignmentType.LEFT)];
   if (report.meta.branchLabel) {
     leftMeta.push(metaLine(`Branch: ${report.meta.branchLabel}`, AlignmentType.LEFT));
   }
@@ -305,6 +306,9 @@ function buildKpiTable(section: ReportSection): Table | null {
 function buildDataTable(section: ReportSection): Table | null {
   if (section.kind !== "table" || section.rows.length === 0) return null;
 
+  // In half-points, as the docx library takes it.
+  const textSize = section.compact ? 15 : 18;
+
   const headerCells = section.columns.map(
     (col) =>
       new TableCell({
@@ -322,7 +326,7 @@ function buildDataTable(section: ReportSection): Table | null {
                 text: col.header,
                 bold: true,
                 color: FOREGROUND,
-                size: 18,
+                size: textSize,
               }),
             ],
           }),
@@ -345,7 +349,7 @@ function buildDataTable(section: ReportSection): Table | null {
                   children: [
                     new TextRun({
                       text: formatCell(row, col),
-                      size: 18,
+                      size: textSize,
                       color: FOREGROUND,
                     }),
                   ],
@@ -380,7 +384,7 @@ function buildDataTable(section: ReportSection): Table | null {
                   text: t ? t.value : isLabel ? "Total" : "",
                   bold: true,
                   color: FOREGROUND,
-                  size: 18,
+                  size: textSize,
                 }),
               ],
             }),

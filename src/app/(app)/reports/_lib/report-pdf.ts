@@ -3,7 +3,7 @@ import autoTable from "jspdf-autotable";
 import { saveAs } from "file-saver";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
-import type { ReportDocument, ReportSection } from "./types";
+import { reportScopeLine, type ReportDocument, type ReportSection } from "./types";
 
 // Match the on-screen preview palette so the PDF feels like the same
 // document. RGB tuples for jsPDF.
@@ -241,7 +241,7 @@ function drawHeader(doc: jsPDF, report: ReportDocument): number {
   doc.setTextColor(...MUTED);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(`Period: ${report.meta.period ?? "—"}`, PAGE_MARGIN_X, stripY + 14);
+  doc.text(reportScopeLine(report.meta), PAGE_MARGIN_X, stripY + 14);
   textRight(doc, `Generated: ${report.meta.generatedAt}`, stripY + 14);
 
   if (secondLine) {
@@ -399,8 +399,8 @@ function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
     theme: "grid",
     styles: {
       font: "helvetica",
-      fontSize: 9,
-      cellPadding: 5,
+      fontSize: section.compact ? 7 : 9,
+      cellPadding: section.compact ? 3 : 5,
       textColor: FOREGROUND,
       lineColor: [229, 231, 235],
       lineWidth: 0.5,

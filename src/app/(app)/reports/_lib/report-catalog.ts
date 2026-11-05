@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { api } from "@/lib/api-client";
 import { reportService } from "@/services";
 import { REPORT_TITLES } from "@/lib/page-titles";
 import {
@@ -94,6 +95,9 @@ function subjectReportBuilder(
 }
 
 const listParams = { per_page: LIST_PAGE_SIZE };
+
+/** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
+const MEMBER_LIST_ENDPOINT = "/reports/borrowers/list";
 
 // ---------------------------------------------------------------------------
 // Accent palettes — chosen per category to give the catalog visual rhythm.
@@ -282,11 +286,11 @@ export const REPORT_CATALOG: ReportDefinition[] = [
         ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
       };
       // Independent reads: either failing leaves the other's section intact.
-      const [summary, released] = await Promise.all([
+      const [summary, members] = await Promise.all([
         reportService.borrowers(params).catch(() => null),
-        reportService.borrowersReleased({ ...params, ...listParams }).catch(() => null),
+        api.getRaw(MEMBER_LIST_ENDPOINT, { params: { ...params, ...listParams } }).catch(() => null),
       ]);
-      return buildBorrowerDoc(summary, ctx.range, released);
+      return buildBorrowerDoc(summary, ctx.range, members);
     },
   },
   {
@@ -329,6 +333,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: FileText,
     accent: ACCENT.emerald,
     subject: "loan",
+    noDateRange: true,
     build: subjectReportBuilder(
       (id) => reportService.statementOfAccount(id),
       buildStatementOfAccountDoc

@@ -76,7 +76,9 @@ import type { LoanProduct } from "@/types/loan";
 import { formatCurrency } from "@/lib/format";
 import {
   EMPTY_FORM,
+  defaultTermError,
   formToApiPayload,
+  productToForm,
   retiredCustomFeesNotice,
   type ProductForm,
 } from "./_lib/product-form";
@@ -151,50 +153,6 @@ const INTEREST_METHOD_LABELS: Record<string, string> = {
   diminishing: "Diminishing",
 };
 
-function productToForm(p: LoanProduct): ProductForm {
-  // Map API response fields to form fields
-  const apiProduct = p as unknown as Record<string, unknown>;
-  const gracePeriod = Number(apiProduct.grace_period_days ?? p.grace_period ?? 0);
-
-  // Parse frequencies - could be array or single value
-  const rawFreq = apiProduct.frequencies ?? apiProduct.frequency ?? p.payment_frequency ?? "monthly";
-  const frequencies = Array.isArray(rawFreq)
-    ? (rawFreq as string[])
-    : [String(rawFreq)];
-
-  // Parse interest rate range — exact, with the API's trailing zeros stripped
-  const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
-  const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
-  const minRate = minRateRaw != null ? formatRate(minRateRaw) : "";
-  const maxRate = maxRateRaw != null ? formatRate(maxRateRaw) : "";
-
-  return {
-    name: p.name,
-    description: p.description ?? "",
-    min_amount: String(apiProduct.min_amount ?? p.min_amount ?? ""),
-    max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
-    min_term: String(apiProduct.min_term ?? p.min_term ?? ""),
-    max_term: String(apiProduct.max_term ?? p.max_term ?? ""),
-    term_unit: String(apiProduct.term_unit ?? "months"),
-    frequencies,
-    min_interest_rate: minRate,
-    max_interest_rate: maxRate,
-    interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
-    interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
-    min_processing_fee: formatRate(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    max_processing_fee: formatRate(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    min_service_fee: formatRate(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee),
-    max_service_fee: formatRate(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee),
-    notarial_fee: formatRate(apiProduct.notarial_fee),
-    penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
-    grace_period_enabled: gracePeriod > 0,
-    grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
-    scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
-    min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
-    max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
-  };
-}
-
 // ── Product Form Dialog ──
 
 function ProductFormDialog({
@@ -226,6 +184,11 @@ function ProductFormDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const termError = defaultTermError(form);
+    if (termError) {
+      toast.error(termError);
+      return;
+    }
     onSubmit(form);
     if (!initialData) setForm(EMPTY_FORM);
     onOpenChange(false);
@@ -324,27 +287,46 @@ function ProductFormDialog({
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
-              <Select
-                value={form.term_unit}
-                onValueChange={(v) => update("term_unit", v ?? "months")}
-              >
-                <SelectTrigger id="term-unit" className="w-full sm:w-1/2">
-                  <SelectValue>
-                    {(v: string | null) =>
-                      TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TERM_UNIT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="default-term">Default Term <span className="text-red-500">*</span></Label>
+                <Input
+                  id="default-term"
+                  type="number"
+                  min={form.min_term || 1}
+                  max={form.max_term || undefined}
+                  placeholder="12"
+                  value={form.term}
+                  onChange={(e) => update("term", e.target.value)}
+                  aria-describedby="default-term-help"
+                  required
+                />
+                <p id="default-term-help" className="text-xs text-muted-foreground">
+                  Between the minimum and maximum term.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
+                <Select
+                  value={form.term_unit}
+                  onValueChange={(v) => update("term_unit", v ?? "months")}
+                >
+                  <SelectTrigger id="term-unit" className="w-full">
+                    <SelectValue>
+                      {(v: string | null) =>
+                        TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TERM_UNIT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
