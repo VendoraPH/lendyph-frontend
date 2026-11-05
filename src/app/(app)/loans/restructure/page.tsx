@@ -676,7 +676,7 @@ function RestructureLoanInner() {
     // Collect every field the user still needs to fix and surface them in a
     // single consolidated pop-up instead of inline red messages.
     const missing: string[] = [];
-    if (borrowerId === null) missing.push("Borrower");
+    if (borrowerId === null) missing.push("Member");
     if (sourceLoanId === null) missing.push("Source loan");
     if (productId === null) missing.push("Loan product");
     if (!(principal > 0) || principalError) missing.push("Principal amount");
@@ -802,7 +802,7 @@ function RestructureLoanInner() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Restructure Loan</h1>
             <p className="text-sm text-muted-foreground">
-              Select a borrower and an active loan to restructure. All fields are pre-filled from the existing loan.
+              Select a member and an active loan to restructure. All fields are pre-filled from the existing loan.
             </p>
           </div>
         </div>
@@ -824,14 +824,14 @@ function RestructureLoanInner() {
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {/* Borrower combobox */}
             <div className="space-y-1.5">
-              <Label>Borrower</Label>
+              <Label>Member</Label>
               <MemberSearchPicker
-                aria-label="Borrower"
+                aria-label="Member"
                 value={selectedBorrower}
                 onChange={handleBorrowerChange}
                 canSearch={canListMembers}
                 showCode
-                placeholder={canListMembers ? "Select borrower…" : "Your role can't view members"}
+                placeholder={canListMembers ? "Select member…" : "Your role can't view members"}
               />
             </div>
 
@@ -853,7 +853,7 @@ function RestructureLoanInner() {
                       ? borrowerLoans.length === 0
                         ? "No eligible loans"
                         : "Select loan…"
-                      : "Select a borrower first"}
+                      : "Select a member first"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </PopoverTrigger>
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -916,7 +916,7 @@ function RestructureLoanInner() {
               <CardContent className="space-y-4">
                 {/* Borrower (locked) */}
                 <div className="space-y-1.5">
-                  <Label>Borrower</Label>
+                  <Label>Member</Label>
                   <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
                     {selectedBorrower?.full_name ?? "—"}
                     <Badge variant="outline" className="ml-2 text-xs">
@@ -1238,7 +1238,7 @@ function RestructureLoanInner() {
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {pickerRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">
-                      No collaterals found for this borrower.
+                      No collaterals found for this member.
                     </p>
                   ) : (
                     pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (

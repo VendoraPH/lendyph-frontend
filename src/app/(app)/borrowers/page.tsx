@@ -215,7 +215,7 @@ function BorrowersContent() {
         // to the "No members yet" empty state, which tells the admin their
         // members are gone.
         setError("We couldn't load the members. Please try again.");
-        toast.error("We couldn't load the borrowers. Please try again.");
+        toast.error("We couldn't load the members. Please try again.");
       }
     } finally {
       if (requestId === requestIdRef.current && !clamping) setLoading(false);
@@ -286,41 +286,41 @@ function BorrowersContent() {
         await borrowerService.reactivate(id);
       }
       toast.success(
-        `Borrower ${borrower.status === "active" ? "deactivated" : "reactivated"}`
+        `Member ${borrower.status === "active" ? "deactivated" : "reactivated"}`
       );
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't update the borrower status. Please try again.");
+      toast.error("We couldn't update the member status. Please try again.");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await borrowerService.delete(id);
-      toast.success("Borrower deleted");
+      toast.success("Member deleted");
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't delete the borrower. Please try again.");
+      toast.error("We couldn't delete the member. Please try again.");
     }
   };
 
   const handleBulkDeactivate = async (ids: number[]) => {
     try {
       await borrowerService.bulkDeactivate(ids);
-      toast.success(`${ids.length} borrower(s) deactivated`);
+      toast.success(`${ids.length} member(s) deactivated`);
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't deactivate some borrowers. Please try again.");
+      toast.error("We couldn't deactivate some members. Please try again.");
     }
   };
 
   const handleBulkDelete = async (ids: number[]) => {
     try {
       await borrowerService.bulkDelete(ids);
-      toast.success(`${ids.length} borrower(s) deleted`);
+      toast.success(`${ids.length} member(s) deleted`);
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't delete some borrowers. Please try again.");
+      toast.error("We couldn't delete some members. Please try again.");
     }
   };
 

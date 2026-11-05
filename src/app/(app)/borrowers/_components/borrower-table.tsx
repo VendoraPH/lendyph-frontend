@@ -398,7 +398,7 @@ export function BorrowerTable({
                   colSpan={visibleCount}
                   className="h-24 text-center text-muted-foreground"
                 >
-                  No borrowers found.
+                  No members found.
                 </TableCell>
               </TableRow>
             )}

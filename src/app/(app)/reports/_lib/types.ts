@@ -286,7 +286,7 @@ export const CATEGORY_META: Record<
   },
   member: {
     label: "Member Activity",
-    description: "Borrower and repayment activity",
+    description: "Member and repayment activity",
   },
   disbursement: {
     label: "Disbursement",

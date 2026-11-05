@@ -110,7 +110,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   },
   borrowers: {
     label: "Members",
-    description: "Manage borrower profiles and member records.",
+    description: "Manage member profiles and records.",
     icon: Users,
     features: [
       "View and search member profiles",
@@ -179,7 +179,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     description: "Business reports, analytics, and exports.",
     icon: BarChart3,
     features: [
-      "View daily collection, portfolio, income, aging, and borrower reports",
+      "View daily collection, portfolio, income, aging, and member reports",
       "Export reports to PDF or Excel",
     ],
   },
@@ -312,10 +312,10 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   },
   credit_scoring: {
     label: "Credit Scoring",
-    description: "Borrower credit scores, risk monitoring, and human credit decisions.",
+    description: "Member credit scores, risk monitoring, and human credit decisions.",
     icon: Gauge,
     features: [
-      "View the dashboard, borrower scores, assessments, risk monitoring and score history",
+      "View the dashboard, member scores, assessments, risk monitoring and score history",
       "Record a credit decision (approve, decline, refer, hold) against a score",
       "Configure the scorecard and credit scoring settings",
     ],

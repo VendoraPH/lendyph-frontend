@@ -7,7 +7,7 @@ import { roleLabelForKey } from "@/lib/role-display-name";
 
 const MODULE_LABELS: Record<AuditModule, string> = {
   auth: "Auth",
-  borrowers: "Borrowers",
+  borrowers: "Members",
   loans: "Loans",
   payments: "Payments",
   collections: "Collections",
@@ -55,6 +55,11 @@ function inWords(key: string): string {
 export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): string {
   if (log.target?.type === "Role") return "Roles";
   return (MODULE_LABELS as Record<string, string>)[log.module] ?? inWords(log.module);
+}
+
+/** The target's kind: the server sends the class name, and a member's class is `Borrower`. */
+export function auditTargetType(type: string): string {
+  return type.replace(/^Borrower/, "Member");
 }
 
 /** The row's action: a known label, or the server's key in words. */

@@ -8,6 +8,7 @@ import {
   auditDescription,
   auditFieldLabel,
   auditModuleLabel,
+  auditTargetType,
   auditUserName,
   auditUserRole,
 } from "./audit-labels";
@@ -188,4 +189,15 @@ test("a status the app has no label for, or a missing value, is left alone", () 
   const row = log({ target: loanTarget });
   assert.equal(auditChangeValue(row, "status", "someday"), "someday");
   assert.equal(auditChangeValue(row, "status", null), null);
+});
+
+test("a member's audit target reads Member, not the class name", () => {
+  assert.equal(auditTargetType("Borrower"), "Member");
+  assert.equal(auditTargetType("BorrowerDocument"), "MemberDocument");
+  assert.equal(auditTargetType("Loan"), "Loan");
+});
+
+test("the module filter says Members and still sends borrowers", () => {
+  const option = AUDIT_MODULE_OPTIONS.find((o) => o.value === "borrowers");
+  assert.equal(option?.label, "Members");
 });

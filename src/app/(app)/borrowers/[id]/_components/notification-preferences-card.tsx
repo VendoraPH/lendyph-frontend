@@ -84,7 +84,7 @@ function PreferencesBody({
       .resume({ scope: "borrower", borrower_id: borrowerId })
       .then(() => {
         setResuming(false);
-        notifySuccess("Reminders resumed for this borrower");
+        notifySuccess("Reminders resumed for this member");
         onChanged();
       })
       .catch((err) => {
@@ -158,7 +158,7 @@ function PreferencesBody({
         </div>
       ) : (
         <PermissionButton permission="reminders:pause" size="sm" variant="outline" onClick={() => setPauseOpen(true)}>
-          <PauseCircle className="mr-1 h-3.5 w-3.5" /> Pause reminders for this borrower
+          <PauseCircle className="mr-1 h-3.5 w-3.5" /> Pause reminders for this member
         </PermissionButton>
       )}
 
@@ -167,7 +167,7 @@ function PreferencesBody({
         onOpenChange={setPauseOpen}
         scope="borrower"
         borrowerId={borrowerId}
-        targetLabel="this borrower"
+        targetLabel="this member"
         onPaused={onChanged}
       />
     </div>
@@ -188,7 +188,7 @@ function NotificationPreferencesContent({ borrowerId }: { borrowerId: number }) 
       <CardContent>
         <DataState
           resource={prefs}
-          summary="How this borrower receives payment reminders — channels, language and pauses — will be managed here once the reminder service is connected."
+          summary="How this member receives payment reminders — channels, language and pauses — will be managed here once the reminder service is connected."
           endpoints={[`GET /borrowers/${borrowerId}/notification-preferences`]}
         >
           {(data) => <PreferencesBody data={data} borrowerId={borrowerId} onChanged={prefs.refetch} />}

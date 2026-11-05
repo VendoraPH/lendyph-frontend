@@ -46,6 +46,14 @@ describe("the title map covers both catalogs", () => {
 });
 
 describe("subPageTitle (the breadcrumb's second part)", () => {
+  test("credit scoring's member list reads its menu title, not the URL", () => {
+    assert.equal(subPageTitle("credit-scoring", "borrowers"), "Member Scores");
+  });
+
+  test("the member report reads its menu title", () => {
+    assert.equal(subPageTitle("reports", "borrower_report"), "Member Report");
+  });
+
   test("a report shows its menu title, not its id", () => {
     assert.equal(subPageTitle("reports", "cash_flow"), "Cash Flow Statement");
     assert.equal(subPageTitle("reports", "performance"), "Officer / Branch Performance");

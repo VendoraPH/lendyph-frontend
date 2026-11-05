@@ -620,7 +620,7 @@ function ProductFormDialog({
                   <p className="text-xs text-muted-foreground">
                     When enabled, every loan using this product will include an
                     SCB amount added to each amortization period. When the
-                    borrower pays, the SCB portion is credited to their share
+                    member pays, the SCB portion is credited to their share
                     capital.
                   </p>
                 </div>

@@ -19,17 +19,17 @@ function CreditAssessmentContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Credit Assessment"
-        description="Run a fresh credit assessment for any borrower."
+        description="Run a fresh credit assessment for any member."
       />
 
       <div className="max-w-sm space-y-1.5">
-        <Label>Borrower</Label>
+        <Label>Member</Label>
         <MemberSearchPicker
           value={member}
           onChange={setMember}
           canSearch={canListMembers}
-          placeholder="Select a borrower"
-          aria-label="Borrower"
+          placeholder="Select a member"
+          aria-label="Member"
         />
       </div>
 

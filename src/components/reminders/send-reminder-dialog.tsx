@@ -173,7 +173,7 @@ export function SendReminderDialog({
         <div className="max-h-[50vh] space-y-3 overflow-y-auto">
           {!template ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Choose a template to see the message the borrower would get.
+              Choose a template to see the message the member would get.
             </p>
           ) : !current ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
@@ -186,7 +186,7 @@ export function SendReminderDialog({
           ) : preview ? (
             <>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border bg-muted/40 p-3 text-sm">
-                <dt className="text-muted-foreground">Borrower</dt>
+                <dt className="text-muted-foreground">Member</dt>
                 <dd className="text-right font-medium">{preview.borrower_name}</dd>
                 <dt className="text-muted-foreground">Loan</dt>
                 <dd className="text-right">{preview.loan_account_number}</dd>

@@ -34,7 +34,7 @@ import {
   type PrintableBuildOptions,
 } from "./shared";
 
-const COPIES = ["Borrower's Copy", "File Copy"];
+const COPIES = ["Member's Copy", "File Copy"];
 
 export function buildOfficialReceiptDoc(
   raw: unknown,

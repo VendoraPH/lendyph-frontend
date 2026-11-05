@@ -91,7 +91,7 @@ const RELEASE_COLUMNS: ReportColumn[] = [
   // sends the application number on every row and it was being dropped.
   { key: "application_number", header: "Application #", format: "text", width: 140 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
   { key: "term", header: "Term", format: "text", align: "right", width: 80 },
   { key: "interest_rate", header: "Rate", format: "rate", align: "right", width: 80 },
@@ -103,7 +103,7 @@ const REPAYMENT_COLUMNS: ReportColumn[] = [
   // a phantom time-of-day on every row.
   { key: "paid_at", header: "Paid On", format: "date", width: 140 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "amount", header: "Amount", format: "currency", align: "right", width: 140 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 120 },
   { key: "method", header: "Method", format: "text", width: 110 },
@@ -118,7 +118,7 @@ const DUE_COLUMNS: ReportColumn[] = [
   { key: "due_date", header: "Due Date", format: "date", width: 110 },
   { key: "period_number", header: "Period", format: "number", align: "center", width: 70 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 200 },
+  { key: "borrower_name", header: "Member", format: "text", width: 200 },
   { key: "principal_due", header: "Principal", format: "currency", align: "right", width: 120 },
   { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
@@ -551,7 +551,7 @@ export function buildPortfolioSummaryDoc(
 // and each row's Total Income.
 const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
   { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
   { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
   { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
@@ -818,14 +818,14 @@ export function buildBorrowerDoc(
 
   const items: KpiItem[] = [
     kpi(
-      "Total Active Borrowers",
+      "Total Active Members",
       countOrDash(pick(obj, ["total_active_borrowers", "active_borrowers", "total_active"]))
     ),
-    kpi("New Borrowers", countOrDash(pick(obj, ["new_borrowers", "new"])), {
+    kpi("New Members", countOrDash(pick(obj, ["new_borrowers", "new"])), {
       tone: "positive",
     }),
     kpi("Avg Loan Size", currencyOrDash(pick(obj, ["avg_loan_size", "average_loan"]))),
-    kpi("Repeat Borrowers", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
+    kpi("Repeat Members", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
   ];
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
@@ -855,7 +855,7 @@ export function buildBorrowerDoc(
 
   return {
     reportId: "borrower_report",
-    meta: meta("Borrower Report", range, "Active, new, and repeat borrower activity"),
+    meta: meta("Member Report", range, "Active, new, and repeat member activity"),
     sections,
   };
 }
@@ -867,7 +867,7 @@ export function buildBorrowerDoc(
 const DISBURSEMENT_COLUMNS: ReportColumn[] = [
   { key: "release_date", header: "Release Date", format: "date", width: 120 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "net_proceeds", header: "Net Proceeds", format: "currency", align: "right", width: 150 },
   { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
   { key: "status", header: "Status", format: "text", width: 110 },
@@ -1210,7 +1210,7 @@ function accountFields(
   borrower: Record<string, unknown> | null
 ): FieldItem[] {
   const fields: [string, unknown, "text" | "currency" | "date" | "rate"][] = [
-    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
+    ["Member", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"]), "text"],
     ["Loan Account No.", pick(loan, ["loan_account_number", "account_number"]), "text"],
     ["Application No.", pick(loan, ["application_number"]), "text"],
@@ -1431,7 +1431,7 @@ export function buildSubsidiaryLedgerDoc(
   const sections: ReportSection[] = [];
 
   const memberFields: [string, unknown][] = [
-    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"])],
+    ["Member", pick(borrower, ["full_name", "name", "borrower_name"])],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"])],
     ["Branch", pick(borrower, ["branch_name"]) ?? pick(asRecord(borrower?.branch), ["name"])],
     ["Status", pick(borrower, ["status"])],
@@ -1469,7 +1469,7 @@ export function buildSubsidiaryLedgerDoc(
             // overdue figure for the ledger.
           ]
         : undefined,
-    emptyText: "This borrower has no loan accounts on record.",
+    emptyText: "This member has no loan accounts on record.",
   });
 
   // Only rendered when the API returns entries — an empty transaction table on
@@ -1491,7 +1491,7 @@ export function buildSubsidiaryLedgerDoc(
       range,
       pick(borrower, ["full_name", "name"])
         ? String(pick(borrower, ["full_name", "name"]))
-        : "All loans and payments for a single borrower"
+        : "All loans and payments for a single member"
     ),
     sections,
   };
@@ -2385,7 +2385,7 @@ const PERFORMANCE_VALUE_COLUMNS: ReportColumn[] = [
   { key: "par_ratio", header: "PAR (to date)", format: "percent", align: "right", width: 115 },
   {
     key: "active_borrowers",
-    header: "Borrowers (to date)",
+    header: "Members (to date)",
     format: "number",
     align: "right",
     width: 145,
@@ -2514,7 +2514,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
     text: String(
       clockNote ??
         "Released and collected figures cover the selected period; outstanding, overdue, " +
-          "PAR and borrower counts are as of today over each officer's whole book."
+          "PAR and member counts are as of today over each officer's whole book."
     ),
   });
 

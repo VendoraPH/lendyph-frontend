@@ -8,6 +8,7 @@ import { RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
+import { reportSubjectNoun } from "../_lib/report-subject";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
@@ -568,7 +569,7 @@ function ReportDetailContent() {
 
               {missingSubject && (
                 <p className="text-xs text-muted-foreground pb-2">
-                  Select a {report.subject} to generate this report.
+                  Select a {report.subject && reportSubjectNoun(report.subject)} to generate this report.
                 </p>
               )}
 
@@ -587,7 +588,7 @@ function ReportDetailContent() {
       {!doc && !generating && (
         <EmptyPreview
           reportTitle={report.title}
-          pick={report.noDateRange ? `a ${report.subject}` : "a date range"}
+          pick={report.noDateRange ? `a ${report.subject ? reportSubjectNoun(report.subject) : ""}` : "a date range"}
         />
       )}
       {generating && (

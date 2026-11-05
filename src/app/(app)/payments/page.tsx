@@ -338,7 +338,7 @@ function PaymentsContent() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment Entry</h1>
           <p className="text-sm text-muted-foreground">
-            Select a borrower from the list below to record a payment
+            Select a member from the list below to record a payment
           </p>
         </div>
         {lastReceiptId && (
@@ -385,7 +385,7 @@ function PaymentsContent() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <ReceiptText className="size-4" />
-            Borrowers with Active Loans
+            Members with Active Loans
           </CardTitle>
           <div className="relative w-full sm:w-72">
             <Input
@@ -445,7 +445,7 @@ function PaymentsContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Borrower</TableHead>
+                    <TableHead>Member</TableHead>
                     <TableHead className="hidden sm:table-cell">Loan Product</TableHead>
                     <TableHead className="hidden md:table-cell">Next Due</TableHead>
                     <TableHead className="text-right">Due Amount</TableHead>
@@ -984,7 +984,7 @@ function PaymentsContent() {
                           {formatCurrency(displayAllocation.scbApplied)}
                         </p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          will credit borrower&apos;s SCB ledger
+                          will credit member&apos;s SCB ledger
                         </p>
                       </div>
                     )}

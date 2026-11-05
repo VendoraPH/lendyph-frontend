@@ -67,7 +67,7 @@ function Summary({ data }: { data: LoanReminderSummary }) {
           {pause.scope === "loan"
             ? "Reminders for this loan are paused"
             : pause.scope === "borrower"
-              ? "Reminders for this borrower are paused"
+              ? "Reminders for this member are paused"
               : "All automated reminders are paused"}{" "}
           by {pause.paused_by_name} on {formatDate(pause.paused_at)} — {pause.reason}
         </p>

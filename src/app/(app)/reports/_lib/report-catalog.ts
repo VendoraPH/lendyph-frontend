@@ -275,7 +275,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   {
     id: "borrower_report",
     title: REPORT_TITLES.borrower_report,
-    description: "Active, new, and repeat borrower counts.",
+    description: "Active, new, and repeat member counts.",
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
@@ -342,7 +342,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   {
     id: "subsidiary_ledger",
     title: REPORT_TITLES.subsidiary_ledger,
-    description: "Every loan and payment for one borrower.",
+    description: "Every loan and payment for one member.",
     category: "member",
     icon: BookOpen,
     accent: ACCENT.purple,

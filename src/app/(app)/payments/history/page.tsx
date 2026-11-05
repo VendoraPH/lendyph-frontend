@@ -231,7 +231,7 @@ function VoidPaymentDialog({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Borrower</span>
+              <span className="text-muted-foreground">Member</span>
               <span className="font-medium">{payment.borrower_name}</span>
             </div>
             <div className="flex justify-between">
@@ -673,7 +673,7 @@ function PaymentHistoryContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Receipt #, borrower name, or loan account..."
+                  placeholder="Receipt #, member name, or loan account..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-9"
@@ -745,7 +745,7 @@ function PaymentHistoryContent() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Receipt #</TableHead>
-                  <TableHead>Borrower</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Loan Account</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>

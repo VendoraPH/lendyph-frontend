@@ -283,10 +283,10 @@ test("borrower report reads total_active_borrowers", () => {
   );
 
   assertNoDashes(doc);
-  assert.equal(kpiValue(doc, "Total Active Borrowers"), "318");
-  assert.equal(kpiValue(doc, "New Borrowers"), "24");
+  assert.equal(kpiValue(doc, "Total Active Members"), "318");
+  assert.equal(kpiValue(doc, "New Members"), "24");
   assert.equal(kpiValue(doc, "Avg Loan Size"), "₱42,350.75");
-  assert.equal(kpiValue(doc, "Repeat Borrowers"), "96");
+  assert.equal(kpiValue(doc, "Repeat Members"), "96");
 });
 
 // GET /reports/borrowers/list: every member who is active or new, with the
@@ -321,9 +321,9 @@ test("member report lists the accounts behind the cards, as the server sent them
     ]
   );
   // The cards stay the summary's figures.
-  assert.equal(kpiValue(doc, "Total Active Borrowers"), "3");
-  assert.equal(kpiValue(doc, "New Borrowers"), "2");
-  assert.equal(kpiValue(doc, "Repeat Borrowers"), "2");
+  assert.equal(kpiValue(doc, "Total Active Members"), "3");
+  assert.equal(kpiValue(doc, "New Members"), "2");
+  assert.equal(kpiValue(doc, "Repeat Members"), "2");
 });
 
 test("member list marks New and Repeat from the server's flags", () => {
@@ -619,7 +619,7 @@ test("income by loan shows a Processing Fee column between the income figures an
 
   assert.deepEqual(
     table.columns.map((c) => c.header),
-    ["Loan #", "Borrower", "Payments", "Interest", "Penalty", "Processing Fee", "Total Income"]
+    ["Loan #", "Member", "Payments", "Interest", "Penalty", "Processing Fee", "Total Income"]
   );
   const column = table.columns.find((c) => c.key === "processing_fee")!;
   assert.equal(column.format, "currency");
@@ -1566,7 +1566,7 @@ test("statement of account opens with the account particulars", () => {
   const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
 
   assert.equal(doc.reportId, "statement_of_account");
-  assert.equal(fieldValue(doc, "Account Particulars", "Borrower"), "Maria Santos");
+  assert.equal(fieldValue(doc, "Account Particulars", "Member"), "Maria Santos");
   assert.equal(fieldValue(doc, "Account Particulars", "Loan Account No."), "LN-2026-0001");
   assert.equal(fieldValue(doc, "Account Particulars", "Principal"), "₱50,000.00");
   assert.equal(fieldValue(doc, "Account Particulars", "Interest Rate"), "3.0%");
@@ -1593,7 +1593,7 @@ test("statement of account particulars omit what the API did not send", () => {
   );
   const labels = fieldItems(doc, "Account Particulars").map((f) => f.label);
 
-  assert.deepEqual(labels, ["Borrower", "Loan Account No."]);
+  assert.deepEqual(labels, ["Member", "Loan Account No."]);
   assert.equal(labels.includes("Maturity Date"), false);
 });
 
@@ -3801,7 +3801,7 @@ test("a row mixing two clocks says which column is which", () => {
   assert.equal(headers.includes("Collected (period)"), true);
   assert.equal(headers.includes("Outstanding (to date)"), true);
   assert.equal(headers.includes("PAR (to date)"), true);
-  assert.equal(headers.includes("Borrowers (to date)"), true);
+  assert.equal(headers.includes("Members (to date)"), true);
 
   // And the server's own sentence is printed under the tables.
   assert.equal(noteText(doc), PERFORMANCE_PAYLOAD.note);
