@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
+import { TablePagination } from "@/components/common/table-pagination";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { notifyError } from "@/lib/notify";
-import { loanService, repaymentService } from "@/services";
+import { repaymentService } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
-import type { Loan } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,17 +54,20 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
-import { currencyOrDash, toNumber } from "@/lib/report-format";
+import { currencyOrDash } from "@/lib/report-format";
 import {
-  dueAmountCell,
   dueNowOnDate,
   dueNowPeriodLabel,
   dueNowTiles,
-  readAmountDueNow,
-  type AmountDueNow,
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
-import { fetchAllActiveLoans, type ActiveLoanTotals } from "./_lib/active-loans";
+import {
+  ACTIVE_LOANS_PER_PAGE_OPTIONS,
+  activeLoanDueCell,
+  type ActiveLoan,
+} from "./_lib/active-loans";
+import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-body";
+import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
 import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
   postPaymentErrorMessage,
@@ -78,30 +80,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types & Constants
 // ---------------------------------------------------------------------------
-
-interface ActiveLoan {
-  id: number;
-  loan_account_number: string;
-  application_number: string;
-  borrower_name: string;
-  borrower_id: number;
-  loan_product_name: string;
-  principal_amount: number;
-  interest_rate: number;
-  interest_type: "fixed" | "diminishing";
-  term_months: number;
-  payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
-  /** Everything owed (principal, interest, penalty, premium); null when not sent. */
-  total_outstanding: number | null;
-  total_payable: number;
-  status: string;
-  current_due: number;
-  next_due_date: string;
-  overdue_amount: number;
-  penalty_amount: number;
-  /** The server's amount due now and its parts; null when it sent none. */
-  amount_due_now: AmountDueNow | null;
-}
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: "Cash",
@@ -143,44 +121,6 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
     label: "Current",
     icon: CheckCircle2,
     className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Map API Loan to local shape
-// ---------------------------------------------------------------------------
-
-/** The list row fields this screen reads that `Loan` does not declare. */
-type LoanListRow = Loan & { total_outstanding?: number | string | null };
-
-function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
-  const l = loan as LoanListRow & Record<string, unknown>;
-  // Upon-maturity loans have a single payment due at maturity, so the next due
-  // date is the maturity date — never a monthly increment off the release date.
-  const isUponMaturity =
-    (l.frequency ?? l.payment_frequency) === "upon_maturity" ||
-    (l.interest_method ?? l.interest_type) === "upon_maturity";
-  const maturityDate = (l.maturity_date as string) || "";
-  return {
-    id: l.id,
-    loan_account_number: l.loan_account_number || `LN-${l.id}`,
-    application_number: l.application_number || `LA-${l.id}`,
-    borrower_name: l.borrower?.full_name ?? l.borrower?.name ?? l.borrower_name ?? "—",
-    borrower_id: l.borrower?.id ?? l.borrower_id ?? 0,
-    loan_product_name: l.loan_product?.name ?? l.loan_product_name ?? "—",
-    principal_amount: l.principal_amount,
-    interest_rate: l.interest_rate,
-    interest_type: ((l.interest_method ?? l.interest_type) === "upon_maturity" ? "fixed" : (l.interest_method ?? l.interest_type ?? "fixed")) as ActiveLoan["interest_type"],
-    term_months: l.term ?? l.term_months ?? 0,
-    payment_frequency: (l.frequency ?? l.payment_frequency ?? "monthly") as ActiveLoan["payment_frequency"],
-    total_outstanding: toNumber(l.total_outstanding),
-    total_payable: l.total_payable ?? 0,
-    status: l.status,
-    current_due: (l.current_due as number) || 0,
-    next_due_date: isUponMaturity ? maturityDate || l.next_due_date || "" : l.next_due_date || "",
-    overdue_amount: (l.overdue_amount as number) || 0,
-    penalty_amount: (l.penalty_amount as number) || 0,
-    amount_due_now: readAmountDueNow(l.amount_due_now),
   };
 }
 
@@ -235,8 +175,10 @@ function PaymentsContent() {
   const { user } = useAuth();
   const defaultCollector = user?.full_name || user?.username || "";
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLoan, setSelectedLoan] = useState<ActiveLoan | null>(null);
+  const list = useActiveLoanPage();
+  const selected = useSelectedLoan();
+  const selectedLoan = selected.loan;
+  const selectedLoanId = selectedLoan?.id ?? null;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [lastReceiptId, setLastReceiptId] = useState<number | null>(null);
 
@@ -252,80 +194,6 @@ function PaymentsContent() {
   const [collectedBy, setCollectedBy] = useState(defaultCollector);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // API-loaded loans
-  const [apiLoans, setApiLoans] = useState<ActiveLoan[]>([]);
-  const [loading, setLoading] = useState(true);
-  // `meta.total` for the same `status=active` query — how many active loans
-  // exist, which is not necessarily how many are in `apiLoans`. Null until a
-  // response says otherwise, so the cards can decline to state a figure the API
-  // has not confirmed rather than printing a confident 0.
-  const [activeLoanTotal, setActiveLoanTotal] = useState<number | null>(null);
-  // Set only when the page guard stopped the fetch with pages outstanding.
-  // Rendered, never swallowed — see the notice below the header.
-  const [truncated, setTruncated] = useState(false);
-  // GET /loans `meta.totals` for the same query: the server's figures over
-  // every active loan. Null until a response carries them.
-  const [listTotals, setListTotals] = useState<ActiveLoanTotals | null>(null);
-  // A failed load must not look like an empty one. Without this the table falls
-  // back to "No active loans found", which tells a cashier standing in front of
-  // a member that the member has nothing to pay.
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchLoans = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchAllActiveLoans((params) =>
-        loanService.list(params),
-      );
-      setApiLoans(result.loans.map(mapLoanToActiveLoan));
-      setActiveLoanTotal(result.total);
-      setTruncated(result.truncated);
-      setListTotals(result.totals);
-    } catch (err) {
-      console.error("Failed to load active loans", err);
-      setApiLoans([]);
-      setActiveLoanTotal(null);
-      setTruncated(false);
-      setListTotals(null);
-      setError("We couldn't load the active loans.");
-      notifyError(err, "We couldn't load the active loans. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLoans();
-  }, [fetchLoans]);
-
-// Filter loans by search
-  const filteredLoans = useMemo(() => {
-    if (!searchQuery.trim()) return apiLoans;
-    const q = searchQuery.toLowerCase();
-    return apiLoans.filter(
-      (loan) =>
-        loan.loan_account_number.toLowerCase().includes(q) ||
-        loan.application_number.toLowerCase().includes(q) ||
-        loan.borrower_name.toLowerCase().includes(q) ||
-        loan.loan_product_name.toLowerCase().includes(q)
-    );
-  }, [searchQuery, apiLoans]);
-
-  // Sort: overdue first, then due soon, then by next due date
-  const sortedLoans = useMemo(() => {
-    return [...filteredLoans].sort((a, b) => {
-      // Overdue first
-      if (a.overdue_amount > 0 && b.overdue_amount <= 0) return -1;
-      if (a.overdue_amount <= 0 && b.overdue_amount > 0) return 1;
-      // Then by next due date (earliest first)
-      if (a.next_due_date && b.next_due_date) {
-        return new Date(a.next_due_date).getTime() - new Date(b.next_due_date).getTime();
-      }
-      return 0;
-    });
-  }, [filteredLoans]);
-
   // The server's preview of exactly this payment. It runs the real repayment
   // code and rolls it back, so its allocation and badge are what posting this
   // amount on this date will record; the page no longer estimates either.
@@ -337,8 +205,8 @@ function PaymentsContent() {
   const amountCheck = checkPaymentAmount(amountPaid);
   const sendAmount = amountCheck.amount !== null && amountCheck.amount > 0 ? amountCheck.amount : null;
   const previewKey =
-    selectedLoan && sendAmount !== null && paymentDate
-      ? `${selectedLoan.id}|${sendAmount}|${paymentDate}`
+    selectedLoanId !== null && sendAmount !== null && paymentDate
+      ? `${selectedLoanId}|${sendAmount}|${paymentDate}`
       : null;
   const [previewResult, setPreviewResult] = useState<{
     key: string;
@@ -369,11 +237,11 @@ function PaymentsContent() {
   );
 
   useEffect(() => {
-    if (!previewKey || !selectedLoan || sendAmount === null) return;
+    if (!previewKey || selectedLoanId === null || sendAmount === null) return;
     let cancelled = false;
     const handle = setTimeout(() => {
       repaymentService
-        .preview(selectedLoan.id, { amount_paid: sendAmount, payment_date: paymentDate })
+        .preview(selectedLoanId, { amount_paid: sendAmount, payment_date: paymentDate })
         .then((preview) => {
           if (!cancelled) setPreviewResult({ key: previewKey, preview: preview ?? null, error: null });
         })
@@ -387,10 +255,10 @@ function PaymentsContent() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [previewKey, selectedLoan, sendAmount, paymentDate]);
+  }, [previewKey, selectedLoanId, sendAmount, paymentDate]);
 
   function handleSelectLoan(loan: ActiveLoan) {
-    setSelectedLoan(loan);
+    selected.select(loan);
     setAmountPaid("");
     setReferenceNumber("");
     setRemarks("");
@@ -402,7 +270,7 @@ function PaymentsContent() {
   }
 
   function resetForm() {
-    setSelectedLoan(null);
+    selected.clear();
     setAmountPaid("");
     setPaymentMethod("cash");
     setReferenceNumber("");
@@ -416,21 +284,19 @@ function PaymentsContent() {
     if (!selectedLoan || sendAmount === null) return;
     setIsSubmitting(true);
 
-    // Backend only stores payment_date/amount_paid/remarks — fold the cashier
-    // UI metadata into remarks so nothing is lost.
-    const metaParts: string[] = [];
-    metaParts.push(`method=${PAYMENT_METHOD_LABELS[paymentMethod] ?? paymentMethod}`);
-    if (referenceNumber.trim()) metaParts.push(`ref=${referenceNumber.trim()}`);
-    if (collectedBy.trim()) metaParts.push(`collected_by=${collectedBy.trim()}`);
-    const metaLine = `[${metaParts.join(" | ")}]`;
-    const composedRemarks = remarks.trim() ? `${remarks.trim()}\n${metaLine}` : metaLine;
-
     try {
-      const repayment = await repaymentService.create(selectedLoan.id, {
-        payment_date: paymentDate,
-        amount_paid: sendAmount,
-        remarks: composedRemarks,
-      });
+      const repayment = await repaymentService.create(
+        selectedLoan.id,
+        buildPaymentBody({
+          paymentDate,
+          amount: sendAmount,
+          method: paymentMethod,
+          referenceNumber,
+          remarks,
+          collectedBy,
+          signedInName: defaultCollector,
+        }),
+      );
 
       const receiptId = repayment?.id;
       if (receiptId) setLastReceiptId(receiptId);
@@ -445,7 +311,7 @@ function PaymentsContent() {
           : undefined,
       });
 
-      await fetchLoans();
+      list.reload();
       resetForm();
     } catch (err) {
       toast.error(postPaymentErrorMessage(err));
@@ -456,20 +322,13 @@ function PaymentsContent() {
 
   const needsReference = paymentMethod !== "cash";
 
-  // Stats. The overdue and outstanding figures are the server's totals over
-  // every active loan (GET /loans `meta.totals`); a figure it did not send
-  // shows a dash. Never add the rows up here.
-  const overdueCount = listTotals?.overdue_count ?? null;
-  const overdueAmount = listTotals?.overdue_amount ?? null;
-  const totalOutstanding = listTotals?.total_outstanding ?? null;
-  // The count of active loans is the one figure the server can state directly,
-  // so prefer `meta.total` over the row count: they agree normally, and when
-  // they don't, the server is right and the notice explains the gap.
-  const activeLoanCount = activeLoanTotal ?? apiLoans.length;
-  // Nothing has been confirmed yet, so state nothing. A zero here reads as
-  // "this coop has no loans out", which a failed request is in no position to
-  // claim.
-  const statsKnown = !(error && apiLoans.length === 0);
+  // The cards are the server's figures over every active loan (GET /loans
+  // `meta.total` and `meta.totals`); a figure it did not send shows a dash.
+  // Never add the rows up here.
+  const activeLoanCount = list.cards?.total ?? null;
+  const overdueCount = list.cards?.totals?.overdue_count ?? null;
+  const overdueAmount = list.cards?.totals?.overdue_amount ?? null;
+  const totalOutstanding = list.cards?.totals?.total_outstanding ?? null;
 
   return (
     <>
@@ -494,43 +353,19 @@ function PaymentsContent() {
         )}
       </div>
 
-      {/* The list is knowingly incomplete — say so where it cannot be missed.
-          This is the state the old `per_page: 500` produced silently. */}
-      {truncated && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
-        >
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
-          <div className="text-sm">
-            <p className="font-medium text-amber-900 dark:text-amber-200">
-              This list is incomplete
-              {activeLoanTotal != null
-                ? ` — showing ${apiLoans.length} of ${activeLoanTotal} active loans.`
-                : "."}
-            </p>
-            <p className="mt-0.5 text-muted-foreground">
-              Some borrowers will not appear below. The figures above are the
-              server&apos;s totals and still cover every active loan. Please report
-              this so the payments screen can be paged properly.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
           label="Active Loans"
-          value={statsKnown ? String(activeLoanCount) : null}
+          value={activeLoanCount !== null ? String(activeLoanCount) : null}
           icon={<Users className="size-5 text-brand-orange" />}
           iconBg="bg-brand-orange/10"
         />
         <SummaryCard
           label="Overdue"
-          value={statsKnown && overdueCount !== null ? String(overdueCount) : null}
+          value={overdueCount !== null ? String(overdueCount) : null}
           detail={
-            statsKnown && overdueCount !== null && overdueAmount !== null
+            overdueCount !== null && overdueAmount !== null
               ? `${formatCurrency(overdueAmount)} overdue`
               : undefined
           }
@@ -539,7 +374,7 @@ function PaymentsContent() {
         />
         <SummaryCard
           label="Total Outstanding"
-          value={statsKnown && totalOutstanding !== null ? formatCurrency(totalOutstanding) : null}
+          value={totalOutstanding !== null ? formatCurrency(totalOutstanding) : null}
           icon={<Banknote className="size-5 text-blue-600" />}
           iconBg="bg-blue-500/10"
         />
@@ -554,21 +389,17 @@ function PaymentsContent() {
           </CardTitle>
           <div className="relative w-full sm:w-72">
             <Input
-              placeholder="Search borrower, account, or product..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search active loans"
+              placeholder="Search member, account, or product..."
+              value={list.search}
+              onChange={(e) => list.setSearch(e.target.value)}
               className="pr-10"
             />
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              Loading loans...
-            </div>
-          ) : error ? (
+          {list.error ? (
             // Deliberately NOT the empty state. "No active loans found" after a
             // failed request tells a cashier the member in front of them has
             // nothing to pay, which is a different and much worse claim than
@@ -578,24 +409,39 @@ function PaymentsContent() {
               className="flex flex-col items-center justify-center py-12 text-center"
             >
               <AlertTriangle className="mb-3 size-8 text-destructive/60" />
-              <p className="text-sm text-muted-foreground">{error}</p>
+              <p className="text-sm text-muted-foreground">{list.error}</p>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchLoans}
+                onClick={list.reload}
                 className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
               >
                 Retry
               </Button>
             </div>
-          ) : sortedLoans.length === 0 ? (
+          ) : list.pending && list.rows.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              Loading loans...
+            </div>
+          ) : list.rows.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery.trim()
-                ? `No active loans found matching "${searchQuery}"`
+              {list.query
+                ? `No active loans found matching "${list.query}"`
                 : "No active loans found"}
             </div>
           ) : (
-            <div className="rounded-md border overflow-hidden">
+            <>
+            <p role="status" className="sr-only">
+              {list.pending ? "Loading loans..." : ""}
+            </p>
+            <div
+              aria-busy={list.pending}
+              className={cn(
+                "rounded-md border overflow-hidden transition-opacity",
+                list.pending && "opacity-60",
+              )}
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -609,7 +455,7 @@ function PaymentsContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedLoans.map((loan) => {
+                  {list.rows.map((loan) => {
                     const status = getLoanPaymentStatus(loan);
                     const StatusIcon = status.icon;
                     return (
@@ -632,9 +478,7 @@ function PaymentsContent() {
                         </TableCell>
                         <TableCell className="text-right">
                           {(() => {
-                            // The server's amount due now, the same figure
-                            // the Record Payment dialog shows as Total Due.
-                            const cell = dueAmountCell(loan.amount_due_now);
+                            const cell = activeLoanDueCell(loan);
                             return (
                               <div>
                                 <p className="text-sm font-semibold tabular-nums">{cell.amount}</p>
@@ -684,6 +528,15 @@ function PaymentsContent() {
                 </TableBody>
               </Table>
             </div>
+            <TablePagination
+              page={list.page}
+              perPage={list.perPage}
+              total={list.total}
+              perPageOptions={ACTIVE_LOANS_PER_PAGE_OPTIONS}
+              onPageChange={list.setPage}
+              onPerPageChange={list.setPerPage}
+            />
+            </>
           )}
         </CardContent>
       </Card>
@@ -738,7 +591,7 @@ function PaymentsContent() {
                   <p className="text-sm font-bold tabular-nums">
                     {currencyOrDash(dueNow?.amount)}
                   </p>
-                  {dueNow === null && selectedLoan.amount_due_now !== null && (
+                  {selected.loaded && dueNow === null && selectedLoan.amount_due_now !== null && (
                     <p className="text-[10px] text-muted-foreground">Today&apos;s date only</p>
                   )}
                 </div>
@@ -748,9 +601,30 @@ function PaymentsContent() {
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
-                  <p className="text-sm font-medium">{formatRate(selectedLoan.interest_rate)}% ({selectedLoan.interest_type})</p>
+                  <p className="text-sm font-medium">
+                    {selectedLoan.interest_rate !== null
+                      ? `${formatRate(selectedLoan.interest_rate)}% (${selectedLoan.interest_type})`
+                      : "—"}
+                  </p>
                 </div>
               </div>
+
+              {/* The table's row carries none of this; say so instead of
+                  leaving dashes to read as "nothing owed". */}
+              {!selected.loaded && !selected.detailError && (
+                <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" />
+                  Loading this loan&apos;s figures...
+                </p>
+              )}
+              {selected.detailError && (
+                <div role="alert" className="flex items-center justify-between gap-3 text-xs text-destructive">
+                  <span>We couldn&apos;t load this loan&apos;s figures. {selected.detailError}</span>
+                  <Button variant="outline" size="sm" onClick={selected.retry}>
+                    Retry
+                  </Button>
+                </div>
+              )}
 
               {/* Total Due's parts, as the server sent them: insurance
                   premium owed first, then penalty, interest, principal and
@@ -843,8 +717,13 @@ function PaymentsContent() {
                   Payment Method <span className="text-destructive">*</span>
                 </Label>
                 <Select
+                  items={PAYMENT_METHOD_LABELS}
                   value={paymentMethod}
-                  onValueChange={(value) => { if (value) setPaymentMethod(value); }}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setReferenceNumber((current) => referenceAfterMethodChange(paymentMethod, value, current));
+                    setPaymentMethod(value);
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select method" />
@@ -867,6 +746,7 @@ function PaymentsContent() {
                 <Input
                   id="reference-number"
                   placeholder={needsReference ? "Required for non-cash payments" : "Optional"}
+                  maxLength={100}
                   value={referenceNumber}
                   onChange={(e) => setReferenceNumber(e.target.value)}
                 />
@@ -1160,6 +1040,7 @@ function PaymentsContent() {
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark gap-2"
                 disabled={
                   isSubmitting ||
+                  !selected.loaded ||
                   sendAmount === null ||
                   (needsReference && !referenceNumber.trim())
                 }
