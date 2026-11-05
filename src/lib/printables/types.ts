@@ -138,6 +138,11 @@ export type PrintBlock =
 
 export interface PrintableDocument {
   id: PrintableId;
+  /**
+   * The record this document was built from. The catalog sets it, and only when
+   * the record was read: a blank form is not that record's document.
+   */
+  subjectId?: number;
   org: PrintableOrg;
   title: string;
   /**

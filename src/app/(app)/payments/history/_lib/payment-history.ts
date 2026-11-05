@@ -9,6 +9,8 @@
  */
 import { formatCurrency } from "@/lib/format";
 import { repaymentInsuranceApplied } from "@/lib/insurance-premium";
+import { withoutLegacyPaymentMeta } from "@/lib/printables/legacy-remarks";
+import { personName } from "@/lib/printables/templates/shared";
 import type { RepaymentListTotals } from "@/types/repayment";
 
 export interface PaymentHistoryFilters {
@@ -130,4 +132,17 @@ export function firstLastNameFrom(row: {
   const parts = row.loan?.borrower ?? row.borrower;
   const joined = [parts?.first_name, parts?.last_name].filter(Boolean).join(" ");
   return joined || null;
+}
+
+/**
+ * Who voided a payment, by name. `voided_by` is the user's id and is never shown;
+ * the name comes from `voided_by_user`, and a dash when that isn't there.
+ */
+export function voidedByName(row: Record<string, unknown>): string {
+  return personName(row, "voided_by_user") ?? "—";
+}
+
+/** A row's remarks without the legacy method line; undefined when nothing's left. */
+export function paymentRemarks(remarks: string | null | undefined): string | undefined {
+  return withoutLegacyPaymentMeta(remarks) || undefined;
 }
