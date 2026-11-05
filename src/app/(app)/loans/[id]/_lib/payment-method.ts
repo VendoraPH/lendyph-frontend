@@ -26,6 +26,19 @@ export function readPaymentMethod(value: unknown, current: RecordPaymentMethod):
   return PAYMENT_METHOD_OPTIONS.find((o) => o.value === value)?.value ?? current;
 }
 
+/**
+ * The reference once the method changes: cleared, since it was typed for the old
+ * method and must not stay on a payment made another way. Picking the same
+ * method again keeps it.
+ */
+export function referenceAfterMethodChange(
+  current: RecordPaymentMethod,
+  next: RecordPaymentMethod,
+  reference: string,
+): string {
+  return next === current ? reference : "";
+}
+
 /** Why the reference number can't be left as it is: the API's rule, said before posting. */
 export function paymentReferenceError(method: RecordPaymentMethod, reference: string): string | null {
   return method !== "cash" && reference.trim() === ""

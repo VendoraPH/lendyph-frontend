@@ -84,6 +84,7 @@ import {
   paymentMethodLabel,
   paymentReferenceError,
   readPaymentMethod,
+  referenceAfterMethodChange,
   type RecordPaymentMethod,
   type RecordPaymentPayload,
 } from "./_lib/payment-method";
@@ -226,6 +227,7 @@ import {
   isEverReleasedLoanStatus,
 } from "@/constants";
 import { loanDisplayStatus } from "@/constants/loan-status";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import type { Loan } from "@/types/loan";
 import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 
@@ -735,6 +737,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
   const [paymentReference, setPaymentReference] = useState("");
+  // Every opening starts at Cash with no reference: what was left after Cancel
+  // must not post on a later payment under the wrong method.
+  if (useDialogOpening(recordPaymentOpen, loanId)) {
+    setPaymentMethod(DEFAULT_PAYMENT_METHOD);
+    setPaymentReference("");
+  }
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
   // The amount and date `paymentPreview` answers (previewRequestKey).
@@ -4386,7 +4394,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </Label>
               <Select
                 value={paymentMethod}
-                onValueChange={(value) => setPaymentMethod(readPaymentMethod(value, paymentMethod))}
+                onValueChange={(value) => {
+                  const next = readPaymentMethod(value, paymentMethod);
+                  setPaymentReference(referenceAfterMethodChange(paymentMethod, next, paymentReference));
+                  setPaymentMethod(next);
+                }}
               >
                 <SelectTrigger className="w-full" aria-labelledby="payment-method-label">
                   <SelectValue>
