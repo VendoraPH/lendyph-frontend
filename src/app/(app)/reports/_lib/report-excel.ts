@@ -6,6 +6,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import { reportScopeLine } from "./types";
 
 // Match the on-screen preview's brand look: orange header band, muted subtitle,
 // clean column chrome. These constants are the only styling the exporter
@@ -126,7 +127,7 @@ function writeHeaderBlock(
   // preview shows, so a printed sheet is self-identifying.
   writeMetaRow(
     ws,
-    `Period: ${doc.meta.period ?? "—"}`,
+    reportScopeLine(doc.meta),
     doc.meta.reference ? `Reference: ${doc.meta.reference}` : ""
   );
   if (doc.meta.branchLabel || doc.meta.preparedBy) {

@@ -6,6 +6,8 @@ import { buildReportWorkbook, toWorksheetName } from "./report-excel";
 import { renderReportPdf, toPdfText } from "./report-pdf";
 import { renderReportDocx } from "./report-docx";
 import { renderReportCsv } from "./report-csv";
+import { buildStatementOfAccountDoc } from "./report-builders";
+import { formatValue } from "@/lib/report-format";
 import type { FieldItem, KpiItem, ReportDocument } from "./types";
 
 /**
@@ -445,4 +447,171 @@ test("a report carrying every section kind exports in all four formats", async (
   await assert.doesNotReject(() => renderReportDocx(doc));
   assert.doesNotThrow(() => renderReportPdf(doc).output("arraybuffer"));
   assert.doesNotThrow(() => renderReportCsv(doc));
+});
+
+// ---------------------------------------------------------------------------
+// Statement of Account (round fx, D3): every output carries the same statement
+// ---------------------------------------------------------------------------
+
+const AS_OF_LINE = `As of ${formatValue("2026-11-05", "date")}`;
+
+function statementDoc(): ReportDocument {
+  return buildStatementOfAccountDoc(
+    {
+      as_of: "2026-11-05",
+      schedule_note: "A balance adjustment restated this schedule.",
+      loan: { loan_account_number: "LN-000004", status: "ongoing", status_label: "Past Due", has_build_up: true },
+      borrower: { full_name: "Eduardo Mendoza" },
+      summary: { outstanding_balance: 32800, overdue_amount: 3000, total_paid: 3000 },
+      amortization_schedule: [
+        { period_number: 1, due_date: "2026-12-05", principal_due: 1000, interest_due: 300, penalty_amount: 20, total_due: 1320, build_up_due: 100, total_payment: 1420 },
+      ],
+      schedule_totals: { total_due: 1320, build_up_due: 100, total_payment: 1420 },
+      transactions: [
+        { type: "payment", date: "2026-11-05", receipt_number: "RCP-000012", payment_method: "GCash", reference_number: "GC12345678", particulars: "Payment RCP-000012", credit: 1000, principal_applied: 700, interest_applied: 200, penalty_applied: 50, insurance_applied: 25, build_up_applied: 25, principal_balance: 11300 },
+      ],
+    },
+    { from: "2026-10-01", to: "2026-10-31" }
+  );
+}
+
+/** Text every output has to carry; the Period the date filter printed is gone. */
+function assertStatementText(output: string): void {
+  assert.ok(output.includes(AS_OF_LINE), `missing "${AS_OF_LINE}"`);
+  assert.ok(!output.includes("Period:"), "still prints a Period line");
+  assert.ok(!output.includes("Oct 1, 2026"), "still prints the picked date range");
+  for (const text of [
+    "Principal Balance",
+    "Share Capital Build-Up",
+    "Total Payment",
+    "Build-Up",
+    "GCash (Ref. GC12345678)",
+    "Past Due",
+    "A balance adjustment restated this schedule.",
+  ]) {
+    assert.ok(output.includes(text), `missing "${text}"`);
+  }
+}
+
+test("statement csv: As of, split columns, reference and schedule note", () => {
+  assertStatementText(renderReportCsv(statementDoc()));
+});
+
+test("statement docx: As of, split columns, reference and schedule note", async () => {
+  assertStatementText(await docxBody(statementDoc()));
+});
+
+test("statement docx: a compact table prints in the smaller type, and others keep theirs", async () => {
+  assert.ok((await docxBody(statementDoc())).includes('w:sz w:val="15"'));
+  assert.ok(!(await docxBody(everySectionDoc())).includes('w:sz w:val="15"'));
+});
+
+test("statement pdf: As of, split columns, reference and schedule note", () => {
+  // Drawn runs can wrap, so words are compared with the line breaks closed up.
+  const flat = pdfTextOperands(statementDoc()).join(" ").replace(/\s+/g, " ");
+  assert.ok(flat.includes(AS_OF_LINE), flat);
+  assert.ok(!flat.includes("Period:"));
+  assert.ok(!flat.includes("Oct 1, 2026"));
+  for (const text of ["Principal", "Build-Up", "Total", "GCash", "GC12345678", "Past Due", "restated this schedule"]) {
+    assert.ok(flat.includes(text), `missing "${text}"`);
+  }
+});
+
+test("statement pdf: a build-up loan's twelve columns never break a word or a figure", () => {
+  const doc = statementDoc();
+  const schedule = doc.sections.find((s) => s.kind === "table" && s.title === "Amortization Schedule");
+  assert.ok(schedule && schedule.kind === "table");
+  // Seven figures in the widest cells, and a status the old width split in two.
+  const wide = {
+    ...doc,
+    sections: doc.sections.map((s) =>
+      s === schedule
+        ? {
+            ...schedule,
+            rows: [
+              { ...schedule.rows[0], beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, total_paid: 119000.97, balance: 120211.82, status: "overdue" },
+            ],
+            // Seven figures in every footer cell are what squeeze the narrow columns.
+            totals: schedule.totals?.map((t) => ({ ...t, value: "₱1,442,541.84" })),
+          }
+        : s
+    ),
+  };
+  const operands = pdfTextOperands(wide);
+
+  for (const whole of ["Period", "overdue", "PHP 1,080,000.00", "PHP 1,442,541.84"]) {
+    assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
+  }
+});
+
+/** The statement with an overpaid line, and the server's total for it. */
+function overpaidStatementDoc(): ReportDocument {
+  return buildStatementOfAccountDoc(
+    {
+      as_of: "2026-11-05",
+      loan: { loan_account_number: "LN-000004", has_build_up: true },
+      amortization_schedule: [
+        { period_number: 1, due_date: "2026-12-05", beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, total_paid: 119000.97, amount_remaining: 120211.82, status: "overdue" },
+      ],
+      transactions: [
+        { type: "payment", date: "2026-11-05", receipt_number: "RCP-000012", payment_method: "Bank Transfer", reference_number: "GC1234567890123", particulars: "Payment RCP-000012", credit: 121211.82, principal_applied: 92000.54, interest_applied: 27000.43, penalty_applied: 1210.85, insurance_applied: 0, build_up_applied: 1000, overpayment_applied: 150.5, principal_balance: 987999.46 },
+      ],
+      transaction_totals: { debit: 0, credit: 121211.82, overpayment_applied: 900.25 },
+    },
+    { from: "2026-10-01", to: "2026-10-31" }
+  );
+}
+
+test("the Overpayment column and its total reach every export, and stay out when there is none", async () => {
+  const overpaid = overpaidStatementDoc();
+  const plain = statementDoc();
+
+  const csv = renderReportCsv(overpaid);
+  assert.ok(csv.includes("Overpayment") && csv.includes("₱150.50") && csv.includes("₱900.25"), "csv");
+  assert.ok(!renderReportCsv(plain).includes("Overpayment"), "csv without one");
+
+  const docx = await docxBody(overpaid);
+  assert.ok(docx.includes("Overpayment") && docx.includes("₱150.50") && docx.includes("₱900.25"), "docx");
+  assert.ok(!(await docxBody(plain)).includes("Overpayment"), "docx without one");
+
+  const pdf = pdfTextOperands(overpaid).join(" ");
+  assert.ok(pdf.includes("Overpayment") && pdf.includes("PHP 150.50") && pdf.includes("PHP 900.25"), "pdf");
+  assert.ok(!pdfTextOperands(plain).join(" ").includes("Overpayment"), "pdf without one");
+
+  const cellsOf = async (doc: ReportDocument) => {
+    const sheet = await readBackSheet(doc);
+    const cells: string[] = [];
+    sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+    return cells;
+  };
+  const excel = await cellsOf(overpaid);
+  assert.ok(excel.includes("Overpayment"), "excel header");
+  assert.ok(excel.includes("150.5"), "excel figure");
+  assert.ok(excel.some((c) => c.includes("900.25")), "excel total");
+  assert.ok(!(await cellsOf(plain)).includes("Overpayment"), "excel without one");
+});
+
+test("statement pdf: thirteen columns never break a word or a figure", () => {
+  const operands = pdfTextOperands(overpaidStatementDoc());
+  for (const whole of ["Overpayment", "Build-Up", "PHP 121,211.82", "PHP 987,999.46", "RCP-000012"]) {
+    assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
+  }
+});
+
+test("statement excel: As of, split columns, reference and schedule note", async () => {
+  const sheet = await readBackSheet(statementDoc());
+  const cells: string[] = [];
+  sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+  assertStatementText(cells.join("\n"));
+});
+
+test("every other report keeps Period in every output", async () => {
+  const doc = everySectionDoc();
+  const period = `Period: ${doc.meta.period}`;
+  assert.ok(renderReportCsv(doc).includes(period));
+  assert.ok((await docxBody(doc)).includes(period));
+  const sheet = await readBackSheet(doc);
+  const cells: string[] = [];
+  sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+  assert.ok(cells.some((c) => c.includes("Period: ")));
 });
