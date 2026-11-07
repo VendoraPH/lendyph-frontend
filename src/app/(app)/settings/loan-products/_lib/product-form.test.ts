@@ -248,3 +248,8 @@ test("every form field has one label, and the form shows those labels", () => {
   assert.doesNotMatch(page, /Minimum SCB|Maximum SCB/);
   assert.match(page, /PRODUCT_FIELD_LABELS\.max_scb/);
 });
+
+test("the stored default frequency and the allowed list never share a label", () => {
+  assert.notEqual(PRODUCT_FIELD_LABELS.frequency, PRODUCT_FIELD_LABELS.frequencies);
+  assert.equal(PRODUCT_FIELD_LABELS.frequency, "Default Payment Frequency");
+});

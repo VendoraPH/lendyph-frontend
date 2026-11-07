@@ -44,7 +44,7 @@ export const PRODUCT_FIELD_LABELS: Readonly<Record<string, string>> = {
   interest_rate_frequency: "Interest Rate Frequency",
   interest_method: "Interest Method",
   frequencies: "Payment Frequency",
-  frequency: "Payment Frequency",
+  frequency: "Default Payment Frequency",
   processing_fee: "Processing Fee",
   min_processing_fee: "Minimum Processing Fee",
   max_processing_fee: "Maximum Processing Fee",
