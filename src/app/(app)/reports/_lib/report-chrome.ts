@@ -57,18 +57,21 @@ const manilaStamp = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
+  second: "2-digit",
   hourCycle: "h23",
 });
 
 /**
  * `AGE-20260806-0915` — prefix, generation date, generation time, in Philippine
  * time whatever the computer is set to. A document about one record has that
- * record in it too (`SOA-LN-000004-20261105-0912`): three members' statements
- * generated in the same minute once carried one reference.
+ * record and the seconds in it too (`SOA-LN-000004-20261105-091207`): three
+ * members' statements generated in the same minute once carried one reference,
+ * and one loan's could still repeat within a minute.
  */
 export function buildReference(reportId: ReportId, at = new Date(), key?: string): string {
   const part = Object.fromEntries(manilaStamp.formatToParts(at).map((p) => [p.type, p.value]));
-  const stamp = `${part.year}${part.month}${part.day}-${part.hour}${part.minute}`;
+  const stamp =
+    `${part.year}${part.month}${part.day}-${part.hour}${part.minute}` + (key ? part.second : "");
   return [REFERENCE_PREFIX[reportId], key, stamp].filter(Boolean).join("-");
 }
 

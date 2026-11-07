@@ -62,6 +62,8 @@ function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown>
     // them. Never the deprecated `outstanding_balance` (principal plus premium).
     principal_balance: pick(raw, ["outstanding_principal"]),
     outstanding: pick(raw, ["total_outstanding"]),
+    // What is late past grace, the Past Due Loans page's per-loan figure.
+    overdue: pick(raw, ["overdue_amount"]),
     status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
@@ -146,18 +148,19 @@ export function buildMemberLedgerCardDoc(
       kind: "table",
       title: "Loan Accounts",
       columns: [
-        { key: "loan_account_number", header: "Loan #", width: "11%" },
-        { key: "product", header: "Product", width: "13%" },
-        { key: "released_at", header: "Released", format: "date", width: "9%" },
-        { key: "maturity_date", header: "Maturity", format: "date", width: "9%" },
-        { key: "principal", header: "Principal", format: "currency", align: "right", width: "10%" },
-        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "10%" },
+        { key: "loan_account_number", header: "Loan #", width: "10%" },
+        { key: "product", header: "Product", width: "11%" },
+        { key: "released_at", header: "Released", format: "date", width: "8%" },
+        { key: "maturity_date", header: "Maturity", format: "date", width: "8%" },
+        { key: "principal", header: "Principal", format: "currency", align: "right", width: "9%" },
+        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "9%" },
         { key: "payments_count", header: "Payments", format: "number", align: "right", width: "6%" },
-        { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: "11%" },
-        { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: "11%" },
+        { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: "10%" },
+        { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: "10%" },
+        { key: "overdue", header: "Past Due", format: "currency", align: "right", width: "9%" },
         { key: "status", header: "Status", width: "10%" },
       ],
-      // Ten columns only fit an A4 page in the smaller type.
+      // Eleven columns only fit an A4 page in the smaller type.
       compact: true,
       rows: loanRows,
       totals:
@@ -169,6 +172,7 @@ export function buildMemberLedgerCardDoc(
               payments_count: paymentsCount === null ? DASH : String(paymentsCount),
               principal_balance: currencyOrDash(pick(loansTotals, ["outstanding_principal"])),
               outstanding: currencyOrDash(pick(loansTotals, ["total_outstanding"])),
+              overdue: currencyOrDash(pick(loansTotals, ["overdue_amount"])),
             }
           : undefined,
       emptyText: "This member has no released loan accounts on record.",

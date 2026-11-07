@@ -104,7 +104,7 @@ function MetaItem({ label, value }: { label: string; value: string }) {
 function SectionRenderer({ section }: { section: ReportSection }) {
   if (section.kind === "kpi_grid") {
     return (
-      <div>
+      <div data-keep-together>
         {section.title && (
           <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
         )}
@@ -239,7 +239,7 @@ function SectionRenderer({ section }: { section: ReportSection }) {
 
   if (section.kind === "fields") {
     return (
-      <div>
+      <div data-keep-together>
         {section.title && (
           <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
         )}

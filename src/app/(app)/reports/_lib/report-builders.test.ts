@@ -524,7 +524,7 @@ test("income report shows a dash, not a sum of the components, when the API omit
 test("income report reads total_income as the server sent it", () => {
   const doc = buildIncomeDoc(
     // Deliberately not the sum of the components: the KPI must show it as sent.
-    { interest_income: 120500.25, processing_fees: 32400.5, penalty_income: 4800.25, total_income: 157700 },
+    { interest_income: 120500.25, processing_fees: 32400.5, penalty_income: 4800.25, service_fee: 0, other_fees: 0, total_income: 157700 },
     RANGE
   );
 
@@ -608,7 +608,7 @@ test("income by loan's truncation note counts loans, and no caption says fees ar
   assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
   assert.ok(notes.every((n) => !/CSV/.test(n)));
   assert.ok(notes.every((n) => !/not part of this list/.test(n)), notes.join(" | "));
-  assert.ok(notes.some((n) => /processing fees from the loans released in the period/.test(n)), notes.join(" | "));
+  assert.ok(notes.some((n) => /processing, service and other fees from the loans released in the period/.test(n)), notes.join(" | "));
 });
 
 // D9: the same rows with the fee column the backend adds. Deliberately not the
@@ -628,7 +628,7 @@ test("income by loan shows a Processing Fee column between the income figures an
 
   assert.deepEqual(
     table.columns.map((c) => c.header),
-    ["Loan #", "Member", "Payments", "Interest", "Penalty", "Processing Fee", "Total Income"]
+    ["Loan #", "Member", "Payments", "Interest", "Penalty", "Processing Fee", "Service Fee", "Other Fees", "Total Income"]
   );
   const column = table.columns.find((c) => c.key === "processing_fee")!;
   assert.equal(column.format, "currency");
@@ -4847,4 +4847,81 @@ test("a failed portfolio summary request still says what day it is as of", () =>
   const doc = buildPortfolioSummaryDoc(null, RANGE);
   assert.ok(doc.meta.asOf && doc.meta.asOf !== DASH);
   assert.equal(doc.meta.period, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Round fz browser check
+// ---------------------------------------------------------------------------
+
+test("income report: service and other fee cards, as the server sent them", () => {
+  const doc = buildIncomeDoc(
+    {
+      interest_income: 34122.44,
+      processing_fees: 17176.4,
+      penalty_income: 0,
+      service_fee: 9228.84,
+      other_fees: 6000,
+      total_income: 66527.68,
+    },
+    RANGE
+  );
+  assert.equal(kpiValue(doc, "Service Fees"), "₱9,228.84");
+  assert.equal(kpiValue(doc, "Other Fees"), "₱6,000.00");
+  assert.equal(kpiValue(doc, "Total Income"), "₱66,527.68");
+
+  const missing = buildIncomeDoc({ interest_income: 1, total_income: 1 }, RANGE);
+  assert.equal(kpiValue(missing, "Service Fees"), DASH);
+  assert.equal(kpiValue(missing, "Other Fees"), DASH);
+});
+
+test("income report: each loan's service and other fees, with the server's totals", () => {
+  const doc = buildIncomeDoc(null, RANGE, {
+    data: [
+      { loan_account_number: "LN-000003", borrower_name: "Maria Reyes", payments: 2, interest_income: 4171.09, penalty_income: 0, processing_fee: 1500, service_fee: 700, other_fees: 500, total_income: 6871.09 },
+    ],
+    meta: { total: 1 },
+    totals: { payments: 2, interest_income: 4171.09, penalty_income: 0, processing_fee: 1500, service_fee: 9228.84, other_fees: 6000, total_income: 6871.09 },
+  });
+  const table = namedTable(doc, "Income by Loan Account");
+  const headers = table.columns.map((c) => c.header);
+  assert.deepEqual(headers.slice(headers.indexOf("Processing Fee"), headers.indexOf("Total Income") + 1), [
+    "Processing Fee",
+    "Service Fee",
+    "Other Fees",
+    "Total Income",
+  ]);
+  assert.equal(table.rows[0].service_fee, 700);
+  assert.equal(table.rows[0].other_fees, 500);
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "service_fee"), "₱9,228.84");
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "other_fees"), "₱6,000.00");
+
+  const noTotals = buildIncomeDoc(null, RANGE, { data: table.rows, meta: { total: 1 } });
+  assert.equal(namedTableTotal(noTotals, "Income by Loan Account", "service_fee"), DASH);
+});
+
+test("due and past due: a schedule status reads in words with a capital", () => {
+  const rows = tableRows(
+    buildDuePastDueListDoc(
+      { data: [{ ...DUE_ROWS[0], status: "pending" }, { ...DUE_ROWS[0], status: "overdue" }, { ...DUE_ROWS[0], status: "partially_paid" }], meta: { total: 3 } },
+      RANGE
+    )
+  );
+  assert.deepEqual(rows.map((r) => r.status), ["Pending", "Overdue", "Partially Paid"]);
+});
+
+test("releases list: a loan past grace reads Past Due, from the server's display_status", () => {
+  const rows = tableRows(
+    buildReleasesListDoc(
+      {
+        data: [
+          { ...RELEASE_ROWS[0], status: "ongoing", display_status: "past_due" },
+          { ...RELEASE_ROWS[0], status: "ongoing", display_status: "ongoing" },
+          { ...RELEASE_ROWS[0], status: "released" },
+        ],
+        meta: { total: 3 },
+      },
+      RANGE
+    )
+  );
+  assert.deepEqual(rows.map((r) => r.status), ["Past Due", "Current", "Current"]);
 });

@@ -149,7 +149,8 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
     principal: pick(raw, ["principal_amount", "principal", "amount"]),
     term: pick(raw, ["term", "term_months", "term_label"]),
     interest_rate: pick(raw, ["interest_rate", "rate"]),
-    status: loanStatusText(pick(raw, ["status"])),
+    // The server's display_status reads Past Due for a loan past grace.
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 
@@ -222,7 +223,7 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
       "outstanding_balance",
       "remaining_balance",
     ]),
-    status: pick(raw, ["status"]),
+    status: periodStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -598,6 +599,8 @@ const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
   { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
   { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
   { key: "processing_fee", header: "Processing Fee", format: "currency", align: "right", width: 130 },
+  { key: "service_fee", header: "Service Fee", format: "currency", align: "right", width: 120 },
+  { key: "other_fees", header: "Other Fees", format: "currency", align: "right", width: 120 },
   { key: "total_income", header: "Total Income", format: "currency", align: "right", width: 140 },
 ];
 
@@ -616,13 +619,18 @@ export function buildIncomeDoc(
   const interest = toNumber(pick(obj, ["interest_income", "interest"]));
   const fees = toNumber(pick(obj, ["processing_fees", "fees", "fee_income"]));
   const penalties = toNumber(pick(obj, ["penalty_income", "penalties"]));
-  // The server's total, or "—" when it sent none: never the three components
-  // added up here.
+  // Fee income booked at release to 4040 and 4080, as the server classed it.
+  const serviceFees = toNumber(pick(obj, ["service_fee"]));
+  const otherFees = toNumber(pick(obj, ["other_fees"]));
+  // The server's total, or "—" when it sent none: never the components added
+  // up here.
   const total = toNumber(pick(obj, ["total_income", "total"]));
 
   const items: KpiItem[] = [
     kpi("Interest Income", currencyOrDash(interest), { tone: "positive" }),
     kpi("Processing Fees", currencyOrDash(fees), { tone: "positive" }),
+    kpi("Service Fees", currencyOrDash(serviceFees), { tone: "positive" }),
+    kpi("Other Fees", currencyOrDash(otherFees), { tone: "positive" }),
     kpi("Penalty Income", currencyOrDash(penalties)),
     kpi("Total Income", currencyOrDash(total), { tone: "positive" }),
   ];
@@ -662,6 +670,8 @@ export function buildIncomeDoc(
                 column: "processing_fee",
                 value: currencyOrDash(pick(totals, ["processing_fee"])),
               },
+              { column: "service_fee", value: currencyOrDash(pick(totals, ["service_fee"])) },
+              { column: "other_fees", value: currencyOrDash(pick(totals, ["other_fees"])) },
               {
                 column: "total_income",
                 value: currencyOrDash(pick(totals, ["total_income"])),
@@ -673,7 +683,7 @@ export function buildIncomeDoc(
     sections.push({
       kind: "note",
       text:
-        "Interest and penalty are taken from the repayments posted in the period, and processing fees from the loans released in the period, per loan account.",
+        "Interest and penalty are taken from the repayments posted in the period, and processing, service and other fees from the loans released in the period, per loan account.",
     });
   }
 

@@ -15,3 +15,8 @@ test("nothing clips the sheet to one page, and a total prints once", () => {
   assert.match(REPORT_PRINT_CSS, /tfoot \{ display: table-row-group; \}/);
   assert.match(REPORT_PRINT_CSS, /@page \{ size: A4 landscape;/);
 });
+
+test("a block's heading prints with the block, never stranded at a page's foot", () => {
+  assert.match(REPORT_PRINT_CSS, /h3 \{ break-after: avoid; \}/);
+  assert.match(REPORT_PRINT_CSS, /\[data-keep-together\] \{ break-inside: avoid; \}/);
+});

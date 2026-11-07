@@ -80,7 +80,7 @@ test("finding 19: a statement's reference carries its loan number", () => {
   const at = new Date("2026-11-05T01:12:00Z");
   assert.equal(
     buildReference("statement_of_account", at, "LN-000004"),
-    "SOA-LN-000004-20261105-0912"
+    "SOA-LN-000004-20261105-091200"
   );
   assert.notEqual(
     buildReference("statement_of_account", at, "LN-000006"),
@@ -91,7 +91,7 @@ test("finding 19: a statement's reference carries its loan number", () => {
 test("finding 19: applying chrome uses the document's reference key", async () => {
   const keyed = { ...baseDoc(), meta: { ...baseDoc().meta, referenceKey: "LN-000004" } };
   const doc = await applyChrome(keyed, {});
-  assert.match(doc.meta.reference!, /^AGE-LN-000004-\d{8}-\d{4}$/);
+  assert.match(doc.meta.reference!, /^AGE-LN-000004-\d{8}-\d{6}$/);
 });
 
 test("finding 18: the organization's address and contact come from branding", async () => {
@@ -226,4 +226,11 @@ test("a name the caller passes wins over the one branding holds", async () => {
   } finally {
     store.restore();
   }
+});
+
+test("a statement's reference carries the seconds, so two in one minute differ", () => {
+  const first = buildReference("statement_of_account", new Date("2026-11-07T07:54:05Z"), "LN-000008");
+  const second = buildReference("statement_of_account", new Date("2026-11-07T07:54:41Z"), "LN-000008");
+  assert.equal(first, "SOA-LN-000008-20261107-155405");
+  assert.notEqual(first, second);
 });

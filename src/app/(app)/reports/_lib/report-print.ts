@@ -8,7 +8,8 @@ export const REPORT_PRINT_CLASS = "report-print-sheet";
  *
  * Everything but the sheet is taken out of the page rather than hidden, because
  * the app shell's fixed-height scrolling containers are what clipped it to one
- * page. A `tfoot` is a row group here because browsers otherwise repeat it on
+ * page. A short block (cards, particulars) keeps its heading with it rather than
+ * leaving the heading alone at a page's foot. A `tfoot` is a row group here because browsers otherwise repeat it on
  * every page, which makes a grand total read like a subtotal.
  */
 export const REPORT_PRINT_CSS = `
@@ -25,5 +26,7 @@ export const REPORT_PRINT_CSS = `
   .${REPORT_PRINT_CLASS} thead { display: table-header-group; }
   .${REPORT_PRINT_CLASS} tfoot { display: table-row-group; }
   .${REPORT_PRINT_CLASS} tr, .${REPORT_PRINT_CLASS} dl > div, .${REPORT_PRINT_CLASS} [data-signatures] { break-inside: avoid; }
+  .${REPORT_PRINT_CLASS} [data-keep-together] { break-inside: avoid; }
+  .${REPORT_PRINT_CLASS} h3 { break-after: avoid; }
 }
 `;
