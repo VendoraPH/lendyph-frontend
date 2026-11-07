@@ -419,6 +419,56 @@ export const API_ENDPOINTS = {
     READ: (id: string) => `/notifications/${encodeURIComponent(id)}/read`,
     READ_ALL: "/notifications/read-all",
   },
+  /**
+   * Savings & Deposits (Phase 1). None of these exist yet; the contract is
+   * docs/SAVINGS_BACKEND_HANDOFF.md and `@/types/savings`. Until they land
+   * every screen shows "Not connected yet" (404/501). The money-moving POSTs
+   * carry an `Idempotency-Key` header.
+   */
+  SAVINGS: {
+    DASHBOARD: "/savings/dashboard",
+    SETTINGS: "/savings/settings",
+
+    PRODUCTS: "/savings/products",
+    PRODUCT: (id: number) => `/savings/products/${id}`,
+    PRODUCT_STATUS: (id: number) => `/savings/products/${id}/status`,
+    PRODUCT_HISTORY: (id: number) => `/savings/products/${id}/history`,
+
+    ACCOUNTS: "/savings/accounts",
+    ACCOUNT_NEXT_NUMBER: "/savings/accounts/next-number",
+    ACCOUNT: (id: number) => `/savings/accounts/${id}`,
+    ACCOUNT_STATUS: (id: number) => `/savings/accounts/${id}/status`,
+    ACCOUNT_CLOSING_QUOTE: (id: number) => `/savings/accounts/${id}/closing-quote`,
+    ACCOUNT_CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+    ACCOUNT_TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
+    ACCOUNT_STATUS_HISTORY: (id: number) => `/savings/accounts/${id}/status-history`,
+    ACCOUNT_AUDIT: (id: number) => `/savings/accounts/${id}/audit`,
+
+    DEPOSITS: "/savings/deposits",
+    WITHDRAWALS: "/savings/withdrawals",
+    TRANSFERS: "/savings/transfers",
+    TRANSACTIONS: "/savings/transactions",
+    TRANSACTION: (id: number) => `/savings/transactions/${id}`,
+    TRANSACTION_REVERSE: (id: number) => `/savings/transactions/${id}/reverse`,
+    REVERSAL_APPROVE: (id: number) => `/savings/reversals/${id}/approve`,
+    REVERSAL_REJECT: (id: number) => `/savings/reversals/${id}/reject`,
+
+    INTEREST_PREVIEW: "/savings/interest/preview",
+    INTEREST_BATCHES: "/savings/interest/batches",
+    INTEREST_BATCH: (id: number) => `/savings/interest/batches/${id}`,
+    INTEREST_BATCH_APPROVE: (id: number) => `/savings/interest/batches/${id}/approve`,
+    INTEREST_BATCH_REJECT: (id: number) => `/savings/interest/batches/${id}/reject`,
+    INTEREST_BATCH_POST: (id: number) => `/savings/interest/batches/${id}/post`,
+    INTEREST_BATCH_REVERSE: (id: number) => `/savings/interest/batches/${id}/reverse`,
+
+    REPORT_REGISTER: "/reports/savings/register",
+    REPORT_BALANCES: "/reports/savings/balances",
+    REPORT_DEPOSITS: "/reports/savings/deposits",
+    REPORT_WITHDRAWALS: "/reports/savings/withdrawals",
+    REPORT_TRANSFERS: "/reports/savings/transfers",
+    REPORT_INTEREST_POSTINGS: "/reports/savings/interest-postings",
+    REPORT_CLOSED_DORMANT: "/reports/savings/closed-dormant",
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

@@ -350,6 +350,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  deposit: { label: "Deposit", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
+  withdraw: { label: "Withdraw", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

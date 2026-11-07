@@ -8,35 +8,22 @@
  * refuses it too (422 on `amount`).
  */
 
-export type ParsedAmount =
-  | { ok: true; amount: number }
-  | { ok: false; message: string };
+import {
+  isTooPrecise,
+  parseMoneyInput,
+  tooPreciseMessage,
+  type ParsedAmount,
+} from "@/lib/money-input";
 
-/** Plain pesos as a number input gives them: digits, an optional fraction. */
-const PESOS = /^\d+(?:\.(\d+))?$/;
-
-function tooPreciseMessage(label: string): string {
-  return `${label} can't have more than two decimals (centavos).`;
-}
-
-/** Plain pesos typed with more than two decimals that aren't trailing zeros. */
-function isTooPrecise(raw: string): boolean {
-  const match = PESOS.exec(raw.trim());
-  return match !== null && (match[1] ?? "").replace(/0+$/, "").length > 2;
-}
+export type { ParsedAmount };
 
 /**
  * The typed amount, exactly, or why it can't be saved. Blank, zero,
  * negative and anything that isn't plain pesos are refused as "must be
- * greater than 0", as before. Trailing zeros past the centavo ("1500.550")
- * are not extra precision.
+ * greater than 0". The shared rule lives in `@/lib/money-input`.
  */
 export function parsePledgeAmount(raw: string, label = "Amount"): ParsedAmount {
-  if (isTooPrecise(raw)) return { ok: false, message: tooPreciseMessage(label) };
-  const match = PESOS.exec(raw.trim());
-  const amount = match ? Number(match[0]) : 0;
-  if (!(amount > 0)) return { ok: false, message: `${label} must be greater than 0` };
-  return { ok: true, amount };
+  return parseMoneyInput(raw, { label });
 }
 
 export interface BulkAmountInput {
