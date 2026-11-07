@@ -61,6 +61,11 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "All Members", href: "/borrowers" },
       { title: "New Member", href: "/borrowers/new", permission: "borrowers:create" },
+      // Who has online access, invitations and change requests. Behind
+      // NEXT_PUBLIC_ENABLE_MEMBER_PORTAL until the backend serves /portal-admin/*.
+      ...(env.features.memberPortal
+        ? [{ title: "Portal Access", href: "/borrowers/portal-access", permission: "member_portal:view" as const }]
+        : []),
     ],
   },
   {
@@ -232,6 +237,9 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
       { title: "GCash", href: "/settings/gcash" },
+      ...(env.features.memberPortal
+        ? [{ title: "Member Portal", href: "/settings/member-portal", permission: "member_portal:settings" as const }]
+        : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.

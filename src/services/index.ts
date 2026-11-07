@@ -30,3 +30,4 @@ export { accountingService } from "./accounting.service";
 export { creditScoringService } from "./credit-scoring.service";
 export { reminderService } from "./reminder.service";
 export { lindaService } from "./linda.service";
+export { portalAdminService } from "./portal-admin.service";

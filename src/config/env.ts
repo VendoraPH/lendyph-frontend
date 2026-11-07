@@ -156,6 +156,10 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // The member self-service portal at /member, and its staff screens
+    // (portal access on a member, the adoption page, Settings > Member Portal).
+    // Off until the backend serves /portal/*; literal reference as above.
+    memberPortal: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MEMBER_PORTAL),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
