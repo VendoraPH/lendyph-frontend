@@ -419,6 +419,53 @@ export const API_ENDPOINTS = {
     READ: (id: string) => `/notifications/${encodeURIComponent(id)}/read`,
     READ_ALL: "/notifications/read-all",
   },
+  /**
+   * The member self-service portal, called with the MEMBER's token
+   * (lib/portal/portal-client.ts), never the staff one. Not built on the
+   * backend yet: contract in docs/MEMBER_PORTAL_BACKEND_HANDOFF.md. Every
+   * route resolves the member from the token, so none takes a member id.
+   */
+  PORTAL: {
+    CONFIG: "/portal/config",
+    AUTH: {
+      LOGIN: "/portal/auth/login",
+      LOGOUT: "/portal/auth/logout",
+      ME: "/portal/auth/me",
+      ACTIVATION_VERIFY: "/portal/auth/activation/verify",
+      ACTIVATION_OTP: "/portal/auth/activation/verify-otp",
+      ACTIVATION_COMPLETE: "/portal/auth/activation/complete",
+      FORGOT: "/portal/auth/password/forgot",
+      FORGOT_OTP: "/portal/auth/password/verify-otp",
+      RESET: "/portal/auth/password/reset",
+      CHANGE_PASSWORD: "/portal/auth/password/change",
+    },
+    DASHBOARD: "/portal/dashboard",
+    MEMBERSHIP: "/portal/membership",
+    PROFILE: "/portal/profile",
+    PROFILE_REQUESTS: "/portal/profile/update-requests",
+    PROFILE_REQUEST: (id: number | string) => `/portal/profile/update-requests/${id}`,
+    SECURITY: {
+      SESSIONS: "/portal/security/sessions",
+      SESSION: (id: number | string) => `/portal/security/sessions/${id}`,
+      LOGOUT_OTHERS: "/portal/security/sessions/logout-others",
+      LOGINS: "/portal/security/logins",
+      REPORT_LOGIN: (id: number | string) => `/portal/security/logins/${id}/report`,
+    },
+  },
+  /** Staff-side management of the member portal (staff token, member_portal:*). */
+  PORTAL_ADMIN: {
+    SETTINGS: "/portal-admin/settings",
+    STATS: "/portal-admin/stats",
+    ACCOUNTS: "/portal-admin/accounts",
+    MEMBER_ACCESS: (borrowerId: number | string) => `/portal-admin/members/${borrowerId}/access`,
+    MEMBER_INVITE: (borrowerId: number | string) => `/portal-admin/members/${borrowerId}/invite`,
+    MEMBER_UNLOCK: (borrowerId: number | string) => `/portal-admin/members/${borrowerId}/unlock`,
+    MEMBER_COMMUNICATIONS: (borrowerId: number | string) =>
+      `/portal-admin/members/${borrowerId}/communications`,
+    BULK_INVITE: "/portal-admin/invitations/bulk",
+    PROFILE_REQUESTS: "/portal-admin/profile-requests",
+    PROFILE_REQUEST_DECIDE: (id: number | string) => `/portal-admin/profile-requests/${id}/decision`,
+  },
   SYSTEM: {
     HEALTH: "/health",
   },

@@ -116,7 +116,8 @@ export type Module =
   // Same rule as `credit_scoring`: none of these are granted by the backend,
   // and none should be until the reminder routes exist. The server withholding
   // them is what keeps Loans → Reminders out of production.
-  | "reminders";
+  | "reminders"
+  | "member_portal";
 
 export type Action =
   | "view"

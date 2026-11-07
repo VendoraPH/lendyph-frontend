@@ -101,6 +101,13 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reminders:send",
       "reminders:pause",
       "reminders:settings",
+      // Member Portal — DOCUMENTED ONLY, for the same reason as reminders.
+      // `:view` sees portal access and adoption, `:manage` invites, enables,
+      // disables and unlocks member accounts and reviews portal requests,
+      // `:settings` configures the portal. See MEMBER_PORTAL_BACKEND_HANDOFF.md.
+      "member_portal:view",
+      "member_portal:manage",
+      "member_portal:settings",
     ],
   },
   loan_officer: {
