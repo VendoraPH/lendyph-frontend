@@ -48,14 +48,22 @@ export function ledgerRowCells(entry: BorrowerLedgerEntry): LedgerRowCells {
   };
 }
 
-/** The rows and closing balances of a GET /borrowers/{id}/ledger answer. */
-export function readMemberLedger(response: BorrowerLedgerResponse): {
+export interface MemberLedgerView {
   entries: BorrowerLedgerEntry[];
   closing: BorrowerLedgerClosing | null;
-} {
+}
+
+/**
+ * The rows and closing balances of a GET /borrowers/{id}/ledger answer. An answer
+ * with no rows list is null, the same as a failed request: only a real empty list
+ * reads as an empty ledger.
+ */
+export function readMemberLedger(response: unknown): MemberLedgerView | null {
+  const answer = response as Partial<BorrowerLedgerResponse> | null | undefined;
+  if (!Array.isArray(answer?.data)) return null;
   return {
-    entries: response.data ?? [],
-    closing: response.meta?.closing ?? null,
+    entries: answer.data,
+    closing: answer.meta?.closing ?? null,
   };
 }
 

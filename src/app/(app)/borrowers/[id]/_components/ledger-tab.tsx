@@ -3,18 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Loader2, BookOpen, FileText } from "lucide-react";
+import { AlertCircle, Loader2, BookOpen, FileText, RefreshCw } from "lucide-react";
 import { borrowerService } from "@/services";
-import type { BorrowerLedgerClosing, BorrowerLedgerEntry } from "@/types/borrower";
 import {
   ledgerClosingCells,
   ledgerRowCells,
   memberLedgerReportHref,
   readMemberLedger,
+  type MemberLedgerView,
 } from "../_lib/ledger-rows";
 
 function formatDate(dateStr: string): string {
@@ -26,8 +26,8 @@ interface LedgerTabProps {
 }
 
 export function LedgerTab({ borrowerId }: LedgerTabProps) {
-  const [entries, setEntries] = useState<BorrowerLedgerEntry[]>([]);
-  const [closing, setClosing] = useState<BorrowerLedgerClosing | null>(null);
+  // Null when it could not be read; an empty ledger has an empty `entries`.
+  const [ledger, setLedger] = useState<MemberLedgerView | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchLedger = useCallback(async () => {
@@ -35,12 +35,9 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
     try {
       // No `per_page`: the endpoint answers every row in one response, with no
       // paginator to bound.
-      const ledger = readMemberLedger(await borrowerService.ledger(borrowerId));
-      setEntries(ledger.entries);
-      setClosing(ledger.closing);
+      setLedger(readMemberLedger(await borrowerService.ledger(borrowerId)));
     } catch {
-      setEntries([]);
-      setClosing(null);
+      setLedger(null);
     } finally {
       setLoading(false);
     }
@@ -58,6 +55,26 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
     );
   }
 
+  if (ledger === null) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <div role="alert" className="flex flex-col items-center gap-3 px-4 py-8 text-center text-sm">
+            <p className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              We couldn&rsquo;t load the ledger.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void fetchLedger()}>
+              <RefreshCw className="mr-1.5 size-3.5" />
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { entries, closing } = ledger;
   const closingCells = ledgerClosingCells(closing);
 
   return (

@@ -108,6 +108,16 @@ test("readMemberLedger has no closing when the server sent none", () => {
   assert.deepEqual(readMemberLedger({ data: [RELEASE] }), { entries: [RELEASE], closing: null });
 });
 
+test("a successful empty answer is an empty ledger, not a failure", () => {
+  assert.deepEqual(readMemberLedger({ data: [] }), { entries: [], closing: null });
+});
+
+test("an answer with no rows list is a failure, never an empty ledger", () => {
+  for (const answer of [null, undefined, "", {}, { data: null }, { data: {} }, { message: "oops" }]) {
+    assert.equal(readMemberLedger(answer), null);
+  }
+});
+
 test("the footer reads the server's closing, zero as ₱0.00", () => {
   assert.deepEqual(
     ledgerClosingCells({ principal: 12000, interest: 200.5, penalty: 0, balance: 12200.5 }),
@@ -138,4 +148,19 @@ test("the tab shows the server's Balance and doesn't say it hides it", () => {
   assert.match(tab, /<TableFooter>/);
   assert.match(tab, /memberLedgerReportHref\(borrowerId\)/);
   assert.doesNotMatch(tab, /which is not shown/);
+});
+
+test("a failed load says so and offers Retry; only a successful empty answer reads as empty", () => {
+  const tab = readFileSync(
+    join(process.cwd(), "src/app/(app)/borrowers/[id]/_components/ledger-tab.tsx"),
+    "utf8",
+  );
+  assert.match(tab, /We couldn&rsquo;t load the ledger\./);
+  assert.match(tab, /role="alert"/);
+  assert.match(tab, /onClick=\{\(\) => void fetchLedger\(\)\}/);
+  assert.match(tab, /Retry/);
+  assert.ok(
+    tab.indexOf("if (ledger === null)") < tab.indexOf("No ledger entries found"),
+    "the failure is decided before the empty state",
+  );
 });
