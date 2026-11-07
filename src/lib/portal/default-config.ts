@@ -31,6 +31,9 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     profile_updates: true,
     gcash_payments: false,
     statements: true,
+    auto_pay: true,
+    dividends: true,
+    help_desk: true,
   },
   dashboard_cards: ["share_capital", "savings", "time_deposits", "loans", "next_payment", "announcements"],
 };

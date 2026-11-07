@@ -11,6 +11,7 @@ import { LedgerTable } from "../../_components/ledger-table";
 import { usePortalConfig } from "../../_components/portal-config";
 import { PortalPageHeader } from "../../_components/portal-shell";
 import { ServiceOff } from "../../_components/service-off";
+import { DividendsCard } from "./_components/dividends-card";
 
 export default function MemberShareCapitalPage() {
   const { config } = usePortalConfig();
@@ -50,6 +51,7 @@ export default function MemberShareCapitalPage() {
               </CardContent>
             </Card>
           )}
+          {!summary.unavailable && config.features.dividends && <DividendsCard />}
         </div>
       )}
     </>

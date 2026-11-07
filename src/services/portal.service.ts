@@ -39,6 +39,19 @@ import type {
   ProfileUpdateSubmit,
   ResetPasswordRequest,
   StatementRequest,
+  ActivityItem,
+  PortalActivityFilters,
+  PortalAnnouncement,
+  PortalAutoPay,
+  PortalCreditScore,
+  PortalDividend,
+  PortalFaq,
+  PortalNotification,
+  PortalNotificationFilters,
+  PortalNotificationPreference,
+  PortalSearchResult,
+  SupportTicket,
+  SupportTicketSubmit,
 } from "@/types/portal";
 import type { PaginatedResponse } from "@/types/api";
 
@@ -111,12 +124,8 @@ export const portalService = {
     portalApi.upload<PortalRequest>(P.REQUESTS, requestForm(body)),
   cancelRequest: (id: number) => portalApi.delete<void>(P.REQUEST(id)),
   /** Answer a "more information needed" request. */
-  replyToRequest: (id: number, message: string, attachments: File[]) => {
-    const form = new FormData();
-    form.append("message", message);
-    attachments.forEach((f) => form.append("attachments[]", f));
-    return portalApi.upload<PortalRequest>(P.REQUEST_REPLY(id), form);
-  },
+  replyToRequest: (id: number, message: string, attachments: File[]) =>
+    portalApi.upload<PortalRequest>(P.REQUEST_REPLY(id), replyForm(message, attachments)),
   savingsProducts: () => portalApi.get<PortalSavingsProduct[]>(P.SAVINGS_PRODUCTS),
 
   loanProducts: () => portalApi.get<PortalLoanProduct[]>(P.LOAN_PRODUCTS),
@@ -129,7 +138,52 @@ export const portalService = {
 
   documents: () => portalApi.get<PortalDocument[]>(P.DOCUMENTS),
   downloadDocument: (id: number) => portalApi.download(P.DOCUMENT_DOWNLOAD(id)),
+
+  creditScore: () => portalApi.get<PortalCreditScore>(P.CREDIT_SCORE),
+  autoPay: () => portalApi.get<PortalAutoPay[]>(P.AUTO_PAY),
+
+  /** Paged: the whole body so the page can read `meta.total`. */
+  notifications: (params: PortalNotificationFilters) =>
+    portalApi.getRaw<PaginatedResponse<PortalNotification>>(P.NOTIFICATIONS, { params }),
+  unreadCount: () => portalApi.get<{ count: number }>(P.NOTIFICATIONS_UNREAD),
+  markRead: (id: number) => portalApi.post<void>(P.NOTIFICATION_READ(id)),
+  markAllRead: () => portalApi.post<void>(P.NOTIFICATIONS_READ_ALL),
+  notificationPreferences: () =>
+    portalApi.get<PortalNotificationPreference[]>(P.NOTIFICATION_PREFERENCES),
+  saveNotificationPreferences: (preferences: PortalNotificationPreference[]) =>
+    portalApi.put<PortalNotificationPreference[]>(P.NOTIFICATION_PREFERENCES, { preferences }),
+
+  announcements: () => portalApi.get<PortalAnnouncement[]>(P.ANNOUNCEMENTS),
+  announcement: (id: number) => portalApi.get<PortalAnnouncement>(P.ANNOUNCEMENT(id)),
+
+  dividends: () => portalApi.get<PortalDividend[]>(P.DIVIDENDS),
+
+  faqs: () => portalApi.get<PortalFaq[]>(P.FAQS),
+  tickets: () => portalApi.get<SupportTicket[]>(P.TICKETS),
+  ticket: (id: number) => portalApi.get<SupportTicket>(P.TICKET(id)),
+  submitTicket: (body: SupportTicketSubmit) => {
+    const form = new FormData();
+    form.append("category", body.category);
+    form.append("subject", body.subject);
+    form.append("message", body.message);
+    body.attachments.forEach((f) => form.append("attachments[]", f));
+    return portalApi.upload<SupportTicket>(P.TICKETS, form);
+  },
+  replyToTicket: (id: number, message: string, attachments: File[]) =>
+    portalApi.upload<SupportTicket>(P.TICKET_REPLY(id), replyForm(message, attachments)),
+
+  /** Paged: the whole body so the page can read `meta.total`. */
+  activity: (params: PortalActivityFilters) =>
+    portalApi.getRaw<PaginatedResponse<ActivityItem>>(P.ACTIVITY, { params }),
+  search: (q: string) => portalApi.get<PortalSearchResult[]>(P.SEARCH, { params: { q } }),
 };
+
+function replyForm(message: string, attachments: File[]): FormData {
+  const form = new FormData();
+  form.append("message", message);
+  attachments.forEach((f) => form.append("attachments[]", f));
+  return form;
+}
 
 function requestForm(body: PortalRequestSubmit): FormData {
   const form = new FormData();

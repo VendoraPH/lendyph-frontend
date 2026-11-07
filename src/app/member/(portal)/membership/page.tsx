@@ -9,6 +9,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { humanize, membershipTone, TONE_CLASS } from "@/lib/portal/labels";
 import { portalService } from "@/services/portal.service";
 import type { PortalBranch, PortalMembership, StandingValue } from "@/types/portal";
+import { CreditScoreCard } from "../../_components/credit-score-card";
 import { DetailItem as Item } from "../../_components/detail-item";
 import { PortalPageHeader, StatusPill } from "../../_components/portal-shell";
 
@@ -61,6 +62,8 @@ function MembershipBody({ data }: { data: PortalMembership }) {
       </Card>
 
       {data.branch && <BranchCard branch={data.branch} />}
+
+      <CreditScoreCard />
 
       {data.standing.length > 0 && (
         <Card>

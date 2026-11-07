@@ -69,6 +69,9 @@ const FEATURE_LABELS: Record<BoolFeature, string> = {
   withdrawal_requests: "Withdrawal requests",
   profile_updates: "Profile change requests",
   gcash_payments: "GCash payments",
+  auto_pay: "Auto-pay",
+  dividends: "Dividends and patronage refunds",
+  help_desk: "Help and support tickets",
 };
 
 /** One switch per member service; switching one off hides it in the portal. */

@@ -2,6 +2,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { api } from "@/lib/api-client";
 import type { PaginatedResponse } from "@/types/api";
 import type {
+  AnnouncementInput,
   BulkInviteRequest,
   BulkInviteResult,
   PortalAccess,
@@ -16,6 +17,10 @@ import type {
   StaffProfileRequest,
   StaffRequestDecisionBody,
   StaffRequestFilters,
+  StaffAnnouncement,
+  StaffSupportTicket,
+  StaffTicketFilters,
+  TicketStatus,
 } from "@/types/portal";
 
 const A = API_ENDPOINTS.PORTAL_ADMIN;
@@ -49,4 +54,17 @@ export const portalAdminService = {
     api.getRaw<PaginatedResponse<StaffPortalRequest>>(A.REQUESTS, { params: filters }),
   decideRequest: (id: number, body: StaffRequestDecisionBody) =>
     api.post<StaffPortalRequest>(A.REQUEST_DECIDE(id), body),
+
+  announcements: (params: { page: number; per_page: number; status?: string }) =>
+    api.getRaw<PaginatedResponse<StaffAnnouncement>>(A.ANNOUNCEMENTS, { params }),
+  createAnnouncement: (body: AnnouncementInput) => api.post<StaffAnnouncement>(A.ANNOUNCEMENTS, body),
+  updateAnnouncement: (id: number, body: AnnouncementInput) =>
+    api.put<StaffAnnouncement>(A.ANNOUNCEMENT(id), body),
+  deleteAnnouncement: (id: number) => api.delete<void>(A.ANNOUNCEMENT(id)),
+
+  tickets: (filters: StaffTicketFilters) =>
+    api.getRaw<PaginatedResponse<StaffSupportTicket>>(A.TICKETS, { params: filters }),
+  /** A reply the member sees, and the ticket's new status. */
+  replyToTicket: (id: number, body: { message: string; status: TicketStatus }) =>
+    api.post<StaffSupportTicket>(A.TICKET_REPLY(id), body),
 };

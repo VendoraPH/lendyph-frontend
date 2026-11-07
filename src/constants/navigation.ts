@@ -67,6 +67,11 @@ export const SIDEBAR_NAV: NavItem[] = [
         ? [
             { title: "Portal Access", href: "/borrowers/portal-access", permission: "member_portal:view" as const },
             { title: "Portal Requests", href: "/borrowers/portal-requests", permission: "member_portal:manage" as const },
+            {
+              title: "Portal Announcements",
+              href: "/borrowers/portal-announcements",
+              permission: "member_portal:manage" as const,
+            },
           ]
         : []),
     ],

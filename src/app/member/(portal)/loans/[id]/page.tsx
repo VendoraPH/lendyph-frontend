@@ -19,6 +19,7 @@ import { PaymentsTable } from "../../../_components/payments-table";
 import { usePortalConfig } from "../../../_components/portal-config";
 import { ServiceOff } from "../../../_components/service-off";
 import { GCashPayDialog } from "../_components/gcash-pay-dialog";
+import { CollateralList } from "../_components/collateral-list";
 import { LoanSummaryCard } from "../_components/loan-summary-card";
 import { ScheduleTable } from "../_components/schedule-table";
 
@@ -92,6 +93,7 @@ function LoanDetail({ loan }: { loan: PortalLoanDetail }) {
         <TabsList>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="collateral">Collateral</TabsTrigger>
         </TabsList>
         <TabsContent value="schedule" className="pt-3">
           <DataState
@@ -110,6 +112,9 @@ function LoanDetail({ loan }: { loan: PortalLoanDetail }) {
           >
             {(rows) => <PaymentsTable payments={rows} showLoan={false} />}
           </DataState>
+        </TabsContent>
+        <TabsContent value="collateral" className="pt-3">
+          <CollateralList collaterals={loan.collaterals ?? []} loanNumber={loan.loan_number} />
         </TabsContent>
       </Tabs>
       {canPay && <GCashPayDialog open={paying} onOpenChange={setPaying} loan={loan} />}
