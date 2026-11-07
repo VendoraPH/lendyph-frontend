@@ -9,7 +9,7 @@ import { csvRow as row } from "@/lib/csv-escape";
 import { csvBlob } from "@/lib/csv";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
-import { reportScopeLine, type ReportDocument } from "./types";
+import { orgDetailsLine, reportScopeLine, type ReportDocument } from "./types";
 
 /**
  * CSV export — simple, plain text. Each section is rendered as its own
@@ -25,6 +25,8 @@ export function renderReportCsv(doc: ReportDocument): string {
   // Header block
   lines.push(row([doc.meta.title]));
   lines.push(row([doc.meta.org]));
+  const orgDetails = orgDetailsLine(doc.meta);
+  if (orgDetails) lines.push(row([orgDetails]));
   if (doc.meta.subtitle) lines.push(row([doc.meta.subtitle]));
   if (doc.meta.reference) lines.push(row([`Reference: ${doc.meta.reference}`]));
   lines.push(row([reportScopeLine(doc.meta)]));
@@ -88,6 +90,7 @@ export function renderReportCsv(doc: ReportDocument): string {
       lines.push(row(["Signatories", ""]));
       for (const role of section.roles) {
         lines.push(row([role, ""]));
+        for (const line of section.lines ?? []) lines.push(row([`${role}: ${line}`, ""]));
       }
       lines.push("");
     } else if (section.kind === "note") {

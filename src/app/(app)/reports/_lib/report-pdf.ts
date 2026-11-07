@@ -3,7 +3,8 @@ import autoTable from "jspdf-autotable";
 import { saveAs } from "file-saver";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
-import { reportScopeLine, type ReportDocument, type ReportSection } from "./types";
+import { PESO_FONT_BOLD, PESO_FONT_REGULAR } from "./report-pdf-peso-font";
+import { orgDetailsLine, reportScopeLine, type ReportDocument, type ReportSection } from "./types";
 
 // Match the on-screen preview palette so the PDF feels like the same
 // document. RGB tuples for jsPDF.
@@ -31,17 +32,16 @@ const PAGE_MARGIN_X = 36;
 // \u20B1 is that character, and it is in every peso figure of all seventeen
 // reports, so every currency line printed with a plus-minus in front of it.
 //
-// So the transcode below only has to do two things: swap \u20B1 for something
-// printable, and make sure nothing else unmappable ever reaches jsPDF and
-// takes a whole line down with it. Punctuation WinAnsi does carry (em dash,
-// bullet, curly quotes) is listed explicitly so it keeps its real glyph rather
-// than being folded away with the genuinely unrepresentable.
+// So the transcode below only has to do two things: hold a slot for \u20B1, and
+// make sure nothing else unmappable ever reaches jsPDF and takes a whole line
+// down with it. Punctuation WinAnsi does carry (em dash, bullet, curly quotes)
+// is listed explicitly so it keeps its real glyph rather than being folded away
+// with the genuinely unrepresentable.
 //
-// We deliberately do NOT embed a Unicode font for the sake of one glyph: three
-// faces of a modern sans is ~370 KB (~490 KB base64) in a route bundle that
-// already carries exceljs, docx and jspdf, and even a Latin-1 subset would add
-// a build step plus a new silent-failure mode - any glyph outside the subset
-// renders as a blank box, which is the class of defect this replaces.
+// The sign itself is drawn from a font holding only that glyph (about 2 KB a
+// face, see report-pdf-peso-font.ts), and everything else stays in Helvetica.
+// A whole Unicode font would cost ~370 KB for three faces, and any glyph outside
+// a subset would print as a blank box.
 
 /**
  * Code points above U+00FF that WinAnsi can represent, mapped to their WinAnsi
@@ -89,11 +89,16 @@ const ASCII_STANDIN: Readonly<Record<string, string>> = {
 
 /**
  * The peso sign is the one glyph in these reports that WinAnsi cannot express
- * at all, so no standard-14 font can print it. It becomes its ISO 4217 code,
- * which is unambiguous on a printed statement. A space already following the
- * sign is swallowed so "\u20B1 100" does not become "PHP  100".
+ * at all, so no standard-14 font can print it. In text it becomes this slot: a
+ * Latin-1 character of a digit's width, so measuring and wrapping work unchanged,
+ * and `doc.text` draws the real sign in its place. A space already following the
+ * sign is swallowed so "\u20B1 100" reads "\u20B1100", like every other figure.
  */
+export const PESO_SLOT = "\u00A4";
+
 const PESO_SIGN = /\u20B1[ \u00A0]?/g;
+
+const PESO_FONT = "LendyphPeso";
 
 /** True for text every standard-14 glyph can already represent. */
 const NON_LATIN1 = /[^\u0000-\u00FF]/;
@@ -124,7 +129,7 @@ function foldChar(char: string): string {
  * print. Idempotent: already-safe text is returned untouched.
  */
 export function toPdfText(value: string): string {
-  const withCurrency = value.replace(PESO_SIGN, "PHP ");
+  const withCurrency = value.replace(PESO_SIGN, PESO_SLOT);
   // Fast path - the overwhelming majority of report text is Latin-1 already.
   if (!NON_LATIN1.test(withCurrency)) return withCurrency;
   return Array.from(withCurrency, foldChar).join("");
@@ -132,6 +137,13 @@ export function toPdfText(value: string): string {
 
 function encodeTextArg(text: string | string[]): string | string[] {
   return Array.isArray(text) ? text.map(toPdfText) : toPdfText(text);
+}
+
+function registerPesoFont(doc: jsPDF): void {
+  doc.addFileToVFS("LendyphPeso-Regular.ttf", PESO_FONT_REGULAR);
+  doc.addFont("LendyphPeso-Regular.ttf", PESO_FONT, "normal");
+  doc.addFileToVFS("LendyphPeso-Bold.ttf", PESO_FONT_BOLD);
+  doc.addFont("LendyphPeso-Bold.ttf", PESO_FONT, "bold");
 }
 
 /**
@@ -150,13 +162,43 @@ function installWinAnsiEncoder(doc: jsPDF): void {
   const getStringUnitWidth = doc.getStringUnitWidth.bind(doc);
   const splitTextToSize = doc.splitTextToSize.bind(doc);
 
+  /** One line holding a slot: Helvetica runs, with the sign drawn into each slot. */
+  const drawPesoLine = (line: string, x: number, y: number): void => {
+    const { fontName, fontStyle } = doc.getFont();
+    let cursor = x;
+    for (const run of line.split(new RegExp(`(${PESO_SLOT})`))) {
+      if (run === "") continue;
+      if (run === PESO_SLOT) {
+        doc.setFont(PESO_FONT, fontStyle.includes("bold") ? "bold" : "normal");
+        text("\u20B1", cursor, y);
+        doc.setFont(fontName, fontStyle);
+      } else {
+        text(run, cursor, y);
+      }
+      cursor += getTextWidth(run);
+    }
+  };
+
   doc.text = ((
     value: string | string[],
     x: number,
     y: number,
     options?: Parameters<jsPDF["text"]>[3],
     transform?: Parameters<jsPDF["text"]>[4]
-  ) => text(encodeTextArg(value), x, y, options, transform)) as jsPDF["text"];
+  ) => {
+    const encoded = encodeTextArg(value);
+    const lines = Array.isArray(encoded) ? encoded : [encoded];
+    if (!lines.some((line) => line.includes(PESO_SLOT))) {
+      return text(encoded, x, y, options, transform);
+    }
+    const align = (options as { align?: string } | undefined)?.align;
+    lines.forEach((line, i) => {
+      const width = getTextWidth(line);
+      const left = align === "right" ? x - width : align === "center" ? x - width / 2 : x;
+      drawPesoLine(line, left, y + i * doc.getLineHeight());
+    });
+    return doc;
+  }) as jsPDF["text"];
 
   doc.getTextWidth = ((value: string) =>
     getTextWidth(toPdfText(String(value)))) as jsPDF["getTextWidth"];
@@ -181,9 +223,21 @@ function textRight(doc: jsPDF, text: string, y: number): void {
   doc.text(text, pageWidth - PAGE_MARGIN_X - doc.getTextWidth(text), y);
 }
 
+/** Room kept clear on the right of the letterhead for the reference. */
+const REFERENCE_WIDTH = 180;
+
 function drawHeader(doc: jsPDF, report: ReportDocument): number {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const headerHeight = 64;
+  const logoWidth = report.meta.logoData ? 50 : 0;
+  const details = orgDetailsLine(report.meta);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const detailLines: string[] = details
+    ? doc.splitTextToSize(details, pageWidth - PAGE_MARGIN_X * 2 - logoWidth - REFERENCE_WIDTH)
+    : [];
+  // The address and contact sit under the name and push the title down.
+  const detailsHeight = detailLines.length * 10;
+  const headerHeight = 64 + detailsHeight;
 
   doc.setFillColor(...BRAND_ORANGE);
   doc.rect(0, 0, pageWidth, headerHeight, "F");
@@ -211,14 +265,20 @@ function drawHeader(doc: jsPDF, report: ReportDocument): number {
   doc.setFont("helvetica", "italic");
   doc.text(report.meta.org.toUpperCase(), textX, 22);
 
+  if (detailLines.length > 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    detailLines.forEach((line, i) => doc.text(line, textX, 32 + i * 10));
+  }
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text(report.meta.title, textX, 44);
+  doc.text(report.meta.title, textX, 44 + detailsHeight);
 
   if (report.meta.subtitle) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(report.meta.subtitle, textX, 58);
+    doc.text(report.meta.subtitle, textX, 58 + detailsHeight);
   }
 
   if (report.meta.reference) {
@@ -281,11 +341,20 @@ function drawFooter(doc: jsPDF, report: ReportDocument) {
   }
 }
 
+/** Starts a new page when a block of this height would run off the current one. */
+function fitOnPage(doc: jsPDF, y: number, height: number): number {
+  if (y + height <= doc.internal.pageSize.getHeight() - 40) return y;
+  doc.addPage();
+  return 40;
+}
+
 function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number {
   if (section.kind !== "kpi_grid") return startY;
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  let y = startY;
+  const gridRows = Math.ceil(section.items.length / 4);
+  const gridHeight = gridRows * (section.items.some((item) => !!item.hint) ? 70 : 56);
+  let y = fitOnPage(doc, startY, gridHeight + (section.title ? 16 : 0));
   if (section.title) {
     doc.setTextColor(...FOREGROUND);
     doc.setFont("helvetica", "bold");
@@ -334,7 +403,7 @@ function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number
 
     if (item.hint) {
       doc.setTextColor(...MUTED);
-      doc.setFont("helvetica", "normal");
+      doc.setFont("helvetica", "italic");
       doc.setFontSize(7);
       // Two lines at most: a card is a headline, not a paragraph.
       const lines = doc.splitTextToSize(item.hint, cardW - 16) as string[];
@@ -394,6 +463,8 @@ function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
     head,
     body,
     foot,
+    // A grand total on every page reads like a subtotal of that page.
+    showFoot: "lastPage",
     startY: y,
     margin: { left: PAGE_MARGIN_X, right: PAGE_MARGIN_X },
     theme: "grid",
@@ -421,6 +492,14 @@ function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
       acc[idx] = { halign: col.align ?? "left" };
       return acc;
     }, {}),
+    // `columnStyles` reaches only the body, so headings and totals follow here.
+    didParseCell: (data) => {
+      if (data.section === "body") {
+        if (section.rows[data.row.index]?.voided === true) data.cell.styles.textColor = MUTED;
+        return;
+      }
+      data.cell.styles.halign = section.columns[data.column.index]?.align ?? "left";
+    },
   });
 
   // jspdf-autotable mutates doc with lastAutoTable.
@@ -443,35 +522,67 @@ function drawFields(doc: jsPDF, section: ReportSection, startY: number): number 
     y += 14;
   }
 
-  // Two columns of label→value, matching the preview's definition list.
+  // Two columns of label→value, matching the preview's definition list. A value
+  // too long for its cell wraps, right-aligned, and its row grows to hold it.
   const cols = 2;
   const totalW = pageWidth - PAGE_MARGIN_X * 2;
   const colW = totalW / cols;
-  const lineH = 16;
-  const rows = Math.ceil(section.items.length / cols);
+  const lineH = 12;
+  const rowGap = 4;
+
+  doc.setFontSize(9);
+  const cells = section.items.map((item) => {
+    doc.setFont("helvetica", "normal");
+    const labelW = doc.getTextWidth(item.label);
+    doc.setFont("helvetica", "bold");
+    const maxW = Math.max(colW - 16 - labelW - 10, colW / 3);
+    return { item, lines: doc.splitTextToSize(item.value, maxW) as string[] };
+  });
+  const rowHeights: number[] = [];
+  cells.forEach((cell, idx) => {
+    const row = Math.floor(idx / cols);
+    rowHeights[row] = Math.max(rowHeights[row] ?? 0, cell.lines.length * lineH + rowGap);
+  });
+  const boxH = rowHeights.reduce((sum, h) => sum + h, 0) + 10;
+
+  const titled = y !== startY;
+  const fitted = fitOnPage(doc, y, boxH);
+  if (fitted !== y && titled) {
+    // The heading moves with its box rather than stranding on the page before.
+    doc.setTextColor(...FOREGROUND);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(section.title!, PAGE_MARGIN_X, fitted + 4);
+    y = fitted + 14;
+  } else {
+    y = fitted;
+  }
 
   doc.setDrawColor(229, 231, 235);
   doc.setFillColor(250, 250, 250);
-  doc.rect(PAGE_MARGIN_X, y, totalW, rows * lineH + 10, "FD");
+  doc.rect(PAGE_MARGIN_X, y, totalW, boxH, "FD");
 
-  section.items.forEach((item, idx) => {
+  doc.setFontSize(9);
+  let rowTop = y + 16;
+  cells.forEach(({ item, lines }, idx) => {
     const col = idx % cols;
     const row = Math.floor(idx / cols);
     const x = PAGE_MARGIN_X + col * colW + 8;
-    const lineY = y + 16 + row * lineH;
 
     doc.setTextColor(...MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text(item.label, x, lineY);
+    doc.text(item.label, x, rowTop);
 
     doc.setTextColor(...FOREGROUND);
     doc.setFont("helvetica", "bold");
-    const valueW = doc.getTextWidth(item.value);
-    doc.text(item.value, x + colW - 16 - valueW, lineY);
+    lines.forEach((line, i) => {
+      doc.text(line, x + colW - 16 - doc.getTextWidth(line), rowTop + i * lineH);
+    });
+
+    if (col === cols - 1 || idx === cells.length - 1) rowTop += rowHeights[row];
   });
 
-  return y + rows * lineH + 20;
+  return y + boxH + 10;
 }
 
 function drawSignatures(
@@ -483,7 +594,9 @@ function drawSignatures(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  const blockHeight = 56;
+  const lines = section.lines ?? [];
+  const lineH = 18;
+  const blockHeight = 56 + lines.length * lineH;
   // Never split a sign-off block across a page — half a signature line at the
   // bottom of a page reads as a printing error.
   let y = startY + 12;
@@ -506,9 +619,17 @@ function drawSignatures(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.text(role, x, ruleY + 11);
+
+    lines.forEach((line, i) => {
+      const lineY = ruleY + 11 + (i + 1) * lineH;
+      const label = `${line}:`;
+      doc.text(label, x, lineY);
+      doc.setLineWidth(0.4);
+      doc.line(x + doc.getTextWidth(label) + 4, lineY + 1, x + colW - 24, lineY + 1);
+    });
   });
 
-  return ruleY + 24;
+  return ruleY + 24 + lines.length * lineH;
 }
 
 function drawNote(doc: jsPDF, section: ReportSection, startY: number): number {
@@ -531,11 +652,20 @@ function drawNote(doc: jsPDF, section: ReportSection, startY: number): number {
  */
 export function renderReportPdf(report: ReportDocument): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+  registerPesoFont(doc);
   installWinAnsiEncoder(doc);
 
   let cursor = drawHeader(doc, report);
+  const pageHeight = doc.internal.pageSize.getHeight();
 
   for (const section of report.sections) {
+    // Soft page break: near the bottom, the next section starts a new page. It
+    // sits before the section, so nothing after the last one adds a blank page.
+    if (cursor > pageHeight - 80) {
+      doc.addPage();
+      cursor = 40;
+    }
+
     if (section.kind === "kpi_grid") {
       cursor = drawKpiGrid(doc, section, cursor);
     } else if (section.kind === "table") {
@@ -546,14 +676,6 @@ export function renderReportPdf(report: ReportDocument): jsPDF {
       cursor = drawSignatures(doc, section, cursor);
     } else if (section.kind === "note") {
       cursor = drawNote(doc, section, cursor);
-    }
-
-    // Soft page break: if we're near the bottom, add a new page so the
-    // next section starts cleanly.
-    const pageHeight = doc.internal.pageSize.getHeight();
-    if (cursor > pageHeight - 80) {
-      doc.addPage();
-      cursor = 40;
     }
   }
 

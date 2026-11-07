@@ -162,12 +162,12 @@ export function parseApiDate(value: unknown): Date | null {
 
 export function dateOrBlank(value: unknown): string {
   if (value === null || value === undefined || value === "") return BLANK_LINE;
-  return formatValue(parseApiDate(value) ?? value, "date");
+  return formatValue(value, "date");
 }
 
 export function dateOrDash(value: unknown): string {
   if (value === null || value === undefined || value === "") return DASH;
-  return formatValue(parseApiDate(value) ?? value, "date");
+  return formatValue(value, "date");
 }
 
 export function moneyOrBlank(value: unknown): string {
@@ -216,7 +216,7 @@ export function dateField(label: string, value: unknown): PrintField {
   if (value === null || value === undefined || value === "") {
     return { label, underline: true };
   }
-  return { label, value: formatValue(parseApiDate(value) ?? value, "date") };
+  return { label, value: formatValue(value, "date") };
 }
 
 /**
@@ -229,7 +229,7 @@ export function dateTimeField(label: string, value: unknown): PrintField {
   if (value === null || value === undefined || value === "") {
     return { label, underline: true };
   }
-  return { label, value: formatValue(parseApiDate(value) ?? value, "datetime") };
+  return { label, value: formatValue(value, "datetime") };
 }
 
 /** Drop the rows the API did not send, keeping a document honest about gaps. */

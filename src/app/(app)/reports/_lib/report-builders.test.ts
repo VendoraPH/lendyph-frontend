@@ -115,12 +115,13 @@ function assertNoDashes(doc: ReportDocument): void {
 // Portfolio Summary — nested portfolio/outstanding/overdue blocks
 // ---------------------------------------------------------------------------
 
-// Flat headline keys sit alongside the nested blocks. `outstanding_balance`
-// includes insurance, so it is deliberately larger than principal + interest +
-// penalty (`outstanding.total`, 3,418,151.50) — the two are not meant to match.
+// Flat headline keys sit alongside the nested blocks. `total_outstanding` is
+// everything owed, the premium included, so it is deliberately larger than
+// principal + interest + penalty (`outstanding.total`, 3,418,151.50).
 const PORTFOLIO_PAYLOAD = {
   active_loans: 42,
-  outstanding_balance: 3462980.15,
+  total_outstanding: 3462980.15,
+  outstanding_principal: 3120450.75,
   at_risk_amount: 458101,
   par_ratio: 12.5,
   par_threshold_days: 30,
@@ -146,10 +147,16 @@ const PORTFOLIO_PAYLOAD = {
       branch_name: "Main",
       loan_count: 42,
       total_released: 5250000,
-      outstanding_balance: 3120450.75,
+      total_outstanding: 3462980.15,
+      outstanding_principal: 3120450.75,
     },
   ],
-  by_branch_totals: { loan_count: 42, total_released: 5250000, outstanding_balance: 3120450.75 },
+  by_branch_totals: {
+    loan_count: 42,
+    total_released: 5250000,
+    total_outstanding: 3462980.15,
+    outstanding_principal: 3120450.75,
+  },
   generated_at: "2026-08-06 09:15:00",
 };
 
@@ -158,17 +165,18 @@ test("portfolio summary prefers the flat headline figures", () => {
 
   assertNoDashes(doc);
   assert.equal(kpiValue(doc, "Total Active Loans"), "42");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱3,462,980.15");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱3,462,980.15");
+  assert.equal(kpiValue(doc, "Principal Balance"), "₱3,120,450.75");
   assert.equal(kpiValue(doc, "At Risk (>30d overdue)"), "₱458,101.00");
   assert.equal(kpiValue(doc, "PAR Ratio"), "12.5%");
 });
 
 test("PAR ratio is shown as the server sent it, not recomputed from the KPIs", () => {
   const doc = buildPortfolioSummaryDoc(PORTFOLIO_PAYLOAD, RANGE);
-  // at_risk ÷ outstanding_balance would be 13.2% — PAR divides by outstanding
-  // principal instead, so the server's 12.5% must survive untouched.
+  // at_risk ÷ total_outstanding would be 13.2% — PAR divides by the Principal
+  // Balance instead, so the server's 12.5% must survive untouched.
   assert.equal(kpiValue(doc, "PAR Ratio"), "12.5%");
-  assert.equal(kpi(doc, "PAR Ratio").hint, "Portfolio at Risk, on outstanding principal");
+  assert.equal(kpi(doc, "PAR Ratio").hint, "Portfolio at Risk, on the Principal Balance");
 });
 
 test("the at-risk label follows the server's PAR threshold", () => {
@@ -185,15 +193,16 @@ test("portfolio summary surfaces the overdue loan count as a hint", () => {
 });
 
 test("portfolio summary never adds up the nested blocks in place of the headline balance", () => {
-  const { active_loans, outstanding_balance, ...nestedOnly } = PORTFOLIO_PAYLOAD;
+  const { active_loans, total_outstanding, outstanding_principal, ...nestedOnly } = PORTFOLIO_PAYLOAD;
   void active_loans;
-  void outstanding_balance;
+  void total_outstanding;
+  void outstanding_principal;
   const doc = buildPortfolioSummaryDoc(nestedOnly, RANGE);
 
   assert.equal(kpiValue(doc, "Total Active Loans"), "42");
   // Not ₱3,418,151.50 (principal + interest + penalty), nor outstanding.total.
-  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
-  assert.equal(kpi(doc, "Outstanding Balance").hint, undefined);
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
+  assert.equal(kpiValue(doc, "Principal Balance"), DASH);
 });
 
 test("portfolio summary dashes only the figures the API omits", () => {
@@ -203,7 +212,7 @@ test("portfolio summary dashes only the figures the API omits", () => {
   const doc = buildPortfolioSummaryDoc(withoutRisk, RANGE);
 
   assert.equal(kpiValue(doc, "Total Active Loans"), "42");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱3,462,980.15");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱3,462,980.15");
   assert.equal(kpiValue(doc, "At Risk (>30d overdue)"), DASH);
   assert.equal(kpiValue(doc, "PAR Ratio"), DASH);
 });
@@ -211,7 +220,7 @@ test("portfolio summary dashes only the figures the API omits", () => {
 test("portfolio summary renders the shell when the request failed", () => {
   const doc = buildPortfolioSummaryDoc(null, RANGE);
   assert.equal(kpiValue(doc, "Total Active Loans"), DASH);
-  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
 });
 
 // ---------------------------------------------------------------------------
@@ -515,7 +524,7 @@ test("income report shows a dash, not a sum of the components, when the API omit
 test("income report reads total_income as the server sent it", () => {
   const doc = buildIncomeDoc(
     // Deliberately not the sum of the components: the KPI must show it as sent.
-    { interest_income: 120500.25, processing_fees: 32400.5, penalty_income: 4800.25, total_income: 157700 },
+    { interest_income: 120500.25, processing_fees: 32400.5, penalty_income: 4800.25, service_fee: 0, other_fees: 0, total_income: 157700 },
     RANGE
   );
 
@@ -599,7 +608,7 @@ test("income by loan's truncation note counts loans, and no caption says fees ar
   assert.ok(notes.some((n) => /server's figures for the whole period/.test(n)));
   assert.ok(notes.every((n) => !/CSV/.test(n)));
   assert.ok(notes.every((n) => !/not part of this list/.test(n)), notes.join(" | "));
-  assert.ok(notes.some((n) => /processing fees from the loans released in the period/.test(n)), notes.join(" | "));
+  assert.ok(notes.some((n) => /processing, service and other fees from the loans released in the period/.test(n)), notes.join(" | "));
 });
 
 // D9: the same rows with the fee column the backend adds. Deliberately not the
@@ -619,7 +628,7 @@ test("income by loan shows a Processing Fee column between the income figures an
 
   assert.deepEqual(
     table.columns.map((c) => c.header),
-    ["Loan #", "Member", "Payments", "Interest", "Penalty", "Processing Fee", "Total Income"]
+    ["Loan #", "Member", "Payments", "Interest", "Penalty", "Processing Fee", "Service Fee", "Other Fees", "Total Income"]
   );
   const column = table.columns.find((c) => c.key === "processing_fee")!;
   assert.equal(column.format, "currency");
@@ -1015,7 +1024,8 @@ test("releases list prefers the server totals over the visible page", () => {
         count: 640,
         total_principal: 18450900.75,
         total_net_proceeds: 17920400.5,
-        total_outstanding_balance: 12408300.25,
+        total_outstanding: 12408300.25,
+        outstanding_principal: 11900000.5,
       },
     },
     RANGE
@@ -1024,19 +1034,21 @@ test("releases list prefers the server totals over the visible page", () => {
   assert.equal(kpiValue(doc, "Total Releases"), "640");
   assert.equal(kpiValue(doc, "Total Principal"), "₱18,450,900.75");
   assert.equal(kpiValue(doc, "Net Proceeds"), "₱17,920,400.50");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱12,408,300.25");
+  assert.equal(kpiValue(doc, "Principal Balance"), "₱11,900,000.50");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱12,408,300.25");
   assert.equal(tableTotal(doc, "principal"), "₱18,450,900.75");
 });
 
-test("releases list omits the extra KPIs when the API sends no totals block", () => {
+test("releases list omits Net Proceeds and dashes what's owed when the API sends no totals block", () => {
   const doc = buildReleasesListDoc({ data: RELEASE_ROWS, meta: { total: 2 } }, RANGE);
   const grid = doc.sections.find((s) => s.kind === "kpi_grid");
 
   assert.ok(grid && grid.kind === "kpi_grid");
   assert.deepEqual(
     grid.items.map((i) => i.label),
-    ["Total Releases", "Total Principal"]
+    ["Total Releases", "Total Principal", "Principal Balance", "Outstanding"]
   );
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
 });
 
 test("repayments list maps RepaymentResource rows and shows dashes, not page sums, without server totals", () => {
@@ -1240,10 +1252,8 @@ test("portfolio summary renders the by_branch breakdown it used to drop", () => 
   assert.equal(table.rows[0].loan_count, 42);
   assert.equal(namedTableTotal(doc, "Breakdown by Branch", "loan_count"), "42");
   assert.equal(namedTableTotal(doc, "Breakdown by Branch", "total_released"), "₱5,250,000.00");
-  assert.equal(
-    namedTableTotal(doc, "Breakdown by Branch", "outstanding_balance"),
-    "₱3,120,450.75"
-  );
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "principal_balance"), "₱3,120,450.75");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outstanding"), "₱3,462,980.15");
 });
 
 test("the branch footer is the server's by_branch_totals, read figure by figure", () => {
@@ -1251,16 +1261,13 @@ test("the branch footer is the server's by_branch_totals, read figure by figure"
     {
       ...PORTFOLIO_PAYLOAD,
       // Deliberately unlike the row, so a sum of the rows cannot pass.
-      by_branch_totals: { loan_count: 50, total_released: 6000000.5, outstanding_balance: 4000000.25 },
+      by_branch_totals: { loan_count: 50, total_released: 6000000.5, total_outstanding: 4000000.25 },
     },
     RANGE
   );
   assert.equal(namedTableTotal(doc, "Breakdown by Branch", "loan_count"), "50");
   assert.equal(namedTableTotal(doc, "Breakdown by Branch", "total_released"), "₱6,000,000.50");
-  assert.equal(
-    namedTableTotal(doc, "Breakdown by Branch", "outstanding_balance"),
-    "₱4,000,000.25"
-  );
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outstanding"), "₱4,000,000.25");
 });
 
 test("the branch footer shows dashes, not a sum of the branches, without by_branch_totals", () => {
@@ -1268,7 +1275,7 @@ test("the branch footer shows dashes, not a sum of the branches, without by_bran
   void by_branch_totals;
   const doc = buildPortfolioSummaryDoc(withoutTotals, RANGE);
 
-  for (const column of ["loan_count", "total_released", "outstanding_balance"]) {
+  for (const column of ["loan_count", "total_released", "principal_balance", "outstanding"]) {
     assert.equal(namedTableTotal(doc, "Breakdown by Branch", column), DASH, column);
   }
 });
@@ -1296,14 +1303,14 @@ test("portfolio summary splits outstanding against overdue by component", () => 
 
   assert.deepEqual(
     table.rows.map((r) => r.component),
-    ["Principal", "Interest", "Penalty"]
+    ["Principal", "Interest", "Penalty", "Insurance Premium"]
   );
   assert.equal(table.rows[0].outstanding, 3120450.75);
   assert.equal(table.rows[0].overdue, 410200.4);
-  // The server's outstanding.total and overdue.total, insurance excluded.
+  // Everything owed, the same figure as the card; the premium is never overdue.
   assert.equal(
     namedTableTotal(doc, "Outstanding vs Overdue Composition", "outstanding"),
-    "₱3,418,151.50"
+    "₱3,462,980.15"
   );
   assert.equal(
     namedTableTotal(doc, "Outstanding vs Overdue Composition", "overdue"),
@@ -1315,6 +1322,7 @@ test("the composition footer shows dashes, not a sum of the components, without 
   const doc = buildPortfolioSummaryDoc(
     {
       ...PORTFOLIO_PAYLOAD,
+      total_outstanding: undefined,
       outstanding: { principal: 3120450.75, interest: 285300.5, penalty: 12400.25 },
       overdue: { principal: 410200.4, interest: 38100.6, penalty: 9800, loan_count: 7 },
     },
@@ -1701,7 +1709,7 @@ test("a period without total_paid shows a dash, not amount_paid or its component
   );
   const paid = table.columns.find((c) => c.key === "total_paid");
   assert.ok(paid);
-  assert.equal(paid.header, "Paid");
+  assert.equal(paid.header, "Period Paid");
 
   assert.equal(table.rows[0].total_paid, null);
   assert.equal(formatCell(table.rows[0], paid), DASH);
@@ -1799,14 +1807,26 @@ test("a transaction row shows the insurance premium it collected, so the balance
   assert.equal(keys.indexOf("insurance_applied"), keys.indexOf("principal_balance") - 1);
 });
 
-test("a transaction row without the server's premium figure shows a dash, never a worked-out one", () => {
-  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+test("a line without the server's premium figure shows a dash, never a worked-out one", () => {
+  const { insurance_applied, ...withoutPremium } = {
+    ...SOA_PAYLOAD.transactions[0],
+    insurance_applied: 400,
+  };
+  void insurance_applied;
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        transactions: [withoutPremium, { ...SOA_PAYLOAD.transactions[0], insurance_applied: 400 }],
+      },
+      RANGE
+    ),
+    "Transaction History"
+  );
   const column = table.columns.find((c) => c.key === "insurance_applied")!;
 
   assert.equal(table.rows[0].insurance_applied, null);
   assert.equal(formatCell(table.rows[0], column), DASH);
-  // No footer total for it: the server sends none, and rows are never added up.
-  assert.equal(table.totals?.some((t) => t.column === "insurance_applied"), false);
 });
 
 test("a typed transaction is posted to the correct side of the ledger", () => {
@@ -1891,7 +1911,7 @@ const SOA_ADJUSTED = {
       principal_applied: 5910.11,
       interest_applied: 3855.03,
       penalty_applied: 234.86,
-      insurance_applied: 0,
+      insurance_applied: 100,
       build_up_applied: 0,
       principal_balance: 74089.89,
       balance: 74089.89,
@@ -1931,7 +1951,7 @@ const SOA_BUILD_UP = {
       principal_applied: 4000,
       interest_applied: 330,
       penalty_applied: 0,
-      insurance_applied: 0,
+      insurance_applied: 25,
       build_up_applied: 100,
     },
   ],
@@ -1977,12 +1997,12 @@ test("finding 2: the column is Principal Balance, and each line shows its split 
 
   assert.deepEqual(
     table.columns.map((c) => c.header),
-    ["Date", "Reference", "Particulars", "Method", "Debit", "Credit", "Principal", "Interest", "Penalty", "Insurance Premium", "Principal Balance"]
+    ["Date", "Reference", "Particulars", "Method", "Receipt Amount", "Debit", "Credit", "Principal", "Interest", "Penalty", "Insurance Premium", "Principal Balance"]
   );
   assert.equal(table.rows[0].principal_applied, 5910.11);
   assert.equal(table.rows[0].interest_applied, 3855.03);
   assert.equal(table.rows[0].penalty_applied, 234.86);
-  assert.equal(table.rows[0].insurance_applied, 0);
+  assert.equal(table.rows[0].insurance_applied, 100);
   assert.equal(table.rows[0].principal_balance, 74089.89);
 });
 
@@ -2430,7 +2450,7 @@ const ALL_REPORT_IDS: Record<ReportId, true> = {
 };
 
 test("every report id has its own reference prefix", () => {
-  const at = new Date(2026, 7, 6, 9, 15);
+  const at = new Date("2026-08-06T01:15:00Z");
   const seen = new Map<string, string>();
 
   for (const id of Object.keys(ALL_REPORT_IDS) as ReportId[]) {
@@ -3116,7 +3136,7 @@ const PRODUCT_PAYLOAD = {
       product_name: "Salary Loan",
       loan_count: 128,
       total_released: 4820500.5,
-      outstanding: 2914300.25,
+      total_outstanding: 2914300.25,
       outstanding_principal: 2810400,
       avg_interest_rate: 2.5,
       overdue_amount: 184200.75,
@@ -3129,7 +3149,7 @@ const PRODUCT_PAYLOAD = {
       product_name: "Business Loan",
       loan_count: 46,
       total_released: 3210000,
-      outstanding: 2105400.5,
+      total_outstanding: 2105400.5,
       outstanding_principal: 2020100.25,
       avg_interest_rate: 3,
       overdue_amount: 298650.25,
@@ -3142,7 +3162,7 @@ const PRODUCT_PAYLOAD = {
       product_name: "Emergency Loan",
       loan_count: 212,
       total_released: 1064500.25,
-      outstanding: 402100.75,
+      total_outstanding: 402100.75,
       outstanding_principal: 390200.5,
       avg_interest_rate: 1.5,
       overdue_amount: 41200,
@@ -3155,7 +3175,7 @@ const PRODUCT_PAYLOAD = {
     product_count: 3,
     loan_count: 386,
     total_released: 9095000.75,
-    outstanding: 5421801.5,
+    total_outstanding: 5421801.5,
     outstanding_principal: 5220700.75,
     avg_interest_rate: 2.02,
     overdue_amount: 524051,
@@ -3174,7 +3194,8 @@ test("portfolio by product summarises the whole book, then lists each product", 
   assert.equal(kpiValue(doc, "Loan Products"), "3");
   assert.equal(kpi(doc, "Loan Products").hint, "386 loans");
   assert.equal(kpiValue(doc, "Total Released"), "₱9,095,000.75");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱5,421,801.50");
+  assert.equal(kpiValue(doc, "Principal Balance"), "₱5,220,700.75");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱5,421,801.50");
   assert.equal(kpiValue(doc, "Overdue Amount"), "₱524,051.00");
 
   assert.equal(table.rows.length, 3);
@@ -3204,9 +3225,10 @@ test("portfolio by product shows dashes, not sums of the rows, without a totals 
   assert.equal(kpiValue(doc, "Loan Products"), DASH);
   assert.equal(kpi(doc, "Loan Products").hint, undefined);
   assert.equal(kpiValue(doc, "Total Released"), DASH);
-  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(kpiValue(doc, "Principal Balance"), DASH);
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
   assert.equal(kpiValue(doc, "Overdue Amount"), DASH);
-  for (const column of ["loan_count", "total_released", "outstanding_balance", "overdue_amount", "portfolio_share"]) {
+  for (const column of ["loan_count", "total_released", "principal_balance", "outstanding", "overdue_amount", "portfolio_share"]) {
     assert.equal(namedTableTotal(doc, "Portfolio by Product", column), DASH, column);
   }
 });
@@ -3623,7 +3645,8 @@ const PERFORMANCE_TOTALS = {
   released_count: 74,
   released_amount: 3655700.75,
   collected: 2480850.25,
-  outstanding: 2272101.5,
+  total_outstanding: 2272101.5,
+  outstanding_principal: 2135700.75,
   overdue_amount: 257700.75,
 };
 
@@ -3641,7 +3664,7 @@ const PERFORMANCE_PAYLOAD = {
       released_amount: 2140500.5,
       collected: 1480200.25,
       payment_count: 310,
-      outstanding: 1284300.75,
+      total_outstanding: 1284300.75,
       outstanding_principal: 1210400.5,
       overdue_amount: 96400.5,
       at_risk_amount: 90780.25,
@@ -3656,7 +3679,7 @@ const PERFORMANCE_PAYLOAD = {
       released_amount: 1305200.25,
       collected: 902450,
       payment_count: 194,
-      outstanding: 812400.5,
+      total_outstanding: 812400.5,
       outstanding_principal: 760300.25,
       overdue_amount: 148900.25,
       at_risk_amount: 139380.1,
@@ -3673,7 +3696,7 @@ const PERFORMANCE_PAYLOAD = {
       released_amount: 210000,
       collected: 98200,
       payment_count: 21,
-      outstanding: 175400.25,
+      total_outstanding: 175400.25,
       outstanding_principal: 165000,
       overdue_amount: 12400,
       at_risk_amount: 9200,
@@ -3690,7 +3713,7 @@ const PERFORMANCE_PAYLOAD = {
       released_amount: 2740500.75,
       collected: 1902650.25,
       payment_count: 386,
-      outstanding: 1584300.5,
+      total_outstanding: 1584300.5,
       outstanding_principal: 1490200.25,
       overdue_amount: 181200.75,
       at_risk_amount: 170500.4,
@@ -3705,7 +3728,7 @@ const PERFORMANCE_PAYLOAD = {
       released_amount: 915200,
       collected: 578200,
       payment_count: 139,
-      outstanding: 687801,
+      total_outstanding: 687801,
       outstanding_principal: 645500.5,
       overdue_amount: 76500,
       at_risk_amount: 68859.95,
@@ -3729,8 +3752,9 @@ test("performance reads its headline from the server's totals", () => {
   assert.equal(kpiValue(doc, "Amount Released"), "₱3,655,700.75");
   assert.equal(kpiValue(doc, "Total Collected"), "₱2,480,850.25");
   // Borrower counts do not total (a borrower can sit under two officers),
-  // which is why the fourth headline is this and not "Active Borrowers".
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱2,272,101.50");
+  // which is why the last headlines are these and not "Active Borrowers".
+  assert.equal(kpiValue(doc, "Principal Balance"), "₱2,135,700.75");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱2,272,101.50");
 });
 
 test("each performance block is read from its own server totals", () => {
@@ -3758,7 +3782,7 @@ test("performance shows dashes, not sums of the rows, without server totals", ()
   void by_branch_totals;
   const doc = buildPerformanceDoc(withoutTotals, RANGE);
 
-  for (const label of ["Loans Released", "Amount Released", "Total Collected", "Outstanding Balance"]) {
+  for (const label of ["Loans Released", "Amount Released", "Total Collected", "Principal Balance", "Outstanding"]) {
     assert.equal(kpiValue(doc, label), DASH, label);
   }
   for (const title of ["By Account Officer", "By Branch"]) {
@@ -3766,7 +3790,8 @@ test("performance shows dashes, not sums of the rows, without server totals", ()
       "released_count",
       "released_amount",
       "collected_amount",
-      "outstanding_balance",
+      "principal_balance",
+      "outstanding",
       "overdue_amount",
     ]) {
       assert.equal(namedTableTotal(doc, title, column), DASH, `${title} ${column}`);
@@ -3782,8 +3807,8 @@ test("the officer rows and the branch rows describe the same book", () => {
     namedTableTotal(doc, "By Branch", "released_amount")
   );
   assert.equal(
-    namedTableTotal(doc, "By Account Officer", "outstanding_balance"),
-    namedTableTotal(doc, "By Branch", "outstanding_balance")
+    namedTableTotal(doc, "By Account Officer", "outstanding"),
+    namedTableTotal(doc, "By Branch", "outstanding")
   );
   assert.equal(namedTableTotal(doc, "By Branch", "released_amount"), "₱3,655,700.75");
 });
@@ -3799,7 +3824,8 @@ test("performance reports by officer and mirrors it by branch", () => {
   );
   assert.equal(officers.rows[0].released_count, 42);
   assert.equal(officers.rows[0].collected_amount, 1480200.25);
-  assert.equal(officers.rows[0].outstanding_balance, 1284300.75);
+  assert.equal(officers.rows[0].outstanding, 1284300.75);
+  assert.equal(officers.rows[0].principal_balance, 1210400.5);
   assert.equal(officers.rows[0].active_borrowers, 38);
 
   assert.deepEqual(
@@ -3866,7 +3892,7 @@ test("a failed performance request still renders both tables", () => {
 
   assert.equal(kpiValue(doc, "Loans Released"), DASH);
   assert.equal(kpiValue(doc, "Amount Released"), DASH);
-  assert.equal(kpiValue(doc, "Outstanding Balance"), DASH);
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
   assert.equal(namedTable(doc, "By Account Officer").rows.length, 0);
   assert.equal(namedTable(doc, "By Branch").rows.length, 0);
   // The two-clocks caveat still prints — it is about the columns, not the data.
@@ -4202,4 +4228,700 @@ test("payment report rows name the method and status in words, never the stored 
       ["Bank Transfer", "Voided"],
     ]
   );
+});
+
+// ---------------------------------------------------------------------------
+// Round fz: the Statement of Account's Medium and Low findings. Payloads follow
+// the contract between the backend and frontend slices.
+// ---------------------------------------------------------------------------
+
+const SOA_FULL = {
+  ...SOA_PAYLOAD,
+  loan: {
+    ...SOA_PAYLOAD.loan,
+    status_label: "Current",
+    product_name: "Salary Loan",
+    released_at: "2026-02-01",
+    member_address: "Butuan City, Agusan del Norte",
+    branch_name: "Main Branch",
+    account_officer_name: "Pedro Reyes",
+    payment_frequency: "Monthly",
+    interest_type: "Straight",
+    term_label: "6 months",
+    rate_label: "3.0% per month",
+    extensions_count: 2,
+    has_build_up: true,
+  },
+  summary: {
+    ...SOA_PAYLOAD.summary,
+    total_paid: 3000,
+    insurance_owed: 1000,
+    principal_paid: 1700,
+    interest_paid: 800,
+    penalty_paid: 50,
+    insurance_paid: 400,
+    build_up_paid: 50,
+  },
+  schedule_totals: { ...SOA_PAYLOAD.schedule_totals, balance: 59908.92 },
+  transactions: [
+    {
+      type: "release",
+      kind: "release",
+      date: "2026-02-01",
+      description: "Loan released",
+      reference: "LN-2026-0001",
+      amount_paid: 0,
+      debit: 50000,
+      credit: null,
+      voided: false,
+      principal_applied: -50000,
+      interest_applied: 0,
+      penalty_applied: 0,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
+      principal_balance: 50000,
+    },
+    {
+      type: "charge",
+      kind: "penalty_charge",
+      date: "2026-03-05",
+      description: "Late penalty charged",
+      amount_paid: 0,
+      debit: 121.85,
+      credit: null,
+      voided: false,
+      principal_applied: 0,
+      interest_applied: 0,
+      penalty_applied: -121.85,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
+      principal_balance: 50000,
+    },
+    {
+      type: "payment",
+      kind: "repayment",
+      date: "2026-03-06",
+      receipt_number: "RCP-000004",
+      description: "Payment RCP-000004 (voided)",
+      amount_paid: 1000,
+      credit: null,
+      debit: null,
+      voided: true,
+      principal_applied: 0,
+      interest_applied: 0,
+      penalty_applied: 0,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
+      principal_balance: 50000,
+    },
+    {
+      type: "payment",
+      kind: "repayment",
+      date: "2026-03-07",
+      receipt_number: "RCP-000008",
+      description: "Extension payment RCP-000008",
+      amount_paid: 3000,
+      credit: 2950,
+      debit: null,
+      voided: false,
+      principal_applied: 1700,
+      interest_applied: 800,
+      penalty_applied: 50,
+      insurance_applied: 400,
+      build_up_applied: 50,
+      overpayment_applied: 0,
+      principal_balance: 48300,
+    },
+  ],
+  transaction_totals: { debit: 50121.85, credit: 2950 },
+};
+
+test("finding 8: the Balance Summary has the insurance premium owed, as sent", () => {
+  assert.equal(kpiValue(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Insurance Premium Owed"), "₱1,000.00");
+  const zero = { ...SOA_FULL, summary: { ...SOA_FULL.summary, insurance_owed: 0 } };
+  assert.equal(kpiValue(buildStatementOfAccountDoc(zero, RANGE), "Insurance Premium Owed"), "₱0.00");
+  assert.equal(kpiValue(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Insurance Premium Owed"), DASH);
+});
+
+test("finding 9: Total Paid is broken down into the server's parts, with the same total", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const title = "What Has Been Paid";
+  assert.equal(fieldValue(doc, title, "Principal Paid"), "₱1,700.00");
+  assert.equal(fieldValue(doc, title, "Interest Paid"), "₱800.00");
+  assert.equal(fieldValue(doc, title, "Penalty Paid"), "₱50.00");
+  assert.equal(fieldValue(doc, title, "Insurance Premium Paid"), "₱400.00");
+  assert.equal(fieldValue(doc, title, "Share Capital Build-Up Paid"), "₱50.00");
+  assert.equal(fieldValue(doc, title, "Total Paid"), "₱3,000.00");
+  assert.equal(kpiValue(doc, "Total Paid"), "₱3,000.00");
+});
+
+test("finding 9: a part the server didn't send is a dash, never the rest worked out", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(fieldValue(doc, "What Has Been Paid", "Principal Paid"), DASH);
+  assert.equal(fieldValue(doc, "What Has Been Paid", "Total Paid"), "₱9,500.00");
+  // Only a build-up loan has the build-up line.
+  const labels = fieldItems(doc, "What Has Been Paid").map((f) => f.label);
+  assert.equal(labels.includes("Share Capital Build-Up Paid"), false);
+});
+
+test("finding 10: Account Particulars carry the account's details", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const field = (label: string) => fieldValue(doc, "Account Particulars", label);
+  assert.equal(field("Loan Product"), "Salary Loan");
+  assert.equal(field("Release Date"), formatValue("2026-02-01", "date"));
+  assert.equal(field("Address"), "Butuan City, Agusan del Norte");
+  assert.equal(field("Branch"), "Main Branch");
+  assert.equal(field("Account Officer"), "Pedro Reyes");
+  assert.equal(field("Payment Frequency"), "Monthly");
+  assert.equal(field("Interest Type"), "Straight");
+});
+
+test("finding 10: the address falls back to the borrower block the server already sends", () => {
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, borrower: { ...SOA_PAYLOAD.borrower, address: "Cebu City" } },
+    RANGE
+  );
+  assert.equal(fieldValue(doc, "Account Particulars", "Address"), "Cebu City");
+});
+
+test("finding 11: term and rate read with their units, and extensions are counted", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  assert.equal(fieldValue(doc, "Account Particulars", "Term"), "6 months");
+  assert.equal(fieldValue(doc, "Account Particulars", "Interest Rate"), "3.0% per month");
+  assert.equal(fieldValue(doc, "Account Particulars", "Extensions"), "2");
+});
+
+test("finding 11: a loan never extended has no Extensions line", () => {
+  const doc = buildStatementOfAccountDoc(
+    { ...SOA_FULL, loan: { ...SOA_FULL.loan, extensions_count: 0 } },
+    RANGE
+  );
+  const labels = fieldItems(doc, "Account Particulars").map((f) => f.label);
+  assert.equal(labels.includes("Extensions"), false);
+});
+
+test("finding 12: a voided payment names its amount in the mark, never under Credit", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const table = namedTable(doc, "Transaction History");
+  const column = (key: string) => table.columns.find((c) => c.key === key)!;
+
+  assert.equal(table.rows[2].particulars, "Payment RCP-000004 (Voided): ₱1,000.00");
+  assert.equal(table.rows[2].voided, true);
+  assert.equal(table.rows[3].voided, false);
+  assert.equal(table.rows[2].credit, null);
+  assert.equal(table.rows[2].debit, null);
+  assert.equal(formatCell(table.rows[2], column("credit")), DASH);
+  assert.equal(formatCell(table.rows[2], column("debit")), DASH);
+  // The server's parts are 0 on a voided line, and they read as a zero.
+  assert.equal(formatCell(table.rows[2], column("principal_applied")), "₱0.00");
+  assert.equal(formatCell(table.rows[2], column("amount_paid")), DASH);
+  // Out of every total: the footers are the server's, without the voided ₱1,000.00.
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱2,950.00");
+  assert.equal(namedTableTotal(doc, "Transaction History", "amount_paid"), "₱3,000.00");
+});
+
+test("finding 12: a voided line whose server still sends a credit keeps it out of the column", () => {
+  const voided = { ...SOA_FULL.transactions[2], credit: 1000, debit: 5 };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [voided] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].credit, null);
+  assert.equal(table.rows[0].debit, null);
+});
+
+test("finding 12: a voided line with no receipt amount has the mark alone", () => {
+  const { amount_paid, ...withoutAmount } = SOA_FULL.transactions[2];
+  void amount_paid;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [withoutAmount] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].particulars, "Payment RCP-000004 (Voided)");
+});
+
+test("release and charge lines show the debit, and a dash in every applied part", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  const parts = ["principal_applied", "interest_applied", "penalty_applied", "insurance_applied", "build_up_applied"];
+
+  for (const [index, debit] of [[0, "₱50,000.00"], [1, "₱121.85"]] as const) {
+    const row = table.rows[index];
+    assert.equal(formatCell(row, table.columns.find((c) => c.key === "debit")!), debit);
+    for (const key of parts) {
+      const text = formatCell(row, table.columns.find((c) => c.key === key)!);
+      assert.equal(text, DASH, `${String(row.particulars)} ${key}`);
+    }
+  }
+});
+
+test("an adjustment line shows its credit or debit, and a dash in every applied part", () => {
+  const adjustment = {
+    type: "adjustment",
+    kind: "waiver",
+    date: "2026-04-01",
+    description: "Penalty waived",
+    amount_paid: 0,
+    debit: null,
+    credit: 374.77,
+    voided: false,
+    principal_applied: 0,
+    interest_applied: 0,
+    penalty_applied: 374.77,
+    insurance_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 48300,
+  };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [...SOA_FULL.transactions, adjustment] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[4].credit, 374.77);
+  assert.equal(formatCell(table.rows[4], table.columns.find((c) => c.key === "penalty_applied")!), DASH);
+});
+
+test("a payment line keeps its parts as the server sent them", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  assert.equal(table.rows[3].principal_applied, 1700);
+  assert.equal(table.rows[3].interest_applied, 800);
+  assert.equal(table.rows[3].penalty_applied, 50);
+  assert.equal(table.rows[3].insurance_applied, 400);
+  assert.equal(table.rows[3].build_up_applied, 50);
+});
+
+test("a payment shows the receipt's amount beside the Credit, which leaves out build-up", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const table = namedTable(doc, "Transaction History");
+  const receipt = table.columns.find((c) => c.key === "amount_paid")!;
+  const keys = table.columns.map((c) => c.key);
+
+  assert.equal(receipt.header, "Receipt Amount");
+  assert.equal(keys.indexOf("amount_paid"), keys.indexOf("debit") - 1);
+  assert.equal(formatCell(table.rows[3], receipt), "₱3,000.00");
+  assert.equal(table.rows[3].credit, 2950);
+  // The two footers differ by the build-up, and neither is worked out here.
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱2,950.00");
+  assert.equal(namedTableTotal(doc, "Transaction History", "amount_paid"), "₱3,000.00");
+});
+
+test("the Receipt Amount footer is the server's: its line total, else Total Paid, else a dash", () => {
+  const sent = buildStatementOfAccountDoc(
+    { ...SOA_FULL, transaction_totals: { ...SOA_FULL.transaction_totals, amount_paid: 3100 } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(sent, "Transaction History", "amount_paid"), "₱3,100.00");
+
+  const neither = buildStatementOfAccountDoc(
+    { ...SOA_FULL, summary: { ...SOA_FULL.summary, total_paid: undefined } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(neither, "Transaction History", "amount_paid"), DASH);
+});
+
+test("release, charge and adjustment lines have no receipt amount", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  const receipt = table.columns.find((c) => c.key === "amount_paid")!;
+  assert.equal(formatCell(table.rows[0], receipt), DASH);
+  assert.equal(formatCell(table.rows[1], receipt), DASH);
+});
+
+test("the insurance premium debit line shows its Debit and a dash in every part", () => {
+  const premiumDebit = {
+    type: "charge",
+    kind: "insurance_debit",
+    date: "2026-02-01",
+    description: "Insurance premium owed",
+    particulars: "Insurance premium owed",
+    amount_paid: 0,
+    debit: 1000,
+    credit: null,
+    voided: false,
+    insurance_applied: -1000,
+    principal_applied: 0,
+    interest_applied: 0,
+    penalty_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 50000,
+  };
+  const [release, ...rest] = SOA_FULL.transactions;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [release, premiumDebit, ...rest] }, RANGE),
+    "Transaction History"
+  );
+  const row = table.rows[1];
+  assert.equal(row.particulars, "Insurance premium owed");
+  assert.equal(formatCell(row, table.columns.find((c) => c.key === "debit")!), "₱1,000.00");
+  for (const key of ["amount_paid", "credit", "insurance_applied", "principal_applied", "interest_applied", "penalty_applied"]) {
+    assert.equal(formatCell(row, table.columns.find((c) => c.key === key)!), DASH, key);
+  }
+
+  // Its negative part alone doesn't bring the premium column on.
+  const onlyDebit = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [release, premiumDebit] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(onlyDebit.columns.some((c) => c.key === "insurance_applied"), false);
+});
+
+test("finding 9: an overpayment joins the paid parts when there is one", () => {
+  const paid = (overpayment_paid: unknown) =>
+    fieldItems(
+      buildStatementOfAccountDoc({ ...SOA_FULL, summary: { ...SOA_FULL.summary, overpayment_paid } }, RANGE),
+      "What Has Been Paid"
+    ).map((f) => [f.label, f.value]);
+
+  const labels = paid(150.5).map(([label]) => label);
+  assert.deepEqual(paid(150.5).find(([label]) => label === "Overpayment"), ["Overpayment", "₱150.50"]);
+  assert.equal(labels.indexOf("Overpayment"), labels.indexOf("Total Paid") - 1);
+  assert.equal(paid(0).some(([label]) => label === "Overpayment"), false);
+  assert.equal(paid(undefined).some(([label]) => label === "Overpayment"), false);
+});
+
+test("finding 12: a description that already says voided isn't marked twice", () => {
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_FULL, transactions: [{ ...SOA_FULL.transactions[2], description: "Voided payment RCP-000004" }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].particulars, "Voided payment RCP-000004: ₱1,000.00");
+});
+
+test("finding 13: every Ledger line is listed, with the release as a debit", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  assert.equal(table.rows.length, 4);
+  assert.equal(table.rows[0].particulars, "Loan released");
+  assert.equal(table.rows[0].debit, 50000);
+  assert.equal(table.rows[0].reference, "LN-2026-0001");
+  assert.equal(table.rows[1].particulars, "Late penalty charged");
+  assert.equal(table.rows[1].debit, 121.85);
+  assert.equal(
+    namedTableTotal(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History", "debit"),
+    "₱50,121.85"
+  );
+});
+
+test("finding 14: extension payments keep the server's label, and a replaced period's note shows", () => {
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_FULL,
+      amortization_schedule: [
+        { ...SOA_PAYLOAD.amortization_schedule[0], period_number: 2, note: "Replaced by an extension on Nov 5, 2026" },
+        SOA_PAYLOAD.amortization_schedule[1],
+      ],
+    },
+    RANGE
+  );
+  assert.equal(namedTable(doc, "Transaction History").rows[3].particulars, "Extension payment RCP-000008");
+  const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+  assert.deepEqual(notes, ["Period 2: Replaced by an extension on Nov 5, 2026"]);
+});
+
+test("finding 14: the server's schedule note names the replacement, so row notes don't repeat it", () => {
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_FULL,
+      schedule_note: "Period 1 was replaced by period 2: extension EXT-1 on May 20, 2026.",
+      amortization_schedule: [{ ...SOA_PAYLOAD.amortization_schedule[0], period_number: 2, note: "Replaces period 1" }],
+    },
+    RANGE
+  );
+  const notes = doc.sections.flatMap((s) => (s.kind === "note" ? [s.text] : []));
+  assert.deepEqual(notes, ["Period 1 was replaced by period 2: extension EXT-1 on May 20, 2026."]);
+});
+
+test("finding 15: each balance is named for what it holds, and the schedule's has a total", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const schedule = namedTable(doc, "Amortization Schedule");
+  const header = (key: string) => schedule.columns.find((c) => c.key === key)?.header;
+  assert.equal(header("beginning_balance"), "Beginning Principal");
+  assert.equal(header("total_paid"), "Period Paid");
+  assert.equal(header("balance"), "Period Balance");
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "balance"), "₱59,908.92");
+
+  const lines = namedTable(doc, "Transaction History");
+  assert.equal(lines.columns.at(-1)?.header, "Principal Balance");
+});
+
+test("finding 15: without the server's schedule_totals.balance the total is a dash", () => {
+  const doc = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(namedTableTotal(doc, "Amortization Schedule", "balance"), DASH);
+});
+
+test("finding 19: the statement hands its loan number to the reference", () => {
+  assert.equal(buildStatementOfAccountDoc(SOA_FULL, RANGE).meta.referenceKey, "LN-2026-0001");
+  assert.equal(buildStatementOfAccountDoc(null, RANGE).meta.referenceKey, undefined);
+});
+
+test("finding 25: period statuses read capitalised, a phrase in words", () => {
+  const table = namedTable(
+    buildStatementOfAccountDoc(
+      {
+        ...SOA_PAYLOAD,
+        amortization_schedule: [
+          { ...SOA_PAYLOAD.amortization_schedule[0], status: "paid" },
+          { ...SOA_PAYLOAD.amortization_schedule[0], status: "partial" },
+          { ...SOA_PAYLOAD.amortization_schedule[0], status: "closed_by_extension" },
+          { ...SOA_PAYLOAD.amortization_schedule[0], status: null },
+        ],
+      },
+      RANGE
+    ),
+    "Amortization Schedule"
+  );
+  assert.deepEqual(table.rows.map((r) => r.status), ["Paid", "Partial", "Closed By Extension", null]);
+});
+
+test("finding 26: Past Due and Outstanding are red only when something is owed", () => {
+  const owing = buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE);
+  assert.equal(kpi(owing, "Past Due").tone, "negative");
+  assert.equal(kpi(owing, "Outstanding Balance").tone, "negative");
+
+  const clear = buildStatementOfAccountDoc(
+    { ...SOA_PAYLOAD, summary: { ...SOA_PAYLOAD.summary, overdue_amount: 0, outstanding_balance: "0.00" } },
+    RANGE
+  );
+  assert.equal(kpi(clear, "Past Due").value, "₱0.00");
+  assert.equal(kpi(clear, "Past Due").tone, "neutral");
+  assert.equal(kpi(clear, "Outstanding Balance").tone, "neutral");
+});
+
+test("finding 26: the premium column stays out when no line collected premium", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_PAYLOAD, RANGE), "Transaction History");
+  assert.equal(table.columns.some((c) => c.key === "insurance_applied"), false);
+
+  const zeros = namedTable(
+    buildStatementOfAccountDoc(
+      { ...SOA_PAYLOAD, transactions: [{ ...SOA_PAYLOAD.transactions[0], insurance_applied: 0 }] },
+      RANGE
+    ),
+    "Transaction History"
+  );
+  assert.equal(zeros.columns.some((c) => c.key === "insurance_applied"), false);
+});
+
+test("finding 26: the premium column has a total: the server's line total, else its Insurance Premium Paid", () => {
+  const paid = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  assert.equal(namedTableTotal(paid, "Transaction History", "insurance_applied"), "₱400.00");
+
+  const lineTotal = buildStatementOfAccountDoc(
+    { ...SOA_FULL, transaction_totals: { ...SOA_FULL.transaction_totals, insurance_applied: 425 } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(lineTotal, "Transaction History", "insurance_applied"), "₱425.00");
+
+  const neither = buildStatementOfAccountDoc(
+    { ...SOA_FULL, summary: { ...SOA_FULL.summary, insurance_paid: undefined } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(neither, "Transaction History", "insurance_applied"), DASH);
+});
+
+// ---------------------------------------------------------------------------
+// Outstanding means everything owed (`total_outstanding`); a principal-only
+// figure reads Principal Balance (`outstanding_principal`). The old aliases hold
+// principal plus premium, so none is ever read under either label.
+// ---------------------------------------------------------------------------
+
+const OLD_ALIASES = { outstanding_balance: 111, outstanding: 222, total_outstanding_balance: 333 };
+const OWED = { outstanding_principal: 1000.5, total_outstanding: 1500.25 };
+
+function assertOwedKpis(doc: ReportDocument): void {
+  assert.equal(kpiValue(doc, "Principal Balance"), "₱1,000.50");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱1,500.25");
+  assert.throws(() => kpiValue(doc, "Outstanding Balance"), /not found/);
+}
+
+function assertAliasesGiveDashes(doc: ReportDocument): void {
+  assert.equal(kpiValue(doc, "Principal Balance"), DASH);
+  assert.equal(kpiValue(doc, "Outstanding"), DASH);
+}
+
+function assertOwedColumns(table: ReturnType<typeof namedTable>): void {
+  const owed = table.columns
+    .filter((c) => c.key === "principal_balance" || c.key === "outstanding")
+    .map((c) => [c.key, c.header.replace(" (to date)", "")]);
+  assert.deepEqual(owed, [["principal_balance", "Principal Balance"], ["outstanding", "Outstanding"]]);
+  assert.equal(table.columns.some((c) => c.key === "outstanding_balance"), false);
+}
+
+test("portfolio summary: Principal Balance and Outstanding, and a dash for the old alias", () => {
+  assertOwedKpis(buildPortfolioSummaryDoc({ ...OLD_ALIASES, ...OWED }, RANGE));
+  assertAliasesGiveDashes(buildPortfolioSummaryDoc(OLD_ALIASES, RANGE));
+});
+
+test("portfolio summary by branch: both columns and footers, never the old alias", () => {
+  const doc = buildPortfolioSummaryDoc(
+    {
+      by_branch: [{ branch_name: "Main", loan_count: 1, ...OLD_ALIASES, ...OWED }, { branch_name: "Old", ...OLD_ALIASES }],
+      by_branch_totals: { ...OLD_ALIASES, ...OWED },
+    },
+    RANGE
+  );
+  const table = namedTable(doc, "Breakdown by Branch");
+  assertOwedColumns(table);
+  assert.equal(table.rows[0].principal_balance, 1000.5);
+  assert.equal(table.rows[0].outstanding, 1500.25);
+  assert.equal(table.rows[1].principal_balance, null);
+  assert.equal(table.rows[1].outstanding, null);
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "principal_balance"), "₱1,000.50");
+  assert.equal(namedTableTotal(doc, "Breakdown by Branch", "outstanding"), "₱1,500.25");
+
+  const old = buildPortfolioSummaryDoc({ by_branch: [{ branch_name: "Old" }], by_branch_totals: OLD_ALIASES }, RANGE);
+  assert.equal(namedTableTotal(old, "Breakdown by Branch", "outstanding"), DASH);
+});
+
+test("portfolio summary composition: the premium has a row, and the footer is everything owed", () => {
+  const doc = buildPortfolioSummaryDoc(
+    {
+      total_outstanding: 1500.25,
+      outstanding: { principal: 1000.5, interest: 300, penalty: 99.75, insurance: 100, total: 1400.25, balance: 1100.5 },
+      overdue: { principal: 10, total: 10 },
+    },
+    RANGE
+  );
+  const table = namedTable(doc, "Outstanding vs Overdue Composition");
+  assert.deepEqual(table.rows.map((r) => r.component), ["Principal", "Interest", "Penalty", "Insurance Premium"]);
+  assert.equal(table.rows[3].outstanding, 100);
+  assert.equal(namedTableTotal(doc, "Outstanding vs Overdue Composition", "outstanding"), "₱1,500.25");
+
+  const old = buildPortfolioSummaryDoc({ outstanding: { principal: 1, total: 1 } }, RANGE);
+  assert.equal(namedTableTotal(old, "Outstanding vs Overdue Composition", "outstanding"), DASH);
+});
+
+test("releases list: Principal Balance and Outstanding, and a dash for the old alias", () => {
+  assertOwedKpis(buildReleasesListDoc({ data: [], meta: { totals: { ...OLD_ALIASES, ...OWED } } }, RANGE));
+  assertAliasesGiveDashes(buildReleasesListDoc({ data: [], meta: { totals: OLD_ALIASES } }, RANGE));
+});
+
+test("portfolio by product: both cards, columns and footers, never the old alias", () => {
+  const doc = buildPortfolioByProductDoc(
+    { products: [{ product_name: "Salary", ...OLD_ALIASES, ...OWED }, { product_name: "Old", ...OLD_ALIASES }], totals: { ...OLD_ALIASES, ...OWED } },
+    RANGE
+  );
+  assertOwedKpis(doc);
+  const table = namedTable(doc, "Portfolio by Product");
+  assertOwedColumns(table);
+  assert.equal(table.rows[0].principal_balance, 1000.5);
+  assert.equal(table.rows[0].outstanding, 1500.25);
+  assert.equal(table.rows[1].outstanding, null);
+  assert.equal(namedTableTotal(doc, "Portfolio by Product", "principal_balance"), "₱1,000.50");
+  assert.equal(namedTableTotal(doc, "Portfolio by Product", "outstanding"), "₱1,500.25");
+  assertAliasesGiveDashes(buildPortfolioByProductDoc({ products: [], totals: OLD_ALIASES }, RANGE));
+});
+
+test("performance: both cards, columns and footers, never the old alias", () => {
+  const doc = buildPerformanceDoc(
+    {
+      totals: { ...OLD_ALIASES, ...OWED },
+      by_officer: [{ account_officer_name: "Pedro", ...OLD_ALIASES, ...OWED }],
+      by_officer_totals: { ...OLD_ALIASES, ...OWED },
+      by_branch: [{ branch_name: "Old", ...OLD_ALIASES }],
+      by_branch_totals: OLD_ALIASES,
+    },
+    RANGE
+  );
+  assertOwedKpis(doc);
+  const officers = namedTable(doc, "By Account Officer");
+  assertOwedColumns(officers);
+  assert.equal(officers.rows[0].principal_balance, 1000.5);
+  assert.equal(officers.rows[0].outstanding, 1500.25);
+  assert.equal(namedTableTotal(doc, "By Account Officer", "outstanding"), "₱1,500.25");
+  assert.equal(namedTable(doc, "By Branch").rows[0].outstanding, null);
+  assert.equal(namedTableTotal(doc, "By Branch", "outstanding"), DASH);
+  assertAliasesGiveDashes(buildPerformanceDoc({ totals: OLD_ALIASES }, RANGE));
+});
+
+test("portfolio summary is as of a day, not a period: the server's day, whatever range is held", () => {
+  const doc = buildPortfolioSummaryDoc({ ...PORTFOLIO_PAYLOAD, generated_at: "2026-11-07 09:15:00" }, RANGE);
+  assert.equal(doc.meta.asOf, formatValue("2026-11-07", "date"));
+  assert.equal(doc.meta.period, undefined);
+});
+
+test("a failed portfolio summary request still says what day it is as of", () => {
+  const doc = buildPortfolioSummaryDoc(null, RANGE);
+  assert.ok(doc.meta.asOf && doc.meta.asOf !== DASH);
+  assert.equal(doc.meta.period, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Round fz browser check
+// ---------------------------------------------------------------------------
+
+test("income report: service and other fee cards, as the server sent them", () => {
+  const doc = buildIncomeDoc(
+    {
+      interest_income: 34122.44,
+      processing_fees: 17176.4,
+      penalty_income: 0,
+      service_fee: 9228.84,
+      other_fees: 6000,
+      total_income: 66527.68,
+    },
+    RANGE
+  );
+  assert.equal(kpiValue(doc, "Service Fees"), "₱9,228.84");
+  assert.equal(kpiValue(doc, "Other Fees"), "₱6,000.00");
+  assert.equal(kpiValue(doc, "Total Income"), "₱66,527.68");
+
+  const missing = buildIncomeDoc({ interest_income: 1, total_income: 1 }, RANGE);
+  assert.equal(kpiValue(missing, "Service Fees"), DASH);
+  assert.equal(kpiValue(missing, "Other Fees"), DASH);
+});
+
+test("income report: each loan's service and other fees, with the server's totals", () => {
+  const doc = buildIncomeDoc(null, RANGE, {
+    data: [
+      { loan_account_number: "LN-000003", borrower_name: "Maria Reyes", payments: 2, interest_income: 4171.09, penalty_income: 0, processing_fee: 1500, service_fee: 700, other_fees: 500, total_income: 6871.09 },
+    ],
+    meta: { total: 1 },
+    totals: { payments: 2, interest_income: 4171.09, penalty_income: 0, processing_fee: 1500, service_fee: 9228.84, other_fees: 6000, total_income: 6871.09 },
+  });
+  const table = namedTable(doc, "Income by Loan Account");
+  const headers = table.columns.map((c) => c.header);
+  assert.deepEqual(headers.slice(headers.indexOf("Processing Fee"), headers.indexOf("Total Income") + 1), [
+    "Processing Fee",
+    "Service Fee",
+    "Other Fees",
+    "Total Income",
+  ]);
+  assert.equal(table.rows[0].service_fee, 700);
+  assert.equal(table.rows[0].other_fees, 500);
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "service_fee"), "₱9,228.84");
+  assert.equal(namedTableTotal(doc, "Income by Loan Account", "other_fees"), "₱6,000.00");
+
+  const noTotals = buildIncomeDoc(null, RANGE, { data: table.rows, meta: { total: 1 } });
+  assert.equal(namedTableTotal(noTotals, "Income by Loan Account", "service_fee"), DASH);
+});
+
+test("due and past due: a schedule status reads in words with a capital", () => {
+  const rows = tableRows(
+    buildDuePastDueListDoc(
+      { data: [{ ...DUE_ROWS[0], status: "pending" }, { ...DUE_ROWS[0], status: "overdue" }, { ...DUE_ROWS[0], status: "partially_paid" }], meta: { total: 3 } },
+      RANGE
+    )
+  );
+  assert.deepEqual(rows.map((r) => r.status), ["Pending", "Overdue", "Partially Paid"]);
+});
+
+test("releases list: a loan past grace reads Past Due, from the server's display_status", () => {
+  const rows = tableRows(
+    buildReleasesListDoc(
+      {
+        data: [
+          { ...RELEASE_ROWS[0], status: "ongoing", display_status: "past_due" },
+          { ...RELEASE_ROWS[0], status: "ongoing", display_status: "ongoing" },
+          { ...RELEASE_ROWS[0], status: "released" },
+        ],
+        meta: { total: 3 },
+      },
+      RANGE
+    )
+  );
+  assert.deepEqual(rows.map((r) => r.status), ["Past Due", "Current", "Current"]);
 });
