@@ -70,10 +70,11 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {shows("share_capital") && data.share_capital && (
-          <Balance label="Share capital" value={formatCurrency(data.share_capital.total)} />
+          <Balance href="/member/share-capital" label="Share capital" value={formatCurrency(data.share_capital.total)} />
         )}
         {shows("savings") && data.savings && (
           <Balance
+            href="/member/savings"
             label="Savings"
             value={formatCurrency(data.savings.total)}
             note={`${formatCurrency(data.savings.available)} available`}
@@ -81,6 +82,7 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
         )}
         {shows("time_deposits") && data.time_deposits && (
           <Balance
+            href="/member/savings"
             label="Time deposits"
             value={formatCurrency(data.time_deposits.total)}
             note={`${data.time_deposits.count} ${data.time_deposits.count === 1 ? "deposit" : "deposits"}`}
@@ -88,6 +90,7 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
         )}
         {shows("loans") && data.loans && (
           <Balance
+            href="/member/loans"
             label="Loan balance"
             value={formatCurrency(data.loans.outstanding)}
             note={`${data.loans.active_count} active ${data.loans.active_count === 1 ? "loan" : "loans"}`}
@@ -97,7 +100,7 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
 
       {shows("next_payment") && data.next_payment && (
         <Card className="border-brand-orange/40">
-          <CardContent className="flex items-center gap-3 p-4">
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
             <CalendarClock className="h-6 w-6 shrink-0 text-brand-orange" aria-hidden />
             <div>
               <p className="text-sm text-muted-foreground">Next payment · Loan {data.next_payment.loan_number}</p>
@@ -105,6 +108,9 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
                 {formatCurrency(data.next_payment.amount)} due {formatDate(data.next_payment.due_date)}
               </p>
             </div>
+            <Link href="/member/loans" className="ml-auto text-sm font-medium text-brand-orange hover:underline">
+              View loans
+            </Link>
           </CardContent>
         </Card>
       )}
@@ -175,15 +181,17 @@ function DashboardBody({ data }: { data: PortalDashboard }) {
   );
 }
 
-function Balance({ label, value, note }: { label: string; value: string; note?: string }) {
+function Balance({ href, label, value, note }: { href: string; label: string; value: string; note?: string }) {
   return (
-    <Card>
-      <CardContent className="space-y-1 p-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-lg font-semibold tabular-nums">{value}</p>
-        {note && <p className="text-xs text-muted-foreground">{note}</p>}
-      </CardContent>
-    </Card>
+    <Link href={href} className="block">
+      <Card className="h-full transition-colors hover:bg-muted/40">
+        <CardContent className="space-y-1 p-4">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-lg font-semibold tabular-nums">{value}</p>
+          {note && <p className="text-xs text-muted-foreground">{note}</p>}
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 

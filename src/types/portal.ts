@@ -419,3 +419,143 @@ export interface PortalSettings {
   dashboard_cards: DashboardCardKey[];
   deceased_policy: "disable" | "read_only";
 }
+
+// ── Finances (PR2) ─────────────────────────────────────────────────────────
+
+export type PortalLoanStatus = "active" | "past_due" | "restructured" | "paid" | "written_off" | "pending" | "approved";
+
+/** A row of GET /portal/loans. */
+export interface PortalLoanSummary {
+  id: number;
+  loan_number: string;
+  product_name: string;
+  status: PortalLoanStatus;
+  principal: Money;
+  outstanding_balance: Money;
+  past_due_amount: Money;
+  next_due_date: string | null;
+  next_due_amount: Money | null;
+  released_at: string | null;
+  maturity_date: string | null;
+}
+
+export interface PortalCollateral {
+  id: number;
+  type: string;
+  description: string;
+  appraised_value: Money | null;
+}
+
+/** GET /portal/loans/{id} */
+export interface PortalLoanDetail extends PortalLoanSummary {
+  term: number;
+  term_unit: string;
+  frequency: string;
+  interest_rate: number;
+  interest_method: string;
+  total_payable: Money;
+  total_paid: Money;
+  penalty_balance: Money;
+  collaterals: PortalCollateral[];
+  co_makers: { name: string }[];
+}
+
+export type ScheduleRowStatus = "paid" | "partial" | "due" | "overdue" | "upcoming";
+
+/** A row of GET /portal/loans/{id}/schedule */
+export interface PortalScheduleRow {
+  installment_no: number;
+  due_date: string;
+  principal: Money;
+  interest: Money;
+  total_due: Money;
+  amount_paid: Money;
+  balance: Money;
+  status: ScheduleRowStatus;
+}
+
+/** A row of GET /portal/payments and /portal/loans/{id}/payments */
+export interface PortalPayment {
+  id: number;
+  receipt_number: string;
+  paid_at: string;
+  amount: Money;
+  loan_id: number | null;
+  loan_number: string | null;
+  method: string;
+  principal: Money;
+  interest: Money;
+  penalty: Money;
+  has_receipt: boolean;
+}
+
+export interface PortalPaymentFilters {
+  page?: number;
+  per_page?: number;
+  loan_id?: number;
+}
+
+/** GET /portal/share-capital */
+export interface PortalShareCapital {
+  subscribed: Money;
+  paid_up: Money;
+  unpaid_subscription: Money;
+  share_count: number | null;
+  last_transaction_at: string | null;
+}
+
+/** A row of any member ledger (share capital, savings). */
+export interface PortalLedgerEntry {
+  id: number;
+  date: string;
+  description: string;
+  reference: string | null;
+  debit: Money;
+  credit: Money;
+  balance: Money;
+}
+
+/** A row of GET /portal/savings */
+export interface PortalSavingsAccount {
+  id: number;
+  account_number: string;
+  product_name: string;
+  status: string;
+  balance: Money;
+  available_balance: Money;
+  interest_rate: number;
+  opened_at: string | null;
+}
+
+/** A row of GET /portal/time-deposits */
+export interface PortalTimeDeposit {
+  id: number;
+  certificate_number: string;
+  principal: Money;
+  interest_rate: number;
+  term_days: number;
+  placed_at: string;
+  maturity_date: string;
+  maturity_value: Money;
+  status: "active" | "matured" | "withdrawn" | "rolled_over";
+}
+
+/** POST /portal/payments/gcash */
+export interface GCashPaymentRequest {
+  loan_id: number;
+  amount: number;
+}
+
+export interface GCashCheckout {
+  reference: string;
+  checkout_url: string;
+}
+
+export type StatementKind = "consolidated" | "loan" | "savings" | "share_capital";
+
+export interface StatementRequest {
+  kind: StatementKind;
+  account_id?: number;
+  from: string;
+  to: string;
+}

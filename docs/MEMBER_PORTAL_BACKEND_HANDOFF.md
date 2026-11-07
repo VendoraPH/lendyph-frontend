@@ -65,3 +65,25 @@ The permissions are `member_portal:view`, `member_portal:manage` and `member_por
 - Mark a member's portal access as `disabled` (reason `deceased`) when the member is marked deceased, following `deceased_policy`, and when membership is terminated.
 - Audit every staff action and every security event on a member account.
 - OTP and invitation sends are rate-limited per member and per IP.
+
+## Part 2: member finances (member token, read-only except GCash)
+
+Every route resolves the member from the token. An `{id}` that belongs to another member answers **404**, not 403, so ids cannot be probed. Amounts are `decimal:2` strings or numbers. Each service obeys its `/portal/config` feature switch: when the switch is off, answer 403.
+
+| Method | Path | Feature | Logic |
+|---|---|---|---|
+| GET | `/portal/loans` | loans | The member's loans, newest first: `{id, loan_number, product_name, status (pending, approved, active, past_due, restructured, paid or written_off), principal, outstanding_balance, past_due_amount, next_due_date, next_due_amount, released_at, maturity_date}`. Use the same balance figures as the staff loan screen and the SOA. |
+| GET | `/portal/loans/{id}` | loans | The summary row plus `term, term_unit, frequency, interest_rate, interest_method, total_payable, total_paid, penalty_balance, collaterals[] {id, type, description, appraised_value}` and `co_makers[] {name}`. Send names only, never co-makers' contact details. |
+| GET | `/portal/loans/{id}/schedule` | loans | Installment rows `{installment_no, due_date, principal, interest, total_due, amount_paid, balance, status (paid, partial, due, overdue or upcoming)}`, with statuses computed on the server as of today in Manila time. |
+| GET | `/portal/loans/{id}/payments` | loans | Posted payments to this loan (the same row shape as `/portal/payments`). Voided payments are excluded. |
+| GET | `/portal/loans/{id}/statement-of-account` | statements | A PDF of the SOA, the same document staff print. |
+| GET | `/portal/payments?page&per_page&loan_id` | loans | Paginated (`meta.total`; `per_page` up to 100), newest first: `{id, receipt_number, paid_at, amount, loan_id, loan_number, method, principal, interest, penalty, has_receipt}`. |
+| GET | `/portal/payments/{id}/receipt` | loans | A PDF of the official receipt. 404 when `has_receipt` is false. |
+| POST | `/portal/payments/gcash` | gcash_payments | Takes `{loan_id, amount}`. Accept only an active, past-due or restructured loan, and an amount between 1 and the outstanding balance with at most 2 decimals. Create a pending GCash intent and return `{reference, checkout_url}` (https). **Post nothing to the loan here.** The payment is applied only by the gateway's verified webhook, using the existing GCash posting flow (idempotent on `reference`); then notify the member. |
+| GET | `/portal/share-capital` | share_capital | `{subscribed, paid_up, unpaid_subscription, share_count, last_transaction_at}`. |
+| GET | `/portal/share-capital/transactions` | share_capital | Ledger rows `{id, date, description, reference, debit, credit, balance}`, newest first, with the running balance from the server. |
+| GET | `/portal/savings` | savings | `{id, account_number, product_name, status, balance, available_balance (net of holds), interest_rate, opened_at}`. |
+| GET | `/portal/savings/{id}/transactions` | savings | Ledger rows (the same shape as share capital). |
+| GET | `/portal/time-deposits` | time_deposits | `{id, certificate_number, principal, interest_rate, term_days, placed_at, maturity_date, maturity_value, status (active, matured, withdrawn or rolled_over)}`. |
+| GET | `/portal/time-deposits/{id}/certificate` | time_deposits | A PDF of the certificate. |
+| GET | `/portal/statements/download?kind&account_id&from&to` | statements | A PDF. `kind` is consolidated, loan, savings or share_capital, and `account_id` is required for loan and savings and must belong to the member. Reject with 422 when `from` is after `to`, when `to` is in the future, or when the range is longer than 1 year. Log the download in the member's activity. |

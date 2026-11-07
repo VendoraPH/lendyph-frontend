@@ -7,6 +7,17 @@ import type {
   ActivationVerifyRequest,
   ChangePasswordRequest,
   ForgotPasswordRequest,
+  GCashCheckout,
+  GCashPaymentRequest,
+  PortalLedgerEntry,
+  PortalLoanDetail,
+  PortalLoanSummary,
+  PortalPayment,
+  PortalPaymentFilters,
+  PortalSavingsAccount,
+  PortalScheduleRow,
+  PortalShareCapital,
+  PortalTimeDeposit,
   PortalConfig,
   PortalDashboard,
   PortalLogin,
@@ -19,7 +30,9 @@ import type {
   ProfileUpdateRequest,
   ProfileUpdateSubmit,
   ResetPasswordRequest,
+  StatementRequest,
 } from "@/types/portal";
+import type { PaginatedResponse } from "@/types/api";
 
 const P = API_ENDPOINTS.PORTAL;
 
@@ -62,4 +75,26 @@ export const portalService = {
   logoutOthers: () => portalApi.post<void>(P.SECURITY.LOGOUT_OTHERS),
   logins: () => portalApi.get<PortalLogin[]>(P.SECURITY.LOGINS),
   reportLogin: (id: number) => portalApi.post<void>(P.SECURITY.REPORT_LOGIN(id)),
+
+  loans: () => portalApi.get<PortalLoanSummary[]>(P.LOANS),
+  loan: (id: number) => portalApi.get<PortalLoanDetail>(P.LOAN(id)),
+  loanSchedule: (id: number) => portalApi.get<PortalScheduleRow[]>(P.LOAN_SCHEDULE(id)),
+  loanPayments: (id: number) => portalApi.get<PortalPayment[]>(P.LOAN_PAYMENTS(id)),
+  loanStatement: (id: number) => portalApi.download(P.LOAN_SOA(id)),
+
+  /** Paged: the whole body so the page can read `meta.total`. */
+  payments: (params: PortalPaymentFilters) =>
+    portalApi.getRaw<PaginatedResponse<PortalPayment>>(P.PAYMENTS, { params }),
+  paymentReceipt: (id: number) => portalApi.download(P.PAYMENT_RECEIPT(id)),
+  payWithGCash: (body: GCashPaymentRequest) => portalApi.post<GCashCheckout>(P.GCASH_PAY, body),
+
+  shareCapital: () => portalApi.get<PortalShareCapital>(P.SHARE_CAPITAL),
+  shareCapitalLedger: () => portalApi.get<PortalLedgerEntry[]>(P.SHARE_CAPITAL_LEDGER),
+  savings: () => portalApi.get<PortalSavingsAccount[]>(P.SAVINGS),
+  savingsLedger: (id: number) => portalApi.get<PortalLedgerEntry[]>(P.SAVINGS_LEDGER(id)),
+  timeDeposits: () => portalApi.get<PortalTimeDeposit[]>(P.TIME_DEPOSITS),
+  timeDepositCertificate: (id: number) => portalApi.download(P.TIME_DEPOSIT_CERTIFICATE(id)),
+
+  /** A PDF statement for the chosen account and period. */
+  statement: (params: StatementRequest) => portalApi.download(P.STATEMENT, { params }),
 };
