@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { LoanProduct } from "@/types/loan";
 import {
   EMPTY_FORM,
+  PRODUCT_FIELD_LABELS,
   defaultTermError,
   formToApiPayload,
   productToForm,
@@ -233,4 +236,15 @@ test("saving an untouched product three times sends null for every empty fee bou
   }
   assert.equal(stored.min_service_fee, null);
   assert.equal(stored.max_service_fee, null);
+});
+
+test("every form field has one label, and the form shows those labels", () => {
+  for (const key of Object.keys(EMPTY_FORM)) {
+    if (key === "grace_period_enabled") continue;
+    assert.equal(typeof PRODUCT_FIELD_LABELS[key], "string", `no label for ${key}`);
+  }
+  assert.equal(PRODUCT_FIELD_LABELS.max_scb, "Maximum Share Capital Build-Up");
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/loan-products/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /Minimum SCB|Maximum SCB/);
+  assert.match(page, /PRODUCT_FIELD_LABELS\.max_scb/);
 });

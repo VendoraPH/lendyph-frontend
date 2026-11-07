@@ -219,7 +219,7 @@ function AuditDetailDrawer({
                   >
                     <div className="bg-muted/50 px-3 py-1.5">
                       <p className="text-xs font-medium capitalize">
-                        {auditFieldLabel(change.field)}
+                        {auditFieldLabel(change.field, log.target)}
                       </p>
                     </div>
                     <div className="px-3 py-2 space-y-1">

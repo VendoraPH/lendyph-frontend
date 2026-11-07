@@ -5,6 +5,7 @@ import type { AuditLog, AuditModule } from "@/types";
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { roleLabelForKey } from "@/lib/role-display-name";
 import { permissionChipLabel } from "@/app/(app)/users/_lib/user-labels";
+import { PRODUCT_FIELD_LABELS } from "@/app/(app)/settings/loan-products/_lib/product-form";
 
 const MODULE_LABELS: Record<AuditModule, string> = {
   auth: "Auth",
@@ -94,10 +95,20 @@ const FIELD_LABELS: Record<string, string> = {
   account_officer_id: "account officer",
   applicable_product_ids: "applicable products",
   loan_product_id: "loan product",
+  step_id: "step",
+  source_loan_id: "source loan",
+  restructured_into_loan_id: "restructured into loan",
+  inherited_collateral_ids: "inherited collaterals",
 };
 
-/** A changed field's name, with every underscore as a space. */
-export function auditFieldLabel(field: string): string {
+/**
+ * A changed field's name, with every underscore as a space. A loan product's
+ * fields read as the product form labels them.
+ */
+export function auditFieldLabel(field: string, target?: Pick<NonNullable<AuditLog["target"]>, "type"> | null): string {
+  if (target?.type === "LoanProduct" && Object.hasOwn(PRODUCT_FIELD_LABELS, field)) {
+    return PRODUCT_FIELD_LABELS[field];
+  }
   if (Object.hasOwn(FIELD_LABELS, field)) return FIELD_LABELS[field];
   return field.split("_").filter(Boolean).join(" ");
 }
@@ -182,13 +193,13 @@ export function auditDescription(
   if (log.action === "deleted") {
     const kept = changes.filter((c) => !isBookkeepingField(c.field) && c.old !== null && c.old !== "");
     if (kept.length === 0) return withRecordLabel("Deleted", log.target);
-    return `Deleted: ${kept.map((c) => `${auditFieldLabel(c.field)} ${auditChangeValue(log, c.field, c.old)}`).join(", ")}`;
+    return `Deleted: ${kept.map((c) => `${auditFieldLabel(c.field, log.target)} ${auditChangeValue(log, c.field, c.old)}`).join(", ")}`;
   }
 
   if (changes.length === 0) return "";
   const parts = changes.map((c) => {
     const pair = auditChangePair(log, c);
-    return `${auditFieldLabel(c.field)}: ${pair.old ?? "—"} → ${pair.new ?? "—"}`;
+    return `${auditFieldLabel(c.field, log.target)}: ${pair.old ?? "—"} → ${pair.new ?? "—"}`;
   });
   return `Changed ${parts.join("; ")}`;
 }

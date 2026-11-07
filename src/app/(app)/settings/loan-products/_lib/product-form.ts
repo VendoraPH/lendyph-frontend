@@ -24,6 +24,44 @@ export function retiredCustomFeesNotice(rawFees: unknown): string | null {
   return `${count} retired additional ${count === 1 ? "fee" : "fees"} (${names.join(", ")}). They were never charged. Recreate any you need in Settings → Fees.`;
 }
 
+/**
+ * Each product field's name, as the form labels it, without its unit. The form
+ * reads its labels from here, and so does the Audit Trail for a product's
+ * changes, so the two never name a field differently. Keyed by the API field.
+ */
+export const PRODUCT_FIELD_LABELS: Readonly<Record<string, string>> = {
+  name: "Product Name",
+  description: "Description",
+  min_amount: "Minimum Amount",
+  max_amount: "Maximum Amount",
+  min_term: "Minimum Term",
+  max_term: "Maximum Term",
+  term: "Default Term",
+  term_unit: "Term Unit",
+  min_interest_rate: "Min Interest Rate",
+  max_interest_rate: "Max Interest Rate",
+  interest_rate: "Interest Rate",
+  interest_rate_frequency: "Interest Rate Frequency",
+  interest_method: "Interest Method",
+  frequencies: "Payment Frequency",
+  frequency: "Payment Frequency",
+  processing_fee: "Processing Fee",
+  min_processing_fee: "Minimum Processing Fee",
+  max_processing_fee: "Maximum Processing Fee",
+  service_fee: "Service Fee",
+  min_service_fee: "Minimum Service Fee",
+  max_service_fee: "Maximum Service Fee",
+  notarial_fee: "Notarial Fee",
+  penalty_rate: "Penalty Rate",
+  grace_period_days: "Grace Period",
+  scb_required: "Share Capital Build-Up Required",
+  min_scb: "Minimum Share Capital Build-Up",
+  max_scb: "Maximum Share Capital Build-Up",
+  custom_fees: "Additional Fees",
+  is_active: "Active",
+  status: "Status",
+};
+
 export interface ProductForm {
   name: string;
   description: string;

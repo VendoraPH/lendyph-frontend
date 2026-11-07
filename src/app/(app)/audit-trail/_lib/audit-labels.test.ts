@@ -278,3 +278,30 @@ test("statuses that read differently keep the app's labels", () => {
   });
   assert.deepEqual(auditChangePair(row, { field: "status", old: null, new: "ongoing" }), { old: null, new: "Current" });
 });
+
+test("more id fields the server sends as names read without Id", () => {
+  assert.equal(auditFieldLabel("step_id"), "step");
+  assert.equal(auditFieldLabel("source_loan_id"), "source loan");
+  assert.equal(auditFieldLabel("restructured_into_loan_id"), "restructured into loan");
+  assert.equal(auditFieldLabel("inherited_collateral_ids"), "inherited collaterals");
+});
+
+const productTarget = { id: 4, type: "LoanProduct", label: "Salary Loan" };
+
+test("a loan product's fields read as the product form names them", () => {
+  const product = { type: "LoanProduct" };
+  assert.equal(auditFieldLabel("max_scb", product), "Maximum Share Capital Build-Up");
+  assert.equal(auditFieldLabel("min_scb", product), "Minimum Share Capital Build-Up");
+  assert.equal(auditFieldLabel("scb_required", product), "Share Capital Build-Up Required");
+  assert.equal(auditFieldLabel("term", product), "Default Term");
+  assert.equal(auditFieldLabel("grace_period_days", product), "Grace Period");
+  assert.equal(
+    auditDescription(log({ target: productTarget, changes: [{ field: "max_scb", old: "₱100.00", new: "₱200.00" }] })),
+    "Changed Maximum Share Capital Build-Up: ₱100.00 → ₱200.00",
+  );
+});
+
+test("the same field on another record keeps its plain words", () => {
+  assert.equal(auditFieldLabel("max_scb", { type: "Loan" }), "max scb");
+  assert.equal(auditFieldLabel("term"), "term");
+});
