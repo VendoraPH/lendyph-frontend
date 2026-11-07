@@ -8,7 +8,12 @@ import { RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
-import { presetMemberId, reportSubjectNoun } from "../_lib/report-subject";
+import {
+  noDateRangeScope,
+  presetMemberId,
+  reportPickPrompt,
+  reportSubjectNoun,
+} from "../_lib/report-subject";
 import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
@@ -458,7 +463,7 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             {report.noDateRange ? (
               <p className="text-sm text-muted-foreground min-w-0 flex-1">
-                Covers the whole loan, as of the day it is generated.
+                {noDateRangeScope(report.subject)}
               </p>
             ) : (
               <div className="space-y-2 min-w-0 flex-1">
@@ -615,7 +620,7 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
       {!doc && !generating && (
         <EmptyPreview
           reportTitle={report.title}
-          pick={report.noDateRange ? `a ${report.subject ? reportSubjectNoun(report.subject) : ""}` : "a date range"}
+          pick={reportPickPrompt(report)}
         />
       )}
       {generating && (

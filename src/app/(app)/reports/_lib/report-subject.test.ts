@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { presetMemberId, reportSubjectNoun } from "./report-subject";
+import { noDateRangeScope, presetMemberId, reportPickPrompt, reportSubjectNoun } from "./report-subject";
 
 test("a report that needs one person asks for a member", () => {
   assert.equal(reportSubjectNoun("borrower"), "member");
@@ -15,4 +15,15 @@ test("?member= opens a member only for a whole positive id", () => {
   for (const value of [null, "", "abc", "0", "-1", "1.5", "4e2", " 7"]) {
     assert.equal(presetMemberId(value), null, String(value));
   }
+});
+
+test("a report without dates says what it covers", () => {
+  assert.equal(noDateRangeScope("loan"), "Covers the whole loan, as of the day it is generated.");
+  assert.equal(noDateRangeScope(undefined), "Covers the whole portfolio, as of the day it is generated.");
+});
+
+test("the empty preview asks for what the report actually needs", () => {
+  assert.equal(reportPickPrompt({}), "a date range");
+  assert.equal(reportPickPrompt({ noDateRange: true, subject: "loan" }), "a loan");
+  assert.equal(reportPickPrompt({ noDateRange: true }), "a branch");
 });

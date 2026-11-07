@@ -517,10 +517,13 @@ function compositionSection(
   };
 }
 
-export function buildPortfolioSummaryDoc(
-  raw: unknown,
-  range: DateRange
-): ReportDocument {
+/**
+ * The range is not read: this report is the whole portfolio as of a day, the same
+ * book as the Dashboard's Total Portfolio. The signature keeps it for the
+ * catalog's mapper type.
+ */
+export function buildPortfolioSummaryDoc(raw: unknown, range?: DateRange): ReportDocument;
+export function buildPortfolioSummaryDoc(raw: unknown): ReportDocument {
   const obj = asRecord(raw);
   const portfolio = asRecord(obj?.portfolio);
   const outstanding = asRecord(obj?.outstanding);
@@ -574,7 +577,13 @@ export function buildPortfolioSummaryDoc(
 
   return {
     reportId: "portfolio_summary",
-    meta: meta("Portfolio Summary", range, "Overall loan portfolio status"),
+    meta: {
+      title: "Portfolio Summary",
+      subtitle: "Overall loan portfolio status",
+      asOf: formatValue(pick(obj, ["as_of", "generated_at"]) ?? new Date(), "date"),
+      generatedAt: formatGeneratedAt(),
+      org: "",
+    },
     sections,
   };
 }
@@ -1231,10 +1240,18 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
 /**
  * One Statement of Account line, as the loan's Ledger has it: the release, a
  * charge, a payment, a waiver or an adjustment. Every figure is the server's, and
- * a line without one shows "—". A voided payment stays listed, marked, and the
- * server leaves it out of the totals and balances. `balance` is the alias of
- * `principal_balance` the server keeps for one release; `running_balance` is
- * another figure (principal plus premium), so it is never read for this column.
+ * a line without one shows "—".
+ *
+ * Only a payment line shows the applied parts. The server gives a release or
+ * charge negative parts ("-₱60,000.00"), which say the same as its debit, so
+ * those lines show the debit and a dash in each part.
+ *
+ * A voided payment stays listed and moves nothing: its receipt's amount is in
+ * the mark, never under Credit, and the server's totals leave it out.
+ *
+ * `balance` is the alias of `principal_balance` the server keeps for one release;
+ * `running_balance` is another figure (principal plus premium), so it is never
+ * read for this column.
  */
 function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string, unknown> {
   const method = paymentMethodText(pick(raw, ["payment_method", "method"]));
@@ -1242,26 +1259,39 @@ function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string
   const referenceText = reference ? `Ref. ${reference}` : null;
   const line = normalizeTransactionRow(raw);
   const voided = pick(raw, ["voided"]) === true;
+  const type = pick(raw, ["type"]);
+  const isPayment = typeof type !== "string" || /payment/.test(type);
+  const part = (key: string) => (isPayment ? toNumber(pick(raw, [key])) : null);
 
   return {
     ...line,
-    particulars: voided ? voidedParticulars(line.particulars) : line.particulars,
+    particulars: voided
+      ? voidedParticulars(line.particulars, pick(raw, ["amount_paid"]))
+      : line.particulars,
+    debit: voided ? null : line.debit,
+    credit: voided ? null : line.credit,
     voided,
     method: method && referenceText ? `${method} (${referenceText})` : (method ?? referenceText),
-    principal_applied: toNumber(pick(raw, ["principal_applied"])),
-    interest_applied: toNumber(pick(raw, ["interest_applied"])),
-    penalty_applied: toNumber(pick(raw, ["penalty_applied"])),
-    insurance_applied: toNumber(pick(raw, ["insurance_applied"])),
-    build_up_applied: toNumber(pick(raw, ["build_up_applied"])),
-    overpayment_applied: toNumber(pick(raw, ["overpayment_applied"])),
+    principal_applied: part("principal_applied"),
+    interest_applied: part("interest_applied"),
+    penalty_applied: part("penalty_applied"),
+    insurance_applied: part("insurance_applied"),
+    build_up_applied: part("build_up_applied"),
+    overpayment_applied: part("overpayment_applied"),
     principal_balance: pick(raw, ["principal_balance", "balance"]),
   };
 }
 
-/** Says a line is voided, unless the server's words already do. */
-function voidedParticulars(particulars: unknown): string {
-  if (typeof particulars !== "string" || particulars === "") return "Voided";
-  return /void/i.test(particulars) ? particulars : `${particulars} (Voided)`;
+/** A voided line's words: the mark, capitalised, and the receipt's amount when sent. */
+function voidedParticulars(particulars: unknown, amount: unknown): string {
+  const text = typeof particulars === "string" ? particulars : "";
+  const marked = /void/i.test(text)
+    ? text.replace("(voided)", "(Voided)")
+    : text === ""
+      ? "Voided"
+      : `${text} (Voided)`;
+  const receipt = toNumber(amount);
+  return receipt !== null && receipt > 0 ? `${marked}: ${formatCurrency(receipt)}` : marked;
 }
 
 type AccountField = [string, unknown, "text" | "currency" | "date" | "rate"];
@@ -1410,6 +1440,10 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
       { label: "Insurance Premium Paid", value: currencyOrDash(pick(summary, ["insurance_paid"])) },
       ...(hasBuildUp
         ? [{ label: "Share Capital Build-Up Paid", value: currencyOrDash(pick(summary, ["build_up_paid"])) }]
+        : []),
+      // Excess a payment left over, which the parts above leave out.
+      ...((toNumber(pick(summary, ["overpayment_paid"])) ?? 0) > 0
+        ? [{ label: "Overpayment", value: currencyOrDash(pick(summary, ["overpayment_paid"])) }]
         : []),
       { label: "Total Paid", value: currencyOrDash(totalPaid) },
     ],

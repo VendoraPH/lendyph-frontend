@@ -4265,44 +4265,74 @@ const SOA_FULL = {
   schedule_totals: { ...SOA_PAYLOAD.schedule_totals, balance: 59908.92 },
   transactions: [
     {
+      type: "release",
       kind: "release",
       date: "2026-02-01",
       description: "Loan released",
       reference: "LN-2026-0001",
+      amount_paid: 0,
       debit: 50000,
       credit: null,
       voided: false,
+      principal_applied: -50000,
+      interest_applied: 0,
+      penalty_applied: 0,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
       principal_balance: 50000,
     },
     {
-      kind: "penalty",
+      type: "charge",
+      kind: "penalty_charge",
       date: "2026-03-05",
       description: "Late penalty charged",
+      amount_paid: 0,
       debit: 121.85,
       credit: null,
       voided: false,
+      principal_applied: 0,
+      interest_applied: 0,
+      penalty_applied: -121.85,
+      insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
       principal_balance: 50000,
     },
     {
-      kind: "payment",
+      type: "payment",
+      kind: "repayment",
       date: "2026-03-06",
       receipt_number: "RCP-000004",
-      description: "Payment RCP-000004",
-      credit: 1000,
+      description: "Payment RCP-000004 (voided)",
+      amount_paid: 1000,
+      credit: null,
       debit: null,
       voided: true,
+      principal_applied: 0,
+      interest_applied: 0,
+      penalty_applied: 0,
       insurance_applied: 0,
+      build_up_applied: 0,
+      overpayment_applied: 0,
       principal_balance: 50000,
     },
     {
-      kind: "payment",
+      type: "payment",
+      kind: "repayment",
       date: "2026-03-07",
       receipt_number: "RCP-000008",
       description: "Extension payment RCP-000008",
+      amount_paid: 3000,
       credit: 3000,
       debit: null,
       voided: false,
+      principal_applied: 1700,
+      interest_applied: 800,
+      penalty_applied: 50,
       insurance_applied: 400,
+      build_up_applied: 50,
+      overpayment_applied: 0,
       principal_balance: 48300,
     },
   ],
@@ -4373,13 +4403,105 @@ test("finding 11: a loan never extended has no Extensions line", () => {
   assert.equal(labels.includes("Extensions"), false);
 });
 
-test("finding 12: a voided payment is listed and marked, and the footer stays the server's", () => {
+test("finding 12: a voided payment names its amount in the mark, never under Credit", () => {
   const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
   const table = namedTable(doc, "Transaction History");
-  assert.equal(table.rows[2].particulars, "Payment RCP-000004 (Voided)");
+  const column = (key: string) => table.columns.find((c) => c.key === key)!;
+
+  assert.equal(table.rows[2].particulars, "Payment RCP-000004 (Voided): ₱1,000.00");
   assert.equal(table.rows[2].voided, true);
   assert.equal(table.rows[3].voided, false);
+  assert.equal(table.rows[2].credit, null);
+  assert.equal(table.rows[2].debit, null);
+  assert.equal(formatCell(table.rows[2], column("credit")), DASH);
+  assert.equal(formatCell(table.rows[2], column("debit")), DASH);
+  // The server's parts are 0 on a voided line, and they read as a zero.
+  assert.equal(formatCell(table.rows[2], column("principal_applied")), "₱0.00");
+  // Out of every total: the footer is the server's, without the voided ₱1,000.00.
   assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱3,000.00");
+});
+
+test("finding 12: a voided line whose server still sends a credit keeps it out of the column", () => {
+  const voided = { ...SOA_FULL.transactions[2], credit: 1000, debit: 5 };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [voided] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].credit, null);
+  assert.equal(table.rows[0].debit, null);
+});
+
+test("finding 12: a voided line with no receipt amount has the mark alone", () => {
+  const { amount_paid, ...withoutAmount } = SOA_FULL.transactions[2];
+  void amount_paid;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [withoutAmount] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[0].particulars, "Payment RCP-000004 (Voided)");
+});
+
+test("release and charge lines show the debit, and a dash in every applied part", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  const parts = ["principal_applied", "interest_applied", "penalty_applied", "insurance_applied", "build_up_applied"];
+
+  for (const [index, debit] of [[0, "₱50,000.00"], [1, "₱121.85"]] as const) {
+    const row = table.rows[index];
+    assert.equal(formatCell(row, table.columns.find((c) => c.key === "debit")!), debit);
+    for (const key of parts) {
+      const text = formatCell(row, table.columns.find((c) => c.key === key)!);
+      assert.equal(text, DASH, `${String(row.particulars)} ${key}`);
+    }
+  }
+});
+
+test("an adjustment line shows its credit or debit, and a dash in every applied part", () => {
+  const adjustment = {
+    type: "adjustment",
+    kind: "waiver",
+    date: "2026-04-01",
+    description: "Penalty waived",
+    amount_paid: 0,
+    debit: null,
+    credit: 374.77,
+    voided: false,
+    principal_applied: 0,
+    interest_applied: 0,
+    penalty_applied: 374.77,
+    insurance_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 48300,
+  };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [...SOA_FULL.transactions, adjustment] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(table.rows[4].credit, 374.77);
+  assert.equal(formatCell(table.rows[4], table.columns.find((c) => c.key === "penalty_applied")!), DASH);
+});
+
+test("a payment line keeps its parts as the server sent them", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  assert.equal(table.rows[3].principal_applied, 1700);
+  assert.equal(table.rows[3].interest_applied, 800);
+  assert.equal(table.rows[3].penalty_applied, 50);
+  assert.equal(table.rows[3].insurance_applied, 400);
+  assert.equal(table.rows[3].build_up_applied, 50);
+});
+
+test("finding 9: an overpayment joins the paid parts when there is one", () => {
+  const paid = (overpayment_paid: unknown) =>
+    fieldItems(
+      buildStatementOfAccountDoc({ ...SOA_FULL, summary: { ...SOA_FULL.summary, overpayment_paid } }, RANGE),
+      "What Has Been Paid"
+    ).map((f) => [f.label, f.value]);
+
+  const labels = paid(150.5).map(([label]) => label);
+  assert.deepEqual(paid(150.5).find(([label]) => label === "Overpayment"), ["Overpayment", "₱150.50"]);
+  assert.equal(labels.indexOf("Overpayment"), labels.indexOf("Total Paid") - 1);
+  assert.equal(paid(0).some(([label]) => label === "Overpayment"), false);
+  assert.equal(paid(undefined).some(([label]) => label === "Overpayment"), false);
 });
 
 test("finding 12: a description that already says voided isn't marked twice", () => {
@@ -4390,7 +4512,7 @@ test("finding 12: a description that already says voided isn't marked twice", ()
     ),
     "Transaction History"
   );
-  assert.equal(table.rows[0].particulars, "Voided payment RCP-000004");
+  assert.equal(table.rows[0].particulars, "Voided payment RCP-000004: ₱1,000.00");
 });
 
 test("finding 13: every Ledger line is listed, with the release as a debit", () => {
@@ -4636,4 +4758,16 @@ test("performance: both cards, columns and footers, never the old alias", () => 
   assert.equal(namedTable(doc, "By Branch").rows[0].outstanding, null);
   assert.equal(namedTableTotal(doc, "By Branch", "outstanding"), DASH);
   assertAliasesGiveDashes(buildPerformanceDoc({ totals: OLD_ALIASES }, RANGE));
+});
+
+test("portfolio summary is as of a day, not a period: the server's day, whatever range is held", () => {
+  const doc = buildPortfolioSummaryDoc({ ...PORTFOLIO_PAYLOAD, generated_at: "2026-11-07 09:15:00" }, RANGE);
+  assert.equal(doc.meta.asOf, formatValue("2026-11-07", "date"));
+  assert.equal(doc.meta.period, undefined);
+});
+
+test("a failed portfolio summary request still says what day it is as of", () => {
+  const doc = buildPortfolioSummaryDoc(null, RANGE);
+  assert.ok(doc.meta.asOf && doc.meta.asOf !== DASH);
+  assert.equal(doc.meta.period, undefined);
 });
