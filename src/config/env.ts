@@ -156,6 +156,10 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // Savings & Deposits (staff side). Off by default: the menu and every
+    // /savings route stay hidden until the backend serves the /savings
+    // endpoints in docs/SAVINGS_BACKEND_HANDOFF.md. Literal reference, as above.
+    savings: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_SAVINGS),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
