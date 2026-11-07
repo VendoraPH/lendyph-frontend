@@ -175,7 +175,8 @@ export function buildOfficialReceiptDoc(
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
-          pick(borrower, ["borrower_code", "member_no", "code"])
+          pick(payment, ["borrower_code"]) ??
+            pick(borrower, ["borrower_code", "member_no", "code"])
         ),
         field(
           "Loan Product",

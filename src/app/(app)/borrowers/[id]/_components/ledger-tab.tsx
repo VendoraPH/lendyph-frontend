@@ -5,12 +5,17 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Loader2, BookOpen, FileText } from "lucide-react";
 import { borrowerService } from "@/services";
-import type { BorrowerLedgerEntry, PaginatedResponse } from "@/types";
-import { ledgerRowCells } from "../_lib/ledger-rows";
+import type { BorrowerLedgerClosing, BorrowerLedgerEntry } from "@/types/borrower";
+import {
+  ledgerClosingCells,
+  ledgerRowCells,
+  memberLedgerReportHref,
+  readMemberLedger,
+} from "../_lib/ledger-rows";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -22,32 +27,20 @@ interface LedgerTabProps {
 
 export function LedgerTab({ borrowerId }: LedgerTabProps) {
   const [entries, setEntries] = useState<BorrowerLedgerEntry[]>([]);
+  const [closing, setClosing] = useState<BorrowerLedgerClosing | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);
     try {
-      // No `per_page`, deliberately. `BorrowerController::ledger()` is not a
-      // paginated endpoint at all: it builds the entries in memory from the
-      // member's loans and repayments and answers
-      // `response()->json(['data' => $withBalance])` — no paginator, no `meta`,
-      // no clamp. The `per_page: 200` that used to be here was read by nothing
-      // on either side. It was still worth removing rather than leaving: it
-      // read as a bound on a list that has none, so the next person to audit
-      // this file would either "fix" it to 100 or drain an endpoint that
-      // returns everything in one response already.
-      //
-      // The rows carry the server's running `balance`, which is not shown:
-      // it takes whole payments, interest and penalty included, off the
-      // principal released, so it matches neither the loan's Principal
-      // Balance nor its Outstanding.
-      const res = await borrowerService.ledger(borrowerId);
-      const items = Array.isArray(res)
-        ? (res as BorrowerLedgerEntry[])
-        : (res as PaginatedResponse<BorrowerLedgerEntry>)?.data ?? [];
-      setEntries(items);
+      // No `per_page`: the endpoint answers every row in one response, with no
+      // paginator to bound.
+      const ledger = readMemberLedger(await borrowerService.ledger(borrowerId));
+      setEntries(ledger.entries);
+      setClosing(ledger.closing);
     } catch {
       setEntries([]);
+      setClosing(null);
     } finally {
       setLoading(false);
     }
@@ -65,6 +58,8 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
     );
   }
 
+  const closingCells = ledgerClosingCells(closing);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -74,7 +69,7 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             Subsidiary Ledger Report
           </CardTitle>
           <Link
-            href="/reports/subsidiary_ledger"
+            href={memberLedgerReportHref(borrowerId)}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <FileText className="mr-2 h-4 w-4" />
@@ -94,10 +89,12 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Loan</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
                 <TableHead className="text-right">Credit</TableHead>
+                <TableHead className="text-right">Balance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -106,16 +103,39 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground font-mono">{cells.loan}</TableCell>
                     <TableCell className="text-sm font-medium">{entry.description}</TableCell>
                     <TableCell className="text-sm text-muted-foreground font-mono">{cells.reference}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{cells.debit}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
                       {cells.credit}
+                      {cells.amountPaid && (
+                        <span className="block text-xs text-muted-foreground">
+                          Paid {cells.amountPaid}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums font-medium">
+                      {cells.balance}
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={6} className="text-sm font-medium whitespace-normal">
+                  Closing balance
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Principal {closingCells.principal} · Interest {closingCells.interest} · Penalty{" "}
+                    {closingCells.penalty}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right text-sm tabular-nums font-semibold">
+                  {closingCells.balance}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         )}
         </CardContent>

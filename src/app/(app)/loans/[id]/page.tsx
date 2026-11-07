@@ -29,7 +29,9 @@ import {
   loanInsuranceOwed,
   previewInsuranceApplied,
 } from "@/lib/insurance-premium";
+import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
+import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -539,61 +541,26 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
 
 // ── Workflow History Component ──
 
+const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
+  created: <FileText className="h-4 w-4 text-gray-500" />,
+  submitted: <Send className="h-4 w-4 text-amber-600" />,
+  approved: <UserCheck className="h-4 w-4 text-blue-600" />,
+  rejected: <Ban className="h-4 w-4 text-red-600" />,
+  released: <Unlock className="h-4 w-4 text-cyan-600" />,
+};
+
 function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events: { icon: React.ReactNode; label: string; date: string; detail?: string }[] = [];
-
-  events.push({
-    icon: <FileText className="h-4 w-4 text-gray-500" />,
-    label: "Application created",
-    date: loan.created_at,
-  });
-
-  if (
-    loan.status !== "draft" &&
-    loan.updated_at !== loan.created_at
-  ) {
-    events.push({
-      icon: <Send className="h-4 w-4 text-amber-600" />,
-      label: "Submitted for approval",
-      date: loan.updated_at,
-    });
-  }
-
-  if (loan.approved_at) {
-    events.push({
-      icon: <UserCheck className="h-4 w-4 text-blue-600" />,
-      label: `Approved by ${loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "—"}`,
-      date: loan.approved_at,
-      detail: loan.approval_remarks ?? undefined,
-    });
-  }
-
-  if (loan.rejected_at) {
-    events.push({
-      icon: <Ban className="h-4 w-4 text-red-600" />,
-      label: `Rejected by ${loan.rejected_by ?? "—"}`,
-      date: loan.rejected_at,
-      detail: loan.rejection_remarks ?? undefined,
-    });
-  }
-
-  if (loan.released_at) {
-    events.push({
-      icon: <Unlock className="h-4 w-4 text-cyan-600" />,
-      label: `Released by ${loan.released_by_user?.full_name ?? loan.released_by_user?.name ?? loan.released_by ?? "—"}`,
-      date: loan.released_at,
-    });
-  }
+  const events = workflowEvents(loan);
 
   return (
     <div className="space-y-4">
-      {events.map((event, idx) => (
-        <div key={idx} className="flex items-start gap-3">
-          <div className="mt-0.5">{event.icon}</div>
+      {events.map((event) => (
+        <div key={event.key} className="flex items-start gap-3">
+          <div className="mt-0.5">{WORKFLOW_ICONS[event.key]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{event.label}</p>
             <p className="text-xs text-muted-foreground">
-              {formatDateTime(event.date)}
+              {event.date ? formatDateTime(event.date) : "—"}
             </p>
             {event.detail && (
               <p className="mt-1 text-sm text-muted-foreground italic">
@@ -5217,15 +5184,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           }}
           isPostRelease={autoPayIsPostRelease}
           onSuccess={(settings) => {
-            setLoan((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    auto_pay_enabled: settings.auto_pay_enabled,
-                    auto_pay_cbs_reference: settings.cbs_reference,
-                  }
-                : prev
-            );
+            setLoan((prev) => (prev ? applyAutoPaySettings(prev, settings) : prev));
             setAutoPayIsPostRelease(false);
           }}
         />

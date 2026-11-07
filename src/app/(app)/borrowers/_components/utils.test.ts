@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { reviewerLabel } from "./utils";
+import { memberStatusLabel, reviewerLabel, statusInWords } from "./utils";
 
 test("reviewerLabel prefers the relation's full_name when the API sends one", () => {
   assert.equal(
@@ -48,4 +48,24 @@ test("reviewerLabel ignores an empty-string name rather than rendering blank", (
     reviewerLabel({ rejected_by: 4, rejected_by_user: { full_name: "", name: "" } }),
     "Reviewer #4",
   );
+});
+
+test("memberStatusLabel capitalises every member status", () => {
+  assert.equal(memberStatusLabel("active"), "Active");
+  assert.equal(memberStatusLabel("inactive"), "Inactive");
+  assert.equal(memberStatusLabel("blacklisted"), "Blacklisted");
+  assert.equal(memberStatusLabel("pending"), "Pending");
+  assert.equal(memberStatusLabel("rejected"), "Rejected");
+});
+
+test("statusInWords capitalises payment and schedule statuses", () => {
+  assert.equal(statusInWords("completed"), "Completed");
+  assert.equal(statusInWords("voided"), "Voided");
+  assert.equal(statusInWords("paid"), "Paid");
+  assert.equal(statusInWords("past_due"), "Past Due");
+});
+
+test("statusInWords reads a dash when there is no status", () => {
+  assert.equal(statusInWords(null), "—");
+  assert.equal(statusInWords(""), "—");
 });

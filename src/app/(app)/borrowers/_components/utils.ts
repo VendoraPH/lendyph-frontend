@@ -1,5 +1,27 @@
 import type { Borrower } from "@/types";
 
+const MEMBER_STATUS_LABELS: Record<Borrower["status"], string> = {
+  active: "Active",
+  inactive: "Inactive",
+  blacklisted: "Blacklisted",
+  pending: "Pending",
+  rejected: "Rejected",
+};
+
+/** A member's status as a badge reads it. */
+export function memberStatusLabel(status: Borrower["status"]): string {
+  return MEMBER_STATUS_LABELS[status] ?? statusInWords(status);
+}
+
+/** A payment's or schedule period's status in words: "past_due" reads "Past Due". */
+export function statusInWords(status: string | null | undefined): string {
+  if (!status) return "—";
+  return status
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 // Keyed off `Borrower["status"]` rather than a hand-written union: a new status
 // on the model then fails the build here instead of silently rendering
 // `className={undefined}`, which is how `rejected` slipped through unstyled.

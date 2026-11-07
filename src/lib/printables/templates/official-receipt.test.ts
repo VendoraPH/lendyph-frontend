@@ -280,3 +280,17 @@ test("official receipt: the voider is named, never shown as a user id", () => {
   const noUser = buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12, voided_by_user: undefined });
   assert.ok(isBlankField(noUser, "Voided by"));
 });
+
+test("official receipt: Member No. reads the repayment's own borrower_code", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, borrower_code: "BRW-000123" });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the repayment's borrower_code wins over a nested member's", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    borrower_code: "BRW-000123",
+    borrower: { borrower_code: "BRW-999999" },
+  });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
