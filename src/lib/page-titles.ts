@@ -64,7 +64,12 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "risk-monitoring": "Risk Monitoring",
     "score-history": "Score History",
   },
-  "share-capital": { "auto-credit": "Auto-Credit" },
+  payments: { history: "Payment History" },
+  "share-capital": {
+    ledger: "Subsidiary Ledger",
+    pledges: "Pledge Entry",
+    "auto-credit": "Auto-Credit",
+  },
 };
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {

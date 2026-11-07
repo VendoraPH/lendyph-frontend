@@ -58,6 +58,12 @@ describe("subPageTitle (the breadcrumb's second part)", () => {
     assert.equal(subPageTitle("credit-scoring", "settings"), "Settings");
   });
 
+  test("Payment History and the Share Capital pages read their menu titles", () => {
+    assert.equal(subPageTitle("payments", "history"), "Payment History");
+    assert.equal(subPageTitle("share-capital", "ledger"), "Subsidiary Ledger");
+    assert.equal(subPageTitle("share-capital", "pledges"), "Pledge Entry");
+  });
+
   test("Auto-Credit reads its menu title", () => {
     assert.equal(subPageTitle("share-capital", "auto-credit"), "Auto-Credit");
   });
