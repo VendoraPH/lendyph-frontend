@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifyValidation } from "@/lib/notify";
 import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
@@ -31,6 +31,11 @@ import {
   type ValidIdDraft,
 } from "./_components/registration-valid-ids-editor";
 import { compressImage } from "@/lib/image-compress";
+import {
+  syncValidIdDrafts,
+  validIdDraftErrors,
+  ValidIdSyncError,
+} from "./_lib/valid-id-sync";
 
 function RegistrationReviewContent() {
   const { id } = useParams<{ id: string }>();
@@ -113,62 +118,12 @@ function RegistrationReviewContent() {
   }
 
   async function syncValidIds() {
-    // Entries removed from the editor (existing id no longer present) → delete.
-    const keptIds = new Set(
-      idDrafts.filter((d) => d.id != null).map((d) => d.id as number)
-    );
-    for (const v of validIds) {
-      if (!keptIds.has(v.id)) {
-        await deleteValidIdIdempotent(v.id);
-      }
-    }
-
-    for (const d of idDrafts) {
-      const isNew = d.id == null;
-      const replaced = !isNew && (d.front_file != null || d.back_file != null);
-      if (!isNew && !replaced) continue; // unchanged existing entry
-
-      // Replacing an existing entry: there is no per-side update endpoint, so
-      // we have to delete the old grouped entry and re-create it. Resolve ALL
-      // files (new uploads + refetches of the untouched side) BEFORE deleting,
-      // so a CORS-blocked refetch doesn't silently lose the untouched side.
-      const front = d.front_file
-        ? await compressImage(d.front_file)
-        : replaced
-        ? await urlToFile(d.front_existing_url, "front.jpg")
-        : null;
-      const back = d.back_file
-        ? await compressImage(d.back_file)
-        : replaced
-        ? await urlToFile(d.back_existing_url, "back.jpg")
-        : null;
-
-      if (replaced) {
-        const lostFront = !d.front_file && d.front_existing_url && !front;
-        const lostBack = !d.back_file && d.back_existing_url && !back;
-        if (lostFront || lostBack) {
-          throw new Error(
-            "Couldn't preserve the unchanged side of an ID image (storage blocked the refetch). Please re-upload both sides and try again."
-          );
-        }
-      }
-
-      if (!d.type || (!front && !back)) continue; // skip incomplete entries
-
-      if (replaced) {
-        await deleteValidIdIdempotent(d.id as number);
-      }
-
-      const fd = new FormData();
-      fd.append("type", d.type);
-      if (d.type === "others" && d.custom_type_name.trim()) {
-        fd.append("custom_type_name", d.custom_type_name.trim());
-      }
-      if (d.id_number.trim()) fd.append("id_number", d.id_number.trim());
-      if (front) fd.append("front_file", front);
-      if (back) fd.append("back_file", back);
-      await registrationService.uploadValidId(registrationId, fd);
-    }
+    await syncValidIdDrafts(validIds, idDrafts, {
+      prepare: compressImage,
+      fetchExisting: urlToFile,
+      upload: (data) => registrationService.uploadValidId(registrationId, data),
+      remove: deleteValidIdIdempotent,
+    });
   }
 
   // Re-read the valid IDs the server actually holds. Run after any failed
@@ -187,6 +142,12 @@ function RegistrationReviewContent() {
   }
 
   async function handleSaveEdit() {
+    const idErrors = validIdDraftErrors(idDrafts);
+    if (idErrors.length > 0) {
+      notifyValidation(idErrors);
+      return;
+    }
+
     setSavingEdit(true);
     // Which step we're on. Each one commits before the next begins, so a
     // failure has to name the step that actually failed — claiming "nothing
@@ -204,6 +165,8 @@ function RegistrationReviewContent() {
     } catch (err) {
       if (phase === "details") {
         notifyError(err, "We couldn't save this registration. Please try again.");
+      } else if (err instanceof ValidIdSyncError) {
+        toast.error(err.message, { description: "The rest of your changes were saved." });
       } else if (phase === "ids") {
         notifyError(
           err,
