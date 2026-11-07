@@ -1167,9 +1167,18 @@ function soaTransactionColumns(
     align: "right",
     width,
   });
+  const [date, reference, particulars, method, debit, credit] = TRANSACTION_COLUMNS;
   return [
+    date,
+    reference,
+    particulars,
     // Wider than the ledger's: this one also carries the reference number.
-    ...TRANSACTION_COLUMNS.slice(0, -1).map((c) => (c.key === "method" ? { ...c, width: 190 } : c)),
+    { ...method, width: 190 },
+    // The whole receipt. Credit is what it took off the debt, so it leaves out
+    // build-up and overpayment.
+    money("amount_paid", "Receipt Amount", 130),
+    debit,
+    credit,
     money("principal_applied", "Principal", 120),
     money("interest_applied", "Interest", 110),
     money("penalty_applied", "Penalty", 110),
@@ -1242,9 +1251,9 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
  * charge, a payment, a waiver or an adjustment. Every figure is the server's, and
  * a line without one shows "—".
  *
- * Only a payment line shows the applied parts. The server gives a release or
- * charge negative parts ("-₱60,000.00"), which say the same as its debit, so
- * those lines show the debit and a dash in each part.
+ * Only a payment line shows its receipt amount and applied parts. The server
+ * gives a release or charge negative parts ("-₱60,000.00"), which say the same as
+ * its debit, so those lines show the debit and a dash in each part.
  *
  * A voided payment stays listed and moves nothing: its receipt's amount is in
  * the mark, never under Credit, and the server's totals leave it out.
@@ -1268,6 +1277,7 @@ function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string
     particulars: voided
       ? voidedParticulars(line.particulars, pick(raw, ["amount_paid"]))
       : line.particulars,
+    amount_paid: isPayment && !voided ? toNumber(pick(raw, ["amount_paid"])) : null,
     debit: voided ? null : line.debit,
     credit: voided ? null : line.credit,
     voided,
@@ -1506,10 +1516,14 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
       transactionRows.length > 0
         ? [
             {
-              column: "debit",
+              column: "amount_paid",
               label: "Total",
-              value: currencyOrDash(pick(transactionTotals, ["debit"])),
+              // Every posted receipt is on a line, so Total Paid is this column's
+              // total when the lines' isn't sent. The Credit total is smaller:
+              // Debit less Credit is what is owed.
+              value: currencyOrDash(pick(transactionTotals, ["amount_paid"]) ?? totalPaid),
             },
+            { column: "debit", value: currencyOrDash(pick(transactionTotals, ["debit"])) },
             { column: "credit", value: currencyOrDash(pick(transactionTotals, ["credit"])) },
             ...(hasPremium
               ? [

@@ -1997,7 +1997,7 @@ test("finding 2: the column is Principal Balance, and each line shows its split 
 
   assert.deepEqual(
     table.columns.map((c) => c.header),
-    ["Date", "Reference", "Particulars", "Method", "Debit", "Credit", "Principal", "Interest", "Penalty", "Insurance Premium", "Principal Balance"]
+    ["Date", "Reference", "Particulars", "Method", "Receipt Amount", "Debit", "Credit", "Principal", "Interest", "Penalty", "Insurance Premium", "Principal Balance"]
   );
   assert.equal(table.rows[0].principal_applied, 5910.11);
   assert.equal(table.rows[0].interest_applied, 3855.03);
@@ -4324,7 +4324,7 @@ const SOA_FULL = {
       receipt_number: "RCP-000008",
       description: "Extension payment RCP-000008",
       amount_paid: 3000,
-      credit: 3000,
+      credit: 2950,
       debit: null,
       voided: false,
       principal_applied: 1700,
@@ -4336,7 +4336,7 @@ const SOA_FULL = {
       principal_balance: 48300,
     },
   ],
-  transaction_totals: { debit: 50121.85, credit: 3000 },
+  transaction_totals: { debit: 50121.85, credit: 2950 },
 };
 
 test("finding 8: the Balance Summary has the insurance premium owed, as sent", () => {
@@ -4417,8 +4417,10 @@ test("finding 12: a voided payment names its amount in the mark, never under Cre
   assert.equal(formatCell(table.rows[2], column("debit")), DASH);
   // The server's parts are 0 on a voided line, and they read as a zero.
   assert.equal(formatCell(table.rows[2], column("principal_applied")), "₱0.00");
-  // Out of every total: the footer is the server's, without the voided ₱1,000.00.
-  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱3,000.00");
+  assert.equal(formatCell(table.rows[2], column("amount_paid")), DASH);
+  // Out of every total: the footers are the server's, without the voided ₱1,000.00.
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱2,950.00");
+  assert.equal(namedTableTotal(doc, "Transaction History", "amount_paid"), "₱3,000.00");
 });
 
 test("finding 12: a voided line whose server still sends a credit keeps it out of the column", () => {
@@ -4488,6 +4490,81 @@ test("a payment line keeps its parts as the server sent them", () => {
   assert.equal(table.rows[3].penalty_applied, 50);
   assert.equal(table.rows[3].insurance_applied, 400);
   assert.equal(table.rows[3].build_up_applied, 50);
+});
+
+test("a payment shows the receipt's amount beside the Credit, which leaves out build-up", () => {
+  const doc = buildStatementOfAccountDoc(SOA_FULL, RANGE);
+  const table = namedTable(doc, "Transaction History");
+  const receipt = table.columns.find((c) => c.key === "amount_paid")!;
+  const keys = table.columns.map((c) => c.key);
+
+  assert.equal(receipt.header, "Receipt Amount");
+  assert.equal(keys.indexOf("amount_paid"), keys.indexOf("debit") - 1);
+  assert.equal(formatCell(table.rows[3], receipt), "₱3,000.00");
+  assert.equal(table.rows[3].credit, 2950);
+  // The two footers differ by the build-up, and neither is worked out here.
+  assert.equal(namedTableTotal(doc, "Transaction History", "credit"), "₱2,950.00");
+  assert.equal(namedTableTotal(doc, "Transaction History", "amount_paid"), "₱3,000.00");
+});
+
+test("the Receipt Amount footer is the server's: its line total, else Total Paid, else a dash", () => {
+  const sent = buildStatementOfAccountDoc(
+    { ...SOA_FULL, transaction_totals: { ...SOA_FULL.transaction_totals, amount_paid: 3100 } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(sent, "Transaction History", "amount_paid"), "₱3,100.00");
+
+  const neither = buildStatementOfAccountDoc(
+    { ...SOA_FULL, summary: { ...SOA_FULL.summary, total_paid: undefined } },
+    RANGE
+  );
+  assert.equal(namedTableTotal(neither, "Transaction History", "amount_paid"), DASH);
+});
+
+test("release, charge and adjustment lines have no receipt amount", () => {
+  const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
+  const receipt = table.columns.find((c) => c.key === "amount_paid")!;
+  assert.equal(formatCell(table.rows[0], receipt), DASH);
+  assert.equal(formatCell(table.rows[1], receipt), DASH);
+});
+
+test("the insurance premium debit line shows its Debit and a dash in every part", () => {
+  const premiumDebit = {
+    type: "charge",
+    kind: "insurance_debit",
+    date: "2026-02-01",
+    description: "Insurance premium owed",
+    particulars: "Insurance premium owed",
+    amount_paid: 0,
+    debit: 1000,
+    credit: null,
+    voided: false,
+    insurance_applied: -1000,
+    principal_applied: 0,
+    interest_applied: 0,
+    penalty_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 50000,
+  };
+  const [release, ...rest] = SOA_FULL.transactions;
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [release, premiumDebit, ...rest] }, RANGE),
+    "Transaction History"
+  );
+  const row = table.rows[1];
+  assert.equal(row.particulars, "Insurance premium owed");
+  assert.equal(formatCell(row, table.columns.find((c) => c.key === "debit")!), "₱1,000.00");
+  for (const key of ["amount_paid", "credit", "insurance_applied", "principal_applied", "interest_applied", "penalty_applied"]) {
+    assert.equal(formatCell(row, table.columns.find((c) => c.key === key)!), DASH, key);
+  }
+
+  // Its negative part alone doesn't bring the premium column on.
+  const onlyDebit = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [release, premiumDebit] }, RANGE),
+    "Transaction History"
+  );
+  assert.equal(onlyDebit.columns.some((c) => c.key === "insurance_applied"), false);
 });
 
 test("finding 9: an overpayment joins the paid parts when there is one", () => {

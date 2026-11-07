@@ -564,7 +564,7 @@ function overpaidStatementDoc(): ReportDocument {
         { period_number: 1, due_date: "2026-12-05", beginning_balance: 1080000, principal_due: 92000.54, interest_due: 27000.43, penalty_amount: 1210.85, total_due: 120211.82, build_up_due: 1000, total_payment: 121211.82, total_paid: 119000.97, amount_remaining: 120211.82, status: "overdue" },
       ],
       transactions: [
-        { type: "payment", date: "2026-11-05", receipt_number: "RCP-000012", payment_method: "Bank Transfer", reference_number: "GC1234567890123", particulars: "Payment RCP-000012", credit: 121211.82, principal_applied: 92000.54, interest_applied: 27000.43, penalty_applied: 1210.85, insurance_applied: 0, build_up_applied: 1000, overpayment_applied: 150.5, principal_balance: 987999.46 },
+        { type: "payment", date: "2026-11-05", receipt_number: "RCP-000012", payment_method: "Bank Transfer", reference_number: "GC1234567890123", particulars: "Payment RCP-000012", amount_paid: 121211.82, credit: 121211.82, principal_applied: 92000.54, interest_applied: 27000.43, penalty_applied: 1210.85, insurance_applied: 0, build_up_applied: 1000, overpayment_applied: 150.5, principal_balance: 987999.46 },
       ],
       transaction_totals: { debit: 0, credit: 121211.82, overpayment_applied: 900.25 },
     },
@@ -601,9 +601,9 @@ test("the Overpayment column and its total reach every export, and stay out when
   assert.ok(!(await cellsOf(plain)).includes("Overpayment"), "excel without one");
 });
 
-test("statement pdf: thirteen columns never break a word or a figure", () => {
+test("statement pdf: fourteen columns never break a word or a figure", () => {
   const operands = pdfTextOperands(overpaidStatementDoc());
-  for (const whole of ["Overpayment", "Build-Up", "121,211.82", "987,999.46", "RCP-000012"]) {
+  for (const whole of ["Overpayment", "Build-Up", "Receipt", "121,211.82", "987,999.46", "RCP-000012"]) {
     assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
   }
 });
