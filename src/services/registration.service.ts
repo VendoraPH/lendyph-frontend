@@ -133,7 +133,8 @@ export interface Registration {
   approved_at?: string | null;
   approved_by?: number | null;
 
-  submitted_at: string;
+  /** When the registration was submitted: the submission creates the record. */
+  created_at?: string | null;
 }
 
 // The /borrowers/{id}/valid-ids endpoint returns one grouped row per ID with

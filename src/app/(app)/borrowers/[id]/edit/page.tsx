@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
+import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -393,6 +395,14 @@ function EditBorrowerContent() {
       return;
     }
 
+    // An ID that was started must be complete: the server refuses one with no
+    // number, and an incomplete row must not be dropped without a word.
+    const idCheck = validateValidIds(validIds, { requireAtLeastOne: false });
+    if (!idCheck.ok) {
+      toast.error(sentencesMessage(idCheck.errors.map((e) => e.message)));
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
@@ -434,12 +444,7 @@ function EditBorrowerContent() {
         }
       }
 
-      const validIdsToUpload = validIds.filter(
-        (v) =>
-          v.type &&
-          (v.front_file || v.back_file) &&
-          (v.type !== "others" || v.custom_type_name.trim())
-      );
+      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
       for (const entry of validIdsToUpload) {
         try {
           const idData = new FormData();
@@ -451,8 +456,8 @@ function EditBorrowerContent() {
           if (entry.front_file) idData.append("front_file", entry.front_file);
           if (entry.back_file) idData.append("back_file", entry.back_file);
           await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
-        } catch {
-          toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
+        } catch (err) {
+          notifyError(err, "We couldn't upload this ID. Please try again.");
         }
       }
 
@@ -771,6 +776,7 @@ function EditBorrowerContent() {
                 Civil Status <span className="text-destructive">*</span>
               </Label>
               <Select
+                items={CIVIL_STATUS_OPTIONS}
                 value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >

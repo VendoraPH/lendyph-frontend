@@ -642,7 +642,10 @@ export interface LoanSummary {
   advance_presets?: LoanAdvancePreset[];
   /** What clears the loan today. */
   payoff_amount?: number | string | null;
+  /** Principal, interest and penalty paid only; narrower than Total Paid. */
   total_paid?: number;
+  /** Every posted receipt: what the loan page shows as Total Paid. */
+  total_repaid?: number | string | null;
   principal_paid?: number;
   interest_paid?: number;
   overdue_amount?: number;

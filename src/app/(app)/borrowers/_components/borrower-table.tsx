@@ -42,7 +42,7 @@ import {
   UserX,
 } from "lucide-react";
 import type { Borrower } from "@/types";
-import { statusBadgeColor } from "./utils";
+import { memberStatusLabel, statusBadgeColor } from "./utils";
 import { getInitials } from "@/lib/initials";
 import { BorrowerActionsCell } from "./borrower-actions";
 
@@ -380,7 +380,7 @@ export function BorrowerTable({
                     variant="outline"
                     className={statusBadgeColor[borrower.status]}
                   >
-                    {borrower.status}
+                    {memberStatusLabel(borrower.status)}
                   </Badge>
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>

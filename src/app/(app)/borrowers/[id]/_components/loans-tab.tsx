@@ -17,6 +17,7 @@ import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
 import { formatCurrency, formatRate } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
+import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
 
@@ -58,7 +59,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
               <TableCell className="text-sm text-right tabular-nums font-medium">{formatCurrency(s.amount_due)}</TableCell>
               <TableCell className="text-sm text-right tabular-nums">{formatCurrency(s.amount_paid)}</TableCell>
               <TableCell>
-                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{s.status}</Badge>
+                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{statusInWords(s.status)}</Badge>
               </TableCell>
             </TableRow>
           ))}
