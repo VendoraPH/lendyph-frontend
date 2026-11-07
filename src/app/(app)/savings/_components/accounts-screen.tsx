@@ -9,7 +9,6 @@ import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -25,6 +24,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsService } from "@/services";
 import { statusTabs } from "../_lib/savings-rules";
 import { AccountStatusBadge } from "./account-status-badge";
+import { Kpi } from "./kpi";
 import { OpenAccountDialog } from "./open-account-dialog";
 
 export function AccountsScreen() {
@@ -194,16 +194,5 @@ export function AccountsScreen() {
         onOpened={(account) => router.push(`/savings/accounts/${account.id}`)}
       />
     </div>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
   );
 }

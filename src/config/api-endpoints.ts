@@ -378,6 +378,12 @@ export const API_ENDPOINTS = {
     DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
     WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
     CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+    TIME_DEPOSITS: "/savings/time-deposits",
+    TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
+    TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
+    TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
+    TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
+      `/savings/time-deposits/${id}/pretermination-quote`,
   },
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",

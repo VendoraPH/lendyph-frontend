@@ -119,4 +119,12 @@ export type {
   OpenSavingsAccountInput,
   SavingsTransactionInput,
   CloseSavingsAccountInput,
+  TimeDepositStatus,
+  MaturityInstruction,
+  TimeDeposit,
+  TimeDepositsResponse,
+  PlaceTimeDepositInput,
+  SettleTimeDepositInput,
+  PreterminateTimeDepositInput,
+  PreterminationQuote,
 } from "./savings";

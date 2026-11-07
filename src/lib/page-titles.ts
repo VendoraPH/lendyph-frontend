@@ -30,7 +30,14 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   subsidiary_ledger: "Subsidiary Ledger",
 };
 
-export const PRINTABLE_TITLES: Readonly<Record<PrintableId, string>> = {
+/**
+ * Titles of the documents in the `/printables` catalog. The time deposit
+ * certificate is printed from its placement's page, not the catalog, so it has
+ * no route here.
+ */
+export const PRINTABLE_TITLES: Readonly<
+  Record<Exclude<PrintableId, "time_deposit_certificate">, string>
+> = {
   disclosure_statement: "Disclosure Statement",
   promissory_note: "Promissory Note",
   release_voucher: "Loan Release Voucher",
@@ -58,6 +65,7 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   reports: REPORT_TITLES,
   printables: PRINTABLE_TITLES,
   "credit-scoring": { borrowers: "Member Scores" },
+  savings: { products: "Savings Products", "time-deposits": "Time Deposits" },
 };
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
