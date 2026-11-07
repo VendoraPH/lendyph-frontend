@@ -57,9 +57,18 @@ export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): stri
   return (MODULE_LABELS as Record<string, string>)[log.module] ?? inWords(log.module);
 }
 
-/** The target's kind: the server sends the class name, and a member's class is `Borrower`. */
+/**
+ * The target's kind in words. The server sends the class name ("CoMaker",
+ * "LoanApprovalStep"), and a member's class is `Borrower`.
+ */
 export function auditTargetType(type: string): string {
-  return type.replace(/^Borrower/, "Member");
+  return type
+    .replace(/^Borrower/, "Member")
+    .replace(/CoMaker/g, "Co-maker")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(" ")
+    .map((word, i) => (i === 0 || word === "GCash" ? word : word.toLowerCase()))
+    .join(" ");
 }
 
 /** The row's action: a known label, or the server's key in words. */

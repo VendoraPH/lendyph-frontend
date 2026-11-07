@@ -93,6 +93,11 @@ describe("no API paths or raw data on screen", () => {
     assert.match(text, /process\.env\.NODE_ENV === "development" && \(/);
   });
 
+  test("the Auto-Pay filters say due date in words", () => {
+    const text = source("src/app/(app)/payments/auto-pay/_components/filters-step.tsx");
+    assert.doesNotMatch(text, /due_date within/);
+  });
+
   test("the member Ledger tab never prints the raw report", () => {
     const text = source("src/app/(app)/borrowers/[id]/_components/ledger-tab.tsx");
     assert.doesNotMatch(text, /JSON\.stringify/);

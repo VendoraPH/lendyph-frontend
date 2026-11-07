@@ -1080,7 +1080,7 @@ test("repayments list maps RepaymentResource rows and shows dashes, not page sum
   assert.equal(kpiValue(doc, "Penalty Collected"), DASH);
   assert.equal(tableTotal(doc, "amount"), DASH);
   assert.equal(tableTotal(doc, "penalty_amount"), DASH);
-  assert.equal(tableRows(doc)[0].method, "cash");
+  assert.equal(tableRows(doc)[0].method, "Cash");
 });
 
 test("repayments list uses the server totals and splits principal from interest", () => {
@@ -4153,4 +4153,23 @@ test("every new report leads with a KPI grid and carries at least one table", ()
       `${id} has no table`
     );
   }
+});
+
+test("payment report rows name the method and status in words, never the stored keys", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [
+        { paid_at: "2026-11-06", amount: 2725, method: "gcash", status: "completed" },
+        { paid_at: "2026-11-06", amount: 500, method: "bank_transfer", status: "voided" },
+      ],
+    },
+    RANGE
+  );
+  assert.deepEqual(
+    tableRows(doc).map((row) => [row.method, row.status]),
+    [
+      ["GCash", "Completed"],
+      ["Bank Transfer", "Voided"],
+    ]
+  );
 });

@@ -153,6 +153,28 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
   };
 }
 
+/** How a payment was received, as the app's screens name it. */
+const PAYMENT_METHOD_NAMES: Record<string, string> = {
+  cash: "Cash",
+  gcash: "GCash",
+  maya: "Maya",
+  bank_transfer: "Bank Transfer",
+  online: "Online",
+  auto_pay: "Auto Pay",
+};
+
+/** A stored payment method in words ("bank_transfer" → "Bank Transfer"); anything else as sent. */
+function paymentMethodText(value: unknown): unknown {
+  return typeof value === "string" ? (PAYMENT_METHOD_NAMES[value] ?? value) : value;
+}
+
+/** A stored payment status in words ("completed" → "Completed"). */
+function paymentStatusText(value: unknown): unknown {
+  return typeof value === "string" && value !== ""
+    ? value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
+    : value;
+}
+
 function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unknown> {
   const borrower = asRecord(raw.borrower);
   const loan = asRecord(raw.loan);
@@ -166,8 +188,8 @@ function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unk
       pick(borrower, ["full_name", "name"]),
     amount: pick(raw, ["amount", "amount_paid", "total_amount"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty_applied", "penalty"]),
-    method: pick(raw, ["method", "payment_method"]),
-    status: pick(raw, ["status"]),
+    method: paymentMethodText(pick(raw, ["method", "payment_method"])),
+    status: paymentStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -1173,7 +1195,7 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
     particulars:
       pick(raw, ["particulars", "description", "remarks", "narration"]) ??
       (type ? type.replace(/_/g, " ") : null),
-    method: pick(raw, ["method", "payment_method"]),
+    method: paymentMethodText(pick(raw, ["method", "payment_method"])),
     debit: explicitDebit ?? (isDebit && !isCredit ? amount : null),
     credit: explicitCredit ?? (isCredit ? amount : null),
     running_balance: pick(raw, ["running_balance", "balance", "outstanding_balance"]),
@@ -1187,7 +1209,7 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
  * another figure (principal plus premium), so it is never read for this column.
  */
 function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string, unknown> {
-  const method = pick(raw, ["payment_method", "method"]);
+  const method = paymentMethodText(pick(raw, ["payment_method", "method"]));
   const reference = pick(raw, ["reference_number"]);
   const referenceText = reference ? `Ref. ${reference}` : null;
 
