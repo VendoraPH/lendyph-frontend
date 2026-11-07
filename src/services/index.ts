@@ -30,3 +30,7 @@ export { accountingService } from "./accounting.service";
 export { creditScoringService } from "./credit-scoring.service";
 export { reminderService } from "./reminder.service";
 export { lindaService } from "./linda.service";
+export { savingsProductService } from "./savings-product.service";
+export { savingsAccountService } from "./savings-account.service";
+export { savingsTransactionService } from "./savings-transaction.service";
+export { savingsInterestService } from "./savings-interest.service";
