@@ -18,6 +18,14 @@ import type {
   PortalScheduleRow,
   PortalShareCapital,
   PortalTimeDeposit,
+  PortalDocument,
+  PortalLoanApplication,
+  PortalLoanApplicationSubmit,
+  PortalLoanEligibility,
+  PortalLoanProduct,
+  PortalRequest,
+  PortalRequestSubmit,
+  PortalSavingsProduct,
   PortalConfig,
   PortalDashboard,
   PortalLogin,
@@ -97,4 +105,51 @@ export const portalService = {
 
   /** A PDF statement for the chosen account and period. */
   statement: (params: StatementRequest) => portalApi.download(P.STATEMENT, { params }),
+
+  requests: () => portalApi.get<PortalRequest[]>(P.REQUESTS),
+  submitRequest: (body: PortalRequestSubmit) =>
+    portalApi.upload<PortalRequest>(P.REQUESTS, requestForm(body)),
+  cancelRequest: (id: number) => portalApi.delete<void>(P.REQUEST(id)),
+  /** Answer a "more information needed" request. */
+  replyToRequest: (id: number, message: string, attachments: File[]) => {
+    const form = new FormData();
+    form.append("message", message);
+    attachments.forEach((f) => form.append("attachments[]", f));
+    return portalApi.upload<PortalRequest>(P.REQUEST_REPLY(id), form);
+  },
+  savingsProducts: () => portalApi.get<PortalSavingsProduct[]>(P.SAVINGS_PRODUCTS),
+
+  loanProducts: () => portalApi.get<PortalLoanProduct[]>(P.LOAN_PRODUCTS),
+  loanEligibility: (productId: number) =>
+    portalApi.get<PortalLoanEligibility>(P.LOAN_ELIGIBILITY(productId)),
+  loanApplications: () => portalApi.get<PortalLoanApplication[]>(P.LOAN_APPLICATIONS),
+  submitLoanApplication: (body: PortalLoanApplicationSubmit) =>
+    portalApi.upload<PortalLoanApplication>(P.LOAN_APPLICATIONS, loanApplicationForm(body)),
+  cancelLoanApplication: (id: number) => portalApi.delete<void>(P.LOAN_APPLICATION(id)),
+
+  documents: () => portalApi.get<PortalDocument[]>(P.DOCUMENTS),
+  downloadDocument: (id: number) => portalApi.download(P.DOCUMENT_DOWNLOAD(id)),
 };
+
+function requestForm(body: PortalRequestSubmit): FormData {
+  const form = new FormData();
+  form.append("type", body.type);
+  Object.entries(body.details).forEach(([key, value]) => form.append(`details[${key}]`, value));
+  if (body.remarks) form.append("remarks", body.remarks);
+  body.attachments?.forEach((f) => form.append("attachments[]", f));
+  return form;
+}
+
+function loanApplicationForm(body: PortalLoanApplicationSubmit): FormData {
+  const form = new FormData();
+  const { documents, ...fields } = body;
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    form.append(key, typeof value === "boolean" ? (value ? "1" : "0") : String(value));
+  });
+  documents.forEach((d, i) => {
+    form.append(`documents[${i}][name]`, d.name);
+    form.append(`documents[${i}][file]`, d.file);
+  });
+  return form;
+}

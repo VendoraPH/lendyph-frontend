@@ -466,6 +466,16 @@ export const API_ENDPOINTS = {
     TIME_DEPOSITS: "/portal/time-deposits",
     TIME_DEPOSIT_CERTIFICATE: (id: number | string) => `/portal/time-deposits/${id}/certificate`,
     STATEMENT: "/portal/statements/download",
+    REQUESTS: "/portal/requests",
+    REQUEST: (id: number | string) => `/portal/requests/${id}`,
+    REQUEST_REPLY: (id: number | string) => `/portal/requests/${id}/reply`,
+    SAVINGS_PRODUCTS: "/portal/savings-products",
+    LOAN_PRODUCTS: "/portal/loan-products",
+    LOAN_ELIGIBILITY: (id: number | string) => `/portal/loan-products/${id}/eligibility`,
+    LOAN_APPLICATIONS: "/portal/loan-applications",
+    LOAN_APPLICATION: (id: number | string) => `/portal/loan-applications/${id}`,
+    DOCUMENTS: "/portal/documents",
+    DOCUMENT_DOWNLOAD: (id: number | string) => `/portal/documents/${id}/download`,
   },
   /** Staff-side management of the member portal (staff token, member_portal:*). */
   PORTAL_ADMIN: {
@@ -480,6 +490,8 @@ export const API_ENDPOINTS = {
     BULK_INVITE: "/portal-admin/invitations/bulk",
     PROFILE_REQUESTS: "/portal-admin/profile-requests",
     PROFILE_REQUEST_DECIDE: (id: number | string) => `/portal-admin/profile-requests/${id}/decision`,
+    REQUESTS: "/portal-admin/requests",
+    REQUEST_DECIDE: (id: number | string) => `/portal-admin/requests/${id}/decision`,
   },
   SYSTEM: {
     HEALTH: "/health",

@@ -64,7 +64,10 @@ export const SIDEBAR_NAV: NavItem[] = [
       // Who has online access, invitations and change requests. Behind
       // NEXT_PUBLIC_ENABLE_MEMBER_PORTAL until the backend serves /portal-admin/*.
       ...(env.features.memberPortal
-        ? [{ title: "Portal Access", href: "/borrowers/portal-access", permission: "member_portal:view" as const }]
+        ? [
+            { title: "Portal Access", href: "/borrowers/portal-access", permission: "member_portal:view" as const },
+            { title: "Portal Requests", href: "/borrowers/portal-requests", permission: "member_portal:manage" as const },
+          ]
         : []),
     ],
   },

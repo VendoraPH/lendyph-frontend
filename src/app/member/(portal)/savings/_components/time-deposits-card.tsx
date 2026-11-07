@@ -7,11 +7,13 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { formatCurrency, formatDate, formatRate } from "@/lib/format";
 import { humanize, TONE_CLASS } from "@/lib/portal/labels";
 import { portalService } from "@/services/portal.service";
+import type { PortalTimeDeposit } from "@/types/portal";
+import { Button } from "@/components/ui/button";
 import { DownloadButton } from "../../../_components/download-button";
 import { StatusPill } from "../../../_components/portal-shell";
 
 /** The member's time deposits, each with its certificate. */
-export function TimeDepositsCard() {
+export function TimeDepositsCard({ onInstruct }: { onInstruct?: (td: PortalTimeDeposit) => void }) {
   const fetcher = useCallback(() => portalService.timeDeposits(), []);
   const resource = useApiResource(fetcher);
 
@@ -53,6 +55,11 @@ export function TimeDepositsCard() {
                     filename={`time-deposit-${td.certificate_number}.pdf`}
                     fetchFile={() => portalService.timeDepositCertificate(td.id)}
                   />
+                  {onInstruct && td.status === "active" && (
+                    <Button size="sm" variant="outline" onClick={() => onInstruct(td)}>
+                      Maturity instruction
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
