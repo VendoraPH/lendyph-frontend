@@ -201,6 +201,41 @@ export const REQUEST_TYPES: Record<PortalRequestType, RequestTypeDef> = {
       { key: "reason", label: "Reason", kind: "textarea", required: true },
     ],
   },
+  auto_pay: {
+    label: "Auto-pay",
+    description: "Start, stop or change automatic payments on a loan. Takes effect once the cooperative approves.",
+    features: ["loans", "savings", "auto_pay"],
+    attachments: false,
+    fields: [
+      {
+        key: "action",
+        label: "What to do",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "enable", label: "Start auto-pay" },
+          { value: "update", label: "Change amount or source" },
+          { value: "disable", label: "Stop auto-pay" },
+        ],
+      },
+      { key: "loan_id", label: "Loan", kind: "loan", required: true },
+      {
+        key: "savings_account_id",
+        label: "Pay from savings account",
+        kind: "savings_account",
+        required: true,
+        showIf: { key: "action", values: ["enable", "update"] },
+      },
+      {
+        key: "amount",
+        label: "Amount per payment",
+        kind: "amount",
+        hint: "Leave blank to pay each installment in full.",
+        showIf: { key: "action", values: ["enable", "update"] },
+      },
+      { key: "reason", label: "Reason", kind: "textarea", showIf: { key: "action", values: ["disable"] } },
+    ],
+  },
   other: {
     label: "Something else",
     description: "Any other request for the cooperative.",

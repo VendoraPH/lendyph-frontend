@@ -26,6 +26,12 @@ export interface PortalFeatures {
   profile_updates: boolean;
   gcash_payments: boolean;
   statements: boolean;
+  /** Members see and ask to change automatic loan payments. */
+  auto_pay: boolean;
+  /** Dividend and patronage refund history on the share capital page. */
+  dividends: boolean;
+  /** Help centre: FAQs and support tickets. */
+  help_desk: boolean;
 }
 
 export type DashboardCardKey =
@@ -443,7 +449,11 @@ export interface PortalCollateral {
   id: number;
   type: string;
   description: string;
+  /** Null when the cooperative does not show valuations to members. */
   appraised_value: Money | null;
+  /** e.g. a TCT, OR/CR or plate number. */
+  reference?: string | null;
+  status?: string | null;
 }
 
 /** GET /portal/loans/{id} */
@@ -576,6 +586,7 @@ export type PortalRequestType =
   | "document_request"
   | "membership_concern"
   | "account_closure"
+  | "auto_pay"
   | "other";
 
 export type PortalRequestStatus =
@@ -747,4 +758,208 @@ export interface StaffRequestDecisionBody {
   decision: StaffRequestDecision;
   /** Shown to the member. Required for need_info and reject. */
   response?: string;
+}
+
+// ── Part 4: engagement ─────────────────────────────────────────────────────
+
+export type CreditFactorImpact = "positive" | "negative" | "neutral";
+
+/**
+ * GET /portal/credit-score. Member-safe: a category, a score and plain-language
+ * factors. Never the scorecard's weights, points or rules.
+ */
+export interface PortalCreditScore {
+  category: string | null;
+  score: number | null;
+  max_score: number;
+  as_of: string | null;
+  factors: { label: string; impact: CreditFactorImpact; description?: string | null }[];
+}
+
+export type AutoPayStatus = "active" | "paused" | "pending" | "cancelled" | "failed";
+
+/** A row of GET /portal/auto-pay: one automatic payment arrangement. */
+export interface PortalAutoPay {
+  id: number;
+  loan_id: number;
+  loan_number: string;
+  status: AutoPayStatus;
+  amount: Money;
+  /** e.g. "Every 15th and 30th" — written by the server. */
+  schedule: string;
+  /** e.g. "Savings SA-0012" or "GCash ••1234". */
+  source: string;
+  next_run: string | null;
+  history: { id: number; date: string; amount: Money; status: "success" | "failed" | "skipped"; note: string | null }[];
+}
+
+export type NotificationCategory =
+  | "loans"
+  | "payments"
+  | "savings"
+  | "share_capital"
+  | "requests"
+  | "announcements"
+  | "security"
+  | "other";
+
+/** A row of GET /portal/notifications (paged). */
+export interface PortalNotification {
+  id: number;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+  /** A portal path such as "/member/loans/12"; never an outside URL. */
+  link: string | null;
+}
+
+export interface PortalNotificationFilters {
+  page?: number;
+  per_page?: number;
+  category?: NotificationCategory;
+  unread?: 1;
+}
+
+export type NotificationChannel = "in_app" | "email" | "sms" | "push";
+
+/** One row of GET/PUT /portal/notification-preferences. */
+export interface PortalNotificationPreference {
+  category: NotificationCategory;
+  /** Security alerts: the member cannot switch these off. */
+  mandatory: boolean;
+  in_app: boolean;
+  email: boolean;
+  sms: boolean;
+  push: boolean;
+}
+
+/** GET /portal/announcements and /portal/announcements/{id} */
+export interface PortalAnnouncement {
+  id: number;
+  title: string;
+  body: string;
+  published_at: string;
+  expires_at: string | null;
+  pinned: boolean;
+}
+
+export type AnnouncementAudience = "all" | "branch" | "member_type" | "members";
+export type AnnouncementStatus = "draft" | "scheduled" | "published" | "expired";
+
+/** A row of GET /portal-admin/announcements (paged). */
+export interface StaffAnnouncement extends PortalAnnouncement {
+  status: AnnouncementStatus;
+  audience: AnnouncementAudience;
+  branch_ids: number[];
+  member_types: string[];
+  member_numbers: string[];
+  /** How many members the audience reached when published. */
+  recipients: number | null;
+  created_by: string | null;
+}
+
+/** POST /portal-admin/announcements, PUT /portal-admin/announcements/{id} */
+export interface AnnouncementInput {
+  title: string;
+  body: string;
+  audience: AnnouncementAudience;
+  branch_ids: number[];
+  member_types: string[];
+  member_numbers: string[];
+  /** Blank publishes now; a future time schedules it. */
+  publish_at: string | null;
+  expires_at: string | null;
+  pinned: boolean;
+  /** false saves a draft. */
+  publish: boolean;
+}
+
+export type DividendStatus = "declared" | "pending" | "paid";
+
+/** A row of GET /portal/share-capital/dividends */
+export interface PortalDividend {
+  year: number;
+  dividend: Money;
+  patronage_refund: Money;
+  total: Money;
+  status: DividendStatus;
+  credited_to: "savings" | "share_capital" | "cash" | null;
+  paid_at: string | null;
+}
+
+/** GET /portal/help/faqs */
+export interface PortalFaq {
+  id: number;
+  category: string;
+  question: string;
+  answer: string;
+}
+
+export type TicketStatus = "submitted" | "open" | "in_progress" | "resolved" | "closed";
+export type TicketCategory = "account" | "loans" | "payments" | "savings" | "portal" | "other";
+
+export interface TicketReply {
+  id: number;
+  author: "member" | "staff";
+  author_name: string;
+  message: string;
+  created_at: string;
+  attachments: PortalAttachment[];
+}
+
+/** GET /portal/support-tickets and /portal/support-tickets/{id} */
+export interface SupportTicket {
+  id: number;
+  reference: string;
+  category: TicketCategory;
+  subject: string;
+  message: string;
+  status: TicketStatus;
+  created_at: string;
+  updated_at: string;
+  attachments: PortalAttachment[];
+  replies: TicketReply[];
+}
+
+export interface SupportTicketSubmit {
+  category: TicketCategory;
+  subject: string;
+  message: string;
+  attachments: File[];
+}
+
+/** A row of GET /portal-admin/support-tickets */
+export interface StaffSupportTicket extends SupportTicket {
+  borrower_id: number;
+  member_name: string;
+  member_number: string;
+}
+
+export interface StaffTicketFilters {
+  page?: number;
+  per_page?: number;
+  status?: TicketStatus;
+  search?: string;
+}
+
+/** GET /portal/activity (paged): the member's own history, no audit internals. */
+export interface PortalActivityFilters {
+  page?: number;
+  per_page?: number;
+  kind?: ActivityItem["kind"];
+  from?: string;
+  to?: string;
+}
+
+export type SearchResultKind = "transaction" | "loan" | "document" | "receipt" | "statement" | "request";
+
+/** GET /portal/search?q= — only the member's own records. */
+export interface PortalSearchResult {
+  kind: SearchResultKind;
+  id: number;
+  title: string;
+  subtitle: string | null;
+  date: string | null;
 }

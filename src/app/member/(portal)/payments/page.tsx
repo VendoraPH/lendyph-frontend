@@ -9,6 +9,7 @@ import { PaymentsTable } from "../../_components/payments-table";
 import { usePortalConfig } from "../../_components/portal-config";
 import { PortalPageHeader } from "../../_components/portal-shell";
 import { ServiceOff } from "../../_components/service-off";
+import { AutoPayCard } from "./_components/auto-pay-card";
 
 /** Every payment posted to the member's loans, paged on the server. */
 export default function MemberPaymentsPage() {
@@ -45,6 +46,11 @@ export default function MemberPaymentsPage() {
             </div>
           )}
         </DataState>
+      )}
+      {config.features.loans && config.features.auto_pay && (
+        <div className="mt-5">
+          <AutoPayCard />
+        </div>
       )}
     </>
   );
