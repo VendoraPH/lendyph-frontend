@@ -139,3 +139,67 @@ test("lowering the maximum below a stored default term asks for a new one", () =
   const form = { ...productToForm(STORED_PRODUCT), max_term: "10" };
   assert.equal(defaultTermError(form), "Enter a Default Term between 6 and 10.");
 });
+
+// A product holding only the single charged fee (processing_fee 2.5, service_fee
+// 1.5) has no range. The form filled the empty Min and Max from it, so any save
+// wrote 2.5 and 1.5 into fields nobody had touched.
+const NO_RANGE_PRODUCT = {
+  ...STORED_PRODUCT,
+  processing_fee: "2.5000",
+  min_processing_fee: null,
+  max_processing_fee: null,
+  service_fee: "1.5000",
+  min_service_fee: null,
+  max_service_fee: null,
+} as unknown as LoanProduct;
+
+test("empty min and max fees open empty, not filled from the charged fee", () => {
+  const form = productToForm(NO_RANGE_PRODUCT);
+  assert.equal(form.min_processing_fee, "");
+  assert.equal(form.max_processing_fee, "");
+  assert.equal(form.min_service_fee, "");
+  assert.equal(form.max_service_fee, "");
+});
+
+test("saving a product with empty min and max fees writes no fee into them", () => {
+  const payload = formToApiPayload(productToForm(NO_RANGE_PRODUCT));
+  assert.equal(payload.min_processing_fee, null);
+  assert.equal(payload.max_processing_fee, null);
+  assert.equal(payload.min_service_fee, null);
+  assert.equal(payload.max_service_fee, null);
+});
+
+test("saving a product with no range leaves its charged fee alone", () => {
+  const payload = formToApiPayload(productToForm(NO_RANGE_PRODUCT));
+  assert.equal("processing_fee" in JSON.parse(JSON.stringify(payload)), false);
+  assert.equal("service_fee" in JSON.parse(JSON.stringify(payload)), false);
+});
+
+test("a min or max fee the user set is sent as set, and zero is a value", () => {
+  const payload = formToApiPayload({
+    ...EMPTY_FORM,
+    min_processing_fee: "1.125",
+    max_processing_fee: "2.5",
+    min_service_fee: "0",
+    max_service_fee: "",
+  });
+  assert.equal(payload.min_processing_fee, 1.125);
+  assert.equal(payload.max_processing_fee, 2.5);
+  assert.equal(payload.processing_fee, 2.5);
+  assert.equal(payload.min_service_fee, 0);
+  assert.equal(payload.max_service_fee, null);
+  assert.equal(payload.service_fee, undefined);
+});
+
+test("a stored range opens as stored, and clearing one end clears it", () => {
+  const form = productToForm({
+    ...NO_RANGE_PRODUCT,
+    min_processing_fee: "1.0000",
+    max_processing_fee: "2.5000",
+    min_service_fee: "0.0000",
+  } as unknown as LoanProduct);
+  assert.equal(form.min_processing_fee, "1");
+  assert.equal(form.max_processing_fee, "2.5");
+  assert.equal(form.min_service_fee, "0");
+  assert.equal(formToApiPayload({ ...form, min_processing_fee: "" }).min_processing_fee, null);
+});

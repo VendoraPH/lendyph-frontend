@@ -177,18 +177,47 @@ test("a loan's status change in the summary line reads the same labels", () => {
   assert.equal(auditDescription(row), "Changed status: Draft → For Approval");
 });
 
-test("only a loan's status is relabelled", () => {
+test("a status on any other record reads in words with a capital", () => {
   const user = log({ target: { id: 7, type: "User", label: "Ana" } });
-  assert.equal(auditChangeValue(user, "status", "approved"), "approved");
-  const step = log({ target: { id: 3, type: "LoanApprovalStep", label: "Manager" } });
-  assert.equal(auditChangeValue(step, "status", "for_review"), "for_review");
-  assert.equal(auditChangeValue(log({ target: loanTarget }), "purpose", "for_review"), "for_review");
+  assert.equal(auditChangeValue(user, "status", "approved"), "Approved");
+  const journal = log({ target: { id: 3, type: "AccountingJournal", label: "JE-000001" } });
+  assert.equal(auditChangeValue(journal, "status", "draft"), "Draft");
+  assert.equal(auditChangeValue(journal, "status", "posted"), "Posted");
+  const expense = log({ target: { id: 4, type: "Expense", label: "EXP-1" } });
+  assert.equal(auditChangeValue(expense, "status", "partially_paid"), "Partially paid");
+  assert.equal(auditChangeValue(log({ target: null }), "status", "pending"), "Pending");
 });
 
-test("a status the app has no label for, or a missing value, is left alone", () => {
+test("a status field by another name reads in words too", () => {
+  const row = log({ target: { id: 3, type: "Borrower", label: "Ana" } });
+  assert.equal(auditChangeValue(row, "approval_status", "pending"), "Pending");
+});
+
+test("for_review reads For Approval on every record, never For review", () => {
+  const step = log({ target: { id: 3, type: "LoanApprovalStep", label: "Manager" } });
+  assert.equal(auditChangeValue(step, "status", "for_review"), "For Approval");
+});
+
+test("a value the server already worded keeps its words", () => {
+  const row = log({ target: { id: 3, type: "Expense", label: "EXP-1" } });
+  assert.equal(auditChangeValue(row, "status", "Partially Paid"), "Partially Paid");
+});
+
+test("only status fields are relabelled", () => {
+  assert.equal(auditChangeValue(log({ target: loanTarget }), "purpose", "for_review"), "for_review");
+  assert.equal(auditChangeValue(log({ target: loanTarget }), "frequency", "Semi-Monthly"), "Semi-Monthly");
+});
+
+test("a loan status the app has no label for reads in words, and a missing value stays missing", () => {
   const row = log({ target: loanTarget });
-  assert.equal(auditChangeValue(row, "status", "someday"), "someday");
+  assert.equal(auditChangeValue(row, "status", "someday"), "Someday");
   assert.equal(auditChangeValue(row, "status", null), null);
+});
+
+test("a user's branches read Branches, not Branch Ids", () => {
+  assert.equal(auditFieldLabel("branch_ids"), "branches");
+  const row = log({ changes: [{ field: "branch_ids", old: null, new: "Main Office" }] });
+  assert.equal(auditDescription(row), "Changed branches: — → Main Office");
 });
 
 test("an audit target reads in words, and a member's reads Member, not the class name", () => {

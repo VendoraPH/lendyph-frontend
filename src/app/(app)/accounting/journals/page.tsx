@@ -42,6 +42,7 @@ import {
 } from "../_components/accounting-filters";
 import { JournalEntryDialog } from "../_components/journal-entry-dialog";
 import { JournalReferenceCell } from "../_components/journal-source-document";
+import { journalSourceLabel, journalStatusLabel } from "../_lib/display-labels";
 import { ANY_STATUS, journalStatusItems } from "../_lib/select-items";
 
 const STATUS_STYLES: Record<JournalStatus, string> = {
@@ -186,12 +187,12 @@ function JournalEntriesContent() {
                       <TableCell className="text-sm">{entry.description}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px]">
-                          {entry.source.replace(/_/g, " ")}
+                          {journalSourceLabel(entry.source)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={STATUS_STYLES[entry.status]}>
-                          {entry.status}
+                          {journalStatusLabel(entry.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">

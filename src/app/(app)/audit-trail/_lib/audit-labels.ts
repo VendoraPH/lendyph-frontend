@@ -86,25 +86,38 @@ export function auditUserRole(log: Pick<AuditLog, "user">): string {
   return roleLabelForKey(log.user?.roles?.[0], undefined);
 }
 
-/** A changed field's name with every underscore as a space. */
+/** Changed fields whose key doesn't read as what it holds. */
+const FIELD_LABELS: Record<string, string> = {
+  branch_ids: "branches",
+};
+
+/** A changed field's name, with every underscore as a space. */
 export function auditFieldLabel(field: string): string {
+  if (Object.hasOwn(FIELD_LABELS, field)) return FIELD_LABELS[field];
   return field.split("_").filter(Boolean).join(" ");
 }
 
+function isStatusField(field: string): boolean {
+  return field === "status" || field.endsWith("_status");
+}
+
 /**
- * A changed value as the row shows it. A loan's `status` reads the app's own
- * label (`for_review` reads "For Approval"); any other value, including a status
- * the app has no label for, stays as the server stored it.
+ * A changed value as the row shows it. A status reads in words with a capital
+ * ("Draft", "Posted"): a loan's `status` reads the app's own label, and
+ * `for_review` is "For Approval" on every record. The server words every other
+ * kind of value itself (`AuditLogResource`), so those stay as sent.
  */
 export function auditChangeValue(
   log: Pick<AuditLog, "target">,
   field: string,
   value: string | null,
 ): string | null {
-  if (value === null || field !== "status" || log.target?.type !== "Loan") return value;
-  return Object.hasOwn(LOAN_STATUS_LABELS, value)
-    ? LOAN_STATUS_LABELS[value as keyof typeof LOAN_STATUS_LABELS]
-    : value;
+  if (value === null || !isStatusField(field)) return value;
+  const isLoanStatus = field === "status" && log.target?.type === "Loan";
+  if ((isLoanStatus || value === "for_review") && Object.hasOwn(LOAN_STATUS_LABELS, value)) {
+    return LOAN_STATUS_LABELS[value as keyof typeof LOAN_STATUS_LABELS];
+  }
+  return inWords(value);
 }
 
 /** Bookkeeping fields a deleted row's summary leaves out: the id and timestamps. */

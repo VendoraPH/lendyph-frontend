@@ -225,8 +225,8 @@ function AuditDetailDrawer({
                     <div className="px-3 py-2 space-y-1">
                       {change.old !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-red-100 text-red-600 text-xs font-bold">
-                            &minus;
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-red-100 px-1.5 text-red-600 text-xs font-medium">
+                            Old
                           </span>
                           <span className="text-red-700 break-all">
                             {auditChangeValue(log, change.field, change.old)}
@@ -235,8 +235,8 @@ function AuditDetailDrawer({
                       )}
                       {change.new !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-green-100 text-green-600 text-xs font-bold">
-                            +
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-green-100 px-1.5 text-green-600 text-xs font-medium">
+                            New
                           </span>
                           <span className="text-green-700 break-all">
                             {auditChangeValue(log, change.field, change.new)}

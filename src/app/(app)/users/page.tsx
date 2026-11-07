@@ -85,6 +85,7 @@ import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
+import { USERNAME_PLACEHOLDER, permissionChipLabel } from "./_lib/user-labels";
 import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
 
@@ -102,13 +103,6 @@ const statusBadge: Record<UserStatus, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
 };
-
-function capitalize(s: string) {
-  return s
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 // ── Loading Spinner ──
 
@@ -162,7 +156,6 @@ function RoleSelector({
                 <Users className="h-3.5 w-3.5" />
               </div>
               <p className="text-xs font-medium leading-tight">{roleDisplayName(role)}</p>
-              <p className="font-mono text-[10px] leading-tight text-muted-foreground">{role.name}</p>
               {isInactiveRole(role) && (
                 <p className="text-[10px] leading-tight text-amber-700">Inactive: grants no access</p>
               )}
@@ -180,7 +173,7 @@ function RoleSelector({
               <div className="flex flex-wrap gap-1">
                 {selected.permissions.map((p) => (
                   <span key={p} className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {capitalize(p)}
+                    {permissionChipLabel(p)}
                   </span>
                 ))}
               </div>
@@ -438,7 +431,7 @@ function AddUserDialog({
                 <Input
                   id="add-username"
                   autoComplete="off"
-                  placeholder="juan.dc"
+                  placeholder={USERNAME_PLACEHOLDER}
                   value={form.username}
                   onChange={(e) => update("username", e.target.value)}
                   required

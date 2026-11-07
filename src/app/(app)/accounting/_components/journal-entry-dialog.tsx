@@ -25,6 +25,7 @@ import {
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import type { JournalEntry } from "@/types";
+import { journalStatusLabel } from "../_lib/display-labels";
 import { JournalSourceDocumentNote } from "./journal-source-document";
 
 interface JournalEntryDialogProps {
@@ -70,7 +71,7 @@ export function JournalEntryDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {entry.reference || `Entry #${entry.id}`}
-            <Badge variant="outline">{entry.status}</Badge>
+            <Badge variant="outline">{journalStatusLabel(entry.status)}</Badge>
           </DialogTitle>
           <DialogDescription>
             {formatDate(entry.date)} · {entry.description}

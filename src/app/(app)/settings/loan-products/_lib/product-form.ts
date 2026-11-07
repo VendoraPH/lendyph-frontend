@@ -125,10 +125,12 @@ export function productToForm(p: LoanProduct): ProductForm {
     max_interest_rate: maxRate,
     interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
     interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
-    min_processing_fee: decimalInputValue(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    max_processing_fee: decimalInputValue(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    min_service_fee: decimalInputValue(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee),
-    max_service_fee: decimalInputValue(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee),
+    // Only the stored range. Filling an empty end from `processing_fee` or
+    // `service_fee` wrote those figures into it on the next save.
+    min_processing_fee: decimalInputValue(apiProduct.min_processing_fee),
+    max_processing_fee: decimalInputValue(apiProduct.max_processing_fee),
+    min_service_fee: decimalInputValue(apiProduct.min_service_fee),
+    max_service_fee: decimalInputValue(apiProduct.max_service_fee),
     notarial_fee: decimalInputValue(apiProduct.notarial_fee),
     penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? decimalInputValue(apiProduct.penalty_rate ?? p.penalty_rate) : "",
     grace_period_enabled: gracePeriod > 0,
@@ -139,6 +141,16 @@ export function productToForm(p: LoanProduct): ProductForm {
   };
 }
 
+/** A min or max fee as the user left it: what they typed, or null when empty. */
+function feeBound(value: string): number | null {
+  return value.trim() === "" ? null : Number(value);
+}
+
+/**
+ * The charged `processing_fee` and `service_fee` follow the max fee when one is
+ * set. With no max they aren't sent, so the stored fee stays as it is; the
+ * column can't hold null.
+ */
 export function formToApiPayload(form: ProductForm) {
   return {
     name: form.name,
@@ -158,11 +170,11 @@ export function formToApiPayload(form: ProductForm) {
     term_unit: form.term_unit as "months" | "days",
     frequencies: form.frequencies,
     processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
-    min_processing_fee: form.min_processing_fee ? Number(form.min_processing_fee) : undefined,
-    max_processing_fee: form.max_processing_fee ? Number(form.max_processing_fee) : undefined,
+    min_processing_fee: feeBound(form.min_processing_fee),
+    max_processing_fee: feeBound(form.max_processing_fee),
     service_fee: form.max_service_fee ? Number(form.max_service_fee) : undefined,
-    min_service_fee: form.min_service_fee ? Number(form.min_service_fee) : undefined,
-    max_service_fee: form.max_service_fee ? Number(form.max_service_fee) : undefined,
+    min_service_fee: feeBound(form.min_service_fee),
+    max_service_fee: feeBound(form.max_service_fee),
     notarial_fee: form.notarial_fee ? Number(form.notarial_fee) : undefined,
     penalty_rate: form.penalty_rate ? Number(form.penalty_rate) : undefined,
     grace_period_days: form.grace_period_enabled && form.grace_period_days ? Number(form.grace_period_days) : 0,
