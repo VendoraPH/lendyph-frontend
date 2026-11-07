@@ -7,7 +7,7 @@ import { TableCell } from "@/components/ui/table";
 import { fileUrl } from "@/lib/file-url";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { Registration } from "@/services/registration.service";
-import { reviewerLabel, statusBadgeColor } from "./utils";
+import { memberStatusLabel, reviewerLabel, statusBadgeColor } from "./utils";
 import { getInitials } from "@/lib/initials";
 
 /** The two registration statuses that get a tab of their own. */
@@ -77,7 +77,7 @@ function PendingCells({ reg }: { reg: Registration }) {
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={statusBadgeColor.pending}>
-          pending
+          {memberStatusLabel("pending")}
         </Badge>
       </TableCell>
     </>

@@ -1,7 +1,8 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Borrower, BorrowerLedgerEntry, BorrowerLoanSummary, PaginatedResponse } from "@/types";
+import type { Borrower, BorrowerLoanSummary, PaginatedResponse } from "@/types";
+import type { BorrowerLedgerResponse } from "@/types/borrower";
 
 /** A valid-ID entry as returned grouped (front/back pair) by the API. */
 export interface BorrowerValidId {
@@ -90,8 +91,9 @@ export const borrowerService = {
   deleteValidId: (id: number, validIdId: number) =>
     api.delete(API_ENDPOINTS.BORROWERS.DELETE_VALID_ID(id, validIdId)),
 
-  ledger: (id: number, params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<BorrowerLedgerEntry>>(API_ENDPOINTS.BORROWERS.LEDGER(id), { params }),
+  /** `getRaw`, because `meta.closing` sits beside `data` and `api.get` would drop it. */
+  ledger: (id: number) =>
+    api.getRaw<BorrowerLedgerResponse>(API_ENDPOINTS.BORROWERS.LEDGER(id)),
 
   loanSummary: (id: number) =>
     api.get<BorrowerLoanSummary>(API_ENDPOINTS.BORROWERS.LOAN_SUMMARY(id)),
