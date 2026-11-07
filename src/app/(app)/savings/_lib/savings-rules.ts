@@ -92,6 +92,30 @@ export function withdrawalProblem(
   return null;
 }
 
+/** Holds go on any account that is not closed; a frozen one can still be earmarked. */
+export function canPlaceHold(account: Pick<SavingsAccount, "status">): boolean {
+  return account.status !== "closed";
+}
+
+/**
+ * Why a hold is refused, or null. A hold can earmark the balance not already
+ * held, maintaining balance included (a loan hold may take the whole
+ * balance), and must end after `today` when it ends at all. The server
+ * re-checks both.
+ */
+export function holdProblem(
+  amount: number | null,
+  expiresOn: string,
+  account: Pick<SavingsAccount, "balance" | "hold_amount">,
+  today: string,
+): string | null {
+  if (amount === null) return "Enter the amount to hold.";
+  const holdable = Math.max(0, toAmount(account.balance) - toAmount(account.hold_amount));
+  if (amount > holdable) return `Only ${holdable.toFixed(2)} of the balance is not already on hold.`;
+  if (expiresOn && expiresOn <= today) return "The hold must end after today, or leave the end date blank.";
+  return null;
+}
+
 /** The fields a product form must fix before saving, by label. */
 export function productProblems(input: SavingsProductInput): string[] {
   const problems: string[] = [];

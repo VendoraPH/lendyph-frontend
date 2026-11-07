@@ -267,6 +267,14 @@ export const reportService = {
   provisioning: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
 
+  // Savings (NEXT_PUBLIC_ENABLE_SAVINGS). Paginator envelopes with `totals`,
+  // so getRaw keeps the meta and the server's whole-book figures.
+  savingsBalances: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_BALANCES, { params }),
+
+  timeDepositMaturities: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.TIME_DEPOSIT_MATURITIES, { params }),
+
   // One member's share capital statement: opening balance, entries with a
   // running balance, period credits/debits, closing balance. Accepts
   // date_from/date_to to window the entries.

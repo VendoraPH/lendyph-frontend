@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   canClose,
   canDeposit,
+  canPlaceHold,
   canWithdraw,
+  holdProblem,
   openingDepositProblem,
   parseAmountInput,
   productProblems,
@@ -103,4 +105,23 @@ test("statusTabs totals the server's per-status counts", () => {
     ["closed", 1],
   ]);
   assert.equal(statusTabs(undefined)[0].count, 0);
+});
+
+test("holds go on any account that is not closed", () => {
+  assert.equal(canPlaceHold({ status: "active" }), true);
+  assert.equal(canPlaceHold({ status: "frozen" }), true);
+  assert.equal(canPlaceHold({ status: "dormant" }), true);
+  assert.equal(canPlaceHold({ status: "closed" }), false);
+});
+
+test("a hold earmarks only the balance not already held, and ends after today", () => {
+  const account = { balance: "5000.00", hold_amount: "1500.00" };
+  const today = "2026-11-07";
+  assert.equal(holdProblem(null, "", account, today), "Enter the amount to hold.");
+  assert.equal(holdProblem(3500, "", account, today), null);
+  assert.equal(holdProblem(3500.01, "", account, today), "Only 3500.00 of the balance is not already on hold.");
+  assert.equal(holdProblem(100, "2026-11-07", account, today), "The hold must end after today, or leave the end date blank.");
+  assert.equal(holdProblem(100, "2026-11-08", account, today), null);
+  // Holds already larger than the balance leave nothing to hold, never a negative.
+  assert.equal(holdProblem(1, "", { balance: 100, hold_amount: 200 }, today), "Only 0.00 of the balance is not already on hold.");
 });

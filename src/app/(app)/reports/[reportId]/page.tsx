@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -55,7 +55,7 @@ import {
   Table as TableIcon,
 } from "lucide-react";
 import { borrowerService, reportService } from "@/services";
-import { REPORT_CATALOG } from "../_lib/report-catalog";
+import { visibleReports } from "../_lib/report-catalog";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
@@ -183,17 +183,16 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
-  const report = useMemo(
-    () => REPORT_CATALOG.find((r) => r.id === (reportId as ReportId)),
-    [reportId]
-  );
+  const { user, hasPermission } = useAuth();
+  // A report this deployment or user can't open answers "not found", the
+  // same as an unknown id, so its data is never requested.
+  const report = visibleReports(hasPermission).find((r) => r.id === (reportId as ReportId));
 
   const [preset, setPreset] = useState<Preset>("this_month");
   const [range, setRange] = useState<DateRange>(() =>
     presetRange("this_month", { from: "", to: "" })
   );
   const [branchId, setBranchId] = useState<number | null>(null);
-  const { user, hasPermission } = useAuth();
   // `?member=<id>` opens a member's report with them selected. Reading a member
   // needs `borrowers:view`, the same as the picker; without it nothing is preset.
   const presetId =

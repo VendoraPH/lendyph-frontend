@@ -1,23 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { useAuth } from "@/hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { FileBarChart, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { REPORT_CATALOG } from "./_lib/report-catalog";
+import { visibleReports } from "./_lib/report-catalog";
 import { CATEGORY_META } from "./_lib/types";
 import type { ReportCategory, ReportDefinition } from "./_lib/types";
 
 export default function ReportsPage() {
   const [query, setQuery] = useState("");
+  const { hasPermission } = useAuth();
+  // A score of reports, filtered per render: cheap, and never stale when the
+  // user's permissions change.
+  const catalog = visibleReports(hasPermission);
 
-  const grouped = useMemo(() => {
+  const grouped = (() => {
     const needle = query.trim().toLowerCase();
-    const filtered = REPORT_CATALOG.filter((r) => {
+    const filtered = catalog.filter((r) => {
       if (!needle) return true;
       return (
         r.title.toLowerCase().includes(needle) ||
@@ -31,7 +36,7 @@ export default function ReportsPage() {
       byCategory.set(r.category, list);
     });
     return byCategory;
-  }, [query]);
+  })();
 
   // Derived from CATEGORY_META rather than listed here, in declaration order.
   // A hardcoded list silently hides every report in a category someone forgets
@@ -70,7 +75,7 @@ export default function ReportsPage() {
                     WYSIWYG preview
                   </Badge>
                   <span className="text-muted-foreground">
-                    {REPORT_CATALOG.length} reports available
+                    {catalog.length} reports available
                   </span>
                 </div>
               </div>

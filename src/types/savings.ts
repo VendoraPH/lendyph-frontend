@@ -135,6 +135,42 @@ export interface CloseSavingsAccountInput {
   payout_method: string;
 }
 
+// ── Holds ──
+
+export type SavingsHoldStatus = "active" | "released";
+
+/**
+ * Money set aside on an account: a pending withdrawal, a loan's collateral
+ * hold, a garnishment. An active hold counts in `hold_amount` and comes off
+ * `available_balance`; an account with an active hold cannot be closed.
+ */
+export interface SavingsHold {
+  id: number;
+  account_id: number;
+  amount: number | string;
+  reason: string;
+  /** YYYY-MM-DD the hold took effect. */
+  placed_at: string;
+  /** YYYY-MM-DD the server lifts it on its own, or null to hold until released. */
+  expires_on: string | null;
+  status: SavingsHoldStatus;
+  released_at: string | null;
+  release_reason: string | null;
+  created_by_user?: { id: number; name: string } | null;
+  released_by_user?: { id: number; name: string } | null;
+}
+
+export interface PlaceSavingsHoldInput {
+  amount: number;
+  reason: string;
+  /** YYYY-MM-DD, or omitted to hold until released. */
+  expires_on?: string;
+}
+
+export interface ReleaseSavingsHoldInput {
+  reason: string;
+}
+
 // ── Time deposits ──
 
 export type TimeDepositStatus = "active" | "matured" | "withdrawn" | "rolled_over" | "preterminated";
