@@ -106,3 +106,17 @@ export type {
   CreateCreditDecisionData,
   CreditScoringSettings,
 } from "./credit-scoring";
+export type {
+  SavingsProductKind,
+  InterestPosting,
+  SavingsProduct,
+  SavingsProductInput,
+  SavingsAccountStatus,
+  SavingsAccount,
+  SavingsAccountsResponse,
+  SavingsTransactionType,
+  SavingsTransaction,
+  OpenSavingsAccountInput,
+  SavingsTransactionInput,
+  CloseSavingsAccountInput,
+} from "./savings";

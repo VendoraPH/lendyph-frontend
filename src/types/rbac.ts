@@ -116,7 +116,15 @@ export type Module =
   // Same rule as `credit_scoring`: none of these are granted by the backend,
   // and none should be until the reminder routes exist. The server withholding
   // them is what keeps Loans → Reminders out of production.
-  | "reminders";
+  | "reminders"
+  // ── Savings & Deposits ──
+  //
+  // `view` reads products, accounts and their ledgers; `create` opens an
+  // account; `transact` posts deposits and withdrawals; `close` closes an
+  // account and pays out its balance; `settings` manages savings products.
+  // Same rule as `credit_scoring`: not granted by the backend until the
+  // /savings routes exist (docs/SAVINGS_BACKEND_HANDOFF.md).
+  | "savings";
 
 export type Action =
   | "view"

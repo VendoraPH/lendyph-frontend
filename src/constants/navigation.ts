@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   BookOpenCheck,
   Gauge,
+  PiggyBank,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -106,6 +107,22 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
     ],
   },
+  // Savings & Deposits: hidden unless NEXT_PUBLIC_ENABLE_SAVINGS is on, and
+  // the backend withholds `savings:*` until its /savings routes exist.
+  ...(env.features.savings
+    ? [
+        {
+          title: "Savings",
+          href: "/savings",
+          icon: PiggyBank,
+          permission: "savings:view" as const,
+          children: [
+            { title: "Savings Accounts", href: "/savings" },
+            { title: "Savings Products", href: "/savings/products", permission: "savings:settings" as const },
+          ],
+        },
+      ]
+    : []),
   {
     title: "Collateral",
     href: "/collaterals",
