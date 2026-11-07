@@ -364,6 +364,21 @@ export const API_ENDPOINTS = {
    * so the UI-only screens have one place to be wrong. Re-check against the
    * handoff before trusting any path.
    */
+  /**
+   * Savings & Deposits. Not built on the backend yet (Swagger unreachable when
+   * this was written, so unverified): docs/SAVINGS_BACKEND_HANDOFF.md is the
+   * contract. Every screen shows "Not connected yet" on a 404/501.
+   */
+  SAVINGS: {
+    PRODUCTS: "/savings/products",
+    PRODUCT: (id: number) => `/savings/products/${id}`,
+    ACCOUNTS: "/savings/accounts",
+    ACCOUNT: (id: number) => `/savings/accounts/${id}`,
+    TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
+    DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
+    WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
+    CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+  },
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
     BORROWERS_LIST: "/credit-scoring/borrowers",
