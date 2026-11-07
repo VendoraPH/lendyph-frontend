@@ -116,7 +116,21 @@ export type Module =
   // Same rule as `credit_scoring`: none of these are granted by the backend,
   // and none should be until the reminder routes exist. The server withholding
   // them is what keeps Loans → Reminders out of production.
-  | "reminders";
+  | "reminders"
+  // ── CDA Compliance ──
+  //
+  // `view` reads the dashboard and every report; `prepare` edits drafts and
+  // runs validation; `upload` adds compliance documents; `review` sends a
+  // report back or forward; `approve`, `finalize`, `reopen` (with a reason)
+  // and `submit` (marking it filed with CDA) are each their own step;
+  // `export` generates PDF/Excel; `delete` removes a draft record; `settings`
+  // covers the regulatory profile, templates and deadlines. Officers, social
+  // audit and mediation have their own `manage_*` verbs, and mediation is
+  // also READ-restricted: its case details are confidential.
+  //
+  // Same rule as `credit_scoring`: none are granted by the backend until the
+  // /cda routes exist, and the module is also behind NEXT_PUBLIC_ENABLE_CDA.
+  | "cda";
 
 export type Action =
   | "view"
@@ -163,7 +177,17 @@ export type Action =
   // Loan products: one verb for create, edit and delete, as the API seeds it.
   | "manage"
   // Branch access: see every branch, not only the ones a user is assigned to.
-  | "view_all";
+  | "view_all"
+  // CDA Compliance workflow steps — see the `cda` module above.
+  | "prepare"
+  | "upload"
+  | "review"
+  | "finalize"
+  | "reopen"
+  | "submit"
+  | "manage_officers"
+  | "manage_social"
+  | "manage_mediation";
 
 export type Permission = `${Module}:${Action}`;
 

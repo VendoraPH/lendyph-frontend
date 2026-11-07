@@ -156,6 +156,10 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // CDA Compliance (annual CDA reports). Off by default: the menu and every
+    // /cda route stay hidden until the backend serves /cda/*. Literal
+    // reference for the same reason as above.
+    cda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CDA),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

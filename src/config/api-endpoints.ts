@@ -412,6 +412,39 @@ export const API_ENDPOINTS = {
   LINDA: {
     CHAT: "/linda/chat",
   },
+  /**
+   * CDA Compliance. None of these exist on the backend yet: the contract is
+   * `@/types/cda` plus `docs/CDA_BACKEND_HANDOFF.md`. Until they land every
+   * screen shows "Not connected yet" (404/501). `year` is the fiscal year
+   * reported on.
+   */
+  CDA: {
+    PERIODS: "/cda/periods",
+    PERIOD: (year: number) => `/cda/periods/${year}`,
+    DASHBOARD: (year: number) => `/cda/periods/${year}/dashboard`,
+    CALENDAR: (year: number) => `/cda/periods/${year}/calendar`,
+    REPORT: (year: number, type: string) => `/cda/periods/${year}/reports/${type}`,
+    REPORT_WORKFLOW: (year: number, type: string) =>
+      `/cda/periods/${year}/reports/${type}/workflow`,
+    LOAN_CLASSIFICATION: (year: number) => `/cda/periods/${year}/loan-classification`,
+    PESOS: (year: number) => `/cda/periods/${year}/pesos`,
+    OFFICERS: "/cda/officers",
+    OFFICER: (id: number) => `/cda/officers/${id}`,
+    TRAININGS: "/cda/trainings",
+    TRAINING: (id: number) => `/cda/trainings/${id}`,
+    SOCIAL_PROGRAMS: (year: number) => `/cda/periods/${year}/social-programs`,
+    SOCIAL_PROGRAM: (id: number) => `/cda/social-programs/${id}`,
+    MEDIATION_CASES: (year: number) => `/cda/periods/${year}/mediation-cases`,
+    MEDIATION_CASE: (id: number) => `/cda/mediation-cases/${id}`,
+    DOCUMENTS: (year: number) => `/cda/periods/${year}/documents`,
+    DOCUMENT_VERSIONS: (id: number) => `/cda/documents/${id}/versions`,
+    SUBMISSIONS: (year: number) => `/cda/periods/${year}/submissions`,
+    SUBMISSION: (id: number) => `/cda/submissions/${id}`,
+    REGULATORY_PROFILE: "/cda/regulatory-profile",
+    SETTINGS: "/cda/settings",
+    TEMPLATES: "/cda/templates",
+    TEMPLATE: (id: number) => `/cda/templates/${id}`,
+  },
   /** The signed-in staff user's own in-app notifications (the header bell). */
   NOTIFICATIONS: {
     LIST: "/notifications",

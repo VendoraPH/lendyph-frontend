@@ -2,7 +2,7 @@ import { siteConfig } from "@/config/site";
 import { API_BASE_URL } from "@/lib/axios-client";
 import { buildDocumentReference } from "@/lib/document-reference";
 import { useBrandingStore } from "@/store/branding-store";
-import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./types";
+import type { DocumentId, ReportChrome, ReportDocument, ReportSection } from "./types";
 
 /**
  * Document identity, applied after a report is built.
@@ -21,7 +21,7 @@ import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./ty
  * Exhaustive over `ReportId` on purpose: adding a report without a prefix is a
  * compile error, not a document that quietly references `undefined-20260826`.
  */
-const REFERENCE_PREFIX: Record<ReportId, string> = {
+const REFERENCE_PREFIX: Record<DocumentId, string> = {
   daily_collection: "DCR",
   portfolio_summary: "PSR",
   income_report: "INC",
@@ -39,6 +39,7 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   share_capital: "SCP",
   performance: "PRF",
   provisioning: "PRV",
+  cda_report: "CDA",
 };
 
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */
@@ -52,7 +53,7 @@ const SIGNATORY_ROLES = ["Prepared by", "Checked by", "Approved by"];
  * calendar parts rather than `toISOString()`, which would stamp a
  * Manila-evening report with the previous day's date.
  */
-export function buildReference(reportId: ReportId, at = new Date()): string {
+export function buildReference(reportId: DocumentId, at = new Date()): string {
   return buildDocumentReference(REFERENCE_PREFIX[reportId], at);
 }
 
