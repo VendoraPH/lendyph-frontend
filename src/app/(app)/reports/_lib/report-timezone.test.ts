@@ -33,6 +33,16 @@ test("a server time with no zone is already Philippine time", async () => {
   assert.equal(formatValue("2026-12-05 00:10:00", "date"), "Dec 5, 2026");
 });
 
+test("a printable reads a server time the same way as a report", async () => {
+  const { dateField, dateOrBlank, dateOrDash, dateTimeField } = await import(
+    "@/lib/printables/templates/shared"
+  );
+  assert.match(dateTimeField("Voided on", "2026-08-27 10:02:00").value ?? "", /^Aug 27, 2026.* 10:02.AM$/i);
+  assert.equal(dateField("Date", "2026-08-26").value, "Aug 26, 2026");
+  assert.equal(dateOrBlank("2026-08-26 23:30:00"), "Aug 26, 2026");
+  assert.equal(dateOrDash("2026-08-26"), "Aug 26, 2026");
+});
+
 test("Generated reads in Philippine time", async () => {
   const { formatGeneratedAt } = await format();
   assert.match(formatGeneratedAt(new Date("2026-12-04T16:30:00Z")), /^Dec 5, 2026.* 12:30.AM$/i);
