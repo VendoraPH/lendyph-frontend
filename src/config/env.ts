@@ -156,6 +156,9 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // Credit Scoring. Off by default: the menu and every route stay hidden until
+    // its endpoints stop answering 501. Literal reference for the same reason.
+    creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

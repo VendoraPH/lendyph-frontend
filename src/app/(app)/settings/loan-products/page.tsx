@@ -76,6 +76,7 @@ import type { LoanProduct } from "@/types/loan";
 import { formatCurrency } from "@/lib/format";
 import {
   EMPTY_FORM,
+  PRODUCT_FIELD_LABELS,
   defaultTermError,
   formToApiPayload,
   productToForm,
@@ -208,7 +209,7 @@ function ProductFormDialog({
               Basic Info
             </h3>
             <div className="space-y-2">
-              <Label htmlFor="product-name">Product Name *</Label>
+              <Label htmlFor="product-name">{PRODUCT_FIELD_LABELS.name} *</Label>
               <Input
                 id="product-name"
                 placeholder="e.g. Salary Loan"
@@ -218,7 +219,7 @@ function ProductFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="product-description">Description</Label>
+              <Label htmlFor="product-description">{PRODUCT_FIELD_LABELS.description}</Label>
               <Textarea
                 id="product-description"
                 placeholder="Brief description of this loan product"
@@ -235,7 +236,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-amount">Minimum Amount (PHP) *</Label>
+                <Label htmlFor="min-amount">{PRODUCT_FIELD_LABELS.min_amount} (₱) *</Label>
                 <Input
                   id="min-amount"
                   type="number"
@@ -248,7 +249,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-amount">Maximum Amount (PHP) *</Label>
+                <Label htmlFor="max-amount">{PRODUCT_FIELD_LABELS.max_amount} (₱) *</Label>
                 <Input
                   id="max-amount"
                   type="number"
@@ -263,7 +264,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-term">Minimum Term <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-term">{PRODUCT_FIELD_LABELS.min_term} <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-term"
                   type="number"
@@ -275,7 +276,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-term">Maximum Term <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-term">{PRODUCT_FIELD_LABELS.max_term} <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-term"
                   type="number"
@@ -289,7 +290,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="default-term">Default Term <span className="text-red-500">*</span></Label>
+                <Label htmlFor="default-term">{PRODUCT_FIELD_LABELS.term} <span className="text-red-500">*</span></Label>
                 <Input
                   id="default-term"
                   type="number"
@@ -306,7 +307,7 @@ function ProductFormDialog({
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
+                <Label htmlFor="term-unit">{PRODUCT_FIELD_LABELS.term_unit} <span className="text-red-500">*</span></Label>
                 <Select
                   value={form.term_unit}
                   onValueChange={(v) => update("term_unit", v ?? "months")}
@@ -337,7 +338,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-interest-rate">Min Interest Rate (%) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-interest-rate">{PRODUCT_FIELD_LABELS.min_interest_rate} (%) <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-interest-rate"
                   type="number"
@@ -350,7 +351,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-interest-rate">Max Interest Rate (%) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-interest-rate">{PRODUCT_FIELD_LABELS.max_interest_rate} (%) <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-interest-rate"
                   type="number"
@@ -365,7 +366,7 @@ function ProductFormDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="interest-rate-frequency">
-                Interest Rate Frequency <span className="text-red-500">*</span>
+                {PRODUCT_FIELD_LABELS.interest_rate_frequency} <span className="text-red-500">*</span>
               </Label>
               <p className="text-xs text-muted-foreground">
                 The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
@@ -392,7 +393,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Interest Method *</Label>
+                <Label>{PRODUCT_FIELD_LABELS.interest_method} *</Label>
                 <Select
                   value={form.interest_method}
                   onValueChange={(v) => update("interest_method", v as string)}
@@ -416,7 +417,7 @@ function ProductFormDialog({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Payment Frequency <span className="text-red-500">*</span></Label>
+                <Label>{PRODUCT_FIELD_LABELS.frequencies} <span className="text-red-500">*</span></Label>
                 <Popover>
                   <PopoverTrigger
                     className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -500,7 +501,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Processing Fee (%)</Label>
+                <Label>{PRODUCT_FIELD_LABELS.processing_fee} (%)</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -522,7 +523,7 @@ function ProductFormDialog({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Service Fee (%)</Label>
+                <Label>{PRODUCT_FIELD_LABELS.service_fee} (%)</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -546,7 +547,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="notarial-fee">Notarial Fee (%)</Label>
+                <Label htmlFor="notarial-fee">{PRODUCT_FIELD_LABELS.notarial_fee} (%)</Label>
                 <Input
                   id="notarial-fee"
                   type="number"
@@ -558,7 +559,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="penalty-rate">Penalty Rate (% per month)</Label>
+                <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
                 <Input
                   id="penalty-rate"
                   type="number"
@@ -575,7 +576,7 @@ function ProductFormDialog({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="grace-period-toggle" className="cursor-pointer">
-                  Grace Period
+                  {PRODUCT_FIELD_LABELS.grace_period_days}
                 </Label>
                 <Switch
                   id="grace-period-toggle"
@@ -591,7 +592,7 @@ function ProductFormDialog({
               </div>
               {form.grace_period_enabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="grace-period">Grace Period (days)</Label>
+                  <Label htmlFor="grace-period">{PRODUCT_FIELD_LABELS.grace_period_days} (days)</Label>
                   <Input
                     id="grace-period"
                     type="number"
@@ -641,7 +642,7 @@ function ProductFormDialog({
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                   <div className="space-y-2">
                     <Label htmlFor="min-scb">
-                      Minimum SCB (PHP){" "}
+                      {PRODUCT_FIELD_LABELS.min_scb} (₱){" "}
                       <span className="text-destructive">*</span>
                     </Label>
                     <Input
@@ -657,7 +658,7 @@ function ProductFormDialog({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="max-scb">
-                      Maximum SCB (PHP){" "}
+                      {PRODUCT_FIELD_LABELS.max_scb} (₱){" "}
                       <span className="text-destructive">*</span>
                     </Label>
                     <Input
