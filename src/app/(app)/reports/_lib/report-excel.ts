@@ -1,12 +1,13 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { todayISO } from "@/lib/format";
+import { reportDateForCell } from "@/lib/report-format";
 import type {
   ReportColumn,
   ReportDocument,
   ReportSection,
 } from "./types";
-import { reportScopeLine } from "./types";
+import { orgDetailsLine, reportScopeLine } from "./types";
 
 // Match the on-screen preview's brand look: orange header band, muted subtitle,
 // clean column chrome. These constants are the only styling the exporter
@@ -63,13 +64,22 @@ function coerceValue(value: unknown, col: ReportColumn): unknown {
       return n / 100;
     }
     case "date":
-    case "datetime": {
-      const d = new Date(value as string | number | Date);
-      return Number.isNaN(d.getTime()) ? value : d;
-    }
+    case "datetime":
+      return reportDateForCell(value as string | number | Date) ?? value;
     default:
       return value;
   }
+}
+
+/**
+ * A totals cell. Totals reach the exporters as display text ("₱1,234.50"), so a
+ * money or number column's is read back to a number, which a sheet can add up.
+ * A dash, and any other column's text, stays as it is.
+ */
+function totalCellValue(text: string, col: ReportColumn): string | number {
+  if (col.format !== "currency" && col.format !== "number") return text;
+  const n = Number(text.replace(/[₱,\s]/g, ""));
+  return text.trim() !== "" && Number.isFinite(n) ? n : text;
 }
 
 function applyBorders(row: ExcelJS.Row, from = 1, to = MAX_COL) {
@@ -113,6 +123,17 @@ function writeHeaderBlock(
     fgColor: { argb: BRAND_ORANGE_ARGB },
   };
 
+  const orgDetails = orgDetailsLine(doc.meta);
+  if (orgDetails) {
+    const detailsRow = ws.addRow([orgDetails]);
+    ws.mergeCells(detailsRow.number, 1, detailsRow.number, MAX_COL);
+    detailsRow.height = 16;
+    const c = detailsRow.getCell(1);
+    c.font = { size: 9, color: { argb: "FFFFFFFF" } };
+    c.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BRAND_ORANGE_ARGB } };
+  }
+
   // Period + generated-at strip.
   if (doc.meta.subtitle) {
     const subRow = ws.addRow([doc.meta.subtitle]);
@@ -145,14 +166,20 @@ function writeHeaderBlock(
   return ws.rowCount;
 }
 
-/** One muted left/right strip line spanning the full header width. */
+/**
+ * One muted left/right strip line spanning the full header width.
+ *
+ * The right side is written to column 4, the first cell of its merged band: in
+ * the band's last cell the merge discarded it, which is how the Reference and
+ * Generated lines went missing from the file.
+ */
 function writeMetaRow(ws: ExcelJS.Worksheet, left: string, right: string): void {
-  const row = ws.addRow([left, null, null, null, null, null, right]);
+  const row = ws.addRow([left, null, null, right]);
   row.height = 16;
   row.getCell(1).font = { size: 10, color: { argb: MUTED_ARGB } };
   row.getCell(1).alignment = { horizontal: "left", indent: 1 };
-  row.getCell(MAX_COL).font = { size: 10, color: { argb: MUTED_ARGB } };
-  row.getCell(MAX_COL).alignment = { horizontal: "right", indent: 1 };
+  row.getCell(4).font = { size: 10, color: { argb: MUTED_ARGB } };
+  row.getCell(4).alignment = { horizontal: "right", indent: 1 };
   ws.mergeCells(row.number, 1, row.number, 3);
   ws.mergeCells(row.number, 4, row.number, MAX_COL);
 }
@@ -289,6 +316,7 @@ function writeTable(ws: ExcelJS.Worksheet, section: ReportSection): void {
       };
       const fmt = excelNumFormat(col);
       if (fmt) cell.numFmt = fmt;
+      if (row.voided === true) cell.font = { color: { argb: MUTED_ARGB } };
     });
     applyBorders(xr, 1, columnCount);
   });
@@ -297,7 +325,7 @@ function writeTable(ws: ExcelJS.Worksheet, section: ReportSection): void {
   if (section.totals && section.totals.length > 0) {
     const totalRowValues = section.columns.map((col) => {
       const match = section.totals!.find((t) => t.column === col.key);
-      return match ? match.value : null;
+      return match ? totalCellValue(match.value, col) : null;
     });
     const firstTotalIndex = section.columns.findIndex((c) =>
       section.totals!.some((t) => t.column === c.key)
@@ -320,6 +348,8 @@ function writeTable(ws: ExcelJS.Worksheet, section: ReportSection): void {
         pattern: "solid",
         fgColor: { argb: TOTAL_ROW_BG_ARGB },
       };
+      const fmt = excelNumFormat(col);
+      if (fmt && typeof cell.value === "number") cell.numFmt = fmt;
     });
     applyBorders(tr, 1, columnCount);
   }
@@ -390,6 +420,21 @@ function writeSignatures(ws: ExcelJS.Worksheet, section: ReportSection): void {
     captionRow.getCell(col).font = { size: 9, color: { argb: MUTED_ARGB } };
     captionRow.getCell(col).alignment = { horizontal: "left", indent: 1 };
   });
+
+  // Blank lines under each role, such as the printed name and the date.
+  for (const line of section.lines ?? []) {
+    const lineRow = ws.addRow([]);
+    lineRow.height = 22;
+    section.roles.forEach((_, i) => {
+      const col = i * span + 1;
+      if (col > MAX_COL) return;
+      const cell = lineRow.getCell(col);
+      cell.value = `${line}:`;
+      cell.font = { size: 9, color: { argb: MUTED_ARGB } };
+      cell.alignment = { horizontal: "left", vertical: "bottom", indent: 1 };
+      cell.border = { bottom: { style: "hair", color: { argb: "FF9CA3AF" } } };
+    });
+  }
 
   ws.addRow([]);
 }

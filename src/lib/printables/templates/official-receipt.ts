@@ -12,6 +12,7 @@
  * alongside them.
  */
 
+import { knownPaymentMethodName } from "@/constants/payment-methods";
 import { amountInWords } from "../amount-in-words";
 import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
@@ -35,6 +36,11 @@ import {
 } from "./shared";
 
 const COPIES = ["Member's Copy", "File Copy"];
+
+/** A payment method as the app labels it ("GCash", "Bank Transfer", "Auto-Pay"). */
+function methodLabel(method: unknown): string | null {
+  return knownPaymentMethodName(method) ?? humanize(method);
+}
 
 export function buildOfficialReceiptDoc(
   raw: unknown,
@@ -175,13 +181,14 @@ export function buildOfficialReceiptDoc(
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
-          pick(borrower, ["borrower_code", "member_no", "code"])
+          pick(payment, ["borrower_code"]) ??
+            pick(borrower, ["borrower_code", "member_no", "code"])
         ),
         field(
           "Loan Product",
           pick(payment, ["loan_product_name"]) ?? pick(loan, ["loan_product_name"])
         ),
-        field("Payment Method", humanize(pick(payment, ["method"]))),
+        field("Payment Method", methodLabel(pick(payment, ["method"]))),
         field("Reference No.", pick(payment, ["reference_number"])),
       ]),
     },

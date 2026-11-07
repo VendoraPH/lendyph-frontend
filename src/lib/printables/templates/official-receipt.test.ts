@@ -71,7 +71,7 @@ test("official receipt: payment particulars come off the wire intact", () => {
   assert.equal(fieldValue(doc, "Receipt No."), "OR-20260826-0142");
   assert.equal(fieldValue(doc, "Received from"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
-  assert.equal(fieldValue(doc, "Payment Method"), "Bank transfer");
+  assert.equal(fieldValue(doc, "Payment Method"), "Bank Transfer");
   assert.equal(fieldValue(doc, "Reference No."), "BDO-99881");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
 });
@@ -279,4 +279,23 @@ test("official receipt: the voider is named, never shown as a user id", () => {
 
   const noUser = buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12, voided_by_user: undefined });
   assert.ok(isBlankField(noUser, "Voided by"));
+});
+
+test("official receipt: Member No. reads the repayment's own borrower_code", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, borrower_code: "BRW-000123" });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the repayment's borrower_code wins over a nested member's", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    borrower_code: "BRW-000123",
+    borrower: { borrower_code: "BRW-999999" },
+  });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the payment method reads its label", () => {
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "gcash" }), "Payment Method"), "GCash");
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto-Pay");
 });

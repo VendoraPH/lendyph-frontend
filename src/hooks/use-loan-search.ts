@@ -28,13 +28,16 @@ export function toLoanOption(loan: Loan): LoanOption {
 }
 
 /**
- * `active` is released and ongoing together: both read "Current", so a statement
- * can be picked for either. `view=summary` leaves the schedules out, which a
- * list of names and numbers has no use for.
+ * Every loan that has ever been released, because this picker is how a statement
+ * is asked for, and a member with a paid-off, defaulted or restructured loan can
+ * ask for a final one. `view=summary` leaves the schedules out, which a list of
+ * names and numbers has no use for.
  */
+const STATEMENT_LOAN_STATUSES = "released,ongoing,completed,defaulted,restructured";
+
 export function loanSearchParams(query: string): Record<string, unknown> {
   return {
-    status: "active",
+    status: STATEMENT_LOAN_STATUSES,
     view: "summary",
     per_page: LOAN_PAGE_SIZE,
     ...(query ? { search: query } : {}),
@@ -74,7 +77,7 @@ export interface LoanSearch {
 const fetchLoans = (query: string) => fetchLoanPage(loanService.list, query);
 
 /**
- * Search-as-you-type over `GET /loans?status=active&view=summary`, for the
+ * Search-as-you-type over `GET /loans?view=summary`, every released loan, for the
  * screens that pick a loan by number or member. See `useSearchPage`.
  */
 export function useLoanSearch({ enabled = true }: { enabled?: boolean } = {}): LoanSearch {

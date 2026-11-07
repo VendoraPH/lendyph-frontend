@@ -24,7 +24,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
-import { reportScopeLine } from "./types";
+import { orgDetailsLine, reportScopeLine } from "./types";
 
 // Hex without # — same palette as preview/excel/pdf so the document
 // reads as a sibling artifact, not a different format.
@@ -95,6 +95,7 @@ function decodeLogo(
 
 function buildHeaderTable(report: ReportDocument): Table {
   const logo = decodeLogo(report.meta.logoData);
+  const orgDetails = orgDetailsLine(report.meta);
 
   const brandCell = new TableCell({
     shading: { type: ShadingType.SOLID, fill: BRAND_ORANGE, color: "auto" },
@@ -123,6 +124,13 @@ function buildHeaderTable(report: ReportDocument): Table {
           }),
         ],
       }),
+      ...(orgDetails
+        ? [
+            new Paragraph({
+              children: [new TextRun({ text: orgDetails, color: "FFFFFF", size: 16 })],
+            }),
+          ]
+        : []),
       new Paragraph({
         children: [
           new TextRun({
@@ -350,7 +358,7 @@ function buildDataTable(section: ReportSection): Table | null {
                     new TextRun({
                       text: formatCell(row, col),
                       size: textSize,
-                      color: FOREGROUND,
+                      color: row.voided === true ? MUTED : FOREGROUND,
                     }),
                   ],
                 }),
@@ -468,6 +476,14 @@ function buildSignatureTable(section: ReportSection): Table | null {
         new Paragraph({
           children: [new TextRun({ text: role, color: MUTED, size: 16 })],
         }),
+        // Blank lines under the role, such as the printed name and the date.
+        ...(section.lines ?? []).map(
+          (line) =>
+            new Paragraph({
+              spacing: { before: 120 },
+              children: [new TextRun({ text: `${line}: ______________`, color: MUTED, size: 16 })],
+            })
+        ),
       ],
     });
 

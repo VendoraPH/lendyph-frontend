@@ -104,6 +104,8 @@ export type ReportSection =
   | {
       kind: "signatures";
       roles: string[];
+      /** Blank lines under each role, such as "Name" and "Date". */
+      lines?: string[];
     };
 
 /**
@@ -145,6 +147,9 @@ export interface ReportDocument {
      * it from branding settings, falling back to `siteConfig.name`.
      */
     org: string;
+    /** The organization's address and contact, printed under its name. */
+    orgAddress?: string | null;
+    orgContact?: string | null;
     /** Organization logo, resolved from branding settings at generate time. */
     logoUrl?: string | null;
     /**
@@ -160,6 +165,11 @@ export interface ReportDocument {
     branchLabel?: string | null;
     /** Human-quotable document reference, e.g. `AGE-20260806-1432`. */
     reference?: string | null;
+    /**
+     * What makes this document's reference its own, when it covers one record:
+     * a statement's loan number.
+     */
+    referenceKey?: string;
   };
   sections: ReportSection[];
 }
@@ -169,6 +179,11 @@ export function reportScope(meta: ReportDocument["meta"]): { label: string; valu
   return meta.asOf !== undefined
     ? { label: "As of", value: meta.asOf }
     : { label: "Period:", value: meta.period ?? DASH };
+}
+
+/** The organization's address and contact on one line, or null without either. */
+export function orgDetailsLine(meta: ReportDocument["meta"]): string | null {
+  return [meta.orgAddress, meta.orgContact].filter(Boolean).join("  •  ") || null;
 }
 
 export function reportScopeLine(meta: ReportDocument["meta"]): string {

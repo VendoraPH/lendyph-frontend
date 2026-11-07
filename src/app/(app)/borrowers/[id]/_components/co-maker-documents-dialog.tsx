@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
+import { documentTypeFromName } from "@/lib/document-type";
 
 interface CoMakerDocumentsDialogProps {
   coMakerId: number | null;
@@ -102,7 +103,7 @@ export function CoMakerDocumentsDialog({
       formData.append("file", file);
       formData.append(
         "type",
-        file.name.split(".").pop()?.toLowerCase() || "file"
+        documentTypeFromName(file.name)
       );
       formData.append("label", file.name);
       await documentService.coMakerUpload(coMakerId, formData);
