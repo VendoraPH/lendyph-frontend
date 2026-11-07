@@ -51,15 +51,36 @@ export interface BorrowerLedgerEntry {
   description: string;
   /** The loan account number on a release, the receipt number on a payment. */
   reference: string | null;
-  /** A release's principal; 0 on a payment. */
+  /** What this row raised the balance by; 0 when it lowered it. */
   debit: number;
-  /** A payment's amount paid; 0 on a release. */
+  /** What this row lowered the balance by; 0 when it raised it. */
   credit: number;
-  /**
-   * Principal released less everything paid, interest and penalty included,
-   * so it is neither a Principal Balance nor an Outstanding. Not shown.
-   */
+  /** The member's running balance after this row, from the server. */
+  balance?: number | null;
+  loan_id?: number | null;
+  loan_account_number?: string | null;
+  kind?: string | null;
+  repayment_id?: number | null;
+  /** Payment rows: what the member handed over, which can exceed the credit. */
+  amount_paid?: number | string | null;
+  /** Payment rows: the part that went to the insurance premium owed. */
+  insurance?: number | null;
+  /** Payment rows: the part credited to the Share Capital Build-Up. */
+  scb?: number | null;
+}
+
+/** `meta.closing` of GET /borrowers/{id}/ledger. */
+export interface BorrowerLedgerClosing {
+  principal: number;
+  interest: number;
+  penalty: number;
   balance: number;
+}
+
+/** The whole GET /borrowers/{id}/ledger answer. */
+export interface BorrowerLedgerResponse {
+  data: BorrowerLedgerEntry[];
+  meta?: { closing?: BorrowerLedgerClosing | null };
 }
 
 export interface Borrower {

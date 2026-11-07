@@ -101,6 +101,6 @@ describe("no API paths or raw data on screen", () => {
   test("the member Ledger tab never prints the raw report", () => {
     const text = source("src/app/(app)/borrowers/[id]/_components/ledger-tab.tsx");
     assert.doesNotMatch(text, /JSON\.stringify/);
-    assert.match(text, /href="\/reports\/subsidiary_ledger"/);
+    assert.match(text, /href=\{memberLedgerReportHref\(borrowerId\)\}/);
   });
 });

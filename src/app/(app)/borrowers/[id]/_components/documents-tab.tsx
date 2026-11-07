@@ -17,6 +17,7 @@ import type { Document } from "@/services/document.service";
 import { VALID_ID_OPTIONS } from "@/constants";
 import { fileUrl } from "@/lib/file-url";
 import { ImagePreviewDialog, type PreviewImage } from "@/components/common";
+import { documentTypeFromName } from "@/lib/document-type";
 
 interface DocumentsTabProps {
   borrowerId: number;
@@ -69,7 +70,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("type", file.name.split(".").pop()?.toUpperCase() || "FILE");
+      formData.append("type", documentTypeFromName(file.name).toUpperCase());
       formData.append("label", file.name);
       await documentService.borrowerUpload(borrowerId, formData);
       toast.success("Document uploaded");
