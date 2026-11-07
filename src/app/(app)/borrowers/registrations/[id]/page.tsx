@@ -241,6 +241,7 @@ function RegistrationReviewContent() {
   }
 
   const fullName = `${registration.first_name} ${registration.last_name}`;
+  const submittedAt = registrationSubmittedAt(registration);
   // Drives the copy and hides the review controls: this page is reachable
   // from the Rejected tab, where the decision has already been made.
   const isRejected = registration.status === "rejected";
@@ -283,7 +284,7 @@ function RegistrationReviewContent() {
               {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Submitted {registrationSubmittedAt(registration) ? new Date(registrationSubmittedAt(registration) as string).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
+              Submitted {submittedAt ? new Date(submittedAt).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
               {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
             </p>
           </div>

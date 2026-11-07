@@ -12,7 +12,7 @@
  * alongside them.
  */
 
-import { PAYMENT_METHOD_OPTIONS } from "@/app/(app)/loans/[id]/_lib/payment-method";
+import { knownPaymentMethodName } from "@/constants/payment-methods";
 import { amountInWords } from "../amount-in-words";
 import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
@@ -37,10 +37,9 @@ import {
 
 const COPIES = ["Member's Copy", "File Copy"];
 
-/** A payment method as the app labels it ("GCash", "Bank Transfer"). */
+/** A payment method as the app labels it ("GCash", "Bank Transfer", "Auto-Pay"). */
 function methodLabel(method: unknown): string | null {
-  const known = PAYMENT_METHOD_OPTIONS.find((o) => o.value === method);
-  return known ? known.label : humanize(method);
+  return knownPaymentMethodName(method) ?? humanize(method);
 }
 
 export function buildOfficialReceiptDoc(

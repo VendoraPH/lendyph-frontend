@@ -297,5 +297,5 @@ test("official receipt: the repayment's borrower_code wins over a nested member'
 
 test("official receipt: the payment method reads its label", () => {
   assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "gcash" }), "Payment Method"), "GCash");
-  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto pay");
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto-Pay");
 });
