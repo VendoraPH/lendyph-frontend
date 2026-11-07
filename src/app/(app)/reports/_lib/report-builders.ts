@@ -1434,7 +1434,9 @@ function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, un
     principal_balance: pick(raw, ["outstanding_principal"]),
     outstanding: pick(raw, ["total_outstanding"]),
     overdue: pick(raw, ["overdue_amount", "past_due_amount", "total_overdue"]),
-    status: loanStatusText(pick(raw, ["status"])),
+    // The server's display_status: Past Due for a released or ongoing loan
+    // past grace, as the loans screens read it; otherwise the stored status.
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 
@@ -1495,8 +1497,7 @@ export function buildSubsidiaryLedgerDoc(
             { column: "total_paid", value: currencyOrDash(totalPaid) },
             { column: "principal_balance", value: currencyOrDash(pick(loansTotals, ["outstanding_principal"])) },
             { column: "outstanding", value: currencyOrDash(totalOutstanding) },
-            // No "Past Due" total: the server states no per-loan or overall
-            // overdue figure for the ledger.
+            { column: "overdue", value: currencyOrDash(pick(loansTotals, ["overdue_amount"])) },
           ]
         : undefined,
     emptyText: "This member has no loan accounts on record.",

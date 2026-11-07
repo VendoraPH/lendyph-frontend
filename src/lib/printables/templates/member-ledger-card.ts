@@ -17,6 +17,8 @@
  * column totals from `loans_totals`. One it did not send prints as a dash.
  */
 
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
+import type { LoanStatus } from "@/types/loan";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
@@ -32,6 +34,16 @@ import {
   presentFields,
   type PrintableBuildOptions,
 } from "./shared";
+
+/**
+ * A loan's status as the loans screens name it: the server's display_status
+ * (Past Due for a loan past grace) first, then the stored status.
+ */
+function loanStatusText(value: unknown): unknown {
+  return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as LoanStatus]
+    : humanize(value);
+}
 
 function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -50,7 +62,7 @@ function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown>
     // them. Never the deprecated `outstanding_balance` (principal plus premium).
     principal_balance: pick(raw, ["outstanding_principal"]),
     outstanding: pick(raw, ["total_outstanding"]),
-    status: humanize(pick(raw, ["status"])),
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 

@@ -2222,6 +2222,7 @@ const LEDGER_PAYLOAD = {
       total_outstanding: 34500.25,
       overdue_amount: 5450.5,
       status: "ongoing",
+      display_status: "past_due",
     },
     {
       loan_account_number: "LN-2025-0044",
@@ -2233,6 +2234,7 @@ const LEDGER_PAYLOAD = {
       total_outstanding: 0,
       overdue_amount: 0,
       status: "closed",
+      display_status: "closed",
     },
   ],
   totals: {
@@ -2247,6 +2249,7 @@ const LEDGER_PAYLOAD = {
     total_paid: 51000.5,
     outstanding_principal: 31000,
     total_outstanding: 34500.25,
+    overdue_amount: 5450.5,
   },
 };
 
@@ -2271,13 +2274,15 @@ test("subsidiary ledger lists every loan account for the borrower", () => {
   assert.equal(namedTableTotal(doc, "Loan Accounts", "total_paid"), "₱51,000.50");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "principal_balance"), "₱31,000.00");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "outstanding"), "₱34,500.25");
-  // The server states no overdue figure for the ledger, so none is footed.
-  assert.equal(namedTableTotal(doc, "Loan Accounts", "overdue"), undefined);
+  // The server's Past Due total, from its column totals.
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "overdue"), "₱5,450.50");
 });
 
 test("subsidiary ledger labels each loan's status as the loans screens do", () => {
   const rows = namedTable(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE), "Loan Accounts").rows;
-  assert.deepEqual(rows.map((r) => r.status), ["Current", "Closed"]);
+  // The server's display_status: a loan past grace reads Past Due, as on the loans screens.
+  assert.deepEqual(rows.map((r) => r.status), ["Past Due", "Closed"]);
+  assert.equal(rows[0].overdue, 5450.5);
 });
 
 test("subsidiary ledger reads the branch off the nested relation", () => {
@@ -2340,7 +2345,7 @@ test("the ledger shows dashes, not sums of the accounts, without server totals",
   for (const label of ["Total Loans", "Total Released", "Total Paid", "Outstanding"]) {
     assert.equal(kpiValue(doc, label), DASH, label);
   }
-  for (const column of ["principal", "total_paid", "principal_balance", "outstanding"]) {
+  for (const column of ["principal", "total_paid", "principal_balance", "outstanding", "overdue"]) {
     assert.equal(namedTableTotal(doc, "Loan Accounts", column), DASH, column);
   }
 });
