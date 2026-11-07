@@ -203,3 +203,34 @@ test("a stored range opens as stored, and clearing one end clears it", () => {
   assert.equal(form.min_service_fee, "0");
   assert.equal(formToApiPayload({ ...form, min_processing_fee: "" }).min_processing_fee, null);
 });
+
+/**
+ * The real load and save path, three times over: the edit form is built from
+ * the list row (`productToForm`), saved (`formToApiPayload`), and the server
+ * stores what was sent (a key that's absent keeps its value, null clears it)
+ * and answers the row the list refetches. An untouched product must send null
+ * for every empty fee bound on every save, and never take another product's.
+ */
+function serverUpdate(stored: Record<string, unknown>, payload: Record<string, unknown>) {
+  const sent = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+  const next = { ...stored, ...sent };
+  for (const key of ["processing_fee", "min_processing_fee", "max_processing_fee", "service_fee", "min_service_fee", "max_service_fee"]) {
+    if (next[key] !== null && next[key] !== undefined) next[key] = Number(next[key]).toFixed(4);
+  }
+  return next;
+}
+
+test("saving an untouched product three times sends null for every empty fee bound", () => {
+  const OTHER = { ...STORED_PRODUCT, id: 8, min_service_fee: "1.5000", max_service_fee: "2.5000" } as unknown as LoanProduct;
+  productToForm(OTHER);
+  let stored: Record<string, unknown> = { ...(NO_RANGE_PRODUCT as unknown as Record<string, unknown>), processing_fee: "0.0000", service_fee: "0.0000" };
+  for (let save = 1; save <= 3; save++) {
+    const payload = formToApiPayload(productToForm(stored as unknown as LoanProduct)) as Record<string, unknown>;
+    for (const key of ["min_processing_fee", "max_processing_fee", "min_service_fee", "max_service_fee"]) {
+      assert.equal(payload[key], null, `save ${save}: ${key}`);
+    }
+    stored = serverUpdate(stored, payload);
+  }
+  assert.equal(stored.min_service_fee, null);
+  assert.equal(stored.max_service_fee, null);
+});

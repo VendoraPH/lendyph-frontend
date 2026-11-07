@@ -4,6 +4,7 @@
 import type { AuditLog, AuditModule } from "@/types";
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { roleLabelForKey } from "@/lib/role-display-name";
+import { permissionChipLabel } from "@/app/(app)/users/_lib/user-labels";
 
 const MODULE_LABELS: Record<AuditModule, string> = {
   auth: "Auth",
@@ -88,7 +89,11 @@ export function auditUserRole(log: Pick<AuditLog, "user">): string {
 
 /** Changed fields whose key doesn't read as what it holds. */
 const FIELD_LABELS: Record<string, string> = {
+  branch_id: "branch",
   branch_ids: "branches",
+  account_officer_id: "account officer",
+  applicable_product_ids: "applicable products",
+  loan_product_id: "loan product",
 };
 
 /** A changed field's name, with every underscore as a space. */
@@ -112,12 +117,41 @@ export function auditChangeValue(
   field: string,
   value: string | null,
 ): string | null {
-  if (value === null || !isStatusField(field)) return value;
+  if (value === null) return value;
+  if (field === "permissions") return permissionsInWords(value);
+  if (!isStatusField(field)) return value;
   const isLoanStatus = field === "status" && log.target?.type === "Loan";
   if ((isLoanStatus || value === "for_review") && Object.hasOwn(LOAN_STATUS_LABELS, value)) {
     return LOAN_STATUS_LABELS[value as keyof typeof LOAN_STATUS_LABELS];
   }
   return inWords(value);
+}
+
+const PERMISSION_KEY = /^[a-z_]+:[a-z_]+$/;
+
+/** "auto_pay:view, borrowers:view" → "Auto-Pay: View, Members: View". Anything else stays as sent. */
+function permissionsInWords(value: string): string {
+  return value
+    .split(", ")
+    .map((part) => (PERMISSION_KEY.test(part) ? permissionChipLabel(part) : part))
+    .join(", ");
+}
+
+/**
+ * A change's old and new values as the row shows them. When two different
+ * stored statuses read the same ("released" and "ongoing" both read
+ * "Current"), each side reads its stored status in words instead.
+ */
+export function auditChangePair(
+  log: Pick<AuditLog, "target">,
+  change: { field: string; old: string | null; new: string | null },
+): { old: string | null; new: string | null } {
+  const old = auditChangeValue(log, change.field, change.old);
+  const next = auditChangeValue(log, change.field, change.new);
+  if (old !== null && old === next && change.old !== change.new && isStatusField(change.field)) {
+    return { old: inWords(change.old as string), new: inWords(change.new as string) };
+  }
+  return { old, new: next };
 }
 
 /** Bookkeeping fields a deleted row's summary leaves out: the id and timestamps. */
@@ -152,9 +186,9 @@ export function auditDescription(
   }
 
   if (changes.length === 0) return "";
-  const parts = changes.map(
-    (c) =>
-      `${auditFieldLabel(c.field)}: ${auditChangeValue(log, c.field, c.old) ?? "—"} → ${auditChangeValue(log, c.field, c.new) ?? "—"}`
-  );
+  const parts = changes.map((c) => {
+    const pair = auditChangePair(log, c);
+    return `${auditFieldLabel(c.field)}: ${pair.old ?? "—"} → ${pair.new ?? "—"}`;
+  });
   return `Changed ${parts.join("; ")}`;
 }

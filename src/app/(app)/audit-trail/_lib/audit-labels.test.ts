@@ -4,6 +4,7 @@ import type { AuditLog } from "@/types";
 import {
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
+  auditChangePair,
   auditChangeValue,
   auditDescription,
   auditFieldLabel,
@@ -232,4 +233,48 @@ test("an audit target reads in words, and a member's reads Member, not the class
 test("the module filter says Members and still sends borrowers", () => {
   const option = AUDIT_MODULE_OPTIONS.find((o) => o.value === "borrowers");
   assert.equal(option?.label, "Members");
+});
+
+test("id fields the server sends as names read without Id", () => {
+  assert.equal(auditFieldLabel("branch_id"), "branch");
+  assert.equal(auditFieldLabel("account_officer_id"), "account officer");
+  assert.equal(auditFieldLabel("applicable_product_ids"), "applicable products");
+  assert.equal(auditFieldLabel("loan_product_id"), "loan product");
+});
+
+const roleRow = log({ target: role });
+
+test("a role's permissions read in words on both sides", () => {
+  assert.equal(
+    auditChangeValue(roleRow, "permissions", "auto_pay:view, borrowers:view, loans:write_off"),
+    "Auto-Pay: View, Members: View, Loans: Write Off",
+  );
+  const pair = auditChangePair(roleRow, { field: "permissions", old: "borrowers:view", new: "borrowers:view, gcash:transact" });
+  assert.deepEqual(pair, { old: "Members: View", new: "Members: View, GCash: Transact" });
+});
+
+test("a permission value that isn't a key stays as it is", () => {
+  assert.equal(auditChangeValue(roleRow, "permissions", "borrowers:view, 3 more"), "Members: View, 3 more");
+  assert.equal(auditChangeValue(roleRow, "permissions", "none"), "none");
+});
+
+test("two statuses that read the same show each side's stored status in words", () => {
+  const row = log({ target: loanTarget });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: "released", new: "ongoing" }), {
+    old: "Released",
+    new: "Ongoing",
+  });
+  assert.equal(
+    auditDescription(log({ target: loanTarget, changes: [{ field: "status", old: "released", new: "ongoing" }] })),
+    "Changed status: Released → Ongoing",
+  );
+});
+
+test("statuses that read differently keep the app's labels", () => {
+  const row = log({ target: loanTarget });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: "draft", new: "for_review" }), {
+    old: "Draft",
+    new: "For Approval",
+  });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: null, new: "ongoing" }), { old: null, new: "Current" });
 });

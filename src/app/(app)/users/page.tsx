@@ -85,7 +85,7 @@ import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
-import { USERNAME_PLACEHOLDER, permissionChipLabel } from "./_lib/user-labels";
+import { USERNAME_PLACEHOLDER, permissionChipLabel, userStatusLabel } from "./_lib/user-labels";
 import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
 
@@ -1233,7 +1233,7 @@ function UsersContent() {
                           variant="outline"
                           className={statusBadge[user.status]}
                         >
-                          {user.status}
+                          {userStatusLabel(user.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>

@@ -52,7 +52,7 @@ import type { AuditLog, AuditAction } from "@/types";
 import {
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
-  auditChangeValue,
+  auditChangePair,
   auditDescription,
   auditFieldLabel,
   auditModuleLabel,
@@ -229,7 +229,7 @@ function AuditDetailDrawer({
                             Old
                           </span>
                           <span className="text-red-700 break-all">
-                            {auditChangeValue(log, change.field, change.old)}
+                            {auditChangePair(log, change).old}
                           </span>
                         </div>
                       )}
@@ -239,7 +239,7 @@ function AuditDetailDrawer({
                             New
                           </span>
                           <span className="text-green-700 break-all">
-                            {auditChangeValue(log, change.field, change.new)}
+                            {auditChangePair(log, change).new}
                           </span>
                         </div>
                       )}
