@@ -123,7 +123,7 @@ function AutoCreditContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Auto-Credit Pledges</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Auto-Credit</h1>
         <p className="text-muted-foreground">
           Initiate auto-credit of all active pledge entries
         </p>

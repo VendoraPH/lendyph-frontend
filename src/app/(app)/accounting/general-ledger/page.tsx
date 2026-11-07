@@ -22,6 +22,7 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
+import { journalSourceLabel } from "../_lib/display-labels";
 import {
   ALL_BRANCHES,
   BranchFilter,
@@ -143,7 +144,7 @@ function GeneralLedgerContent() {
                         <TableCell className="text-sm">{row.description}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">
-                            {row.source.replace(/_/g, " ")}
+                            {journalSourceLabel(row.source)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">

@@ -4,6 +4,7 @@ import type { AuditLog } from "@/types";
 import {
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
+  auditChangePair,
   auditChangeValue,
   auditDescription,
   auditFieldLabel,
@@ -177,18 +178,47 @@ test("a loan's status change in the summary line reads the same labels", () => {
   assert.equal(auditDescription(row), "Changed status: Draft → For Approval");
 });
 
-test("only a loan's status is relabelled", () => {
+test("a status on any other record reads in words with a capital", () => {
   const user = log({ target: { id: 7, type: "User", label: "Ana" } });
-  assert.equal(auditChangeValue(user, "status", "approved"), "approved");
-  const step = log({ target: { id: 3, type: "LoanApprovalStep", label: "Manager" } });
-  assert.equal(auditChangeValue(step, "status", "for_review"), "for_review");
-  assert.equal(auditChangeValue(log({ target: loanTarget }), "purpose", "for_review"), "for_review");
+  assert.equal(auditChangeValue(user, "status", "approved"), "Approved");
+  const journal = log({ target: { id: 3, type: "AccountingJournal", label: "JE-000001" } });
+  assert.equal(auditChangeValue(journal, "status", "draft"), "Draft");
+  assert.equal(auditChangeValue(journal, "status", "posted"), "Posted");
+  const expense = log({ target: { id: 4, type: "Expense", label: "EXP-1" } });
+  assert.equal(auditChangeValue(expense, "status", "partially_paid"), "Partially paid");
+  assert.equal(auditChangeValue(log({ target: null }), "status", "pending"), "Pending");
 });
 
-test("a status the app has no label for, or a missing value, is left alone", () => {
+test("a status field by another name reads in words too", () => {
+  const row = log({ target: { id: 3, type: "Borrower", label: "Ana" } });
+  assert.equal(auditChangeValue(row, "approval_status", "pending"), "Pending");
+});
+
+test("for_review reads For Approval on every record, never For review", () => {
+  const step = log({ target: { id: 3, type: "LoanApprovalStep", label: "Manager" } });
+  assert.equal(auditChangeValue(step, "status", "for_review"), "For Approval");
+});
+
+test("a value the server already worded keeps its words", () => {
+  const row = log({ target: { id: 3, type: "Expense", label: "EXP-1" } });
+  assert.equal(auditChangeValue(row, "status", "Partially Paid"), "Partially Paid");
+});
+
+test("only status fields are relabelled", () => {
+  assert.equal(auditChangeValue(log({ target: loanTarget }), "purpose", "for_review"), "for_review");
+  assert.equal(auditChangeValue(log({ target: loanTarget }), "frequency", "Semi-Monthly"), "Semi-Monthly");
+});
+
+test("a loan status the app has no label for reads in words, and a missing value stays missing", () => {
   const row = log({ target: loanTarget });
-  assert.equal(auditChangeValue(row, "status", "someday"), "someday");
+  assert.equal(auditChangeValue(row, "status", "someday"), "Someday");
   assert.equal(auditChangeValue(row, "status", null), null);
+});
+
+test("a user's branches read Branches, not Branch Ids", () => {
+  assert.equal(auditFieldLabel("branch_ids"), "branches");
+  const row = log({ changes: [{ field: "branch_ids", old: null, new: "Main Office" }] });
+  assert.equal(auditDescription(row), "Changed branches: — → Main Office");
 });
 
 test("an audit target reads in words, and a member's reads Member, not the class name", () => {
@@ -203,4 +233,75 @@ test("an audit target reads in words, and a member's reads Member, not the class
 test("the module filter says Members and still sends borrowers", () => {
   const option = AUDIT_MODULE_OPTIONS.find((o) => o.value === "borrowers");
   assert.equal(option?.label, "Members");
+});
+
+test("id fields the server sends as names read without Id", () => {
+  assert.equal(auditFieldLabel("branch_id"), "branch");
+  assert.equal(auditFieldLabel("account_officer_id"), "account officer");
+  assert.equal(auditFieldLabel("applicable_product_ids"), "applicable products");
+  assert.equal(auditFieldLabel("loan_product_id"), "loan product");
+});
+
+const roleRow = log({ target: role });
+
+test("a role's permissions read in words on both sides", () => {
+  assert.equal(
+    auditChangeValue(roleRow, "permissions", "auto_pay:view, borrowers:view, loans:write_off"),
+    "Auto-Pay: View, Members: View, Loans: Write Off",
+  );
+  const pair = auditChangePair(roleRow, { field: "permissions", old: "borrowers:view", new: "borrowers:view, gcash:transact" });
+  assert.deepEqual(pair, { old: "Members: View", new: "Members: View, GCash: Transact" });
+});
+
+test("a permission value that isn't a key stays as it is", () => {
+  assert.equal(auditChangeValue(roleRow, "permissions", "borrowers:view, 3 more"), "Members: View, 3 more");
+  assert.equal(auditChangeValue(roleRow, "permissions", "none"), "none");
+});
+
+test("two statuses that read the same show each side's stored status in words", () => {
+  const row = log({ target: loanTarget });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: "released", new: "ongoing" }), {
+    old: "Released",
+    new: "Ongoing",
+  });
+  assert.equal(
+    auditDescription(log({ target: loanTarget, changes: [{ field: "status", old: "released", new: "ongoing" }] })),
+    "Changed status: Released → Ongoing",
+  );
+});
+
+test("statuses that read differently keep the app's labels", () => {
+  const row = log({ target: loanTarget });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: "draft", new: "for_review" }), {
+    old: "Draft",
+    new: "For Approval",
+  });
+  assert.deepEqual(auditChangePair(row, { field: "status", old: null, new: "ongoing" }), { old: null, new: "Current" });
+});
+
+test("more id fields the server sends as names read without Id", () => {
+  assert.equal(auditFieldLabel("step_id"), "step");
+  assert.equal(auditFieldLabel("source_loan_id"), "source loan");
+  assert.equal(auditFieldLabel("restructured_into_loan_id"), "restructured into loan");
+  assert.equal(auditFieldLabel("inherited_collateral_ids"), "inherited collaterals");
+});
+
+const productTarget = { id: 4, type: "LoanProduct", label: "Salary Loan" };
+
+test("a loan product's fields read as the product form names them", () => {
+  const product = { type: "LoanProduct" };
+  assert.equal(auditFieldLabel("max_scb", product), "Maximum Share Capital Build-Up");
+  assert.equal(auditFieldLabel("min_scb", product), "Minimum Share Capital Build-Up");
+  assert.equal(auditFieldLabel("scb_required", product), "Share Capital Build-Up Required");
+  assert.equal(auditFieldLabel("term", product), "Default Term");
+  assert.equal(auditFieldLabel("grace_period_days", product), "Grace Period");
+  assert.equal(
+    auditDescription(log({ target: productTarget, changes: [{ field: "max_scb", old: "₱100.00", new: "₱200.00" }] })),
+    "Changed Maximum Share Capital Build-Up: ₱100.00 → ₱200.00",
+  );
+});
+
+test("the same field on another record keeps its plain words", () => {
+  assert.equal(auditFieldLabel("max_scb", { type: "Loan" }), "max scb");
+  assert.equal(auditFieldLabel("term"), "term");
 });

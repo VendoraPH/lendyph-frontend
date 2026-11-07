@@ -64,7 +64,19 @@ const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
 const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   reports: REPORT_TITLES,
   printables: PRINTABLE_TITLES,
-  "credit-scoring": { borrowers: "Member Scores" },
+  "credit-scoring": {
+    borrowers: "Member Scores",
+    assessment: "Credit Assessment",
+    "scorecard-configuration": "Scorecard Configuration",
+    "risk-monitoring": "Risk Monitoring",
+    "score-history": "Score History",
+  },
+  payments: { history: "Payment History" },
+  "share-capital": {
+    ledger: "Subsidiary Ledger",
+    pledges: "Pledge Entry",
+    "auto-credit": "Auto-Credit",
+  },
   savings: { products: "Savings Products", "time-deposits": "Time Deposits" },
 };
 
