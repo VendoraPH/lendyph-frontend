@@ -44,15 +44,22 @@ export interface BorrowerLoanSummary {
   counts: Record<string, number>;
 }
 
+/** One row of GET /borrowers/{id}/ledger (`BorrowerController::ledger()`). */
 export interface BorrowerLedgerEntry {
   id: number;
   date: string;
-  type: "debit" | "credit";
   description: string;
-  amount: number;
-  running_balance: number;
-  reference_id?: number;
-  reference_type?: string;
+  /** The loan account number on a release, the receipt number on a payment. */
+  reference: string | null;
+  /** A release's principal; 0 on a payment. */
+  debit: number;
+  /** A payment's amount paid; 0 on a release. */
+  credit: number;
+  /**
+   * Principal released less everything paid, interest and penalty included,
+   * so it is neither a Principal Balance nor an Outstanding. Not shown.
+   */
+  balance: number;
 }
 
 export interface Borrower {
