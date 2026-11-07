@@ -39,6 +39,7 @@ test("every printable has its own prefix", () => {
   assert.equal(buildPrintableReference("amortization_schedule", at), "AMS-20260826-0142");
   assert.equal(buildPrintableReference("share_capital_certificate", at), "SCC-20260826-0142");
   assert.equal(buildPrintableReference("member_ledger_card", at), "MLC-20260826-0142");
+  assert.equal(buildPrintableReference("time_deposit_certificate", at), "TDC-20260826-0142");
 });
 
 test("the reference is stamped from local calendar parts, not UTC", () => {

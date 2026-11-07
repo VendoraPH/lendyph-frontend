@@ -61,6 +61,9 @@ const product: SavingsProductInput = {
   maintaining_balance: 500,
   minimum_balance_for_interest: 1000,
   dormant_after_days: 730,
+  withholding_tax_rate: 20,
+  term_options_days: null,
+  pretermination_rate: null,
   is_active: true,
 };
 
@@ -71,6 +74,23 @@ test("productProblems lists every invalid field", () => {
     ["Code", "Interest rate (0–100%)", "Dormant after (days)"],
   );
   assert.deepEqual(productProblems({ ...product, dormant_after_days: null }), []);
+  assert.deepEqual(productProblems({ ...product, withholding_tax_rate: 101 }), ["Withholding tax (0–100%)"]);
+});
+
+test("productProblems checks a time deposit's terms and pre-termination rate", () => {
+  const td: SavingsProductInput = {
+    ...product,
+    kind: "time_deposit",
+    annual_interest_rate: 4,
+    dormant_after_days: 0, // ignored for time deposits
+    term_options_days: [90, 180],
+    pretermination_rate: 1,
+  };
+  assert.deepEqual(productProblems(td), []);
+  assert.deepEqual(productProblems({ ...td, term_options_days: [] }), ["Terms offered (days)"]);
+  assert.deepEqual(productProblems({ ...td, pretermination_rate: 5 }), [
+    "Pre-termination rate (0 up to the regular rate)",
+  ]);
 });
 
 test("statusTabs totals the server's per-status counts", () => {

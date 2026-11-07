@@ -12,12 +12,18 @@ import type {
   CloseSavingsAccountInput,
   OpenSavingsAccountInput,
   PaginatedResponse,
+  PlaceTimeDepositInput,
+  PreterminateTimeDepositInput,
+  PreterminationQuote,
   SavingsAccount,
   SavingsAccountsResponse,
   SavingsProduct,
   SavingsProductInput,
   SavingsTransaction,
   SavingsTransactionInput,
+  SettleTimeDepositInput,
+  TimeDeposit,
+  TimeDepositsResponse,
 } from "@/types";
 
 const E = API_ENDPOINTS.SAVINGS;
@@ -56,4 +62,24 @@ export const savingsService = {
     api.post<SavingsTransaction>(E.DEPOSITS(id), data),
   withdraw: (id: number, data: SavingsTransactionInput) =>
     api.post<SavingsTransaction>(E.WITHDRAWALS(id), data),
+
+  // ── Time deposits ──
+
+  /**
+   * One page of placements, `getRaw` so `meta` survives. Params: `page`,
+   * `per_page` (≤ 100), `search` (certificate no., member name or code),
+   * `status`, `product_id`, `branch_id`, `borrower_id`.
+   */
+  timeDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw<TimeDepositsResponse>(E.TIME_DEPOSITS, { params }),
+  timeDeposit: (id: number) => api.get<TimeDeposit>(E.TIME_DEPOSIT(id)),
+  /** The server computes interest, tax and the maturity date; the form's figures are an estimate. */
+  placeTimeDeposit: (data: PlaceTimeDepositInput) => api.post<TimeDeposit>(E.TIME_DEPOSITS, data),
+  /** At or after maturity. A rollover links the new placement through `rolled_over_to_id`. */
+  settleTimeDeposit: (id: number, data: SettleTimeDepositInput) =>
+    api.post<TimeDeposit>(E.TIME_DEPOSIT_SETTLE(id), data),
+  preterminationQuote: (id: number, date: string) =>
+    api.get<PreterminationQuote>(E.TIME_DEPOSIT_PRETERMINATION_QUOTE(id), { params: { date } }),
+  preterminateTimeDeposit: (id: number, data: PreterminateTimeDepositInput) =>
+    api.post<TimeDeposit>(E.TIME_DEPOSIT_PRETERMINATE(id), data),
 };
