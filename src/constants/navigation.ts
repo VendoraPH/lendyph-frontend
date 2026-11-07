@@ -118,6 +118,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           permission: "savings:view" as const,
           children: [
             { title: "Savings Accounts", href: "/savings" },
+            { title: "Time Deposits", href: "/savings/time-deposits" },
             { title: "Savings Products", href: "/savings/products", permission: "savings:settings" as const },
           ],
         },

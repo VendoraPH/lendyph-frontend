@@ -102,7 +102,17 @@ export function productProblems(input: SavingsProductInput): string[] {
   if (toAmount(input.minimum_opening_balance) < 0) problems.push("Minimum opening balance");
   if (toAmount(input.maintaining_balance) < 0) problems.push("Maintaining balance");
   if (toAmount(input.minimum_balance_for_interest) < 0) problems.push("Minimum balance to earn interest");
-  if (input.dormant_after_days !== null && (!Number.isInteger(input.dormant_after_days) || input.dormant_after_days < 1)) {
+  const tax = toAmount(input.withholding_tax_rate);
+  if (tax < 0 || tax > 100) problems.push("Withholding tax (0–100%)");
+  if (input.kind === "time_deposit") {
+    const terms = input.term_options_days ?? [];
+    if (terms.length === 0 || terms.some((d) => !Number.isInteger(d) || d < 1)) problems.push("Terms offered (days)");
+    const pre = toAmount(input.pretermination_rate);
+    if (pre < 0 || pre > rate) problems.push("Pre-termination rate (0 up to the regular rate)");
+  } else if (
+    input.dormant_after_days !== null &&
+    (!Number.isInteger(input.dormant_after_days) || input.dormant_after_days < 1)
+  ) {
     problems.push("Dormant after (days)");
   }
   return problems;

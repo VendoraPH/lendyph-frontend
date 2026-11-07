@@ -1,4 +1,4 @@
-# Savings & Deposits: backend handoff (Part 1: products, accounts, transactions)
+# Savings & Deposits: backend handoff (Parts 1–2: products, accounts, transactions, time deposits)
 
 Built frontend-only behind `NEXT_PUBLIC_ENABLE_SAVINGS` (off by default). The
 Swagger at `api-lendyph.abedubas.dev` was unreachable (404) when this was
@@ -40,7 +40,34 @@ Money is `decimal:2`. Dates are `YYYY-MM-DD` in Asia/Manila.
 - An account with no member transaction for `dormant_after_days` turns `dormant`. Interest postings do not count as activity.
 - `frozen` is set by staff or by a hold order; it blocks withdrawals and deposits. (No screen sets it yet.)
 
+## Part 2: time deposits
+
+### Product fields (both kinds)
+
+- `withholding_tax_rate`: percent 0–100 on interest (0 where members are exempt). Applies to regular-savings interest postings too.
+- `term_options_days`: `int[]`, required and non-empty for `kind: time_deposit`, null for `regular`.
+- `pretermination_rate`: percent per year, 0 up to `annual_interest_rate`, for `time_deposit` only.
+- `kind` cannot change after create (422). One rate per TD product; a coop with rates by term makes one product per term.
+
+### Endpoints
+
+| Endpoint | Permission | Logic |
+| --- | --- | --- |
+| `GET /savings/time-deposits` | `savings:view` | Paged (`per_page` ≤ 100). Filters: `search` (certificate no., member name or code), `status`, `borrower_id`, `product_id`. Branch-scoped. `meta.stats` = placements per status over the visible book; `meta.totals` = `{count, total_principal, maturing_30_days}` over the matching rows (`maturing_30_days` counts active ones). |
+| `GET /savings/time-deposits/{id}` | `savings:view` | One placement, with `product`, member and branch names, `created_by_user`, rollover links. |
+| `POST /savings/time-deposits` | `savings:create` | Place: `borrower_id`, `product_id`, `principal`, `term_days`, `placement_date`, `maturity_instruction` (`payout`/`rollover_principal`/`rollover_all`), `payment_method`, `reference?`. Product active and `time_deposit`; `term_days` in its `term_options_days`; principal ≥ `minimum_opening_balance`. Copy the rates onto the placement, set `maturity_date` = placement + term, compute `gross_interest`, `withholding_tax`, `net_interest`, `maturity_amount`, generate `certificate_number`, and journal it (Dr cash/bank, Cr time deposits liability). |
+| `POST /savings/time-deposits/{id}/settle` | `savings:transact` | `date` (≥ `maturity_date`), `action`, `payout_method`. `payout`: pay principal + net interest, status `withdrawn`. `rollover_principal`: pay net interest, new placement of the principal. `rollover_all`: new placement of the maturity amount. A rollover uses the same product and term at the product's **current** rate, sets `rolled_over_to_id`/`rolled_over_from_id`, status `rolled_over`, and **returns the new placement** (the UI follows it). Set `settled_at`, `settled_amount`. Journal interest expense, tax payable and the payout. |
+| `GET /savings/time-deposits/{id}/pretermination-quote?date=` | `savings:view` | What breaking it on `date` pays: `{date, days_held, rate, gross_interest, withholding_tax, penalty, payout}` at the placement's `pretermination_rate`. No side effects. |
+| `POST /savings/time-deposits/{id}/preterminate` | `savings:close` | `date` (before maturity), `reason`, `payout_method`. Same figures as the quote; status `preterminated`, `settled_at`, `settled_amount`. Journal it. |
+
+### Server-side rules
+
+- The server computes all interest. The UI estimates on a **360-day year** (`principal × rate × days / 360`); confirm the basis (360 vs 365) and we will match it.
+- A nightly job turns `active` placements whose `maturity_date` has passed into `matured`.
+- `DELETE /savings/products/{id}` stays 422 while a product has any placement.
+- The certificate is printed client-side from the placement; `certificate_number` must be unique and stable, because reprints quote it.
+
 ## Coming in later parts
 
-Time deposits (placement, maturity, rollover, certificate), holds, passbook printing,
-reports, and approving Member Portal withdrawal and opening requests.
+Holds, passbook printing, savings reports and accounting views, and approving
+Member Portal withdrawal and opening requests.

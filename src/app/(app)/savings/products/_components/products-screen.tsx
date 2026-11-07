@@ -30,6 +30,7 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
 import { INTEREST_POSTING_LABELS } from "../../_lib/savings-rules";
+import { termLabel } from "../../_lib/time-deposit-rules";
 import { ProductDialog } from "./product-dialog";
 
 export function ProductsScreen() {
@@ -66,7 +67,7 @@ export function ProductsScreen() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Savings Products</h1>
           <p className="text-sm text-muted-foreground">
-            Interest, minimum balances and dormancy rules for passbook savings.
+            Rates, minimum balances and rules for passbook savings and time deposits.
           </p>
         </div>
         <Button onClick={() => edit(null)}>
@@ -107,20 +108,24 @@ export function ProductsScreen() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatRate(p.annual_interest_rate)}%</TableCell>
-                    <TableCell>{INTEREST_POSTING_LABELS[p.interest_posting] ?? p.interest_posting}</TableCell>
+                    <TableCell>
+                      {p.kind === "time_deposit"
+                        ? `At maturity · ${(p.term_options_days ?? []).map(termLabel).join(", ") || "no terms"}`
+                        : (INTEREST_POSTING_LABELS[p.interest_posting] ?? p.interest_posting)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{formatCurrency(p.minimum_opening_balance)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(p.maintaining_balance)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {p.kind === "time_deposit" ? "—" : formatCurrency(p.maintaining_balance)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{p.account_count ?? "—"}</TableCell>
                     <TableCell>
                       <Badge variant={p.is_active ? "secondary" : "outline"}>{p.is_active ? "Active" : "Inactive"}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        {p.kind === "regular" && (
-                          <Button variant="ghost" size="icon" aria-label={`Edit ${p.name}`} onClick={() => edit(p)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <Button variant="ghost" size="icon" aria-label={`Edit ${p.name}`} onClick={() => edit(p)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         {!p.account_count && (
                           <Button variant="ghost" size="icon" aria-label={`Delete ${p.name}`} onClick={() => setDeleting(p)}>
                             <Trash2 className="h-4 w-4" />
