@@ -5,7 +5,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { notifyError, notifyValidation } from "@/lib/notify";
+import { notifyError } from "@/lib/notify";
+import { registrationSubmittedAt, sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
@@ -144,7 +145,7 @@ function RegistrationReviewContent() {
   async function handleSaveEdit() {
     const idErrors = validIdDraftErrors(idDrafts);
     if (idErrors.length > 0) {
-      notifyValidation(idErrors);
+      toast.error(sentencesMessage(idErrors));
       return;
     }
 
@@ -282,7 +283,7 @@ function RegistrationReviewContent() {
               {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
+              Submitted {registrationSubmittedAt(registration) ? new Date(registrationSubmittedAt(registration) as string).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
               {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
             </p>
           </div>

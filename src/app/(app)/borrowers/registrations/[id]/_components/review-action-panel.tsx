@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Pencil } from "lucide-react";
 import type { Registration } from "@/services/registration.service";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { reviewerLabel } from "@/app/(app)/borrowers/_components/utils";
+import { registrationSubmittedAt, reviewerLabel } from "@/app/(app)/borrowers/_components/utils";
 
 interface Props {
   registration: Registration;
@@ -47,9 +47,8 @@ export function ReviewActionPanel({
   onToggleEdit,
   onSaveEdit,
 }: Props) {
-  const submittedDate = registration.submitted_at
-    ? formatDate(registration.submitted_at)
-    : "—";
+  const submitted = registrationSubmittedAt(registration);
+  const submittedDate = submitted ? formatDate(submitted) : "—";
 
   // A rejected application is a record, not a decision still to be made. The
   // approve/reject/edit buttons all 422 against it server-side ("Only borrowers

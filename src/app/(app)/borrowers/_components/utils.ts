@@ -59,3 +59,28 @@ export function reviewerLabel(source: {
   if (source.rejected_by != null) return `Reviewer #${source.rejected_by}`;
   return null;
 }
+
+/**
+ * Messages that are already full sentences ("Enter the ID number for ID 1."),
+ * shown as they are. `notifyValidation` is for field names only: it would wrap
+ * a sentence in "Please enter a valid …".
+ */
+export function sentencesMessage(messages: string[]): string {
+  return messages.map((m) => m.trim()).filter(Boolean).join(" ");
+}
+
+/**
+ * When a registration was submitted: the record is created by the submission
+ * itself (POST /borrowers) and later edits don't move `created_at`. The API
+ * sends no `submitted_at` for registrations.
+ */
+export function registrationSubmittedAt(registration: {
+  created_at?: string | null;
+}): string | null {
+  return registration.created_at || null;
+}
+
+/** A payment's Reference cell: its reference number, else a dash. */
+export function paymentReferenceCell(payment: { reference_number?: string | null }): string {
+  return payment.reference_number?.trim() || "—";
+}

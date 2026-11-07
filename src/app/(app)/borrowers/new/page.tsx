@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
 import { branchSelectItems, userBranches } from "@/lib/user-branches";
@@ -377,7 +378,7 @@ function NewBorrowerContent() {
     // went nowhere.
     const idCheck = validateValidIds(validIds, { requireAtLeastOne: false });
     if (!idCheck.ok) {
-      notifyValidation(idCheck.errors.map((e) => e.message));
+      toast.error(sentencesMessage(idCheck.errors.map((e) => e.message)));
       return;
     }
 

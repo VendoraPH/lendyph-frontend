@@ -115,7 +115,7 @@ function LedgerRow({
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">{description || dash}</span>
           {payment.voided && (
-            <Badge variant="destructive" className="shrink-0 text-[10px] px-1 py-0">voided</Badge>
+            <Badge variant="destructive" className="shrink-0 text-[10px] px-1 py-0">Voided</Badge>
           )}
           {payment.canVoid && repaymentId !== null && (
             <PermissionButton

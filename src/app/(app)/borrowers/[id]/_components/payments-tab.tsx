@@ -9,7 +9,7 @@ import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react
 import { formatCurrency } from "@/lib/format";
 import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
 import { memberPaymentFigures } from "../_lib/member-payment-figures";
-import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
+import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_components/utils";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -141,7 +141,7 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
                     </TableCell>
                     <TableCell>{paymentMethodLabels[payment.method] ?? payment.method}</TableCell>
                     <TableCell className="text-muted-foreground font-mono text-xs">
-                      {payment.reference_number || payment.collected_by || "—"}
+                      {paymentReferenceCell(payment)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={paymentStatusColor[payment.status]}>

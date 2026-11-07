@@ -805,6 +805,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // used to require `users:view` as well, which only admins hold, so loan
   // officers never saw the control.
   const canUpdateLoan = usePermission().can("loans:update");
+  const canToggleAutoPay = usePermission().can("auto_pay:toggle");
 
   // Save AO assignment. This goes through its own endpoint, not `update`: PUT
   // /loans/{id} refuses every loan past for_review. The page shows what the
@@ -1447,8 +1448,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
     void refreshApproval();
     if (reloaded) {
       setLoan(reloaded);
-      setAutoPayIsPostRelease(true);
-      setAutoPayDialogOpen(true);
+      if (canToggleAutoPay) {
+        setAutoPayIsPostRelease(true);
+        setAutoPayDialogOpen(true);
+      }
     } else {
       notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
@@ -3157,17 +3160,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   )}
                 </>
               )}
-              <Button
+              <PermissionButton
+                permission="auto_pay:toggle"
+                tooltip="Turning Auto-Pay on or off needs permission to manage Auto-Pay"
                 variant="outline"
                 size="sm"
                 className="w-full"
+                wrapperClassName="w-full"
                 onClick={() => {
                   setAutoPayIsPostRelease(false);
                   setAutoPayDialogOpen(true);
                 }}
               >
                 {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
-              </Button>
+              </PermissionButton>
           </CollapsibleCard>
         )}
 
@@ -3259,7 +3265,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
                 <div>
                   <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_paid)}</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_repaid)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Principal Paid</p>
@@ -3405,7 +3411,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
-                          <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_paid)}</p>
+                          <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_repaid)}</p>
                         </div>
                         {(loanSummary.overdue_amount ?? 0) > 0 && (
                           <div>

@@ -71,7 +71,7 @@ test("official receipt: payment particulars come off the wire intact", () => {
   assert.equal(fieldValue(doc, "Receipt No."), "OR-20260826-0142");
   assert.equal(fieldValue(doc, "Received from"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
-  assert.equal(fieldValue(doc, "Payment Method"), "Bank transfer");
+  assert.equal(fieldValue(doc, "Payment Method"), "Bank Transfer");
   assert.equal(fieldValue(doc, "Reference No."), "BDO-99881");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
 });
@@ -293,4 +293,9 @@ test("official receipt: the repayment's borrower_code wins over a nested member'
     borrower: { borrower_code: "BRW-999999" },
   });
   assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the payment method reads its label", () => {
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "gcash" }), "Payment Method"), "GCash");
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto pay");
 });

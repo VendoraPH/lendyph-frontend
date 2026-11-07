@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 
 import { Button } from "@/components/ui/button";
@@ -398,7 +399,7 @@ function EditBorrowerContent() {
     // number, and an incomplete row must not be dropped without a word.
     const idCheck = validateValidIds(validIds, { requireAtLeastOne: false });
     if (!idCheck.ok) {
-      notifyValidation(idCheck.errors.map((e) => e.message));
+      toast.error(sentencesMessage(idCheck.errors.map((e) => e.message)));
       return;
     }
 
@@ -775,6 +776,7 @@ function EditBorrowerContent() {
                 Civil Status <span className="text-destructive">*</span>
               </Label>
               <Select
+                items={CIVIL_STATUS_OPTIONS}
                 value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
