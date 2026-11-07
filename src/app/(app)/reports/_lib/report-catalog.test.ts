@@ -57,6 +57,26 @@ test("the Statement of Account takes no date range, and the other subject report
   assert.equal((await reportDefinition("income_report")).noDateRange, undefined);
 });
 
+test("the Portfolio Summary opens on the whole portfolio: no dates asked, the branch kept", async () => {
+  requests.length = 0;
+  const report = await reportDefinition("portfolio_summary");
+  assert.equal(report.noDateRange, true);
+
+  const doc = await report.build({ range: RANGE, branchId: 3 });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].searchParams.has("date_from"), false);
+  assert.equal(requests[0].searchParams.has("date_to"), false);
+  assert.equal(requests[0].searchParams.get("branch_id"), "3");
+  assert.ok(doc.meta.asOf);
+  assert.equal(doc.meta.period, undefined);
+});
+
+test("every other portfolio report still asks for its dates", async () => {
+  requests.length = 0;
+  await (await reportDefinition("income_report")).build({ range: RANGE });
+  assert.ok(requests.some((r) => r.searchParams.get("date_from") === RANGE.from));
+});
+
 test("the Statement of Account asks for no dates and prints the server's As of", async () => {
   requests.length = 0;
   const report = await reportDefinition("statement_of_account");

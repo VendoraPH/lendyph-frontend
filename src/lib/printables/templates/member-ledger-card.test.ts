@@ -31,10 +31,10 @@ const PAYLOAD = {
   },
   loans: [
     { loan_account_number: "LN-2025-0011", product_name: "Regular Loan", principal_amount: 40000, released_at: "2025-06-01", maturity_date: "2025-12-01", status: "completed", total_paid: 44000, outstanding_balance: 0, outstanding_principal: 0, total_outstanding: 0, payments_count: 6 },
-    { loan_account_number: "LN-2026-0042", product_name: "Regular Loan", principal_amount: 100000, released_at: "2026-08-01", maturity_date: "2027-02-01", status: "ongoing", display_status: "past_due", total_paid: 18666.67, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000, payments_count: 1 },
+    { loan_account_number: "LN-2026-0042", product_name: "Regular Loan", principal_amount: 100000, released_at: "2026-08-01", maturity_date: "2027-02-01", status: "ongoing", display_status: "past_due", total_paid: 18666.67, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000, overdue_amount: 6359, payments_count: 1 },
   ],
   totals: { total_loans: 2, total_portfolio: 140000, total_paid: 62666.67, total_outstanding: 90000 },
-  loans_totals: { principal_amount: 140000, total_paid: 62666.67, payments_count: 7, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000 },
+  loans_totals: { principal_amount: 140000, total_paid: 62666.67, payments_count: 7, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000, overdue_amount: 6359 },
   generated_at: "2026-08-26 09:15:00",
 };
 
@@ -168,4 +168,28 @@ test("member ledger card: a loan past grace reads Past Due, from the server's di
   assert.equal(table.compact, true);
   assert.equal(table.rows[0]?.status, "Completed");
   assert.equal(table.rows[1]?.status, "Past Due");
+});
+
+test("member ledger card: each loan's Past Due is the server's, with the server's total", () => {
+  const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
+  const keys = table.columns.map((c) => c.key);
+  assert.equal(table.columns.find((c) => c.key === "overdue")?.header, "Past Due");
+  assert.equal(keys.indexOf("overdue"), keys.indexOf("outstanding") + 1);
+  assert.equal(table.rows[1]?.overdue, 6359);
+  assert.equal(table.rows[0]?.overdue, null);
+  assert.equal(table.totals?.overdue, formatCurrency(6359));
+
+  const noTotal = tableBlock(
+    buildMemberLedgerCardDoc({ ...PAYLOAD, loans_totals: { ...PAYLOAD.loans_totals, overdue_amount: undefined } }),
+    "Loan Accounts"
+  );
+  assert.equal(noTotal.totals?.overdue, DASH);
+});
+
+test("member ledger card: eleven columns still share the page and print compact", () => {
+  const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
+  const widths = table.columns.map((c) => Number.parseFloat(String(c.width)));
+  assert.equal(table.columns.length, 11);
+  assert.equal(widths.reduce((sum, w) => sum + w, 0), 100);
+  assert.equal(table.compact, true);
 });

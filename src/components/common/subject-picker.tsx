@@ -21,6 +21,10 @@ interface SubjectPickerProps {
   subject: SubjectKind;
   value: number | null;
   onChange: (id: number | null) => void;
+  /** A member the page opened with (`?member=<id>`): it stays selected on mount. */
+  presetId?: number | null;
+  /** That member's name, once loaded, so the picker can show it. */
+  presetMember?: MemberOption | null;
 }
 
 const TRIGGER_CLASS = "h-9 w-64";
@@ -37,7 +41,13 @@ const TRIGGER_CLASS = "h-9 w-64";
  * Loans need `loans:view` and members `borrowers:view`, neither of which the
  * report and document screens imply. Without it the picker is locked.
  */
-export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) {
+export function SubjectPicker({
+  subject,
+  value,
+  onChange,
+  presetId = null,
+  presetMember = null,
+}: SubjectPickerProps) {
   const canList = usePermission().can(
     subject === "loan" ? "loans:view" : "borrowers:view",
   );
@@ -47,7 +57,9 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
 
   useEffect(() => {
     // Clear a selection carried over from the other subject type — a loan id
-    // is meaningless once the picker is showing members.
+    // is meaningless once the picker is showing members. A member the page
+    // opened with wasn't carried over from anything.
+    if (value !== null && value === presetId) return;
     onChange(null);
     // onChange is a stable setter from the parent; re-running on identity
     // changes would clear the user's selection on every parent render.
@@ -77,7 +89,7 @@ export function SubjectPicker({ subject, value, onChange }: SubjectPickerProps) 
     <div className="space-y-1">
       <Label className="text-xs">Member</Label>
       <MemberSearchPicker
-        value={member?.id === value ? member : null}
+        value={member?.id === value ? member : presetMember?.id === value ? presetMember : null}
         onChange={(next) => {
           setMember(next);
           onChange(next?.id ?? null);

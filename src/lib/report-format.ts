@@ -72,19 +72,56 @@ const rateFmt = new Intl.NumberFormat("en-PH", {
   maximumFractionDigits: 4,
 });
 
+/**
+ * Documents always read in Philippine time, whatever the computer is set to. On
+ * one set to US Pacific time, every date on a statement read a day early.
+ */
+const PHILIPPINE_TIME = "Asia/Manila";
+const PHILIPPINE_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 const dateFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
   year: "numeric",
   month: "short",
   day: "numeric",
 });
 
 const dateTimeFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
   year: "numeric",
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const NO_ZONE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * An API date as an instant. A date alone parses as midnight UTC, which is the
+ * same day in Manila. A time with no zone is the server's own Manila time, which
+ * `new Date()` would read in the computer's zone instead.
+ */
+function parseReportDate(value: string | number | Date): Date {
+  return typeof value === "string" && NO_ZONE.test(value)
+    ? new Date(`${value.replace(" ", "T")}+08:00`)
+    : new Date(value);
+}
+
+/**
+ * An API date for a spreadsheet cell, or null when it isn't one. A cell holds a
+ * clock reading rather than an instant, and ExcelJS takes it from the Date's UTC
+ * parts, so those parts are set to the Philippine reading. A date alone already
+ * reads as its own day.
+ */
+export function reportDateForCell(value: string | number | Date): Date | null {
+  const date = parseReportDate(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return typeof value === "string" && DATE_ONLY.test(value)
+    ? date
+    : new Date(date.getTime() + PHILIPPINE_OFFSET_MS);
+}
 
 /** Coerce an API value to a finite number, or null when it is not one. */
 export function toNumber(value: unknown): number | null {
@@ -158,12 +195,12 @@ export function formatValue(value: unknown, format?: ColumnFormat): string {
       return formatRatePercent(n);
     }
     case "date": {
-      const d = new Date(value as string | number | Date);
+      const d = parseReportDate(value as string | number | Date);
       if (Number.isNaN(d.getTime())) return String(value);
       return dateFmt.format(d);
     }
     case "datetime": {
-      const d = new Date(value as string | number | Date);
+      const d = parseReportDate(value as string | number | Date);
       if (Number.isNaN(d.getTime())) return String(value);
       return dateTimeFmt.format(d);
     }
@@ -183,8 +220,8 @@ export function formatCell(
 }
 
 export function formatDateRange(from: string, to: string): string {
-  const fromDate = from ? new Date(from) : null;
-  const toDate = to ? new Date(to) : null;
+  const fromDate = from ? parseReportDate(from) : null;
+  const toDate = to ? parseReportDate(to) : null;
   if (fromDate && toDate) {
     if (fromDate.getTime() === toDate.getTime()) {
       return dateFmt.format(fromDate);

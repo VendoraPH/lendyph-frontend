@@ -94,6 +94,18 @@ function subjectReportBuilder(
   };
 }
 
+/**
+ * A report of the whole book as of today. The API narrows by release date when
+ * dates are sent, so none are: hiding the date controls alone would still report
+ * only the loans released in the default month.
+ */
+function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
+  return async (ctx: ReportContext): Promise<ReportDocument> => {
+    const raw = await fetcher(ctx.branchId ? { branch_id: ctx.branchId } : {}).catch(() => null);
+    return map(raw, ctx.range);
+  };
+}
+
 const listParams = { per_page: LIST_PAGE_SIZE };
 
 /** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
@@ -219,7 +231,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: PieChart,
     accent: ACCENT.blue,
     supportsBranch: true,
-    build: reportBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
+    noDateRange: true,
+    build: pointInTimeBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
   },
   {
     id: "income_report",
