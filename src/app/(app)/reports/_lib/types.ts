@@ -21,6 +21,13 @@ export type ReportId =
   | "performance"
   | "provisioning";
 
+/**
+ * What a built document can be: a catalog report, or a document another
+ * module renders through the same exporters (a CDA compliance report). Only
+ * `ReportId`s appear in the reports catalog.
+ */
+export type DocumentId = ReportId | "cda_report";
+
 export type ReportCategory =
   | "operations"
   | "portfolio"
@@ -127,7 +134,7 @@ export interface ReportChrome {
 }
 
 export interface ReportDocument {
-  reportId: ReportId;
+  reportId: DocumentId;
   meta: {
     title: string;
     subtitle?: string;

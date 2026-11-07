@@ -350,6 +350,17 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  // CDA Compliance verbs. The matrix does not offer `cda` yet (UI-only), so
+  // these label a permission a role already holds rather than a checkbox.
+  prepare: { label: "Prepare", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  upload: { label: "Upload", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  review: { label: "Review", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  finalize: { label: "Finalize", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  reopen: { label: "Reopen", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  submit: { label: "Mark Submitted", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  manage_officers: { label: "Manage Officers", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  manage_social: { label: "Manage Social Audit", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
+  manage_mediation: { label: "Manage Mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

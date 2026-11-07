@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   BookOpenCheck,
   Gauge,
+  ClipboardCheck,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -159,6 +160,43 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Settings", href: "/credit-scoring/settings", permission: "credit_scoring:settings" },
     ],
   },
+  ...(env.features.cda
+    ? [
+        {
+          title: "CDA Compliance",
+          href: "/cda",
+          icon: ClipboardCheck,
+          permission: "cda:view",
+          /**
+           * The annual CDA reports. Behind NEXT_PUBLIC_ENABLE_CDA as well as
+           * `cda:view`, which the backend does not seed until /cda/* exists
+           * (contract: docs/CDA_BACKEND_HANDOFF.md). Mediation is
+           * read-restricted: its cases are confidential.
+           */
+          children: [
+            { title: "Dashboard", href: "/cda" },
+            { title: "Compliance Calendar", href: "/cda/calendar" },
+            { title: "CAPR", href: "/cda/capr" },
+            { title: "Financial Statements", href: "/cda/financial-statements" },
+            { title: "Loan Classification", href: "/cda/loan-classification" },
+            { title: "Enhanced PESOS", href: "/cda/pesos" },
+            { title: "Performance Audit", href: "/cda/performance-audit" },
+            { title: "Social Audit", href: "/cda/social-audit" },
+            { title: "Officers & Trainings", href: "/cda/officers" },
+            {
+              title: "Mediation & Conciliation",
+              href: "/cda/mediation",
+              permission: "cda:manage_mediation",
+            },
+            { title: "Sworn Statement", href: "/cda/sworn-statement" },
+            { title: "ATIR & ABR", href: "/cda/tax-reports" },
+            { title: "Compliance Documents", href: "/cda/documents" },
+            { title: "Submission History", href: "/cda/submissions" },
+            { title: "Settings", href: "/cda/settings", permission: "cda:settings" },
+          ],
+        } satisfies NavItem,
+      ]
+    : []),
   {
     title: "Accounting",
     href: "/accounting",
