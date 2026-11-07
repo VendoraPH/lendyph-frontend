@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Loader2, BookOpen, FileText } from "lucide-react";
-import { toast } from "sonner";
-import { borrowerService, reportService } from "@/services";
+import { borrowerService } from "@/services";
 import { formatCurrency } from "@/lib/format";
 import type { BorrowerLedgerEntry, PaginatedResponse } from "@/types";
 
@@ -23,8 +23,6 @@ interface LedgerTabProps {
 export function LedgerTab({ borrowerId }: LedgerTabProps) {
   const [entries, setEntries] = useState<BorrowerLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subsidiaryLoading, setSubsidiaryLoading] = useState(false);
-  const [subsidiary, setSubsidiary] = useState<Record<string, unknown> | null>(null);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);
@@ -55,23 +53,6 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
     }
   }, [borrowerId]);
 
-  const handleViewSubsidiaryLedger = useCallback(async () => {
-    setSubsidiaryLoading(true);
-    try {
-      const res = await reportService.subsidiaryLedger(borrowerId);
-      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
-        ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
-      setSubsidiary(payload ?? {});
-      toast.success("Subsidiary ledger loaded");
-    } catch {
-      toast.error("We couldn't load the subsidiary ledger. Please try again.");
-      setSubsidiary(null);
-    } finally {
-      setSubsidiaryLoading(false);
-    }
-  }, [borrowerId]);
-
   useEffect(() => {
     fetchLedger();
   }, [fetchLedger]);
@@ -92,32 +73,14 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             <FileText className="h-4 w-4 text-muted-foreground" />
             Subsidiary Ledger Report
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleViewSubsidiaryLedger}
-            disabled={subsidiaryLoading}
+          <Link
+            href="/reports/subsidiary_ledger"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            {subsidiaryLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                {subsidiary ? "Refresh" : "Load Report"}
-              </>
-            )}
-          </Button>
+            <FileText className="mr-2 h-4 w-4" />
+            Open in Reports
+          </Link>
         </CardHeader>
-        {subsidiary && (
-          <CardContent className="pt-0">
-            <pre className="max-h-[40vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
-              {JSON.stringify(subsidiary, null, 2)}
-            </pre>
-          </CardContent>
-        )}
       </Card>
       <Card>
         <CardContent className="p-0">

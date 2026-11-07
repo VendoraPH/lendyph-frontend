@@ -77,16 +77,18 @@ export function GCashPartyPicker({
 }: Props) {
   const [open, setOpen] = useState(false);
   const singular = noun.replace(/s$/, "");
+  // However the list closes (a pick, Escape or a click outside), the next
+  // opening starts from a fresh search, not the last one's text and results.
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next) onQueryChange("");
+  };
 
   return (
     <div className="space-y-2">
       <Popover
         open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          // Reopening starts from a fresh search, not the last one's results.
-          if (!next) onQueryChange("");
-        }}
+        onOpenChange={changeOpen}
       >
         <PopoverTrigger
           render={
@@ -154,7 +156,7 @@ export function GCashPartyPicker({
                       value={optionValue}
                       onSelect={() => {
                         onChange(isSelected ? null : option);
-                        setOpen(false);
+                        changeOpen(false);
                       }}
                       className="items-start"
                     >

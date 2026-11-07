@@ -78,3 +78,24 @@ describe('"For review" is gone from the loan screens', () => {
     );
   });
 });
+
+describe('"For review" is gone from the member screens', () => {
+  test("the pending registrations list says for approval", () => {
+    const text = source("src/app/(app)/borrowers/_components/registration-row.tsx");
+    assert.doesNotMatch(text, /for review|awaiting review/i);
+    assert.match(text, /appear here for approval/);
+  });
+});
+
+describe("no API paths or raw data on screen", () => {
+  test("the not-connected panel lists its endpoints in development builds only", () => {
+    const text = source("src/components/common/data-state.tsx");
+    assert.match(text, /process\.env\.NODE_ENV === "development" && \(/);
+  });
+
+  test("the member Ledger tab never prints the raw report", () => {
+    const text = source("src/app/(app)/borrowers/[id]/_components/ledger-tab.tsx");
+    assert.doesNotMatch(text, /JSON\.stringify/);
+    assert.match(text, /href="\/reports\/subsidiary_ledger"/);
+  });
+});
