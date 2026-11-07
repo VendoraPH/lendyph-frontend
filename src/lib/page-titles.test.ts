@@ -50,6 +50,24 @@ describe("subPageTitle (the breadcrumb's second part)", () => {
     assert.equal(subPageTitle("credit-scoring", "borrowers"), "Member Scores");
   });
 
+  test("every credit scoring page reads its menu title", () => {
+    assert.equal(subPageTitle("credit-scoring", "assessment"), "Credit Assessment");
+    assert.equal(subPageTitle("credit-scoring", "scorecard-configuration"), "Scorecard Configuration");
+    assert.equal(subPageTitle("credit-scoring", "risk-monitoring"), "Risk Monitoring");
+    assert.equal(subPageTitle("credit-scoring", "score-history"), "Score History");
+    assert.equal(subPageTitle("credit-scoring", "settings"), "Settings");
+  });
+
+  test("Payment History and the Share Capital pages read their menu titles", () => {
+    assert.equal(subPageTitle("payments", "history"), "Payment History");
+    assert.equal(subPageTitle("share-capital", "ledger"), "Subsidiary Ledger");
+    assert.equal(subPageTitle("share-capital", "pledges"), "Pledge Entry");
+  });
+
+  test("Auto-Credit reads its menu title", () => {
+    assert.equal(subPageTitle("share-capital", "auto-credit"), "Auto-Credit");
+  });
+
   test("the member report reads its menu title", () => {
     assert.equal(subPageTitle("reports", "borrower_report"), "Member Report");
   });
