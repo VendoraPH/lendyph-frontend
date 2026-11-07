@@ -525,6 +525,12 @@ export interface PortalSavingsAccount {
   available_balance: Money;
   interest_rate: number;
   opened_at: string | null;
+  /** The balance the account must keep; withdrawals cannot go below it. */
+  maintaining_balance?: Money | null;
+  /** The most the member may withdraw now (available less maintaining balance and holds). */
+  withdrawable?: Money | null;
+  /** Withdrawal requests awaiting approval whose funds are reserved. */
+  pending_withdrawal?: Money | null;
 }
 
 /** A row of GET /portal/time-deposits */
@@ -558,4 +564,187 @@ export interface StatementRequest {
   account_id?: number;
   from: string;
   to: string;
+}
+
+// ── Requests, loan applications and documents (PR3) ────────────────────────
+
+export type PortalRequestType =
+  | "savings_withdrawal"
+  | "savings_opening"
+  | "time_deposit_instruction"
+  | "loan_restructure"
+  | "document_request"
+  | "membership_concern"
+  | "account_closure"
+  | "other";
+
+export type PortalRequestStatus =
+  | "submitted"
+  | "under_review"
+  | "need_info"
+  | "approved"
+  | "rejected"
+  | "completed"
+  | "cancelled";
+
+/** One step of a request's or application's history. Member-safe: no staff notes. */
+export interface PortalTimelineEntry {
+  at: string;
+  status: string;
+  label: string | null;
+}
+
+export interface PortalAttachment {
+  id: number;
+  name: string;
+  /** A signed, expiring link. */
+  url: string;
+}
+
+/** A row of GET /portal/requests */
+export interface PortalRequest {
+  id: number;
+  reference: string;
+  type: PortalRequestType;
+  status: PortalRequestStatus;
+  /** One line the server writes, e.g. "Withdraw ₱5,000 from SA-0012 by GCash". */
+  summary: string;
+  details: Record<string, string | number | null>;
+  remarks: string | null;
+  /** The cooperative's reply, shown to the member. */
+  response: string | null;
+  submitted_at: string;
+  updated_at: string;
+  timeline: PortalTimelineEntry[];
+  attachments: PortalAttachment[];
+}
+
+/** POST /portal/requests (multipart). */
+export interface PortalRequestSubmit {
+  type: PortalRequestType;
+  details: Record<string, string>;
+  remarks?: string;
+  attachments?: File[];
+}
+
+/** A row of GET /portal/savings-products: products a member may open online. */
+export interface PortalSavingsProduct {
+  id: number;
+  name: string;
+  description: string | null;
+  minimum_deposit: Money;
+  interest_rate: number;
+  terms_url: string | null;
+}
+
+/** A row of GET /portal/loan-products: products this member may apply for. */
+export interface PortalLoanProduct {
+  id: number;
+  name: string;
+  description: string | null;
+  min_amount: Money;
+  max_amount: Money;
+  min_term: number;
+  max_term: number;
+  term_unit: "days" | "weeks" | "months";
+  interest_rate: number;
+  frequency: string;
+  requires_income_info: boolean;
+  requires_collateral: boolean;
+  required_documents: string[];
+}
+
+/** GET /portal/loan-products/{id}/eligibility */
+export interface PortalLoanEligibility {
+  eligible: boolean;
+  checks: { label: string; ok: boolean; detail: string | null }[];
+}
+
+export type LoanApplicationStatus =
+  | "submitted"
+  | "document_review"
+  | "credit_assessment"
+  | "for_approval"
+  | "approved"
+  | "for_release"
+  | "released"
+  | "rejected"
+  | "cancelled";
+
+/** A row of GET /portal/loan-applications */
+export interface PortalLoanApplication {
+  id: number;
+  reference: string;
+  product_name: string;
+  amount: Money;
+  term: number;
+  term_unit: string;
+  purpose: string;
+  status: LoanApplicationStatus;
+  submitted_at: string;
+  /** Set once released: the loan it became. */
+  loan_id: number | null;
+  response: string | null;
+  timeline: PortalTimelineEntry[];
+}
+
+/** POST /portal/loan-applications (multipart). */
+export interface PortalLoanApplicationSubmit {
+  product_id: number;
+  amount: number;
+  term: number;
+  purpose: string;
+  monthly_income?: number;
+  other_income?: number;
+  monthly_expenses?: number;
+  income_source?: string;
+  collateral_description?: string;
+  collateral_value?: number;
+  /** One file per required document. */
+  documents: { name: string; file: File }[];
+  declaration_accepted: true;
+}
+
+export type PortalDocumentCategory =
+  | "membership"
+  | "loans"
+  | "share_capital"
+  | "savings"
+  | "payments"
+  | "other";
+
+export type SigningStatus = "not_required" | "for_signature" | "signed" | "expired" | "replaced";
+
+/** A row of GET /portal/documents: only documents released for member access. */
+export interface PortalDocument {
+  id: number;
+  title: string;
+  category: PortalDocumentCategory;
+  reference: string | null;
+  issued_at: string | null;
+  signing_status: SigningStatus;
+  file_name: string;
+}
+
+/** A row of GET /portal-admin/requests */
+export interface StaffPortalRequest extends PortalRequest {
+  borrower_id: number;
+  member_name: string;
+  member_number: string;
+}
+
+export interface StaffRequestFilters {
+  page?: number;
+  per_page?: number;
+  status?: PortalRequestStatus;
+  type?: PortalRequestType;
+  search?: string;
+}
+
+export type StaffRequestDecision = "under_review" | "need_info" | "approve" | "reject" | "complete";
+
+export interface StaffRequestDecisionBody {
+  decision: StaffRequestDecision;
+  /** Shown to the member. Required for need_info and reject. */
+  response?: string;
 }

@@ -12,7 +12,9 @@ import { todayISO } from "@/lib/format";
 import { isPayable } from "@/lib/portal/finance";
 import { portalService } from "@/services/portal.service";
 import type { PortalLoanDetail } from "@/types/portal";
+import { notifyInfo } from "@/lib/notify";
 import { DownloadButton } from "../../../_components/download-button";
+import { NewRequestDialog } from "../../../_components/new-request-dialog";
 import { PaymentsTable } from "../../../_components/payments-table";
 import { usePortalConfig } from "../../../_components/portal-config";
 import { ServiceOff } from "../../../_components/service-off";
@@ -58,6 +60,8 @@ function LoanDetail({ loan }: { loan: PortalLoanDetail }) {
   const fetchPayments = useCallback(() => portalService.loanPayments(loan.id), [loan.id]);
   const payments = useApiResource(fetchPayments);
   const canPay = config.features.gcash_payments && isPayable(loan.status);
+  const [restructuring, setRestructuring] = useState(false);
+  const canRestructure = isPayable(loan.status);
 
   const actions = (
     <>
@@ -71,6 +75,11 @@ function LoanDetail({ loan }: { loan: PortalLoanDetail }) {
       {canPay && (
         <Button size="sm" onClick={() => setPaying(true)}>
           <Smartphone className="mr-1.5 h-4 w-4" /> Pay with GCash
+        </Button>
+      )}
+      {canRestructure && (
+        <Button size="sm" variant="outline" onClick={() => setRestructuring(true)}>
+          Request restructuring
         </Button>
       )}
     </>
@@ -104,6 +113,15 @@ function LoanDetail({ loan }: { loan: PortalLoanDetail }) {
         </TabsContent>
       </Tabs>
       {canPay && <GCashPayDialog open={paying} onOpenChange={setPaying} loan={loan} />}
+      {canRestructure && (
+        <NewRequestDialog
+          open={restructuring}
+          onOpenChange={setRestructuring}
+          initialType="loan_restructure"
+          initialValues={{ loan_id: String(loan.id) }}
+          onSubmitted={() => notifyInfo("You can follow it under Requests.")}
+        />
+      )}
     </div>
   );
 }

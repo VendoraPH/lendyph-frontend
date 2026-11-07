@@ -12,7 +12,10 @@ import type {
   PortalSettings,
   PortalStats,
   ProfileRequestDecision,
+  StaffPortalRequest,
   StaffProfileRequest,
+  StaffRequestDecisionBody,
+  StaffRequestFilters,
 } from "@/types/portal";
 
 const A = API_ENDPOINTS.PORTAL_ADMIN;
@@ -40,4 +43,10 @@ export const portalAdminService = {
     api.get<StaffProfileRequest[]>(A.PROFILE_REQUESTS, { params: status ? { status } : undefined }),
   decideProfileRequest: (id: number, body: ProfileRequestDecision) =>
     api.post<StaffProfileRequest>(A.PROFILE_REQUEST_DECIDE(id), body),
+
+  /** One page of members' service requests; `meta` drives the pager and tab counts. */
+  requests: (filters: StaffRequestFilters) =>
+    api.getRaw<PaginatedResponse<StaffPortalRequest>>(A.REQUESTS, { params: filters }),
+  decideRequest: (id: number, body: StaffRequestDecisionBody) =>
+    api.post<StaffPortalRequest>(A.REQUEST_DECIDE(id), body),
 };

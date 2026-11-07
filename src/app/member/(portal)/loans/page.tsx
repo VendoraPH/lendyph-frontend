@@ -2,8 +2,9 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -14,16 +15,33 @@ import type { PortalLoanSummary } from "@/types/portal";
 import { usePortalConfig } from "../../_components/portal-config";
 import { PortalPageHeader, StatusPill } from "../../_components/portal-shell";
 import { ServiceOff } from "../../_components/service-off";
+import { ApplicationsCard } from "./_components/applications-card";
 
 export default function MemberLoansPage() {
   const { config } = usePortalConfig();
   const enabled = config.features.loans;
   const fetcher = useCallback(() => portalService.loans(), []);
   const resource = useApiResource(fetcher, enabled);
+  const canApply = enabled && config.features.loan_applications;
 
   return (
     <>
-      <PortalPageHeader title="My loans" description="Your current and past loans with the cooperative." />
+      <PortalPageHeader
+        title="My loans"
+        description="Your current and past loans with the cooperative."
+        actions={
+          canApply && (
+            <Button size="sm" render={<Link href="/member/loans/apply" />}>
+              <Plus className="mr-1.5 h-4 w-4" /> Apply for a loan
+            </Button>
+          )
+        }
+      />
+      {canApply && (
+        <div className="mb-5">
+          <ApplicationsCard />
+        </div>
+      )}
       {!enabled ? (
         <ServiceOff service="Loan information" />
       ) : (

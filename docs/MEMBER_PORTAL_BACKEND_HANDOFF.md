@@ -87,3 +87,35 @@ Every route resolves the member from the token. An `{id}` that belongs to anothe
 | GET | `/portal/time-deposits` | time_deposits | `{id, certificate_number, principal, interest_rate, term_days, placed_at, maturity_date, maturity_value, status (active, matured, withdrawn or rolled_over)}`. |
 | GET | `/portal/time-deposits/{id}/certificate` | time_deposits | A PDF of the certificate. |
 | GET | `/portal/statements/download?kind&account_id&from&to` | statements | A PDF. `kind` is consolidated, loan, savings or share_capital, and `account_id` is required for loan and savings and must belong to the member. Reject with 422 when `from` is after `to`, when `to` is in the future, or when the range is longer than 1 year. Log the download in the member's activity. |
+
+## Part 3: requests, loan applications, documents and staff review
+
+Swagger was unreachable when this was written, so the contract is unverified against the backend. The same rules as Part 2 apply: the member is resolved from the token, another member's `{id}` answers **404**, and a service whose `/portal/config` switch is off answers **403**. **No member route posts money**: each one creates a pending record for staff.
+
+| Method | Path | Feature | Logic |
+|---|---|---|---|
+| GET | `/portal/requests` | (always) | The member's requests, newest first: `{id, reference, type, status, summary, details{}, remarks, response, submitted_at, updated_at, timeline[] {at, status, label}, attachments[] {id, name, url}}`. The timeline must be member-safe, so leave out internal staff notes. |
+| POST | `/portal/requests` | per type | Multipart: `type`, `details[key]`, `remarks?` and `attachments[]` (up to 5 files, each 10 MB or less, PDF/JPG/PNG). `type` is one of savings_withdrawal (switches savings + withdrawal_requests), savings_opening (savings), time_deposit_instruction (time_deposits), loan_restructure (loans), document_request (documents), membership_concern, account_closure or other. Validate the `details` per type (see below). The status starts at `submitted`. Notify staff. |
+| DELETE | `/portal/requests/{id}` | — | Cancels the request. Allowed only while it is `submitted`; otherwise answer 422. |
+| POST | `/portal/requests/{id}/reply` | — | Multipart: `message` and `attachments[]`. Allowed only while it is `need_info`. Moves the request back to `under_review` and adds a timeline entry. |
+| GET | `/portal/savings-products` | savings | The products a member may open: `{id, name, description, minimum_deposit, interest_rate, terms_url}`. |
+| GET | `/portal/loan-products` | loan_applications | The products offered online: `{id, name, description, min_amount, max_amount, min_term, max_term, term_unit, interest_rate, frequency, requires_income_info, requires_collateral, required_documents[]}`. |
+| GET | `/portal/loan-products/{id}/eligibility` | loan_applications | `{eligible, checks[] {label, ok, detail}}`: membership standing, share capital minimum, no past-due loan, and the product's own rules. This is a preview only; the member is told "Final approval is subject to cooperative review." |
+| GET | `/portal/loan-applications` | loan_applications | `{id, reference, product_name, amount, term, term_unit, purpose, status (submitted, document_review, credit_assessment, for_approval, approved, for_release, released, rejected or cancelled), submitted_at, loan_id, response, timeline[]}`. Set `loan_id` once the loan exists. |
+| POST | `/portal/loan-applications` | loan_applications | Multipart: `product_id, amount, term, purpose`, plus `monthly_income`, `other_income`, `monthly_expenses` and `income_source` when the product requires income information, `collateral_description` and `collateral_value` when it requires collateral, `documents[i][name]` + `documents[i][file]` for every required document, and `declaration_accepted=1`. Re-check eligibility, the product's min/max amount and term, and the required documents (422 on any failure). **Create a normal staff loan application** (the same record as Loans → New Application) with the source `portal`, so it runs through the existing workflow. |
+| DELETE | `/portal/loan-applications/{id}` | loan_applications | Cancels the application while it is `submitted`; otherwise answer 422. |
+| GET | `/portal/documents` | documents | Only the documents released to the member: `{id, title, category (membership, loans, share_capital, savings, payments or other), reference, issued_at, signing_status (not_required, for_signature, signed, expired or replaced), file_name}`. |
+| GET | `/portal/documents/{id}/download` | documents | The file. Log the download. |
+| GET | `/portal-admin/requests?page&per_page&status&type&search` | manage | Paginated (`meta.total`; `per_page` up to 100), with `borrower_id`, `member_name` and `member_number` added to each row. Scope it to the user's branch for branch staff. |
+| POST | `/portal-admin/requests/{id}/decision` | manage | Takes `{decision (under_review, need_info, approve, reject or complete), response?}`. `response` is **required for need_info and reject**. The allowed moves are: submitted → any decision except complete; under_review or need_info → need_info, approve or reject; approved → complete. Answer 422 on anything else. Add a timeline entry, write an audit entry, and notify the member. |
+
+**`details` keys per request type**
+- **savings_withdrawal:** `account_id`, `amount`, `disbursement_method` (gcash, bank or cash_pickup), then `gcash_number`, or `bank_name` + `bank_account_name` + `bank_account_number`. The amount must not exceed `withdrawable`, which is the available balance minus the maintaining balance. **Approve reserves the amount (a hold); complete posts the withdrawal** through the existing savings withdrawal flow.
+- **savings_opening:** `product_id`, `initial_deposit` (at least the product's `minimum_deposit`) and `terms_accepted`. Complete opens the account.
+- **time_deposit_instruction:** `time_deposit_id` (must be active), `instruction` (renew_principal, renew_with_interest, credit_to_savings or payout), and `savings_account_id` when the instruction is credit_to_savings. It is applied at maturity.
+- **loan_restructure:** `loan_id`, `reason` and `requested_arrangement`. Approve hands it to the existing restructure workflow (Loans → Restructure); it never changes the loan by itself.
+- **document_request:** `document_type` and `purpose`.
+- **membership_concern / other:** `subject` and `message`.
+- **account_closure:** `close` (membership or savings), `savings_account_id` when closing savings, and `reason`.
+
+**Savings fields the portal now reads.** `GET /portal/savings` rows gain `maintaining_balance`, `withdrawable` and `pending_withdrawal`. These are optional; when `withdrawable` is missing, the frontend falls back to `available_balance − maintaining_balance`.

@@ -5,8 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Banknote,
   FileText,
+  FolderOpen,
   Home,
   IdCard,
+  Inbox,
   Landmark,
   LogOut,
   MoreHorizontal,
@@ -40,7 +42,6 @@ interface NavItem {
   primary?: boolean;
 }
 
-/** Later PRs add Requests here. */
 export const PORTAL_NAV: NavItem[] = [
   { href: "/member", label: "Home", icon: Home, primary: true },
   { href: "/member/loans", label: "Loans", icon: Landmark, feature: "loans", primary: true },
@@ -48,6 +49,8 @@ export const PORTAL_NAV: NavItem[] = [
   { href: "/member/payments", label: "Payments", icon: Receipt, feature: "loans", primary: true },
   { href: "/member/share-capital", label: "Share Capital", icon: Banknote, feature: "share_capital" },
   { href: "/member/statements", label: "Statements", icon: FileText, feature: "statements" },
+  { href: "/member/requests", label: "Requests", icon: Inbox },
+  { href: "/member/documents", label: "Documents", icon: FolderOpen, feature: "documents" },
   { href: "/member/membership", label: "Membership", icon: IdCard },
   { href: "/member/profile", label: "Profile", icon: UserRound },
   { href: "/member/security", label: "Security", icon: ShieldCheck },
@@ -172,11 +175,23 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
 }
 
 /** Page heading used by every signed-in screen. */
-export function PortalPageHeader({ title, description }: { title: string; description?: string }) {
+export function PortalPageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  /** Buttons beside the title, e.g. "New request". */
+  actions?: React.ReactNode;
+}) {
   return (
-    <div className="mb-5 space-y-1">
-      <h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>
-      {description && <p className="text-sm text-muted-foreground">{description}</p>}
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {actions}
     </div>
   );
 }
