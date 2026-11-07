@@ -157,6 +157,8 @@ export function buildMemberLedgerCardDoc(
         { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: "11%" },
         { key: "status", header: "Status", width: "10%" },
       ],
+      // Ten columns only fit an A4 page in the smaller type.
+      compact: true,
       rows: loanRows,
       totals:
         loanRows.length > 0

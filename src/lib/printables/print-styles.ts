@@ -71,6 +71,10 @@ export const PRINT_STYLES = `
   td.num { text-align: right; font-family: "Courier New", monospace; font-size: 9pt; }
   td.ctr { text-align: center; }
   tfoot td { border-top: 2px solid #000; font-weight: bold; background: #f5f5f5; }
+  table.compact { font-size: 8pt; }
+  table.compact th { font-size: 7pt; padding: 3pt 3pt; letter-spacing: 0; }
+  table.compact td { padding: 2pt 3pt; }
+  table.compact td.num { font-size: 7.5pt; }
 
   .charges-table { width: 100%; font-size: 10.5pt; border-collapse: collapse; }
   .charges-table td { padding: 3pt 0; border: none; }

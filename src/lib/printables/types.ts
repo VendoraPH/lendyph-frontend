@@ -121,6 +121,8 @@ export type PrintBlock =
       /** Footer row, keyed by column. Values are pre-formatted strings. */
       totals?: Record<string, string>;
       emptyText?: string;
+      /** Smaller type, for a table too wide for the page at the normal size. */
+      compact?: boolean;
     }
   | { kind: "charges"; title?: string; lines: PrintChargeLine[] }
   | {

@@ -162,8 +162,10 @@ test("member ledger card: a null payload still prints a blank card", () => {
 
 test("member ledger card: a loan past grace reads Past Due, from the server's display_status", () => {
   const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
-  // The status is printed, in its own column.
+  // The status is printed, in its own column, and ten columns print in the
+  // compact type so the table fits an A4 page.
   assert.ok(table.columns.some((c) => c.key === "status" && c.header === "Status"));
+  assert.equal(table.compact, true);
   assert.equal(table.rows[0]?.status, "Completed");
   assert.equal(table.rows[1]?.status, "Past Due");
 });
