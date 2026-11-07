@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { formatCell } from "@/lib/report-format";
-import { reportScope, type ReportDocument, type ReportSection } from "../_lib/types";
+import { orgDetailsLine, reportScope, type ReportDocument, type ReportSection } from "../_lib/types";
 
 interface ReportPreviewProps {
   doc: ReportDocument;
@@ -18,6 +18,7 @@ interface ReportPreviewProps {
  */
 export function ReportPreview({ doc }: ReportPreviewProps) {
   const scope = reportScope(doc.meta);
+  const orgDetails = orgDetailsLine(doc.meta);
   return (
     <div className="rounded-lg border bg-background shadow-sm overflow-hidden">
       {/* Brand header — letterhead: logo, org, title, reference */}
@@ -39,6 +40,9 @@ export function ReportPreview({ doc }: ReportPreviewProps) {
               <p className="text-[11px] uppercase tracking-[0.2em] opacity-80">
                 {doc.meta.org}
               </p>
+              {orgDetails && (
+                <p className="text-[11px] opacity-90 mt-0.5 break-words">{orgDetails}</p>
+              )}
               <h2 className="text-xl font-bold leading-tight mt-1">
                 {doc.meta.title}
               </h2>
@@ -104,7 +108,7 @@ function SectionRenderer({ section }: { section: ReportSection }) {
         {section.title && (
           <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
         )}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
           {section.items.map((item, i) => (
             <div
               key={i}
@@ -126,7 +130,7 @@ function SectionRenderer({ section }: { section: ReportSection }) {
                 {item.value}
               </p>
               {item.hint && (
-                <p className="text-[10px] text-muted-foreground leading-tight">
+                <p className="text-[10px] italic text-muted-foreground leading-tight">
                   {item.hint}
                 </p>
               )}
@@ -175,7 +179,8 @@ function SectionRenderer({ section }: { section: ReportSection }) {
                     key={rowIdx}
                     className={cn(
                       "border-t",
-                      rowIdx % 2 === 1 && "bg-muted/20"
+                      rowIdx % 2 === 1 && "bg-muted/20",
+                      row.voided === true && "text-muted-foreground"
                     )}
                   >
                     {section.columns.map((col) => (
@@ -238,7 +243,7 @@ function SectionRenderer({ section }: { section: ReportSection }) {
         {section.title && (
           <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
         )}
-        <dl className="grid gap-x-8 gap-y-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 rounded-md border bg-muted/20 px-4 py-3">
+        <dl className="grid gap-x-8 gap-y-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 rounded-md border bg-muted/20 px-4 py-3">
           {/* A value is never truncated: when the label and the value don't
               fit on one line (Cash Flow's "Net movement for the period" at
               1200px), the value moves to its own line, right-aligned, and only
@@ -260,8 +265,15 @@ function SectionRenderer({ section }: { section: ReportSection }) {
 
   if (section.kind === "signatures") {
     return (
-      <div className="pt-4">
-        <div className="grid gap-8 grid-cols-1 sm:grid-cols-3">
+      <div className="pt-4" data-signatures>
+        <div
+          className={cn(
+            "grid gap-8 grid-cols-1",
+            section.roles.length > 3
+              ? "sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4"
+              : "sm:grid-cols-3 print:grid-cols-3"
+          )}
+        >
           {section.roles.map((role) => (
             <div key={role}>
               {/* Ruled line first, caption under it — the printed convention,
@@ -269,6 +281,12 @@ function SectionRenderer({ section }: { section: ReportSection }) {
               <div className="h-10" />
               <div className="border-t border-foreground/40" />
               <p className="text-[11px] text-muted-foreground mt-1">{role}</p>
+              {section.lines?.map((line) => (
+                <div key={line} className="mt-3 flex items-end gap-1 text-[11px] text-muted-foreground">
+                  <span>{line}:</span>
+                  <span className="flex-1 border-b border-foreground/30" />
+                </div>
+              ))}
             </div>
           ))}
         </div>

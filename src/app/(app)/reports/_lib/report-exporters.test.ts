@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { inflateRawSync } from "node:zlib";
 import ExcelJS from "exceljs";
 import { buildReportWorkbook, toWorksheetName } from "./report-excel";
-import { renderReportPdf, toPdfText } from "./report-pdf";
+import { PESO_SLOT, renderReportPdf, toPdfText } from "./report-pdf";
 import { renderReportDocx } from "./report-docx";
 import { renderReportCsv } from "./report-csv";
 import { buildStatementOfAccountDoc } from "./report-builders";
@@ -258,6 +258,10 @@ test("toWorksheetName strips Excel's whole forbidden set", () => {
  * Pull the text-showing operands out of the rendered PDF. jsPDF leaves content
  * streams uncompressed, so this is what a viewer will actually draw.
  */
+function pdfRaw(doc: ReportDocument): string {
+  return Buffer.from(renderReportPdf(doc).output("arraybuffer")).toString("latin1");
+}
+
 function pdfTextOperands(doc: ReportDocument): string[] {
   const bytes = Buffer.from(renderReportPdf(doc).output("arraybuffer"));
   const raw = bytes.toString("latin1");
@@ -270,9 +274,10 @@ function pdfTextOperands(doc: ReportDocument): string[] {
 }
 
 test("toPdfText encodes into WinAnsi rather than dropping or mangling", () => {
-  // No standard-14 font has a peso glyph, so it becomes its ISO 4217 code.
-  assert.equal(toPdfText(CASH_RELEASED), "PHP 352,800.00");
-  assert.equal(toPdfText("₱ 100"), "PHP 100", "an existing space is swallowed");
+  // No standard-14 font has a peso glyph, so the text holds its slot, and the
+  // sign is drawn into it from its own small font.
+  assert.equal(toPdfText(CASH_RELEASED), `${PESO_SLOT}352,800.00`);
+  assert.equal(toPdfText("₱ 100"), `${PESO_SLOT}100`, "an existing space is swallowed");
 
   // These do have WinAnsi slots, in the range Latin-1 leaves to control codes.
   assert.equal(toPdfText(EM_DASH), WIN_EM_DASH);
@@ -282,7 +287,7 @@ test("toPdfText encodes into WinAnsi rather than dropping or mangling", () => {
 
   // Latin-1 passes through untouched, and the transform is idempotent.
   assert.equal(toPdfText("Niño Peña"), "Niño Peña");
-  assert.equal(toPdfText(toPdfText(CASH_RELEASED)), "PHP 352,800.00");
+  assert.equal(toPdfText(toPdfText(CASH_RELEASED)), `${PESO_SLOT}352,800.00`);
 
   // Anything else folds to a Latin-1 base, or to a visible placeholder: a
   // wrong glyph gets reported, a silently missing one does not.
@@ -295,15 +300,20 @@ test("toPdfText encodes into WinAnsi rather than dropping or mangling", () => {
   assert.equal(toPdfText("中"), "?", "an unrepresentable glyph stays visible");
 });
 
-test("pdf: peso figures print as PHP, never as the plus-minus mojibake", () => {
+test("finding 21: peso figures print the sign, never PHP or the plus-minus mojibake", () => {
+  const raw = pdfRaw(everySectionDoc());
   const joined = pdfTextOperands(everySectionDoc()).join("\n");
 
-  assert.ok(joined.includes("PHP 352,800.00"), "KPI currency missing from the PDF");
-  assert.ok(joined.includes("PHP 370,000.00"), "fields currency missing from the PDF");
+  assert.ok(joined.includes("352,800.00"), "KPI currency missing from the PDF");
+  assert.ok(joined.includes("370,000.00"), "fields currency missing from the PDF");
+  assert.ok(!joined.includes("PHP"), "still prints PHP");
+  assert.ok(!joined.includes(PESO_SLOT), "the slot reached the page instead of the sign");
   assert.ok(
     !joined.includes("±"),
     "a peso sign reached the page as UTF-16 and renders as plus-minus"
   );
+  assert.ok(raw.includes("/FontFile2"), "the sign's font is not embedded");
+  assert.ok(raw.includes("/ToUnicode"), "the sign can't be copied or searched");
 });
 
 test("pdf: no text run falls back to UTF-16", () => {
@@ -333,7 +343,7 @@ test("pdf: WinAnsi punctuation keeps its glyph instead of folding away", () => {
 test("pdf: KPI hints are drawn on the card", () => {
   const joined = pdfTextOperands(everySectionDoc()).join("\n");
   assert.ok(
-    joined.includes("Withheld from PHP 370,000.00 principal released"),
+    joined.includes("Withheld from ") && joined.includes("370,000.00 principal released"),
     "KPI hint missing from the PDF"
   );
 });
@@ -539,7 +549,7 @@ test("statement pdf: a build-up loan's twelve columns never break a word or a fi
   };
   const operands = pdfTextOperands(wide);
 
-  for (const whole of ["Period", "overdue", "PHP 1,080,000.00", "PHP 1,442,541.84"]) {
+  for (const whole of ["Period", "overdue", "1,080,000.00", "1,442,541.84"]) {
     assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
   }
 });
@@ -575,7 +585,7 @@ test("the Overpayment column and its total reach every export, and stay out when
   assert.ok(!(await docxBody(plain)).includes("Overpayment"), "docx without one");
 
   const pdf = pdfTextOperands(overpaid).join(" ");
-  assert.ok(pdf.includes("Overpayment") && pdf.includes("PHP 150.50") && pdf.includes("PHP 900.25"), "pdf");
+  assert.ok(pdf.includes("Overpayment") && pdf.includes("150.50") && pdf.includes("900.25"), "pdf");
   assert.ok(!pdfTextOperands(plain).join(" ").includes("Overpayment"), "pdf without one");
 
   const cellsOf = async (doc: ReportDocument) => {
@@ -593,7 +603,7 @@ test("the Overpayment column and its total reach every export, and stay out when
 
 test("statement pdf: thirteen columns never break a word or a figure", () => {
   const operands = pdfTextOperands(overpaidStatementDoc());
-  for (const whole of ["Overpayment", "Build-Up", "PHP 121,211.82", "PHP 987,999.46", "RCP-000012"]) {
+  for (const whole of ["Overpayment", "Build-Up", "121,211.82", "987,999.46", "RCP-000012"]) {
     assert.ok(operands.some((o) => o.includes(whole)), `"${whole}" was broken across lines`);
   }
 });
@@ -614,4 +624,243 @@ test("every other report keeps Period in every output", async () => {
   const cells: string[] = [];
   sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
   assert.ok(cells.some((c) => c.includes("Period: ")));
+});
+
+// ---------------------------------------------------------------------------
+// Statement of Account (round fz): layout and output findings
+// ---------------------------------------------------------------------------
+
+/** A money table long enough to run over several pages. */
+function longTableDoc(rowCount: number): ReportDocument {
+  return {
+    reportId: "statement_of_account",
+    meta: { title: "Statement of Account", generatedAt: "Nov 5, 2026", org: "Coop", reference: "SOA-LN-1-20261105-0912" },
+    sections: [
+      {
+        kind: "table",
+        title: "Amortization Schedule",
+        columns: [
+          { key: "period", header: "Period", format: "number", align: "center" },
+          { key: "amount", header: "Amount", format: "currency", align: "right" },
+        ],
+        rows: Array.from({ length: rowCount }, (_, i) => ({ period: i + 1, amount: 100 })),
+        totals: [{ column: "amount", value: "₱1,000,000.00" }],
+      },
+      { kind: "signatures", roles: ["Prepared by"] },
+    ],
+  };
+}
+
+/** Each page's drawing commands, in order. */
+function pdfPages(doc: ReportDocument): string[] {
+  const pdf = renderReportPdf(doc);
+  const count = pdf.getNumberOfPages();
+  const pages = (pdf.internal as unknown as { pages: string[][] }).pages;
+  return Array.from({ length: count }, (_, i) => pages[i + 1].join("\n"));
+}
+
+/** Where a drawn run starts: its x, read off the Td just before it. */
+function pdfRunX(doc: ReportDocument, text: string): number[] {
+  const raw = pdfPages(doc).join("\n");
+  const found: number[] = [];
+  const pattern = /(-?[\d.]+) -?[\d.]+ Td\s*\(((?:\\.|[^()\\])*)\) Tj/g;
+  for (const match of raw.matchAll(pattern)) {
+    if (match[2] === text) found.push(Number(match[1]));
+  }
+  return found;
+}
+
+test("finding 22: a table over several pages prints its total once, on the last page", () => {
+  const pages = pdfPages(longTableDoc(90));
+  assert.ok(pages.length >= 3, `expected several pages, got ${pages.length}`);
+  const withTotal = pages.flatMap((page, i) => (page.includes("(Total) Tj") ? [i] : []));
+  // Once, under the table's last row; the signature may follow on its own page.
+  const lastRowPage = pages.findIndex((page) => page.includes("(90) Tj"));
+  assert.deepEqual(withTotal, [lastRowPage]);
+});
+
+test("finding 22: totals sit right-aligned under right-aligned figures", () => {
+  const doc = longTableDoc(2);
+  const [totalX] = pdfRunX(doc, "1,000,000.00");
+  const [cellX] = pdfRunX(doc, "100.00");
+  assert.ok(totalX !== undefined && cellX !== undefined, "figures not found");
+  // Left-aligned they would start at the same x; right-aligned the longer one starts earlier.
+  assert.ok(totalX < cellX, `total starts at ${totalX}, a cell at ${cellX}`);
+});
+
+test("finding 23: whatever the length, the PDF ends on the signature, never a blank page", () => {
+  for (let rows = 1; rows <= 60; rows++) {
+    const pages = pdfPages(longTableDoc(rows));
+    assert.ok(pages[pages.length - 1].includes("(Prepared by) Tj"), `${rows} rows end on a page with no signature`);
+  }
+});
+
+test("finding 24: a long name wraps inside its box and clears its label", () => {
+  const long = "Maria Concepcion Evangelista de los Santos Villanueva-Dimaculangan y Fernandez Jr III";
+  const doc: ReportDocument = {
+    reportId: "statement_of_account",
+    meta: { title: "Statement of Account", generatedAt: "", org: "" },
+    sections: [
+      {
+        kind: "fields",
+        title: "Account Particulars",
+        items: [
+          { label: "Member", value: long },
+          { label: "Status", value: "Current" },
+          { label: "Loan Account No.", value: "LN-000001" },
+        ],
+      },
+    ],
+  };
+  const pages = pdfPages(doc).join("\n");
+  assert.ok(!pages.includes(`(${long}) Tj`), "the name was drawn on one line");
+
+  const runs = [...pages.matchAll(/(-?[\d.]+) -?[\d.]+ Td\s*\(((?:\\.|[^()\\])*)\) Tj/g)].map((m) => ({
+    x: Number(m[1]),
+    text: m[2],
+  }));
+  const pdf = renderReportPdf(doc);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  const labelEnd = runs.find((r) => r.text === "Member")!.x + pdf.getTextWidth("Member");
+  pdf.setFont("helvetica", "bold");
+  const nameLines = runs.filter((r) => long.includes(r.text) && r.text.length > 6);
+  assert.ok(nameLines.length >= 2, "expected the name on two lines or more");
+  const middle = pdf.internal.pageSize.getWidth() / 2;
+  for (const line of nameLines) {
+    assert.ok(line.x > labelEnd, `"${line.text}" runs over the label`);
+    assert.ok(line.x + pdf.getTextWidth(line.text) <= middle, `"${line.text}" runs out of its column`);
+  }
+  // The row below starts under the name's last line.
+  const nameYs = [...pages.matchAll(/-?[\d.]+ (-?[\d.]+) Td\s*\(((?:\\.|[^()\\])*)\) Tj/g)];
+  const lastNameY = Math.min(...nameYs.filter((m) => long.includes(m[2]) && m[2].length > 6).map((m) => Number(m[1])));
+  const nextRowY = Number(nameYs.find((m) => m[2] === "Loan Account No.")![1]);
+  assert.ok(nextRowY < lastNameY, "the next row overlaps the wrapped name");
+});
+
+test("finding 27: a KPI hint prints in italics in the PDF", () => {
+  const raw = pdfPages(everySectionDoc()).join("\n");
+  const at = raw.indexOf("(In the selected period) Tj");
+  assert.ok(at > 0, "hint not found");
+  const before = raw.slice(0, at);
+  const font = before.slice(before.lastIndexOf("/F"), before.lastIndexOf(" Tf"));
+
+  const pdf = renderReportPdf(everySectionDoc());
+  pdf.setFont("helvetica", "italic");
+  const italicKey = (pdf.getFont() as unknown as { id: string }).id;
+  assert.ok(font.startsWith(`${italicKey.startsWith("/") ? "" : "/"}${italicKey} `), `hint drawn in ${font}`);
+});
+
+test("finding 28: name, date and Received by reach every output", async () => {
+  const doc: ReportDocument = {
+    ...everySectionDoc(),
+    sections: [{ kind: "signatures", roles: ["Prepared by", "Received by (Member)"], lines: ["Name", "Date"] }],
+  };
+  const csv = renderReportCsv(doc);
+  assert.ok(csv.includes("Received by (Member)") && csv.includes("Received by (Member): Name") && csv.includes("Prepared by: Date"), "csv");
+
+  const docx = await docxBody(doc);
+  assert.ok(docx.includes("Received by (Member)") && docx.includes("Name:") && docx.includes("Date:"), "docx");
+
+  const pdf = pdfTextOperands(doc);
+  for (const text of ["Received by (Member)".replace(/[()]/g, "\\$&"), "Name:", "Date:"]) {
+    assert.ok(pdf.some((o) => o.includes(text)), `pdf: ${text}`);
+  }
+
+  const sheet = await readBackSheet(doc);
+  const cells: string[] = [];
+  sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+  for (const text of ["Received by (Member)", "Name:", "Date:"]) {
+    assert.ok(cells.includes(text), `excel: ${text}`);
+  }
+});
+
+test("a sign-off without lines keeps its old shape", async () => {
+  const docx = await docxBody(everySectionDoc());
+  assert.ok(!docx.includes("Name:"));
+  assert.ok(!renderReportCsv(everySectionDoc()).includes("Prepared by: Name"));
+});
+
+test("finding 29: excel carries the reference and the generated date", async () => {
+  const doc = { ...everySectionDoc(), meta: { ...everySectionDoc().meta, generatedAt: "Nov 5, 2026, 9:12 AM" } };
+  const sheet = await readBackSheet(doc);
+  const cells: string[] = [];
+  sheet.eachRow((row) => row.eachCell((cell) => cells.push(String(cell.value))));
+  assert.ok(cells.includes(`Reference: ${doc.meta.reference}`), "no reference");
+  assert.ok(cells.includes("Generated: Nov 5, 2026, 9:12 AM"), "no generated date");
+  assert.ok(cells.includes(`Prepared by: ${doc.meta.preparedBy}`), "no preparer");
+});
+
+test("finding 29: excel stores money totals as numbers, and a dash stays a dash", async () => {
+  const doc: ReportDocument = {
+    ...everySectionDoc(),
+    sections: [
+      {
+        kind: "table",
+        columns: [
+          { key: "label", header: "Label" },
+          { key: "amount", header: "Amount", format: "currency", align: "right" },
+          { key: "missing", header: "Missing", format: "currency", align: "right" },
+          { key: "share", header: "Share", format: "percent", align: "right" },
+        ],
+        rows: [{ label: "A", amount: 1, missing: 1, share: 1 }],
+        totals: [
+          { column: "amount", value: "₱1,234,567.89" },
+          { column: "missing", value: EM_DASH },
+          { column: "share", value: "100.0%" },
+        ],
+      },
+    ],
+  };
+  const row = rowForLabel(await readBackSheet(doc), "Total");
+  assert.equal(row.getCell(2).value, 1234567.89);
+  assert.equal(row.getCell(2).numFmt, '"₱"#,##0.00;[Red]-"₱"#,##0.00');
+  assert.equal(row.getCell(3).value, EM_DASH);
+  assert.equal(row.getCell(4).value, "100.0%");
+});
+
+test("finding 18: the organization's address and contact reach every output", async () => {
+  const doc = {
+    ...everySectionDoc(),
+    meta: { ...everySectionDoc().meta, orgAddress: "Butuan City", orgContact: "0917 000 0000" },
+  };
+  const line = `Butuan City  •  0917 000 0000`;
+  assert.ok(renderReportCsv(doc).includes(line), "csv");
+  assert.ok((await docxBody(doc)).includes(line), "docx");
+  const pdf = pdfTextOperands(doc).join("\n");
+  assert.ok(pdf.includes("Butuan City") && pdf.includes("0917 000 0000"), "pdf");
+  const sheet = await readBackSheet(doc);
+  const cells: string[] = [];
+  sheet.eachRow((r) => r.eachCell((c) => cells.push(String(c.value))));
+  assert.ok(cells.includes(line), "excel");
+});
+
+test("finding 12: a voided line reads muted in the PDF and Excel", async () => {
+  const doc: ReportDocument = {
+    ...everySectionDoc(),
+    sections: [
+      {
+        kind: "table",
+        columns: [
+          { key: "particulars", header: "Particulars" },
+          { key: "credit", header: "Credit", format: "currency", align: "right" },
+        ],
+        rows: [
+          { particulars: "Payment A", credit: 1, voided: false },
+          { particulars: "Payment B (Voided)", credit: 2, voided: true },
+        ],
+      },
+    ],
+  };
+  const raw = pdfPages(doc).join("\n");
+  const colorBefore = (text: string) => {
+    const at = raw.indexOf(`(${text}) Tj`);
+    assert.ok(at > 0, `${text} not drawn`);
+    return [...raw.slice(0, at).matchAll(/([\d. ]+) (?:rg|g)\n/g)].at(-1)?.[1];
+  };
+  assert.notEqual(colorBefore("Payment B \\(Voided\\)"), colorBefore("Payment A"));
+
+  const sheet = await readBackSheet(doc);
+  assert.equal(rowForLabel(sheet, "Payment B (Voided)").getCell(1).font?.color?.argb, "FF6B7280");
+  assert.notEqual(rowForLabel(sheet, "Payment A").getCell(1).font?.color?.argb, "FF6B7280");
 });

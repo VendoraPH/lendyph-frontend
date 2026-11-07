@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { siteConfig } from "@/config/site";
 import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, buildReference } from "./report-chrome";
-import type { ReportDocument } from "./types";
+import { orgDetailsLine, type ReportDocument } from "./types";
 
 /**
  * Chrome is what turns a data dump into a document: who ran it, under whose
@@ -70,15 +70,59 @@ test("a reference is minted when the caller supplies none", async () => {
   assert.match(doc.meta.reference!, /^AGE-\d{8}-\d{4}$/);
 });
 
-test("the reference is stamped from local calendar parts, not UTC", () => {
-  // 00:30 on Aug 7 in Manila is still Aug 6 in UTC. Formatting off the ISO
-  // string would date this report a day early.
-  const at = new Date(2026, 7, 7, 0, 30);
+test("the reference is stamped in Philippine time, whatever the computer is set to", () => {
+  // 00:30 on Aug 7 in Manila is still Aug 6 in UTC.
+  const at = new Date("2026-08-06T16:30:00Z");
   assert.equal(buildReference("statement_of_account", at), "SOA-20260807-0030");
 });
 
+test("finding 19: a statement's reference carries its loan number", () => {
+  const at = new Date("2026-11-05T01:12:00Z");
+  assert.equal(
+    buildReference("statement_of_account", at, "LN-000004"),
+    "SOA-LN-000004-20261105-0912"
+  );
+  assert.notEqual(
+    buildReference("statement_of_account", at, "LN-000006"),
+    buildReference("statement_of_account", at, "LN-000003")
+  );
+});
+
+test("finding 19: applying chrome uses the document's reference key", async () => {
+  const keyed = { ...baseDoc(), meta: { ...baseDoc().meta, referenceKey: "LN-000004" } };
+  const doc = await applyChrome(keyed, {});
+  assert.match(doc.meta.reference!, /^AGE-LN-000004-\d{8}-\d{4}$/);
+});
+
+test("finding 18: the organization's address and contact come from branding", async () => {
+  useBrandingStore.getState().hydrate({
+    logoUrl: null,
+    organizationName: "Binhi Coop",
+    address: "Butuan City",
+    contact: "0917 000 0000",
+  });
+  const doc = await applyChrome(baseDoc(), {});
+  assert.equal(doc.meta.orgAddress, "Butuan City");
+  assert.equal(doc.meta.orgContact, "0917 000 0000");
+  assert.equal(orgDetailsLine(doc.meta), "Butuan City  •  0917 000 0000");
+  useBrandingStore.setState({ organizationName: null, address: null, contact: null });
+});
+
+test("finding 18: no address or contact configured leaves no line", () => {
+  assert.equal(orgDetailsLine({ title: "", generatedAt: "", org: "" }), null);
+});
+
+test("finding 28: a statement signs with name and date lines, and the member's Received by", async () => {
+  const statement = { ...baseDoc(), reportId: "statement_of_account" as const };
+  const doc = await applyChrome(statement, {});
+  const last = doc.sections[doc.sections.length - 1];
+  assert.ok(last.kind === "signatures");
+  assert.deepEqual(last.roles, ["Prepared by", "Checked by", "Approved by", "Received by (Member)"]);
+  assert.deepEqual(last.lines, ["Name", "Date"]);
+});
+
 test("every report id has its own reference prefix", () => {
-  const at = new Date(2026, 7, 6, 9, 15);
+  const at = new Date("2026-08-06T01:15:00Z");
   assert.equal(buildReference("daily_collection", at), "DCR-20260806-0915");
   assert.equal(buildReference("subsidiary_ledger", at), "SLG-20260806-0915");
 });
