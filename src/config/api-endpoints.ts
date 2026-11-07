@@ -197,6 +197,8 @@ export const API_ENDPOINTS = {
     SHARE_CAPITAL: "/reports/share-capital",
     PERFORMANCE: "/reports/performance",
     PROVISIONING: "/reports/provisioning",
+    SAVINGS_BALANCES: "/reports/savings/balances",
+    TIME_DEPOSIT_MATURITIES: "/reports/savings/time-deposit-maturities",
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.
@@ -378,6 +380,8 @@ export const API_ENDPOINTS = {
     DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
     WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
     CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+    HOLDS: (id: number) => `/savings/accounts/${id}/holds`,
+    HOLD_RELEASE: (holdId: number) => `/savings/holds/${holdId}/release`,
     TIME_DEPOSITS: "/savings/time-deposits",
     TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,

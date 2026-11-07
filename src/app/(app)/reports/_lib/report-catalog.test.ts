@@ -106,3 +106,32 @@ test("the Member Report reads the member list with the period and a page size", 
   assert.ok(table && table.kind === "table");
   assert.equal(table.rows[0].borrower_name, "Ana Cruz");
 });
+
+test("the savings reports stay off the list unless savings is switched on and the user can read it", async () => {
+  const { visibleReports } = await import("./report-catalog");
+  // NEXT_PUBLIC_ENABLE_SAVINGS is unset here, so even an all-powerful user
+  // doesn't see them; the loan reports are unaffected.
+  const ids = visibleReports(() => true).map((r) => r.id);
+  assert.equal(ids.includes("savings_balances"), false);
+  assert.equal(ids.includes("time_deposit_maturities"), false);
+  assert.ok(ids.includes("releases_list"));
+  assert.equal((await reportDefinition("savings_balances")).permission, "savings:view");
+  assert.equal((await reportDefinition("time_deposit_maturities")).permission, "savings:view");
+});
+
+test("Savings Balances asks for the whole book as of today; Time Deposit Maturities for its period", async () => {
+  requests.length = 0;
+  const balances = await reportDefinition("savings_balances");
+  await balances.build({ range: RANGE, branchId: 2 });
+  assert.equal(requests[0].pathname, "/reports/savings/balances");
+  assert.equal(requests[0].searchParams.has("date_from"), false);
+  assert.equal(requests[0].searchParams.get("branch_id"), "2");
+  assert.equal(requests[0].searchParams.get("per_page"), "200");
+
+  requests.length = 0;
+  await (await reportDefinition("time_deposit_maturities")).build({ range: RANGE });
+  assert.equal(requests[0].pathname, "/reports/savings/time-deposit-maturities");
+  assert.equal(requests[0].searchParams.get("date_from"), RANGE.from);
+  assert.equal(requests[0].searchParams.get("date_to"), RANGE.to);
+  assert.equal(requests[0].searchParams.get("per_page"), "200");
+});

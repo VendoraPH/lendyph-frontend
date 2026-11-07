@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   Gauge,
+  Hourglass,
   Layers,
   ListChecks,
   PieChart,
@@ -16,7 +17,9 @@ import {
   Target,
   TrendingUp,
   Users,
+  Wallet,
 } from "lucide-react";
+import { env } from "@/config/env";
 import { api } from "@/lib/api-client";
 import { reportService } from "@/services";
 import { REPORT_TITLES } from "@/lib/page-titles";
@@ -40,6 +43,8 @@ import {
   buildStatementOfAccountDoc,
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
+import { buildSavingsBalancesDoc, buildTimeDepositMaturitiesDoc } from "./savings-report-builders";
+import type { Permission } from "@/types";
 import type {
   DateRange,
   ReportContext,
@@ -223,6 +228,36 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     supportsBranch: true,
     build: reportBuilder(reportService.provisioning, buildProvisioningDoc),
   },
+  // Savings: listed only where NEXT_PUBLIC_ENABLE_SAVINGS is on, and only to
+  // users who can read savings accounts.
+  {
+    id: "savings_balances",
+    title: REPORT_TITLES.savings_balances,
+    description: "Every savings account's balance, holds and accrued interest today.",
+    category: "financial",
+    icon: Wallet,
+    accent: ACCENT.emerald,
+    supportsBranch: true,
+    noDateRange: true,
+    permission: "savings:view",
+    available: env.features.savings,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsBalances({ ...params, ...listParams }),
+      buildSavingsBalancesDoc,
+    ),
+  },
+  {
+    id: "time_deposit_maturities",
+    title: REPORT_TITLES.time_deposit_maturities,
+    description: "Time deposits maturing in the period and the cash due on them.",
+    category: "financial",
+    icon: Hourglass,
+    accent: ACCENT.amber,
+    supportsBranch: true,
+    permission: "savings:view",
+    available: env.features.savings,
+    build: reportBuilder(reportService.timeDepositMaturities, buildTimeDepositMaturitiesDoc, listParams),
+  },
   {
     id: "portfolio_summary",
     title: REPORT_TITLES.portfolio_summary,
@@ -366,3 +401,13 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     ),
   },
 ];
+
+/**
+ * The reports this user may open: their module is switched on for this
+ * deployment, and they hold any extra permission the report's data needs.
+ */
+export function visibleReports(can: (permission: Permission) => boolean): ReportDefinition[] {
+  return REPORT_CATALOG.filter(
+    (r) => r.available !== false && (!r.permission || can(r.permission)),
+  );
+}

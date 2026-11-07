@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Lock } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Lock, Printer } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { AccountStatusBadge } from "../../../_components/account-status-badge";
 import { canClose, canDeposit, canWithdraw } from "../../../_lib/savings-rules";
+import { printSavingsPassbook } from "../_lib/print-passbook";
 import { CloseAccountDialog } from "./close-account-dialog";
+import { HoldsCard } from "./holds-card";
 import { TransactionDialog, type TransactionMode } from "./transaction-dialog";
 import { TransactionsTable } from "./transactions-table";
 
@@ -23,6 +25,12 @@ export function AccountDetail({ accountId }: { accountId: number }) {
   const [ledgerKey, setLedgerKey] = useState(0);
   const [mode, setMode] = useState<TransactionMode | null>(null);
   const [closing, setClosing] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  const printPassbook = (account: SavingsAccount) => {
+    setPrinting(true);
+    printSavingsPassbook(account).then(() => setPrinting(false));
+  };
 
   const reload = () => {
     resource.refetch();
@@ -42,8 +50,16 @@ export function AccountDetail({ accountId }: { accountId: number }) {
       >
         {(account) => (
           <>
-            <Header account={account} onDeposit={() => setMode("deposit")} onWithdraw={() => setMode("withdrawal")} onClose={() => setClosing(true)} />
+            <Header
+              account={account}
+              printing={printing}
+              onPrint={() => printPassbook(account)}
+              onDeposit={() => setMode("deposit")}
+              onWithdraw={() => setMode("withdrawal")}
+              onClose={() => setClosing(true)}
+            />
             <Balances account={account} />
+            <HoldsCard account={account} onChanged={() => resource.refetch()} />
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Transactions</CardTitle>
@@ -68,11 +84,15 @@ export function AccountDetail({ accountId }: { accountId: number }) {
 
 function Header({
   account,
+  printing,
+  onPrint,
   onDeposit,
   onWithdraw,
   onClose,
 }: {
   account: SavingsAccount;
+  printing: boolean;
+  onPrint: () => void;
   onDeposit: () => void;
   onWithdraw: () => void;
   onClose: () => void;
@@ -96,31 +116,36 @@ function Header({
           {account.closed_at && ` · Closed ${formatDate(account.closed_at)}`}
         </p>
       </div>
-      {account.status !== "closed" && (
-        <div className="flex flex-wrap gap-2">
-          <PermissionButton permission="savings:transact" onClick={onDeposit} disabled={!canDeposit(account)}>
-            <ArrowDownToLine className="h-4 w-4" /> Deposit
-          </PermissionButton>
-          <PermissionButton
-            permission="savings:transact"
-            variant="outline"
-            onClick={onWithdraw}
-            disabled={!canWithdraw(account)}
-            title={canWithdraw(account) ? undefined : "Only an active account can be withdrawn from."}
-          >
-            <ArrowUpFromLine className="h-4 w-4" /> Withdraw
-          </PermissionButton>
-          <PermissionButton
-            permission="savings:close"
-            variant="outline"
-            onClick={onClose}
-            disabled={!canClose(account)}
-            title={canClose(account) ? undefined : "Release the holds on this account before closing it."}
-          >
-            <Lock className="h-4 w-4" /> Close
-          </PermissionButton>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={onPrint} disabled={printing}>
+          <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print passbook"}
+        </Button>
+        {account.status !== "closed" && (
+          <>
+            <PermissionButton permission="savings:transact" onClick={onDeposit} disabled={!canDeposit(account)}>
+              <ArrowDownToLine className="h-4 w-4" /> Deposit
+            </PermissionButton>
+            <PermissionButton
+              permission="savings:transact"
+              variant="outline"
+              onClick={onWithdraw}
+              disabled={!canWithdraw(account)}
+              title={canWithdraw(account) ? undefined : "Only an active account can be withdrawn from."}
+            >
+              <ArrowUpFromLine className="h-4 w-4" /> Withdraw
+            </PermissionButton>
+            <PermissionButton
+              permission="savings:close"
+              variant="outline"
+              onClick={onClose}
+              disabled={!canClose(account)}
+              title={canClose(account) ? undefined : "Release the holds on this account before closing it."}
+            >
+              <Lock className="h-4 w-4" /> Close
+            </PermissionButton>
+          </>
+        )}
+      </div>
     </div>
   );
 }

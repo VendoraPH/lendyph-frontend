@@ -1,4 +1,4 @@
-# Savings & Deposits: backend handoff (Parts 1–2: products, accounts, transactions, time deposits)
+# Savings & Deposits: backend handoff (Parts 1–3: products, accounts, transactions, time deposits, holds, reports)
 
 Built frontend-only behind `NEXT_PUBLIC_ENABLE_SAVINGS` (off by default). The
 Swagger at `api-lendyph.abedubas.dev` was unreachable (404) when this was
@@ -67,7 +67,25 @@ Money is `decimal:2`. Dates are `YYYY-MM-DD` in Asia/Manila.
 - `DELETE /savings/products/{id}` stays 422 while a product has any placement.
 - The certificate is printed client-side from the placement; `certificate_number` must be unique and stable, because reprints quote it.
 
+## Part 3: holds, passbook, savings reports
+
+| Endpoint | Permission | Logic |
+| --- | --- | --- |
+| `GET /savings/accounts/{id}/holds` | `savings:view` | Every hold on the account, active first. Plain array, not paged: `{id, account_id, amount, reason, placed_at, expires_on\|null, status: active\|released, released_at, release_reason, created_by_user, released_by_user}`. |
+| `POST /savings/accounts/{id}/holds` | `savings:transact` | `amount`, `reason`, optional `expires_on` (after today). 422 when `amount` exceeds `balance − hold_amount` or the account is closed. Raise `hold_amount` and lower `available_balance`. No journal entry: the money doesn't move. |
+| `POST /savings/holds/{id}/release` | `savings:transact` | `reason`. Set `status: released`, `released_at`, `release_reason`, `released_by_user`, and give the amount back to `available_balance`. 422 if it's already released. |
+| `GET /reports/savings/balances?branch_id&per_page` | `reports:view` + `savings:view` | Every account as of today (no dates). Paginator envelope with rows `{account_number, borrower_name, product_name, status, balance, hold_amount, available_balance, accrued_interest, last_transaction_at}`, `meta.total`, and `totals {account_count, total_balance, total_hold, total_available, total_accrued_interest}` over the **whole book**, plus `as_of`. |
+| `GET /reports/savings/time-deposit-maturities?date_from&date_to&branch_id&per_page` | `reports:view` + `savings:view` | Placements whose `maturity_date` is in the range, soonest first. Rows `{certificate_number, borrower_name, product_name, principal, annual_interest_rate, term_days, maturity_date, net_interest, maturity_amount, maturity_instruction, status}`. `totals {count, total_principal, total_net_interest, total_maturity_amount}` over the whole period, and optionally `payout_amount` (the part not set to roll over). |
+
+### Server-side rules
+
+- A nightly job releases holds whose `expires_on` has passed.
+- Holds count toward `hold_amount`, and `available_balance` is `balance − holds − maintaining balance`, never below 0. Closing stays 422 while any hold is active.
+- Report totals must be the server's figures for the whole book or period. The UI never sums the page, and shows "—" when they're missing.
+- `per_page` for both reports is 200, inside the 1000 report cap.
+- The passbook is printed client-side from `GET /savings/accounts/{id}/transactions`, drained 100 rows a page. It relies on the stored `running_balance` being in posting order (date, then id).
+- **Member Portal requests.** `savings_opening` and `savings_withdrawal` requests are reviewed on the existing staff request screen (#513). Approving a `savings_withdrawal` must post the withdrawal, or place a hold for it until it's paid out. Approving a `savings_opening` must open the account. Neither may happen on submit.
+
 ## Coming in later parts
 
-Holds, passbook printing, savings reports and accounting views, and approving
-Member Portal withdrawal and opening requests.
+Savings accounting views (GL mapping for deposits, interest expense, and withholding tax payable).

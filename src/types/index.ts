@@ -127,4 +127,8 @@ export type {
   SettleTimeDepositInput,
   PreterminateTimeDepositInput,
   PreterminationQuote,
+  PlaceSavingsHoldInput,
+  ReleaseSavingsHoldInput,
+  SavingsHold,
+  SavingsHoldStatus,
 } from "./savings";

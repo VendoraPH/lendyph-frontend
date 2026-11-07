@@ -12,11 +12,14 @@ import type {
   CloseSavingsAccountInput,
   OpenSavingsAccountInput,
   PaginatedResponse,
+  PlaceSavingsHoldInput,
   PlaceTimeDepositInput,
   PreterminateTimeDepositInput,
   PreterminationQuote,
+  ReleaseSavingsHoldInput,
   SavingsAccount,
   SavingsAccountsResponse,
+  SavingsHold,
   SavingsProduct,
   SavingsProductInput,
   SavingsTransaction,
@@ -52,6 +55,14 @@ export const savingsService = {
   openAccount: (data: OpenSavingsAccountInput) => api.post<SavingsAccount>(E.ACCOUNTS, data),
   closeAccount: (id: number, data: CloseSavingsAccountInput) =>
     api.post<SavingsAccount>(E.CLOSE(id), data),
+
+  // ── Holds ──
+
+  /** Every hold on the account, active first. A short list, so not paged. */
+  holds: (id: number) => api.get<SavingsHold[]>(E.HOLDS(id)),
+  placeHold: (id: number, data: PlaceSavingsHoldInput) => api.post<SavingsHold>(E.HOLDS(id), data),
+  releaseHold: (holdId: number, data: ReleaseSavingsHoldInput) =>
+    api.post<SavingsHold>(E.HOLD_RELEASE(holdId), data),
 
   // ── Transactions ──
 
