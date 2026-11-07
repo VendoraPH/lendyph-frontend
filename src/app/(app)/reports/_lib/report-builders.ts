@@ -1411,7 +1411,8 @@ const LEDGER_LOAN_COLUMNS: ReportColumn[] = [
   { key: "release_date", header: "Released", format: "date", width: 110 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
   { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: 140 },
-  { key: "balance", header: "Outstanding", format: "currency", align: "right", width: 140 },
+  { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: 150 },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 140 },
   { key: "overdue", header: "Past Due", format: "currency", align: "right", width: 130 },
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
@@ -1426,9 +1427,16 @@ function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, un
     release_date: pick(raw, ["release_date", "released_at", "start_date"]),
     principal: pick(raw, ["principal_amount", "principal"]),
     total_paid: pick(raw, ["total_paid", "amount_paid", "total_amount_paid"]),
-    balance: pick(raw, ["outstanding_balance", "balance", "remaining_balance"]),
+    // The server's two figures, as the loan pages name them: unpaid principal,
+    // and everything still owed (principal, interest, penalty and premium).
+    // Never the deprecated `outstanding_balance`, which is principal plus
+    // premium and was labelled Outstanding.
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
     overdue: pick(raw, ["overdue_amount", "past_due_amount", "total_overdue"]),
-    status: loanStatusText(pick(raw, ["status"])),
+    // The server's display_status: Past Due for a released or ongoing loan
+    // past grace, as the loans screens read it; otherwise the stored status.
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 
@@ -1441,6 +1449,7 @@ export function buildSubsidiaryLedgerDoc(
   // Every ledger total is the server's; a figure it did not send is "—",
   // never the loan rows added up.
   const totals = asRecord(pick(obj, ["totals"]));
+  const loansTotals = asRecord(pick(obj, ["loans_totals"]));
   const totalPrincipal = pick(totals, ["total_principal"]);
   const totalPaid = pick(totals, ["total_paid"]);
   const totalOutstanding = pick(totals, ["total_outstanding"]);
@@ -1472,7 +1481,7 @@ export function buildSubsidiaryLedgerDoc(
       kpi("Total Loans", countOrDash(pick(totals, ["total_loans"]))),
       kpi("Total Released", currencyOrDash(totalPrincipal)),
       kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
-      kpi("Outstanding Balance", currencyOrDash(totalOutstanding), { tone: "negative" }),
+      kpi("Outstanding", currencyOrDash(totalOutstanding), { tone: "negative" }),
     ],
   });
 
@@ -1486,9 +1495,9 @@ export function buildSubsidiaryLedgerDoc(
         ? [
             { column: "principal", label: "Total", value: currencyOrDash(totalPrincipal) },
             { column: "total_paid", value: currencyOrDash(totalPaid) },
-            { column: "balance", value: currencyOrDash(totalOutstanding) },
-            // No "Past Due" total: the server states no per-loan or overall
-            // overdue figure for the ledger.
+            { column: "principal_balance", value: currencyOrDash(pick(loansTotals, ["outstanding_principal"])) },
+            { column: "outstanding", value: currencyOrDash(totalOutstanding) },
+            { column: "overdue", value: currencyOrDash(pick(loansTotals, ["overdue_amount"])) },
           ]
         : undefined,
     emptyText: "This member has no loan accounts on record.",

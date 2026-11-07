@@ -2217,9 +2217,12 @@ const LEDGER_PAYLOAD = {
       release_date: "2026-02-01",
       principal_amount: 50000,
       total_paid: 21000.5,
-      outstanding_balance: 34500.25,
+      outstanding_balance: 31000,
+      outstanding_principal: 31000,
+      total_outstanding: 34500.25,
       overdue_amount: 5450.5,
       status: "ongoing",
+      display_status: "past_due",
     },
     {
       loan_account_number: "LN-2025-0044",
@@ -2227,8 +2230,11 @@ const LEDGER_PAYLOAD = {
       principal_amount: 30000,
       total_paid: 30000,
       outstanding_balance: 0,
+      outstanding_principal: 0,
+      total_outstanding: 0,
       overdue_amount: 0,
       status: "closed",
+      display_status: "closed",
     },
   ],
   totals: {
@@ -2237,6 +2243,13 @@ const LEDGER_PAYLOAD = {
     total_principal: 80000,
     total_paid: 51000.5,
     total_outstanding: 34500.25,
+  },
+  loans_totals: {
+    principal_amount: 80000,
+    total_paid: 51000.5,
+    outstanding_principal: 31000,
+    total_outstanding: 34500.25,
+    overdue_amount: 5450.5,
   },
 };
 
@@ -2259,14 +2272,17 @@ test("subsidiary ledger lists every loan account for the borrower", () => {
   assert.equal(table.rows[0].loan_account_number, "LN-2026-0001");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "principal"), "₱80,000.00");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "total_paid"), "₱51,000.50");
-  assert.equal(namedTableTotal(doc, "Loan Accounts", "balance"), "₱34,500.25");
-  // The server states no overdue figure for the ledger, so none is footed.
-  assert.equal(namedTableTotal(doc, "Loan Accounts", "overdue"), undefined);
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "principal_balance"), "₱31,000.00");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "outstanding"), "₱34,500.25");
+  // The server's Past Due total, from its column totals.
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "overdue"), "₱5,450.50");
 });
 
 test("subsidiary ledger labels each loan's status as the loans screens do", () => {
   const rows = namedTable(buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE), "Loan Accounts").rows;
-  assert.deepEqual(rows.map((r) => r.status), ["Current", "Closed"]);
+  // The server's display_status: a loan past grace reads Past Due, as on the loans screens.
+  assert.deepEqual(rows.map((r) => r.status), ["Past Due", "Closed"]);
+  assert.equal(rows[0].overdue, 5450.5);
 });
 
 test("subsidiary ledger reads the branch off the nested relation", () => {
@@ -2281,7 +2297,20 @@ test("ledger KPIs read the server's totals block", () => {
   assert.equal(kpiValue(doc, "Total Loans"), "2");
   assert.equal(kpiValue(doc, "Total Released"), "₱80,000.00");
   assert.equal(kpiValue(doc, "Total Paid"), "₱51,000.50");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱34,500.25");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱34,500.25");
+});
+
+test("the ledger shows each loan's Principal Balance and Outstanding as sent, never the old alias", () => {
+  const doc = buildSubsidiaryLedgerDoc(LEDGER_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Loan Accounts");
+
+  assert.deepEqual(
+    table.columns.map((c) => c.header).filter((h) => /Balance|Outstanding/.test(h)),
+    ["Principal Balance", "Outstanding"]
+  );
+  assert.equal(table.rows[0].principal_balance, 31000);
+  assert.equal(table.rows[0].outstanding, 34500.25);
+  assert.throws(() => kpiValue(doc, "Outstanding Balance"), /not found/);
 });
 
 test("the ledger's KPIs and footer are the server's figures, not the accounts added up", () => {
@@ -2301,21 +2330,22 @@ test("the ledger's KPIs and footer are the server's figures, not the accounts ad
   assert.equal(kpiValue(doc, "Total Loans"), "9");
   assert.equal(kpiValue(doc, "Total Released"), "₱410,000.00");
   assert.equal(kpiValue(doc, "Total Paid"), "₱220,000.75");
-  assert.equal(kpiValue(doc, "Outstanding Balance"), "₱190,000.25");
+  assert.equal(kpiValue(doc, "Outstanding"), "₱190,000.25");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "principal"), "₱410,000.00");
   assert.equal(namedTableTotal(doc, "Loan Accounts", "total_paid"), "₱220,000.75");
-  assert.equal(namedTableTotal(doc, "Loan Accounts", "balance"), "₱190,000.25");
+  assert.equal(namedTableTotal(doc, "Loan Accounts", "outstanding"), "₱190,000.25");
 });
 
 test("the ledger shows dashes, not sums of the accounts, without server totals", () => {
-  const { totals, ...withoutTotals } = LEDGER_PAYLOAD;
+  const { totals, loans_totals, ...withoutTotals } = LEDGER_PAYLOAD;
   void totals;
+  void loans_totals;
   const doc = buildSubsidiaryLedgerDoc(withoutTotals, RANGE);
 
-  for (const label of ["Total Loans", "Total Released", "Total Paid", "Outstanding Balance"]) {
+  for (const label of ["Total Loans", "Total Released", "Total Paid", "Outstanding"]) {
     assert.equal(kpiValue(doc, label), DASH, label);
   }
-  for (const column of ["principal", "total_paid", "balance"]) {
+  for (const column of ["principal", "total_paid", "principal_balance", "outstanding", "overdue"]) {
     assert.equal(namedTableTotal(doc, "Loan Accounts", column), DASH, column);
   }
 });
