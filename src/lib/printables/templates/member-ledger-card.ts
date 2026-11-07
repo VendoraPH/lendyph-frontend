@@ -46,11 +46,10 @@ function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown>
     principal: pick(raw, ["principal_amount", "principal"]),
     total_paid: pick(raw, ["total_paid", "amount_paid"]),
     payments_count: pick(raw, ["payments_count", "repayments_count"]),
-    balance: pick(raw, [
-      "outstanding_balance",
-      "balance",
-      "remaining_balance",
-    ]),
+    // Unpaid principal, and everything still owed, as the loan pages name
+    // them. Never the deprecated `outstanding_balance` (principal plus premium).
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
     status: humanize(pick(raw, ["status"])),
   };
 }
@@ -87,7 +86,7 @@ export function buildMemberLedgerCardDoc(
 
   const totalReleased = pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]);
   const totalPaid = pickNumber(totals, ["total_paid", "total_amount_paid"]);
-  const totalOutstanding = pickNumber(totals, ["total_outstanding", "outstanding_balance"]);
+  const totalOutstanding = pickNumber(totals, ["total_outstanding"]);
   const loanCount =
     pickNumber(totals, ["total_loans", "loan_count"]) ?? loanRows.length;
   const paymentsCount = pickNumber(loansTotals, ["payments_count"]);
@@ -125,7 +124,7 @@ export function buildMemberLedgerCardDoc(
         { label: "Total released", amount: currencyOrDash(totalReleased) },
         { label: "Total paid", amount: currencyOrDash(totalPaid), indent: true },
         {
-          label: "TOTAL OUTSTANDING BALANCE",
+          label: "TOTAL OUTSTANDING",
           amount: currencyOrDash(totalOutstanding),
           rule: "grand",
         },
@@ -135,14 +134,15 @@ export function buildMemberLedgerCardDoc(
       kind: "table",
       title: "Loan Accounts",
       columns: [
-        { key: "loan_account_number", header: "Loan #", width: "14%" },
-        { key: "product", header: "Product", width: "16%" },
-        { key: "released_at", header: "Released", format: "date", width: "11%" },
-        { key: "maturity_date", header: "Maturity", format: "date", width: "11%" },
-        { key: "principal", header: "Principal", format: "currency", align: "right", width: "13%" },
-        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "13%" },
-        { key: "payments_count", header: "Payments", format: "number", align: "right", width: "9%" },
-        { key: "balance", header: "Balance", format: "currency", align: "right", width: "13%" },
+        { key: "loan_account_number", header: "Loan #", width: "12%" },
+        { key: "product", header: "Product", width: "14%" },
+        { key: "released_at", header: "Released", format: "date", width: "10%" },
+        { key: "maturity_date", header: "Maturity", format: "date", width: "10%" },
+        { key: "principal", header: "Principal", format: "currency", align: "right", width: "11%" },
+        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "11%" },
+        { key: "payments_count", header: "Payments", format: "number", align: "right", width: "7%" },
+        { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: "12%" },
+        { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: "13%" },
       ],
       rows: loanRows,
       totals:
@@ -152,7 +152,8 @@ export function buildMemberLedgerCardDoc(
               principal: currencyOrDash(pick(loansTotals, ["principal_amount"])),
               total_paid: currencyOrDash(pick(loansTotals, ["total_paid"])),
               payments_count: paymentsCount === null ? DASH : String(paymentsCount),
-              balance: currencyOrDash(pick(loansTotals, ["outstanding_balance"])),
+              principal_balance: currencyOrDash(pick(loansTotals, ["outstanding_principal"])),
+              outstanding: currencyOrDash(pick(loansTotals, ["total_outstanding"])),
             }
           : undefined,
       emptyText: "This member has no released loan accounts on record.",
