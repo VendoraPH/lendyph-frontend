@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
-import { reportSubjectNoun } from "../_lib/report-subject";
+import {
+  noDateRangeScope,
+  presetMemberId,
+  reportPickPrompt,
+  reportSubjectNoun,
+} from "../_lib/report-subject";
+import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
@@ -48,11 +54,12 @@ import {
   RefreshCw,
   Table as TableIcon,
 } from "lucide-react";
-import { reportService } from "@/services";
+import { borrowerService, reportService } from "@/services";
 import { REPORT_CATALOG } from "../_lib/report-catalog";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
+import { ReportPrintSheet } from "../_components/report-print-sheet";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
@@ -172,7 +179,7 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
   }
 }
 
-function ReportDetailContent() {
+function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
@@ -186,13 +193,18 @@ function ReportDetailContent() {
     presetRange("this_month", { from: "", to: "" })
   );
   const [branchId, setBranchId] = useState<number | null>(null);
-  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const { user, hasPermission } = useAuth();
+  // `?member=<id>` opens a member's report with them selected. Reading a member
+  // needs `borrowers:view`, the same as the picker; without it nothing is preset.
+  const presetId =
+    report?.subject === "borrower" && hasPermission("borrowers:view") ? memberParam : null;
+  const [subjectId, setSubjectId] = useState<number | null>(presetId);
+  const [presetMember, setPresetMember] = useState<MemberOption | null>(null);
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
   const { branches } = useBranches();
-  const { user, hasPermission } = useAuth();
   // Without `branches:view_all` the API answers 403 to a branch outside the
   // caller's own, so the picker offers only theirs.
   const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
@@ -200,6 +212,24 @@ function ReportDetailContent() {
   const loadBranding = useBrandingStore((s) => s.load);
 
   const [logoData, setLogoData] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (presetId === null) return;
+    let cancelled = false;
+    borrowerService
+      .detail(presetId)
+      .then((member) => {
+        if (!cancelled) setPresetMember(toMemberOption(member));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubjectId((current) => (current === presetId ? null : current));
+        toast.error("We couldn't open that member. Please pick one.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [presetId]);
 
   // Warms branding for the case where Reports is the first page of the session
   // to need it, so the logo is on screen before anyone clicks Generate. The
@@ -433,7 +463,7 @@ function ReportDetailContent() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             {report.noDateRange ? (
               <p className="text-sm text-muted-foreground min-w-0 flex-1">
-                Covers the whole loan, as of the day it is generated.
+                {noDateRangeScope(report.subject)}
               </p>
             ) : (
               <div className="space-y-2 min-w-0 flex-1">
@@ -564,6 +594,8 @@ function ReportDetailContent() {
                     setSubjectId(id);
                     setDoc(null);
                   }}
+                  presetId={presetId}
+                  presetMember={presetMember}
                 />
               )}
 
@@ -588,7 +620,7 @@ function ReportDetailContent() {
       {!doc && !generating && (
         <EmptyPreview
           reportTitle={report.title}
-          pick={report.noDateRange ? `a ${report.subject ? reportSubjectNoun(report.subject) : ""}` : "a date range"}
+          pick={reportPickPrompt(report)}
         />
       )}
       {generating && (
@@ -600,14 +632,23 @@ function ReportDetailContent() {
         </div>
       )}
       {doc && !generating && <ReportPreview doc={doc} />}
+      {doc && !generating && <ReportPrintSheet doc={doc} />}
     </div>
   );
+}
+
+/** Keyed by the member, so following a link to another member starts afresh. */
+function ReportDetailRoute() {
+  const memberParam = presetMemberId(useSearchParams().get("member"));
+  return <ReportDetailContent key={memberParam ?? "none"} memberParam={memberParam} />;
 }
 
 export default function ReportDetailPage() {
   return (
     <RouteGuard permission="reports:view" pageName="Reports">
-      <ReportDetailContent />
+      <Suspense fallback={null}>
+        <ReportDetailRoute />
+      </Suspense>
     </RouteGuard>
   );
 }

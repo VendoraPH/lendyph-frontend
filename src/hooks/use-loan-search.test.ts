@@ -23,10 +23,10 @@ const view = (fields: Partial<SearchView>): SearchView => ({
 });
 
 describe("what is asked of the server", () => {
-  test("the first 25 active loans before typing, without schedules", () => {
+  test("the first 25 loans ever released before typing, closed ones too, without schedules", () => {
     assert.equal(LOAN_PAGE_SIZE, 25);
     assert.deepEqual(loanSearchParams(""), {
-      status: "active",
+      status: "released,ongoing,completed,defaulted,restructured",
       view: "summary",
       per_page: 25,
     });
@@ -34,7 +34,7 @@ describe("what is asked of the server", () => {
 
   test("the search goes to the server", () => {
     assert.deepEqual(loanSearchParams("LN-001"), {
-      status: "active",
+      status: "released,ongoing,completed,defaulted,restructured",
       view: "summary",
       per_page: 25,
       search: "LN-001",
