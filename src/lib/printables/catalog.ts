@@ -127,7 +127,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
     id: "promissory_note",
     title: PRINTABLE_TITLES.promissory_note,
     description:
-      "The borrower's undertaking to pay, with co-maker clause and notarial block.",
+      "The member's undertaking to pay, with co-maker clause and notarial block.",
     subject: "loan",
     icon: FileSignature,
     build: printableBuilder(
@@ -171,7 +171,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
     id: "official_receipt",
     title: PRINTABLE_TITLES.official_receipt,
     description:
-      "Two copies — borrower's and file — with the payment's full application.",
+      "Two copies — member's and file — with the payment's full application.",
     subject: "repayment",
     icon: ReceiptText,
     build: printableBuilder(

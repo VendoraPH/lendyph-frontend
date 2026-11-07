@@ -126,7 +126,7 @@ import {
   type SelectedCollateral,
 } from "./_lib/edit-collaterals";
 import { loanMemberOptions, memberPicker } from "./_lib/member-picker";
-import { MemberSearchPicker } from "./_components/member-search-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
 import {
   formInterestMethod,
@@ -728,7 +728,7 @@ function NewLoanApplicationInner() {
     // Collect every field the user still needs to fix and surface them in a
     // single consolidated pop-up instead of inline red messages.
     const missing: string[] = [];
-    if (borrowerId === null) missing.push("Borrower");
+    if (borrowerId === null) missing.push("Member");
     if (productId === null) missing.push("Loan product");
     if (!(principal > 0) || principalError) missing.push("Principal amount");
     if (!(term > 0) || termError) missing.push("Term");

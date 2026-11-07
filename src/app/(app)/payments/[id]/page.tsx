@@ -398,7 +398,7 @@ function PaymentReceiptContent({
 
               {/* Borrower information */}
               <div className="space-y-2">
-                <SectionHeading>Borrower Information</SectionHeading>
+                <SectionHeading>Member Information</SectionHeading>
                 <div className="space-y-1.5">
                   <ReceiptRow label="Name" value={receipt.borrower_name} />
                   <ReceiptRow

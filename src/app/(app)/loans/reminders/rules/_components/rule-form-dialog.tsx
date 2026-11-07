@@ -65,7 +65,7 @@ const EMPTY: ReminderRuleInput = {
 };
 
 const BORROWER_TYPES: { value: BorrowerType; label: string }[] = [
-  { value: "all", label: "All borrowers" },
+  { value: "all", label: "All members" },
   { value: "member", label: "Members only" },
   { value: "non_member", label: "Walk-ins only" },
 ];
@@ -270,7 +270,7 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="rule-borrowers">Borrower type</Label>
+            <Label htmlFor="rule-borrowers">Member type</Label>
             <NativeSelect
               id="rule-borrowers"
               className="w-full"

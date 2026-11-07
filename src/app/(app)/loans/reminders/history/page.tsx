@@ -53,7 +53,7 @@ export default function ReminderHistoryPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Sent</TableHead>
-                    <TableHead>Borrower</TableHead>
+                    <TableHead>Member</TableHead>
                     <TableHead>Loan</TableHead>
                     <TableHead>Channel</TableHead>
                     <TableHead>Template</TableHead>

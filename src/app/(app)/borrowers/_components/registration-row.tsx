@@ -155,11 +155,11 @@ export const REGISTRATION_VARIANTS: Record<RegistrationTabStatus, RegistrationVa
     codePrefix: "PEND",
     align: "align-middle",
     action: "Review",
-    caption: "Membership applications awaiting review",
+    caption: "Membership applications awaiting approval",
     empty: {
       Icon: ClipboardList,
       title: "No pending registrations",
-      hint: "New applications will appear here for review.",
+      hint: "New applications will appear here for approval.",
     },
   },
   rejected: {

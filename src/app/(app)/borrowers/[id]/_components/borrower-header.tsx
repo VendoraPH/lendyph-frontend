@@ -92,7 +92,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Borrowers
+        Back to Members
       </Link>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

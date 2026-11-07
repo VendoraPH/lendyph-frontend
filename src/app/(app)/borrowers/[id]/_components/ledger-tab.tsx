@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Loader2, BookOpen, FileText } from "lucide-react";
-import { toast } from "sonner";
-import { borrowerService, reportService } from "@/services";
-import { formatCurrency } from "@/lib/format";
+import { borrowerService } from "@/services";
 import type { BorrowerLedgerEntry, PaginatedResponse } from "@/types";
+import { ledgerRowCells } from "../_lib/ledger-rows";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -23,8 +23,6 @@ interface LedgerTabProps {
 export function LedgerTab({ borrowerId }: LedgerTabProps) {
   const [entries, setEntries] = useState<BorrowerLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subsidiaryLoading, setSubsidiaryLoading] = useState(false);
-  const [subsidiary, setSubsidiary] = useState<Record<string, unknown> | null>(null);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);
@@ -39,10 +37,10 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
       // this file would either "fix" it to 100 or drain an endpoint that
       // returns everything in one response already.
       //
-      // Note the running balance comes back precomputed and cumulative over
-      // the WHOLE ledger, which is another reason this must never be paged
-      // client-side: a slice of it would carry balances that do not start at
-      // the slice.
+      // The rows carry the server's running `balance`, which is not shown:
+      // it takes whole payments, interest and penalty included, off the
+      // principal released, so it matches neither the loan's Principal
+      // Balance nor its Outstanding.
       const res = await borrowerService.ledger(borrowerId);
       const items = Array.isArray(res)
         ? (res as BorrowerLedgerEntry[])
@@ -52,23 +50,6 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
       setEntries([]);
     } finally {
       setLoading(false);
-    }
-  }, [borrowerId]);
-
-  const handleViewSubsidiaryLedger = useCallback(async () => {
-    setSubsidiaryLoading(true);
-    try {
-      const res = await reportService.subsidiaryLedger(borrowerId);
-      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
-        ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
-      setSubsidiary(payload ?? {});
-      toast.success("Subsidiary ledger loaded");
-    } catch {
-      toast.error("We couldn't load the subsidiary ledger. Please try again.");
-      setSubsidiary(null);
-    } finally {
-      setSubsidiaryLoading(false);
     }
   }, [borrowerId]);
 
@@ -92,32 +73,14 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             <FileText className="h-4 w-4 text-muted-foreground" />
             Subsidiary Ledger Report
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleViewSubsidiaryLedger}
-            disabled={subsidiaryLoading}
+          <Link
+            href="/reports/subsidiary_ledger"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            {subsidiaryLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                {subsidiary ? "Refresh" : "Load Report"}
-              </>
-            )}
-          </Button>
+            <FileText className="mr-2 h-4 w-4" />
+            Open in Reports
+          </Link>
         </CardHeader>
-        {subsidiary && (
-          <CardContent className="pt-0">
-            <pre className="max-h-[40vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
-              {JSON.stringify(subsidiary, null, 2)}
-            </pre>
-          </CardContent>
-        )}
       </Card>
       <Card>
         <CardContent className="p-0">
@@ -135,29 +98,19 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
                 <TableHead>Reference</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
                 <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.map((entry) => {
-                const isDebit = entry.type === "debit";
-                const reference =
-                  entry.reference_type && entry.reference_id
-                    ? `${entry.reference_type} #${entry.reference_id}`
-                    : "—";
+                const cells = ledgerRowCells(entry);
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
                     <TableCell className="text-sm font-medium">{entry.description}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground font-mono">{reference}</TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {isDebit ? formatCurrency(entry.amount) : "—"}
-                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground font-mono">{cells.reference}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{cells.debit}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {!isDebit ? formatCurrency(entry.amount) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums font-semibold">
-                      {formatCurrency(entry.running_balance)}
+                      {cells.credit}
                     </TableCell>
                   </TableRow>
                 );

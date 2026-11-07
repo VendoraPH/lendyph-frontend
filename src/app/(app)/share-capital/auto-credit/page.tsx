@@ -38,7 +38,7 @@ function toLocalMember(m: AutoCreditMember): LocalMember {
   const raw = m as AutoCreditMember & Record<string, unknown>;
   return {
     id: m.id,
-    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Borrower #${m.borrower_id}`,
+    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Member #${m.borrower_id}`,
     pledgeAmount: m.pledge_amount ?? (raw.amount as number) ?? 0,
     autoCredit: m.auto_credit ?? (raw.autoCredit as boolean) ?? false,
   };

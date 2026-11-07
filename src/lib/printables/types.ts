@@ -206,7 +206,7 @@ export const SUBJECT_META: Record<
   PrintableSubject,
   { label: string; placeholder: string }
 > = {
-  loan: { label: "Loan", placeholder: "Search loan or borrower…" },
+  loan: { label: "Loan", placeholder: "Search loan or member…" },
   borrower: { label: "Member", placeholder: "Search member…" },
   repayment: { label: "Payment", placeholder: "Search receipt number…" },
 };

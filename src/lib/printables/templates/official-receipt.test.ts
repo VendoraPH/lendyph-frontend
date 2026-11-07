@@ -58,7 +58,7 @@ test("official receipt: prints two copies and reuses the receipt number", () => 
   const doc = buildOfficialReceiptDoc(PAYMENT);
   assertPrintableShape(doc, "official_receipt");
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   // Reprinting must quote the number the receipt was issued under, not mint a
   // second one for the same payment.
   assert.equal(doc.reference, "OR-20260826-0142");
@@ -160,7 +160,7 @@ test("official receipt: a voided payment prints conspicuously as VOID", () => {
     titleBlock(doc).subtitle,
     "VOID — CANCELLED, NOT VALID PROOF OF PAYMENT"
   );
-  assert.deepEqual(doc.copies, ["VOID — Borrower's Copy", "VOID — File Copy"]);
+  assert.deepEqual(doc.copies, ["VOID — Member's Copy", "VOID — File Copy"]);
   assert.match(prose(doc), /\*\*\* V O I D \*\*\*/);
   assert.match(prose(doc), /not<\/strong> valid proof of payment/);
   assert.equal(doc.footerNote, "VOIDED PAYMENT — NOT A VALID OFFICIAL RECEIPT");
@@ -235,7 +235,7 @@ test("official receipt: an unreadable payment states no amount at all", () => {
 test("official receipt: a null payload still prints a blank two-copy form", () => {
   const doc = buildOfficialReceiptDoc(null);
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   assert.equal(doc.reference, undefined);
   assert.ok(isBlankField(doc, "Receipt No."));
   assert.ok(isBlankField(doc, "Received from"));

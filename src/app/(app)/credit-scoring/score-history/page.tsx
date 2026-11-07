@@ -44,7 +44,7 @@ function ScoreHistoryContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Score History"
-        description="Every recorded score change, across all borrowers."
+        description="Every recorded score change, across all members."
       />
 
       <FilterBar>
@@ -71,7 +71,7 @@ function ScoreHistoryContent() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Borrower</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Risk Level</TableHead>
                   <TableHead>Type</TableHead>

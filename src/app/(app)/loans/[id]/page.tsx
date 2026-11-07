@@ -311,7 +311,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
           <CollapsibleTrigger className="w-full text-left group/trigger">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              Borrower&rsquo;s Active Loans
+              Member&rsquo;s Active Loans
               <Badge variant="outline" className="text-xs font-normal">
                 {loading
                   ? "Loading..."
@@ -332,7 +332,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
             className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200"
           >
             <span className="font-medium">This list may be incomplete.</span>{" "}
-            We couldn&rsquo;t confirm all of this borrower&rsquo;s existing loans.
+            We couldn&rsquo;t confirm all of this member&rsquo;s existing loans.
             Check their profile before approving.
           </div>
         )}
@@ -342,7 +342,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
           <p className="text-sm text-muted-foreground py-4 text-center">
             {truncated
               ? "No other active loans were returned — see the notice above."
-              : "No other active loans for this borrower."}
+              : "No other active loans for this member."}
           </p>
         ) : (
           <>
@@ -2308,7 +2308,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <p className="font-medium">Not yet submitted</p>
                     <p className="text-muted-foreground mt-0.5">
                       The approval chain is created when this loan is submitted for
-                      review. Nobody can sign off on it until then.
+                      approval. Nobody can sign off on it until then.
                     </p>
                   </div>
                 </div>
@@ -3925,7 +3925,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Releasing this loan will lock the principal, interest rate, and term.
                   {releaseAnswer && (
                     <>
-                      {" "}The borrower will receive{" "}
+                      {" "}The member will receive{" "}
                       <span className="font-semibold">
                         {currencyOrDash(releaseAnswer.net_proceeds_after_insurance)}
                       </span>{" "}
@@ -4381,7 +4381,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               )}
               {paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
                 <p className="text-[11px] text-muted-foreground tabular-nums">
-                  Borrower will pay{" "}
+                  Member will pay{" "}
                   <span className="font-semibold text-foreground">
                     {formatCurrency(paymentAmountCheck.amount)}
                   </span>
@@ -4545,7 +4545,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   bucket must be fully covered before excess flows to the
                   next; insurance premium still owed on the loan is taken
                   before anything else. {loanHasScb
-                    ? "Because this loan has SCB, leftover after current dues credits the borrower's Share Capital before advancing future periods."
+                    ? "Because this loan has SCB, leftover after current dues credits the member's Share Capital before advancing future periods."
                     : "This loan has no SCB, so leftover after current dues advances directly to upcoming periods."}
                 </p>
               </div>
@@ -4973,7 +4973,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               id="extend-remarks"
               value={extendRemarks}
               onChange={(e) => setExtendRemarks(e.target.value)}
-              placeholder="e.g. borrower requested extension"
+              placeholder="e.g. member requested extension"
               rows={2}
             />
           </div>

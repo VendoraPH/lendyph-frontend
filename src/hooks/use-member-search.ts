@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { borrowerService } from "@/services/borrower.service";
 import type { Borrower } from "@/types";
+import {
+  SEARCH_DEBOUNCE_MS,
+  normaliseSearchQuery,
+  searchEmptyMessage,
+  searchStatus,
+  useSearchPage,
+  viewSearch,
+  type SearchPage,
+  type SearchState,
+  type SearchView,
+} from "./use-search-page";
 
 /** Rows per search, and what shows before typing. The status line says when there are more. */
 export const MEMBER_PAGE_SIZE = 25;
 
 /** How long typing has to pause before the server is asked. */
-export const MEMBER_SEARCH_DEBOUNCE_MS = 300;
+export const MEMBER_SEARCH_DEBOUNCE_MS = SEARCH_DEBOUNCE_MS;
 
 /** A member as the pickers hold it. A saved loan's co-maker comes with no code. */
 export interface MemberOption {
@@ -27,9 +37,7 @@ export function toMemberOption(member: Borrower): MemberOption {
  * The `search` to send for what was typed: trimmed, inner whitespace collapsed,
  * because the server matches a whole name with single spaces.
  */
-export function normaliseMemberQuery(raw: string): string {
-  return raw.trim().replace(/\s+/g, " ");
-}
+export const normaliseMemberQuery = normaliseSearchQuery;
 
 /**
  * Members only: pending and rejected applicants can't take or back a loan, and
@@ -45,11 +53,7 @@ export function memberSearchParams(query: string): Record<string, unknown> {
 }
 
 /** One answered search. */
-export interface MemberPage {
-  query: string;
-  rows: MemberOption[];
-  total: number;
-}
+export type MemberPage = SearchPage<MemberOption>;
 
 /** One page for one query, and nothing more: the pickers never drain the membership. */
 export async function fetchMemberPage(
@@ -61,68 +65,26 @@ export async function fetchMemberPage(
   return { query, rows, total: response.meta?.total ?? rows.length };
 }
 
-/** What the search holds, as far as the picker needs it. */
-export interface MemberSearchState {
-  /** The search box, as typed. */
-  query: string;
-  /** The normalised query last sent. Null after a failure, until the next keystroke. */
-  asked: string | null;
-  /** The query whose request failed, if the latest one did. */
-  failedQuery: string | null;
-  /** The latest answer, whichever query it was for. */
-  page: MemberPage | null;
-  /** The answer to the empty query, kept so reopening the popup needs no request. */
-  firstPage: MemberPage | null;
-}
+export type MemberSearchState = SearchState<MemberOption>;
 
-export interface MemberSearchView {
-  query: string;
-  shown: number;
-  total: number;
-  /** Typing has not settled yet, or the request for it is still out. */
-  pending: boolean;
-  failed: boolean;
-}
+export type MemberSearchView = SearchView;
 
-// One instance, so an empty list keeps its identity across renders.
-const NO_ROWS: MemberOption[] = [];
-
-/**
- * The rows to list and how to describe them. Until the answer for the typed
- * query arrives, the previous rows stay up and the search reads as pending, so
- * nothing is presented as matching a query it was not fetched for.
- */
+/** See `viewSearch`. */
 export function viewMemberSearch(state: MemberSearchState): {
   rows: MemberOption[];
   view: MemberSearchView;
 } {
-  const { asked, failedQuery, page, firstPage } = state;
-  const query = normaliseMemberQuery(state.query);
-  const answered = asked === "" && firstPage ? firstPage : page;
-  const failed = asked === null && query === failedQuery;
-  const pending = !failed && (query !== asked || answered?.query !== asked);
-  const rows = failed || !answered ? NO_ROWS : answered.rows;
-  return {
-    rows,
-    view: { query, shown: rows.length, total: answered?.total ?? 0, pending, failed },
-  };
+  return viewSearch(state);
 }
 
 /** The line under the list. Empty when there is nothing to add. */
 export function memberSearchStatus(view: MemberSearchView): string {
-  if (view.pending) return view.shown === 0 ? "Loading members…" : "Searching…";
-  if (view.failed) return "Couldn't load members. Keep typing to try again.";
-  if (view.total > view.shown) {
-    const narrow = view.query === "" ? "Type a name" : "Keep typing";
-    return `Showing ${view.shown} of ${view.total}. ${narrow} to narrow.`;
-  }
-  return "";
+  return searchStatus(view, { plural: "members", firstHint: "a name" });
 }
 
 /** What the list says when a settled search found nobody. Null otherwise. */
 export function memberEmptyMessage(view: MemberSearchView): string | null {
-  if (view.pending || view.failed || view.shown > 0) return null;
-  return view.query === "" ? "No member found." : `No member matches “${view.query}”.`;
+  return searchEmptyMessage(view, "member");
 }
 
 /** The rows a picker offers: not the loan's member, nor a co-maker picked in another slot. */
@@ -162,73 +124,15 @@ export interface MemberSearch {
   emptyMessage: string | null;
 }
 
+const fetchMembers = (query: string) => fetchMemberPage(borrowerService.list, query);
+
 /**
  * Search-as-you-type over `GET /borrowers?members_only=1`, for the screens that
  * pick a member: the first 25 before typing, then one page per settled query.
- * It never drains the membership, which stopped at 2,000 and cost every form
- * opening the whole list.
- *
- * - `enabled` holds the first request back until the popup first opens, so a
- *   form with several pickers asks for nothing it doesn't use. Pass the
- *   caller's `borrowers:view` into it too.
- * - A response to a query the user has typed past is dropped, so a slow answer
- *   never replaces a newer one.
- * - The first page is kept, so closing the popup needs no second request. A
- *   failure waits for the next keystroke or the next opening.
+ * See `useSearchPage` for `enabled`, debouncing and dropped answers.
  */
 export function useMemberSearch({ enabled = true }: { enabled?: boolean } = {}): MemberSearch {
-  const [query, setQueryState] = useState("");
-  const [asked, setAsked] = useState<string | null>("");
-  const [failedQuery, setFailedQuery] = useState<string | null>(null);
-  const [page, setPage] = useState<MemberPage | null>(null);
-  const [firstPage, setFirstPage] = useState<MemberPage | null>(null);
-  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    const timer = debounce;
-    return () => clearTimeout(timer.current);
-  }, []);
-
-  // Debounced here rather than in an effect on `query`, so only a keystroke
-  // starts the timer.
-  const setQuery = useCallback((next: string) => {
-    setQueryState(next);
-    clearTimeout(debounce.current);
-    debounce.current = setTimeout(
-      () => setAsked(normaliseMemberQuery(next)),
-      MEMBER_SEARCH_DEBOUNCE_MS,
-    );
-  }, []);
-
-  const reset = useCallback(() => {
-    clearTimeout(debounce.current);
-    setQueryState("");
-    setAsked("");
-  }, []);
-
-  useEffect(() => {
-    if (!enabled || asked === null) return;
-    if (asked === "" && firstPage) return;
-    let cancelled = false;
-    fetchMemberPage(borrowerService.list, asked)
-      .then((answered) => {
-        if (cancelled) return;
-        setPage(answered);
-        if (asked === "") setFirstPage(answered);
-        setFailedQuery(null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFailedQuery(asked);
-        setAsked(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, asked, firstPage]);
-
-  const { rows, view } = viewMemberSearch({ query, asked, failedQuery, page, firstPage });
-
+  const { query, setQuery, reset, rows, view } = useSearchPage({ enabled, fetchPage: fetchMembers });
   return {
     query,
     setQuery,

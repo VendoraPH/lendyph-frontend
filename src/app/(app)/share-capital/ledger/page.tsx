@@ -291,7 +291,7 @@ function SubsidiaryLedgerContent() {
     setSelectedMember(null);
   }
 
-  const selectedName = selectedMember ? (selectedMember.full_name ?? `Borrower #${selectedMember.borrower_id}`) : null;
+  const selectedName = selectedMember ? (selectedMember.full_name ?? `Member #${selectedMember.borrower_id}`) : null;
 
   // ══════════════════════════════════════════════════════════
   // Render
@@ -508,7 +508,7 @@ function SubsidiaryLedgerContent() {
                           {member.borrower_code ?? member.borrower_id}
                         </TableCell>
                         <TableCell className="font-medium text-sm">
-                          {member.full_name ?? `Borrower #${member.borrower_id}`}
+                          {member.full_name ?? `Member #${member.borrower_id}`}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {member.last_transaction_date
