@@ -101,7 +101,7 @@ function BorrowerDetailContent() {
       if (borrowerResult.status === "fulfilled") {
         setBorrower(borrowerResult.value);
       } else {
-        toast.error("We couldn't load the borrower details. Please try again.");
+        toast.error("We couldn't load the member details. Please try again.");
       }
 
       if (loansResult.status === "fulfilled") {
@@ -208,7 +208,7 @@ function BorrowerDetailContent() {
   if (!borrower) {
     return (
       <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <p className="text-muted-foreground">Borrower not found.</p>
+        <p className="text-muted-foreground">Member not found.</p>
       </div>
     );
   }

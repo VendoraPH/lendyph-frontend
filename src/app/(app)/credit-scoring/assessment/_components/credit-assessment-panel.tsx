@@ -29,7 +29,7 @@ export function CreditAssessmentPanel({ borrowerId }: { borrowerId: number }) {
   return (
     <DataState
       resource={resource}
-      summary="A fresh credit assessment for this borrower will appear here once the backend is connected."
+      summary="A fresh credit assessment for this member will appear here once the backend is connected."
       endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
     >
       {(profile) => (

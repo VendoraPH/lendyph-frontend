@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { memberPicker } from "./member-picker";
+import type { Loan } from "@/types";
+import { loanMemberOptions, memberPicker } from "./member-picker";
 
 describe("memberPicker", () => {
   test("a new application picks its member", () => {
@@ -21,5 +22,30 @@ describe("memberPicker", () => {
 
   test("an edit stays locked even with no name to show", () => {
     assert.equal(memberPicker(true, null, null).locked, true);
+  });
+});
+
+describe("loanMemberOptions", () => {
+  test("names the loan's member with their code", () => {
+    const options = loanMemberOptions({
+      id: 1,
+      borrower: { id: 5, full_name: "Maria Santos", borrower_code: "M-5" },
+    } as unknown as Loan);
+    assert.deepEqual(options, [{ id: 5, full_name: "Maria Santos", borrower_code: "M-5" }]);
+  });
+
+  test("names co-makers who are members, even past the first page of any search", () => {
+    const options = loanMemberOptions({
+      id: 1,
+      co_makers: [
+        { id: 1, borrower_id: 4001, full_name: "Rosa Lim" },
+        { id: 2, full_name: "No Member Record" },
+      ],
+    } as unknown as Loan);
+    assert.deepEqual(options, [{ id: 4001, full_name: "Rosa Lim" }]);
+  });
+
+  test("a loan with neither names nobody", () => {
+    assert.deepEqual(loanMemberOptions({ id: 1 } as unknown as Loan), []);
   });
 });

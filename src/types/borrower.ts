@@ -44,15 +44,43 @@ export interface BorrowerLoanSummary {
   counts: Record<string, number>;
 }
 
+/** One row of GET /borrowers/{id}/ledger (`BorrowerController::ledger()`). */
 export interface BorrowerLedgerEntry {
   id: number;
   date: string;
-  type: "debit" | "credit";
   description: string;
-  amount: number;
-  running_balance: number;
-  reference_id?: number;
-  reference_type?: string;
+  /** The loan account number on a release, the receipt number on a payment. */
+  reference: string | null;
+  /** What this row raised the balance by; 0 when it lowered it. */
+  debit: number;
+  /** What this row lowered the balance by; 0 when it raised it. */
+  credit: number;
+  /** The member's running balance after this row, from the server. */
+  balance?: number | null;
+  loan_id?: number | null;
+  loan_account_number?: string | null;
+  kind?: string | null;
+  repayment_id?: number | null;
+  /** Payment rows: what the member handed over, which can exceed the credit. */
+  amount_paid?: number | string | null;
+  /** Payment rows: the part that went to the insurance premium owed. */
+  insurance?: number | null;
+  /** Payment rows: the part credited to the Share Capital Build-Up. */
+  scb?: number | null;
+}
+
+/** `meta.closing` of GET /borrowers/{id}/ledger. */
+export interface BorrowerLedgerClosing {
+  principal: number;
+  interest: number;
+  penalty: number;
+  balance: number;
+}
+
+/** The whole GET /borrowers/{id}/ledger answer. */
+export interface BorrowerLedgerResponse {
+  data: BorrowerLedgerEntry[];
+  meta?: { closing?: BorrowerLedgerClosing | null };
 }
 
 export interface Borrower {

@@ -10,13 +10,14 @@ import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lu
 import type { Loan, LoanSchedule } from "@/types";
 import {
   LOAN_STATUS_COLORS,
-  LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
 import { formatCurrency, formatRate } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
+import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
 
@@ -58,7 +59,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
               <TableCell className="text-sm text-right tabular-nums font-medium">{formatCurrency(s.amount_due)}</TableCell>
               <TableCell className="text-sm text-right tabular-nums">{formatCurrency(s.amount_paid)}</TableCell>
               <TableCell>
-                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{s.status}</Badge>
+                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{statusInWords(s.status)}</Badge>
               </TableCell>
             </TableRow>
           ))}
@@ -164,8 +165,8 @@ export function LoansTab({ loans }: LoansTabProps) {
                         {loan.maturity_date ? formatDate(loan.maturity_date) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
-                          {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loanDisplayStatus(loan)]}>
+                          {loanRowStatusLabel(loan)}
                         </Badge>
                       </TableCell>
                       <TableCell>

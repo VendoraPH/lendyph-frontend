@@ -105,7 +105,7 @@ export const ROLES: Record<Role, RoleConfig> = {
   },
   loan_officer: {
     label: "Loan Officer",
-    description: "Manage loans and borrowers",
+    description: "Manage loans and members",
     permissions: [
       "dashboard:view",
       "borrowers:view",
@@ -132,7 +132,7 @@ export const ROLES: Record<Role, RoleConfig> = {
   },
   cashier: {
     label: "Cashier",
-    description: "Record payments and view borrowers",
+    description: "Record payments and view members",
     permissions: [
       "dashboard:view",
       "borrowers:view",

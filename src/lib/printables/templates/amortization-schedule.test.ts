@@ -50,7 +50,7 @@ test("amortization schedule: the loan's terms head the document", () => {
   assertPrintableShape(doc, "amortization_schedule");
 
   assert.equal(titleBlock(doc).text, "Amortization Schedule");
-  assert.equal(fieldValue(doc, "Borrower"), "Juana Dela Cruz");
+  assert.equal(fieldValue(doc, "Member"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
   assert.equal(fieldValue(doc, "Member No."), "MBR-0001");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
@@ -197,7 +197,7 @@ test("amortization schedule: a null payload still prints a blank schedule form",
   const doc = buildAmortizationScheduleDoc(null);
   assertPrintableShape(doc, "amortization_schedule");
 
-  assert.ok(isBlankField(doc, "Borrower"));
+  assert.ok(isBlankField(doc, "Member"));
   assert.ok(isBlankField(doc, "Loan Account No."));
   assert.ok(isBlankField(doc, "Interest Rate"));
   assert.equal(tableBlock(doc).rows.length, 0);

@@ -28,7 +28,7 @@ export function DueLoansTable({ loans, totals }: DueLoansTableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Loan Account</TableHead>
-            <TableHead>Borrower</TableHead>
+            <TableHead>Member</TableHead>
             <TableHead className="text-right">Principal</TableHead>
             <TableHead className="text-right">Interest</TableHead>
             <TableHead className="text-right">Penalty</TableHead>

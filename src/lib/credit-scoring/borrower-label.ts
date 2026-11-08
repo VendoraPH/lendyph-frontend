@@ -19,5 +19,5 @@ export function borrowerLabel(row: {
   borrower_name?: string | null;
 }): string {
   const name = row.borrower_name?.trim();
-  return name ? name : `Borrower #${row.borrower_id}`;
+  return name ? name : `Member #${row.borrower_id}`;
 }

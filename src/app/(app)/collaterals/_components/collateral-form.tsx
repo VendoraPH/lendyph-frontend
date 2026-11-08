@@ -1,23 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   Select,
   SelectContent,
@@ -37,12 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { collateralLock, holdersSentence, isLocked } from "@/lib/collateral-lock";
-import { Check, ChevronsUpDown, Loader2, Shield } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { completeRows, emptyDrain } from "@/lib/paginate";
+import { Loader2, Shield } from "lucide-react";
+import { completeRows } from "@/lib/paginate";
 import { usePermission } from "@/hooks";
+import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { borrowerService } from "@/services/borrower.service";
 import {
   collateralService,
@@ -56,7 +43,8 @@ import {
   type ShareCapitalBalance,
 } from "@/utils/share-capital";
 import { formatCurrency } from "@/utils/format";
-import type { Borrower, Collateral, CollateralType } from "@/types";
+import type { Collateral, CollateralType } from "@/types";
+import { knownMemberId, memberPlaceholderOption } from "../_lib/member-option";
 
 interface Props {
   initial?: Collateral;
@@ -76,16 +64,17 @@ export function CollateralForm({ initial, mode }: Props) {
   const canListTypes = can("collaterals:view");
   const canReadShareCapital = can("share_capital:view");
 
-  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [types, setTypes] = useState<CollateralType[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const [borrowerId, setBorrowerId] = useState<number | null>(
-    initial?.borrower_id ??
-      (presetBorrowerId ? Number(presetBorrowerId) : null),
-  );
-  const [borrowerOpen, setBorrowerOpen] = useState(false);
+  // Picking a member holds their name, so it shows whatever the search has
+  // moved on to. One the form opens with has an id only until `detail` answers.
+  const [member, setMember] = useState<MemberOption | null>(() => {
+    const id = knownMemberId(initial, presetBorrowerId);
+    return id ? memberPlaceholderOption(id) : null;
+  });
+  const borrowerId = member?.id ?? null;
   const [typeId, setTypeId] = useState<number | null>(
     initial?.collateral_type_id ?? null,
   );
@@ -97,34 +86,11 @@ export function CollateralForm({ initial, mode }: Props) {
   // non-"ok" status means this form must not book a value.
   const [scBalance, setScBalance] = useState<ShareCapitalBalance | null>(null);
   const [scBalanceLoading, setScBalanceLoading] = useState(false);
-  // Set only when the member drain gave up with pages outstanding, i.e. the
-  // owner picker below is knowingly missing people. Null means complete.
-  const [memberShortfall, setMemberShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-
   useEffect(() => {
     let cancelled = false;
-    // members_only: keeps pending/rejected applicants out of the owner picker.
-    // Drained across pages rather than asked for in one `per_page: 9999` gulp:
-    // BorrowerController clamps that to 100 silently, so on a co-op with more
-    // than 100 members the picker simply had no entry for the rest — which
-    // reads as "that member is not registered", not as a bug.
-    Promise.all([
-      canListMembers
-        ? borrowerService.listAll({ members_only: 1 })
-        : emptyDrain<Borrower>(),
-      canListTypes ? collateralTypeService.listAll().then(completeRows) : [],
-    ])
-      .then(([memberDrain, tRes]) => {
+    Promise.resolve(canListTypes ? collateralTypeService.listAll().then(completeRows) : [])
+      .then((tRes) => {
         if (cancelled) return;
-        setBorrowers(memberDrain.rows);
-        setMemberShortfall(
-          memberDrain.truncated
-            ? { shown: memberDrain.rows.length, total: memberDrain.total }
-            : null,
-        );
         setTypes(tRes.filter((t) => t.is_visible));
       })
       .catch(() => {
@@ -136,7 +102,26 @@ export function CollateralForm({ initial, mode }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [canListMembers, canListTypes]);
+  }, [canListTypes]);
+
+  // The name of the member the form opened with. Only that one: a member picked
+  // here already has theirs. If it can't be read the id stays as the label.
+  const openingMemberId = useRef(knownMemberId(initial, presetBorrowerId));
+  useEffect(() => {
+    const id = openingMemberId.current;
+    if (!id || !canListMembers) return;
+    let cancelled = false;
+    borrowerService
+      .detail(id)
+      .then((found) => {
+        if (cancelled) return;
+        setMember((current) => (current?.id === id ? toMemberOption(found) : current));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canListMembers]);
 
   /**
    * Lock state of the record being edited, straight off `GET /collaterals/{id}`.
@@ -151,11 +136,6 @@ export function CollateralForm({ initial, mode }: Props) {
   const initialLock = useMemo(
     () => (mode === "edit" && initial ? collateralLock(initial) : null),
     [mode, initial],
-  );
-
-  const selectedBorrower = useMemo(
-    () => borrowers.find((b) => b.id === borrowerId) ?? null,
-    [borrowers, borrowerId],
   );
 
   const selectedType = useMemo(
@@ -238,7 +218,7 @@ export function CollateralForm({ initial, mode }: Props) {
           (mode !== "edit" || c.id !== initial?.id),
       );
       if (dup) {
-        const memberName = selectedBorrower?.full_name ?? "this member";
+        const memberName = member?.full_name ?? "this member";
         const typeName = selectedType?.name ?? "this type";
         toast.error(
           `${memberName} already has a ${typeName} registered with this ${selectedType?.detail_field_label?.toLowerCase() ?? "reference"}.`,
@@ -325,79 +305,19 @@ export function CollateralForm({ initial, mode }: Props) {
           </div>
         )}
 
-        {memberShortfall && (
-          <IncompleteListNotice
-            shown={memberShortfall.shown}
-            total={memberShortfall.total}
-            noun="members"
-            consequence="Some members are missing from the picker below and cannot be selected."
-          />
-        )}
-
         {/* ── Section: Member ─────────────────────────────────────── */}
         <div className="space-y-2">
           <Label htmlFor="collateral-member">
             Member <span className="text-destructive">*</span>
           </Label>
-          <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
-            <PopoverTrigger
-              render={
-                <button
-                  id="collateral-member"
-                  type="button"
-                  // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
-                  role="combobox"
-                  aria-expanded={borrowerOpen}
-                  className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-input/30"
-                />
-              }
-            >
-              <span
-                className={cn(
-                  "truncate text-left",
-                  !selectedBorrower && "text-muted-foreground",
-                )}
-              >
-                {selectedBorrower
-                  ? selectedBorrower.full_name
-                  : "Search member…"}
-              </span>
-              <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-            </PopoverTrigger>
-            <PopoverContent className="w-(--anchor-width) p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Type a name to search…" />
-                <CommandList>
-                  <CommandEmpty>No member found.</CommandEmpty>
-                  <CommandGroup>
-                    {borrowers.map((b) => (
-                      <CommandItem
-                        key={b.id}
-                        value={`${b.full_name} ${b.borrower_code}`}
-                        onSelect={() => {
-                          setBorrowerId(b.id === borrowerId ? null : b.id);
-                          setBorrowerOpen(false);
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 size-4",
-                            borrowerId === b.id ? "opacity-100" : "opacity-0",
-                          )}
-                        />
-                        <span>
-                          {b.full_name}{" "}
-                          <span className="text-muted-foreground">
-                            ({b.borrower_code})
-                          </span>
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+          <MemberSearchPicker
+            id="collateral-member"
+            value={member}
+            onChange={setMember}
+            canSearch={canListMembers}
+            placeholder="Search member…"
+            className="h-10"
+          />
         </div>
 
         {/* ── Section: Type ───────────────────────────────────────── */}

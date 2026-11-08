@@ -144,7 +144,7 @@ export default function LoginPage() {
               Manage your lending business with confidence
             </h2>
             <p className="mt-4 text-lg text-white/80 leading-relaxed">
-              Track borrowers, process loans, collect payments, and monitor your
+              Track members, process loans, collect payments, and monitor your
               portfolio — all in one place.
             </p>
 
