@@ -51,6 +51,12 @@ function CollateralListingContent() {
   const register = useCollateralRegister();
   const [deleting, setDeleting] = useState<RegisterCollateral | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  // Base UI reads the trigger's label from `items`; without them it shows the
+  // stored value ("all", or the type's id).
+  const typeItems = [
+    { value: ALL_TYPES, label: "All types" },
+    ...register.types.map((t) => ({ value: String(t.id), label: t.name })),
+  ];
   // Members whose nested collateral rows are expanded in the table. Kept here
   // rather than in the table so a reload does not collapse them.
   const [expandedMembers, setExpandedMembers] = useState<ReadonlySet<number>>(
@@ -151,6 +157,7 @@ function CollateralListingContent() {
           <div className="flex items-center gap-2">
             <ListFilter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <Select
+              items={typeItems}
               value={register.typeFilter}
               onValueChange={register.changeTypeFilter}
             >
@@ -158,10 +165,9 @@ function CollateralListingContent() {
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_TYPES}>All types</SelectItem>
-                {register.types.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name}
+                {typeItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

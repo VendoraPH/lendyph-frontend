@@ -37,12 +37,16 @@ export function TablePagination({
   const startIndex = (safePage - 1) * perPage;
   const endIndex = Math.min(startIndex + perPage, total);
   const hasResults = total > 0;
+  // The value is the number's own text, but Base UI reads the trigger's text
+  // from `items`, so the dropdown is given them like every other one.
+  const perPageItems = perPageOptions.map((opt) => ({ value: String(opt), label: String(opt) }));
 
   return (
     <div className="flex items-center justify-between pt-4 border-t mt-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span>Rows per page</span>
         <Select
+          items={perPageItems}
           value={String(perPage)}
           onValueChange={(val) => {
             if (val != null) onPerPageChange(Number(val));
@@ -52,9 +56,9 @@ export function TablePagination({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {perPageOptions.map((opt) => (
-              <SelectItem key={opt} value={String(opt)}>
-                {opt}
+            {perPageItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
               </SelectItem>
             ))}
           </SelectContent>
