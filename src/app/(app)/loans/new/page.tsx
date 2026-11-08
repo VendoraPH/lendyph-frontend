@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { RouteGuard } from "@/components/common";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
 import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -16,10 +15,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { notifyValidation } from "@/lib/notify";
-import { AlertCircle, ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, RefreshCw, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CalendarIcon, Info, Plus, RefreshCw, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  borrowerService,
   collateralService,
   collateralTypeService,
   documentService,
@@ -28,7 +26,7 @@ import {
 } from "@/services";
 import { api } from "@/lib/api-client";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
-import { completeRows, emptyDrain } from "@/lib/paginate";
+import { completeRows } from "@/lib/paginate";
 import { usePermission } from "@/hooks";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
@@ -40,7 +38,6 @@ import {
 } from "@/utils/collateral-value";
 import { securityStatusLabel } from "@/types/collateral";
 import type {
-  Borrower,
   CollateralType,
   Loan,
   StaffMember,
@@ -84,14 +81,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDateISO, formatRate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
@@ -136,7 +125,9 @@ import {
   type EditCollateralResult,
   type SelectedCollateral,
 } from "./_lib/edit-collaterals";
-import { memberPicker } from "./_lib/member-picker";
+import { loanMemberOptions, memberPicker } from "./_lib/member-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
+import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
 import {
   formInterestMethod,
   interestMethodLabel,
@@ -206,12 +197,10 @@ function NewLoanApplicationInner() {
       }),
     [canListMembers, canListProducts, canListCollaterals, canReadShareCapital],
   );
-  // Said in the picker itself too: "No member found" reads as an empty
-  // member list, which is not what is wrong.
-  const memberPickerEmpty = canListMembers ? "No member found." : "Your role can't view members.";
-
   // ── API Data ──
-  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  // The members this form has picked or the loan being edited names, so their
+  // names show whatever the pickers' searches have moved on to.
+  const [knownMembers, setKnownMembers] = useState<Record<number, MemberOption>>({});
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -220,7 +209,6 @@ function NewLoanApplicationInner() {
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
-  const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
   const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
 
@@ -255,7 +243,6 @@ function NewLoanApplicationInner() {
   const [policyExceptionLetter, setPolicyExceptionLetter] = useState<File | null>(null);
 
   // ── Combobox Open State ──
-  const [borrowerOpen, setBorrowerOpen] = useState(false);
 
   // ── Dates State ──
   const [releaseDate, setReleaseDate] = useState<Date | undefined>(new Date());
@@ -271,14 +258,8 @@ function NewLoanApplicationInner() {
   // Deductions the form shows but does not edit — the product's notarial fee,
   // or one stored on the loan being edited — sent back unchanged.
   const [carriedDeductions, setCarriedDeductions] = useState<LoanDeduction[]>([]);
-  // Set only when the member drain gave up with pages outstanding, i.e. the
-  // member picker is knowingly missing people. Null means complete.
-  const [memberShortfall, setMemberShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
 
-  // ── Fetch borrowers, products — and the loan when editing ──
+  // ── Fetch products — and the loan when editing ──
   useEffect(() => {
     // Set by the cleanup, so Strict Mode's discarded first mount (or a real
     // unmount) neither writes state nor toasts.
@@ -286,31 +267,12 @@ function NewLoanApplicationInner() {
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, loanResult] =
+      const [productsResult, loanResult] =
         await Promise.allSettled([
-          // members_only: pending and rejected applicants are not loan-eligible,
-          // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
-          // server-side status gate behind this picker.
-          // Drained across pages. `per_page: 200` was clamped to 100 by
-          // BorrowerController without a word, so member 101 onwards could not
-          // be picked and could not be lent to from this screen at all.
-          canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
           canListProducts ? loanProductService.listAll().then(completeRows) : [],
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
         ]);
       if (cancelled) return;
-
-      if (borrowersResult.status === "fulfilled") {
-        const memberDrain = borrowersResult.value;
-        setBorrowers(memberDrain.rows);
-        setMemberShortfall(
-          memberDrain.truncated
-            ? { shown: memberDrain.rows.length, total: memberDrain.total }
-            : null,
-        );
-      } else {
-        toast.error("We couldn't load members. Please try again.");
-      }
 
       if (productsResult.status === "fulfilled") {
         setProducts(productsResult.value);
@@ -328,6 +290,7 @@ function NewLoanApplicationInner() {
           setExistingLoan(loan);
           const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
           if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
+          setKnownMembers((known) => rememberMembers(known, loanMemberOptions(loan)));
           const coMakerIdList: number[] = Array.isArray(loan.co_makers)
             ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
             : [];
@@ -373,7 +336,7 @@ function NewLoanApplicationInner() {
       cancelled = true;
     };
     // Re-fetch if user switches between create and edit in the same tab
-  }, [editLoanId, router, canListMembers, canListProducts]);
+  }, [editLoanId, router, canListProducts]);
 
   // ── Collateral types: load once on mount ──
   useEffect(() => {
@@ -502,22 +465,8 @@ function NewLoanApplicationInner() {
     collateralResult,
   );
 
-  // Co-makers: all borrowers except the selected borrower and already-picked co-makers
-  const availableCoMakersFor = useCallback(
-    (currentIndex: number) => {
-      const pickedElsewhere = new Set(
-        coMakerIds.filter((id, i) => id !== null && i !== currentIndex) as number[]
-      );
-      return borrowers.filter((b) => b.id !== borrowerId && !pickedElsewhere.has(b.id));
-    },
-    [borrowers, borrowerId, coMakerIds]
-  );
-
   // ── Derived ──
-  const selectedBorrower = useMemo(
-    () => borrowers.find((b) => b.id === borrowerId) ?? null,
-    [borrowerId, borrowers]
-  );
+  const selectedBorrower = borrowerId !== null ? knownMembers[borrowerId] ?? null : null;
   const member = memberPicker(
     isEditMode,
     selectedBorrower?.full_name ?? null,
@@ -747,8 +696,9 @@ function NewLoanApplicationInner() {
 
   // ── Borrower Selection Handler ──
   // A new application only: an edit's member is fixed (`memberPicker`).
-  function handleBorrowerChange(id: number | null) {
-    setBorrowerId(id);
+  function handleBorrowerChange(picked: MemberOption | null) {
+    if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+    setBorrowerId(picked?.id ?? null);
     setCoMakerIds([null]);
     // Collaterals are per-borrower — drop any selections from the previous
     // member so they don't get accidentally attached to the new loan.
@@ -767,8 +717,9 @@ function NewLoanApplicationInner() {
     });
   }
 
-  function setCoMakerAt(index: number, id: number | null) {
-    setCoMakerIds((prev) => prev.map((v, i) => (i === index ? id : v)));
+  function setCoMakerAt(index: number, picked: MemberOption | null) {
+    if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+    setCoMakerIds((prev) => prev.map((v, i) => (i === index ? (picked?.id ?? null) : v)));
   }
 
   // ── Submit ──
@@ -777,7 +728,7 @@ function NewLoanApplicationInner() {
     // Collect every field the user still needs to fix and surface them in a
     // single consolidated pop-up instead of inline red messages.
     const missing: string[] = [];
-    if (borrowerId === null) missing.push("Borrower");
+    if (borrowerId === null) missing.push("Member");
     if (productId === null) missing.push("Loan product");
     if (!(principal > 0) || principalError) missing.push("Principal amount");
     if (!(term > 0) || termError) missing.push("Term");
@@ -898,14 +849,14 @@ function NewLoanApplicationInner() {
       }
 
       // Auto-forward to Manager: creating the loan IS the Loan Processor's action,
-      // so skip the redundant "Submit for Review" click on the detail page.
+      // so skip the redundant "Submit for Approval" click on the detail page.
       let forwarded = false;
       try {
         await loanService.submit(loan.id);
         forwarded = true;
       } catch {
         toast.warning(
-          "Loan created but could not be forwarded for review. Open the loan to submit it manually."
+          "Loan created but could not be forwarded for approval. Open the loan to submit it manually."
         );
       }
 
@@ -964,15 +915,6 @@ function NewLoanApplicationInner() {
 
       <MissingAccessNotice missing={missingAccess} />
 
-      {memberShortfall && (
-        <IncompleteListNotice
-          shown={memberShortfall.shown}
-          total={memberShortfall.total}
-          noun="members"
-          consequence="Some members are missing from the member and co-maker pickers below and cannot be selected."
-        />
-      )}
-
       {/* ── Card 1: Borrower & Co-Maker ── */}
       <Card>
         <CardHeader>
@@ -1002,61 +944,13 @@ function NewLoanApplicationInner() {
                   </p>
                 </>
               ) : (
-              <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
-                      role="combobox"
-                      aria-expanded={borrowerOpen}
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                    />
-                  }
-                >
-                  <span className={cn("truncate", !selectedBorrower && "text-muted-foreground")}>
-                    {selectedBorrower
-                      ? selectedBorrower.full_name
-                      : "Search member..."}
-                  </span>
-                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                </PopoverTrigger>
-                <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Type a name to search..." />
-                    <CommandList>
-                      <CommandEmpty>{memberPickerEmpty}</CommandEmpty>
-                      <CommandGroup>
-                        {borrowers.map((b) => (
-                          <CommandItem
-                            key={b.id}
-                            value={`${b.full_name} ${b.borrower_code}`}
-                            onSelect={() => {
-                              handleBorrowerChange(
-                                b.id === borrowerId ? null : b.id
-                              );
-                              setBorrowerOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 size-4",
-                                borrowerId === b.id
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            {b.full_name}{" "}
-                            <span className="text-muted-foreground">
-                              ({b.borrower_code})
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <MemberSearchPicker
+                aria-label="Member"
+                value={selectedBorrower}
+                onChange={handleBorrowerChange}
+                canSearch={canListMembers}
+                placeholder={canListMembers ? "Search member..." : "Your role can't view members"}
+              />
               )}
             </div>
 
@@ -1077,67 +971,21 @@ function NewLoanApplicationInner() {
               </div>
               <div className="space-y-2">
                 {coMakerIds.map((selectedId, index) => {
-                  const options = availableCoMakersFor(index);
-                  const selected = selectedId ? borrowers.find((b) => b.id === selectedId) : null;
-                  const isOpen = openCoMakerIndex === index;
+                  const selected = selectedId ? knownMembers[selectedId] ?? null : null;
                   return (
                     <div key={index} className="flex items-center gap-2">
-                      <Popover
-                        open={isOpen}
-                        onOpenChange={(o) => setOpenCoMakerIndex(o ? index : null)}
-                      >
-                        <PopoverTrigger
-                          render={
-                            <button
-                              type="button"
-                              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
-                              role="combobox"
-                              aria-expanded={isOpen}
-                              disabled={options.length === 0}
-                              className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                            />
-                          }
-                        >
-                          <span className={cn("truncate", !selectedId && "text-muted-foreground")}>
-                            {selected
-                              ? (selected.full_name ?? `${selected.first_name} ${selected.last_name}`)
-                              : !canListMembers
-                                ? "Your role can't view members"
-                                : options.length === 0
-                                ? "No members available"
-                                : "Search co-maker (optional)..."}
-                          </span>
-                          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Type a name to search..." />
-                            <CommandList>
-                              <CommandEmpty>No members found.</CommandEmpty>
-                              <CommandGroup>
-                                {options.map((b) => (
-                                  <CommandItem
-                                    key={b.id}
-                                    value={b.full_name ?? `${b.first_name} ${b.last_name}`}
-                                    onSelect={() => {
-                                      setCoMakerAt(index, b.id === selectedId ? null : b.id);
-                                      setOpenCoMakerIndex(null);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 size-4",
-                                        selectedId === b.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {b.full_name ?? `${b.first_name} ${b.last_name}`}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <MemberSearchPicker
+                        aria-label={`Co-maker ${index + 1}`}
+                        value={selected}
+                        onChange={(picked) => setCoMakerAt(index, picked)}
+                        canSearch={canListMembers}
+                        exclude={[borrowerId, ...coMakerIds.filter((_, i) => i !== index)]}
+                        placeholder={
+                          canListMembers
+                            ? "Search co-maker (optional)..."
+                            : "Your role can't view members"
+                        }
+                      />
                       {coMakerIds.length > 1 && (
                         <Button
                           type="button"

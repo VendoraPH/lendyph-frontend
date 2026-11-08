@@ -72,7 +72,7 @@ function CreditScoringSettingsContent() {
                     className="min-h-32"
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Shown to borrowers per NPC (Philippine Data Privacy Act) disclosure
+                    Shown to members per NPC (Philippine Data Privacy Act) disclosure
                     requirements before their data is used for scoring.
                   </p>
                 </CardContent>

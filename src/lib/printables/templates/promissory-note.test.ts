@@ -26,7 +26,6 @@ const PAYLOAD = {
     borrower_code: "MBR-0001",
     full_name: "Juana Dela Cruz",
     address: "12 Mabini St., Poblacion, Cebu City",
-    contact_number: "0917-555-0101",
   },
   co_makers: [
     {

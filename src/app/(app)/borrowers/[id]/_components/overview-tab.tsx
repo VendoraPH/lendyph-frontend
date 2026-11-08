@@ -58,7 +58,7 @@ export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabP
             label="Civil Status"
             value={borrower.civil_status ? borrower.civil_status.charAt(0).toUpperCase() + borrower.civil_status.slice(1) : undefined}
           />
-          <InfoItem label="Borrower Code" value={borrower.borrower_code} />
+          <InfoItem label="Member Code" value={borrower.borrower_code} />
         </CardContent>
       </Card>
 

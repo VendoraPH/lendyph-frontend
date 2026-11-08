@@ -17,6 +17,7 @@ import { VALID_ID_OPTIONS } from "@/constants";
 import { fileUrl } from "@/lib/file-url";
 import { ID_MIME_TYPES, validateUploadFile } from "@/lib/file-validation";
 import type { RegistrationValidId } from "@/services/registration.service";
+import { showsIdNumberInput } from "../_lib/valid-id-sync";
 
 export interface ValidIdDraft {
   key: string;
@@ -24,6 +25,8 @@ export interface ValidIdDraft {
   type: string;
   custom_type_name: string;
   id_number: string;
+  /** The number on file; empty on a new row and on an ID that has none. */
+  stored_id_number: string;
   front_file: File | null;
   front_preview: string | null;
   front_existing_url: string | null;
@@ -42,6 +45,7 @@ export function makeEmptyDraft(): ValidIdDraft {
     type: "",
     custom_type_name: "",
     id_number: "",
+    stored_id_number: "",
     front_file: null,
     front_preview: null,
     front_existing_url: null,
@@ -58,6 +62,7 @@ export function draftFromServer(item: RegistrationValidId): ValidIdDraft {
     type: item.type,
     custom_type_name: item.custom_type_name ?? "",
     id_number: item.id_number ?? "",
+    stored_id_number: item.id_number ?? "",
     front_file: null,
     front_preview: null,
     front_existing_url: item.front_url ?? null,
@@ -180,10 +185,25 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
                         VALID_ID_OPTIONS.find((o) => o.value === d.type)?.label ||
                         d.type}
                     </p>
-                    {d.id_number && (
+                    {d.stored_id_number && (
                       <p className="text-xs text-muted-foreground font-mono">
-                        {d.id_number}
+                        {d.stored_id_number}
                       </p>
+                    )}
+                    {showsIdNumberInput(d) && (
+                      <div className="mt-2 space-y-1.5">
+                        <Label htmlFor={`${d.key}-id-number`} className="text-xs">
+                          ID Number
+                        </Label>
+                        <Input
+                          id={`${d.key}-id-number`}
+                          value={d.id_number}
+                          onChange={(e) =>
+                            patch(d.key, { id_number: e.target.value })
+                          }
+                          placeholder="ID number"
+                        />
+                      </div>
                     )}
                   </div>
                 ) : (

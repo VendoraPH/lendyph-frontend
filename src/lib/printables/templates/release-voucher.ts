@@ -119,7 +119,7 @@ export function buildReleaseVoucherDoc(
       title: "Loan Details",
       columns: 2,
       items: presentFields([
-        field("Payee / Borrower", borrowerName),
+        field("Payee / Member", borrowerName),
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
@@ -161,7 +161,7 @@ export function buildReleaseVoucherDoc(
           rule: "total",
         },
         {
-          label: "NET PROCEEDS (Amount Released to Borrower)",
+          label: "NET PROCEEDS (Amount Released to Member)",
           amount: money(netProceeds),
           rule: "grand",
         },
@@ -204,7 +204,7 @@ export function buildReleaseVoucherDoc(
         {
           name: borrowerName ? String(borrowerName) : null,
           label: "Received by",
-          detail: "Borrower — Signature Over Printed Name",
+          detail: "Member — Signature Over Printed Name",
         },
       ],
     },

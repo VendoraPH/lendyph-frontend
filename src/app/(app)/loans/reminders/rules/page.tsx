@@ -26,7 +26,7 @@ import type { ReminderRule, ReminderRuleInput } from "@/types/reminder";
 import { RuleFormDialog } from "./_components/rule-form-dialog";
 
 const BORROWER_TYPE_LABELS: Record<ReminderRule["borrower_type"], string> = {
-  all: "All borrowers",
+  all: "All members",
   member: "Members",
   non_member: "Walk-ins",
 };

@@ -50,6 +50,44 @@ export interface NavItem {
   children?: NavSubItem[];
 }
 
+const CREDIT_SCORING_NAV: NavItem = {
+  title: "Credit Scoring",
+  href: "/credit-scoring",
+  icon: Gauge,
+  permission: "credit_scoring:view",
+  /**
+   * The backend seeds `credit_scoring:view|override|settings` for admin and
+   * super_admin only (lendyph-backend #174, 2026-10-02), and every endpoint
+   * behind these seven destinations answers 501 until it is built. Each
+   * screen then shows its "Not connected yet" panel: `useApiResource` treats
+   * 404 and 501 as "not built yet" and anything else as an error, so a real
+   * endpoint must not ship as a 403/500 stub.
+   *
+   * The server's permissions are the only gate. `RouteGuard` reads the same
+   * `user.permissions` from the auth store as the sidebar, so granting
+   * `credit_scoring:view` to another role shows it this menu at once.
+   *
+   * Note the name: the two admin screens gate on `credit_scoring:settings`,
+   * NOT `:configure`. The design spec originally said `configure` and has
+   * since been corrected; older copies of it have not. The code is
+   * authoritative, and it mirrors `accounting:settings`.
+   *
+   * Contract for whoever builds it: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
+   *
+   * Children that need a stricter permission than the parent's
+   * `credit_scoring:view` say so; the rest repeat it explicitly.
+   */
+  children: [
+    { title: "Dashboard", href: "/credit-scoring", permission: "credit_scoring:view" },
+    { title: "Member Scores", href: "/credit-scoring/borrowers", permission: "credit_scoring:view" },
+    { title: "Credit Assessment", href: "/credit-scoring/assessment", permission: "credit_scoring:view" },
+    { title: "Scorecard Configuration", href: "/credit-scoring/scorecard-configuration", permission: "credit_scoring:settings" },
+    { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", permission: "credit_scoring:view" },
+    { title: "Score History", href: "/credit-scoring/score-history", permission: "credit_scoring:view" },
+    { title: "Settings", href: "/credit-scoring/settings", permission: "credit_scoring:settings" },
+  ],
+};
+
 export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
@@ -154,43 +192,9 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: GCashIcon,
     permission: "gcash:view",
   },
-  {
-    title: "Credit Scoring",
-    href: "/credit-scoring",
-    icon: Gauge,
-    permission: "credit_scoring:view",
-    /**
-     * The backend seeds `credit_scoring:view|override|settings` for admin and
-     * super_admin only (lendyph-backend #174, 2026-10-02), and every endpoint
-     * behind these seven destinations answers 501 until it is built. Each
-     * screen then shows its "Not connected yet" panel: `useApiResource` treats
-     * 404 and 501 as "not built yet" and anything else as an error, so a real
-     * endpoint must not ship as a 403/500 stub.
-     *
-     * The server's permissions are the only gate. `RouteGuard` reads the same
-     * `user.permissions` from the auth store as the sidebar, so granting
-     * `credit_scoring:view` to another role shows it this menu at once.
-     *
-     * Note the name: the two admin screens gate on `credit_scoring:settings`,
-     * NOT `:configure`. The design spec originally said `configure` and has
-     * since been corrected; older copies of it have not. The code is
-     * authoritative, and it mirrors `accounting:settings`.
-     *
-     * Contract for whoever builds it: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
-     *
-     * Children that need a stricter permission than the parent's
-     * `credit_scoring:view` say so; the rest repeat it explicitly.
-     */
-    children: [
-      { title: "Dashboard", href: "/credit-scoring", permission: "credit_scoring:view" },
-      { title: "Borrower Scores", href: "/credit-scoring/borrowers", permission: "credit_scoring:view" },
-      { title: "Credit Assessment", href: "/credit-scoring/assessment", permission: "credit_scoring:view" },
-      { title: "Scorecard Configuration", href: "/credit-scoring/scorecard-configuration", permission: "credit_scoring:settings" },
-      { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", permission: "credit_scoring:view" },
-      { title: "Score History", href: "/credit-scoring/score-history", permission: "credit_scoring:view" },
-      { title: "Settings", href: "/credit-scoring/settings", permission: "credit_scoring:settings" },
-    ],
-  },
+  // Gated on NEXT_PUBLIC_ENABLE_CREDIT_SCORING at build time. The routes also
+  // answer not found when the flag is off (credit-scoring/layout.tsx).
+  ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",

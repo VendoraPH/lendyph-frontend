@@ -256,7 +256,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
               ))}
             </NativeSelect>
           </Field>
-          <Field id="sms-sender" label="Sender ID" hint="The name borrowers see, as registered with the provider.">
+          <Field id="sms-sender" label="Sender ID" hint="The name members see, as registered with the provider.">
             <Input id="sms-sender" value={form.sms_provider.sender_id} onChange={(e) => patchSms({ sender_id: e.target.value })} />
           </Field>
           <Field id="sms-key" label="API key" hint={secretHint(settings.sms_provider.has_credentials)}>

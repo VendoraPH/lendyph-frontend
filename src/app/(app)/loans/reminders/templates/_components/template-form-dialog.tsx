@@ -169,7 +169,7 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
           <DialogTitle>{template ? "Edit template" : "New template"}</DialogTitle>
           <DialogDescription>
             Write firmly but respectfully: no threats, shaming, or ALL CAPS, and never mention the debt to anyone but
-            the borrower.
+            the member.
           </DialogDescription>
         </DialogHeader>
 

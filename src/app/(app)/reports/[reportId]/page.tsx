@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AccessDenied, RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
+import {
+  noDateRangeScope,
+  presetMemberId,
+  reportPickPrompt,
+  reportSubjectNoun,
+} from "../_lib/report-subject";
+import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
@@ -47,11 +54,12 @@ import {
   RefreshCw,
   Table as TableIcon,
 } from "lucide-react";
-import { reportService } from "@/services";
+import { borrowerService, reportService } from "@/services";
 import { REPORT_CATALOG } from "../_lib/report-catalog";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
+import { ReportPrintSheet } from "../_components/report-print-sheet";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
@@ -171,7 +179,7 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
   }
 }
 
-function ReportDetailContent() {
+function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
@@ -185,13 +193,18 @@ function ReportDetailContent() {
     presetRange("this_month", { from: "", to: "" })
   );
   const [branchId, setBranchId] = useState<number | null>(null);
-  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const { user, hasPermission } = useAuth();
+  // `?member=<id>` opens a member's report with them selected. Reading a member
+  // needs `borrowers:view`, the same as the picker; without it nothing is preset.
+  const presetId =
+    report?.subject === "borrower" && hasPermission("borrowers:view") ? memberParam : null;
+  const [subjectId, setSubjectId] = useState<number | null>(presetId);
+  const [presetMember, setPresetMember] = useState<MemberOption | null>(null);
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
   const { branches } = useBranches();
-  const { user, hasPermission } = useAuth();
   // Without `branches:view_all` the API answers 403 to a branch outside the
   // caller's own, so the picker offers only theirs.
   const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
@@ -199,6 +212,24 @@ function ReportDetailContent() {
   const loadBranding = useBrandingStore((s) => s.load);
 
   const [logoData, setLogoData] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (presetId === null) return;
+    let cancelled = false;
+    borrowerService
+      .detail(presetId)
+      .then((member) => {
+        if (!cancelled) setPresetMember(toMemberOption(member));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubjectId((current) => (current === presetId ? null : current));
+        toast.error("We couldn't open that member. Please pick one.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [presetId]);
 
   // Warms branding for the case where Reports is the first page of the session
   // to need it, so the logo is on screen before anyone clicks Generate. The
@@ -435,62 +466,72 @@ function ReportDetailContent() {
       <Card>
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2 min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Date Range
+            {report.noDateRange ? (
+              <p className="text-sm text-muted-foreground min-w-0 flex-1">
+                {noDateRangeScope(report.subject)}
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => applyPreset(p.id)}
-                    className={cn(
-                      "h-8 px-3 text-xs rounded-md border transition-colors",
-                      preset === p.id
-                        ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
-                        : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            ) : (
+              <div className="space-y-2 min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Date Range
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => applyPreset(p.id)}
+                      className={cn(
+                        "h-8 px-3 text-xs rounded-md border transition-colors",
+                        preset === p.id
+                          ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
+                          : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label htmlFor="from-date" className="text-xs">
-                  From
-                </Label>
-                <Input
-                  id="from-date"
-                  type="date"
-                  value={activeRange.from}
-                  onChange={(e) => {
-                    setPreset("custom");
-                    setRange({ ...activeRange, from: e.target.value });
-                    setDoc(null);
-                  }}
-                  className="h-9 w-40"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="to-date" className="text-xs">
-                  To
-                </Label>
-                <Input
-                  id="to-date"
-                  type="date"
-                  value={activeRange.to}
-                  onChange={(e) => {
-                    setPreset("custom");
-                    setRange({ ...activeRange, to: e.target.value });
-                    setDoc(null);
-                  }}
-                  className="h-9 w-40"
-                />
-              </div>
+              {!report.noDateRange && (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="from-date" className="text-xs">
+                      From
+                    </Label>
+                    <Input
+                      id="from-date"
+                      type="date"
+                      value={activeRange.from}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, from: e.target.value });
+                        setDoc(null);
+                      }}
+                      className="h-9 w-40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="to-date" className="text-xs">
+                      To
+                    </Label>
+                    <Input
+                      id="to-date"
+                      type="date"
+                      value={activeRange.to}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, to: e.target.value });
+                        setDoc(null);
+                      }}
+                      className="h-9 w-40"
+                    />
+                  </div>
+                </>
+              )}
               <Button
                 onClick={handleGenerate}
                 disabled={generating || missingSubject || spanTooWide}
@@ -558,12 +599,14 @@ function ReportDetailContent() {
                     setSubjectId(id);
                     setDoc(null);
                   }}
+                  presetId={presetId}
+                  presetMember={presetMember}
                 />
               )}
 
               {missingSubject && (
                 <p className="text-xs text-muted-foreground pb-2">
-                  Select a {report.subject} to generate this report.
+                  Select a {report.subject && reportSubjectNoun(report.subject)} to generate this report.
                 </p>
               )}
 
@@ -579,7 +622,12 @@ function ReportDetailContent() {
       </Card>
 
       {/* Preview area */}
-      {!doc && !generating && <EmptyPreview reportTitle={report.title} />}
+      {!doc && !generating && (
+        <EmptyPreview
+          reportTitle={report.title}
+          pick={reportPickPrompt(report)}
+        />
+      )}
       {generating && (
         <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -589,14 +637,23 @@ function ReportDetailContent() {
         </div>
       )}
       {doc && !generating && <ReportPreview doc={doc} />}
+      {doc && !generating && <ReportPrintSheet doc={doc} />}
     </div>
   );
+}
+
+/** Keyed by the member, so following a link to another member starts afresh. */
+function ReportDetailRoute() {
+  const memberParam = presetMemberId(useSearchParams().get("member"));
+  return <ReportDetailContent key={memberParam ?? "none"} memberParam={memberParam} />;
 }
 
 export default function ReportDetailPage() {
   return (
     <RouteGuard permission="reports:view" pageName="Reports">
-      <ReportDetailContent />
+      <Suspense fallback={null}>
+        <ReportDetailRoute />
+      </Suspense>
     </RouteGuard>
   );
 }
@@ -675,7 +732,7 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
   );
 }
 
-function EmptyPreview({ reportTitle }: { reportTitle: string }) {
+function EmptyPreview({ reportTitle, pick }: { reportTitle: string; pick: string }) {
   return (
     <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
       <div className="max-w-md mx-auto text-center space-y-3">
@@ -686,7 +743,7 @@ function EmptyPreview({ reportTitle }: { reportTitle: string }) {
           Ready to generate {reportTitle}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Pick a date range above and click{" "}
+          Pick {pick} above and click{" "}
           <span className="font-medium text-foreground">Generate Preview</span>.
           What you see will match the exported Excel exactly.
         </p>

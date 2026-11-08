@@ -1,16 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Loader2, BookOpen, FileText } from "lucide-react";
-import { toast } from "sonner";
-import { borrowerService, reportService } from "@/services";
-import { formatCurrency } from "@/lib/format";
-import type { BorrowerLedgerEntry, PaginatedResponse } from "@/types";
+import { AlertCircle, Loader2, BookOpen, FileText, RefreshCw } from "lucide-react";
+import { borrowerService } from "@/services";
+import {
+  ledgerClosingCells,
+  ledgerRowCells,
+  memberLedgerReportHref,
+  readMemberLedger,
+  type MemberLedgerView,
+} from "../_lib/ledger-rows";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -21,54 +26,20 @@ interface LedgerTabProps {
 }
 
 export function LedgerTab({ borrowerId }: LedgerTabProps) {
-  const [entries, setEntries] = useState<BorrowerLedgerEntry[]>([]);
+  // Null when it could not be read; an empty ledger has an empty `entries`.
+  const [ledger, setLedger] = useState<MemberLedgerView | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subsidiaryLoading, setSubsidiaryLoading] = useState(false);
-  const [subsidiary, setSubsidiary] = useState<Record<string, unknown> | null>(null);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);
     try {
-      // No `per_page`, deliberately. `BorrowerController::ledger()` is not a
-      // paginated endpoint at all: it builds the entries in memory from the
-      // member's loans and repayments and answers
-      // `response()->json(['data' => $withBalance])` — no paginator, no `meta`,
-      // no clamp. The `per_page: 200` that used to be here was read by nothing
-      // on either side. It was still worth removing rather than leaving: it
-      // read as a bound on a list that has none, so the next person to audit
-      // this file would either "fix" it to 100 or drain an endpoint that
-      // returns everything in one response already.
-      //
-      // Note the running balance comes back precomputed and cumulative over
-      // the WHOLE ledger, which is another reason this must never be paged
-      // client-side: a slice of it would carry balances that do not start at
-      // the slice.
-      const res = await borrowerService.ledger(borrowerId);
-      const items = Array.isArray(res)
-        ? (res as BorrowerLedgerEntry[])
-        : (res as PaginatedResponse<BorrowerLedgerEntry>)?.data ?? [];
-      setEntries(items);
+      // No `per_page`: the endpoint answers every row in one response, with no
+      // paginator to bound.
+      setLedger(readMemberLedger(await borrowerService.ledger(borrowerId)));
     } catch {
-      setEntries([]);
+      setLedger(null);
     } finally {
       setLoading(false);
-    }
-  }, [borrowerId]);
-
-  const handleViewSubsidiaryLedger = useCallback(async () => {
-    setSubsidiaryLoading(true);
-    try {
-      const res = await reportService.subsidiaryLedger(borrowerId);
-      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
-        ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
-      setSubsidiary(payload ?? {});
-      toast.success("Subsidiary ledger loaded");
-    } catch {
-      toast.error("We couldn't load the subsidiary ledger. Please try again.");
-      setSubsidiary(null);
-    } finally {
-      setSubsidiaryLoading(false);
     }
   }, [borrowerId]);
 
@@ -84,6 +55,28 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
     );
   }
 
+  if (ledger === null) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <div role="alert" className="flex flex-col items-center gap-3 px-4 py-8 text-center text-sm">
+            <p className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              We couldn&rsquo;t load the ledger.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void fetchLedger()}>
+              <RefreshCw className="mr-1.5 size-3.5" />
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { entries, closing } = ledger;
+  const closingCells = ledgerClosingCells(closing);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -92,32 +85,14 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             <FileText className="h-4 w-4 text-muted-foreground" />
             Subsidiary Ledger Report
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleViewSubsidiaryLedger}
-            disabled={subsidiaryLoading}
+          <Link
+            href={memberLedgerReportHref(borrowerId)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            {subsidiaryLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                {subsidiary ? "Refresh" : "Load Report"}
-              </>
-            )}
-          </Button>
+            <FileText className="mr-2 h-4 w-4" />
+            Open in Reports
+          </Link>
         </CardHeader>
-        {subsidiary && (
-          <CardContent className="pt-0">
-            <pre className="max-h-[40vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
-              {JSON.stringify(subsidiary, null, 2)}
-            </pre>
-          </CardContent>
-        )}
       </Card>
       <Card>
         <CardContent className="p-0">
@@ -131,6 +106,7 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Loan</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
@@ -140,29 +116,43 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
             </TableHeader>
             <TableBody>
               {entries.map((entry) => {
-                const isDebit = entry.type === "debit";
-                const reference =
-                  entry.reference_type && entry.reference_id
-                    ? `${entry.reference_type} #${entry.reference_id}`
-                    : "—";
+                const cells = ledgerRowCells(entry);
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground font-mono">{cells.loan}</TableCell>
                     <TableCell className="text-sm font-medium">{entry.description}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground font-mono">{reference}</TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {isDebit ? formatCurrency(entry.amount) : "—"}
-                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground font-mono">{cells.reference}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{cells.debit}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {!isDebit ? formatCurrency(entry.amount) : "—"}
+                      {cells.credit}
+                      {cells.amountPaid && (
+                        <span className="block text-xs text-muted-foreground">
+                          Paid {cells.amountPaid}
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums font-semibold">
-                      {formatCurrency(entry.running_balance)}
+                    <TableCell className="text-right text-sm tabular-nums font-medium">
+                      {cells.balance}
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={6} className="text-sm font-medium whitespace-normal">
+                  Closing balance
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Principal {closingCells.principal} · Interest {closingCells.interest} · Penalty{" "}
+                    {closingCells.penalty}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right text-sm tabular-nums font-semibold">
+                  {closingCells.balance}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         )}
         </CardContent>

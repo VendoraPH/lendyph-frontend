@@ -111,7 +111,7 @@ export function buildAmortizationScheduleDoc(
       title: "Loan Details",
       columns: 2,
       items: presentFields([
-        field("Borrower", borrowerName),
+        field("Member", borrowerName),
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",

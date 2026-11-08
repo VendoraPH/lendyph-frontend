@@ -367,3 +367,17 @@ test("three-column sign-offs get their own grid", () => {
   assert.equal(count(html, 'class="sig-line"'), 3);
   assert.equal(count(html, '<div class="sig-name">&nbsp;</div>'), 3);
 });
+
+test("a compact table prints in the smaller type, and a normal one doesn't", () => {
+  const table = (compact?: boolean): PrintBlock => ({
+    kind: "table",
+    columns: [{ key: "a", header: "A" }],
+    rows: [{ a: "1" }],
+    ...(compact === undefined ? {} : { compact }),
+  });
+
+  const compactHtml = renderPrintable(doc({ blocks: [table(true)] }));
+  assert.match(compactHtml, /<table class="compact">/);
+  assert.match(compactHtml, /table\.compact/);
+  assert.doesNotMatch(renderPrintable(doc({ blocks: [table()] })), /<table class="compact">/);
+});
