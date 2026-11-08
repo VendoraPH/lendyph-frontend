@@ -51,6 +51,18 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
         hint: "Penalties charged but not yet collected.",
         types: ["asset"],
       },
+      {
+        key: "loan_adjustments",
+        label: "Loan adjustments clearing",
+        hint: "Where an approved balance adjustment is cleared against loans receivable. It should read zero once each adjustment is reviewed.",
+        types: ["asset"],
+      },
+      {
+        key: "unearned_restructure_income",
+        label: "Unearned restructure interest and penalty",
+        hint: "A contra-asset. Interest and penalty a restructure added to the new loan's principal, earned as that principal is collected.",
+        types: ["asset"],
+      },
     ],
   },
   {
@@ -63,6 +75,12 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
         key: "processing_fee_income",
         label: "Processing fee income",
         hint: "Processing fees, fees charged at collection, and any release deduction without an account below.",
+        types: ["income"],
+      },
+      {
+        key: "gcash_service_income",
+        label: "GCash service income",
+        hint: "The charge on a GCash Cash In or Cash Out.",
         types: ["income"],
       },
     ],
@@ -155,6 +173,24 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
         label: "Member advances",
         hint: "Money received beyond what was due. Held on the member's behalf until it is applied or refunded — never income.",
         types: ["liability"],
+      },
+      {
+        key: "suspense",
+        label: "Suspense",
+        hint: "Money received that cannot be identified yet. Held until it is, never income.",
+        types: ["liability"],
+      },
+    ],
+  },
+  {
+    title: "Year-end close",
+    description: "Where the year's result is moved when the books are closed.",
+    fields: [
+      {
+        key: "net_surplus",
+        label: "Retained earnings or net surplus",
+        hint: "Retained Earnings on a company chart, Undivided Net Surplus on a cooperative's.",
+        types: ["equity"],
       },
     ],
   },

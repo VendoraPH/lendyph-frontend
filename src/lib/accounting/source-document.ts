@@ -12,7 +12,8 @@
  *    gets a humanised name and no link.
  * 2. **A link is only offered where a route exists.** `loan` and `repayment`
  *    have detail pages; `expense` has a list but no detail page, and
- *    `expense_payment` has nothing at all. Linking them anyway would send the
+ *    `expense_payment`, `loan_adjustment`, `share_capital_entry` and
+ *    `gcash_transaction` have none keyed by their own id. Linking them anyway would send the
  *    user to a 404, so those render as text. {@see POSTABLE_ROUTES} is the
  *    only place that decision is made.
  *
@@ -50,8 +51,10 @@ export interface JournalSourceDocument {
  *
  * `expense` is absent on purpose: `/accounting/expenses` is a list with no
  * detail route, and deep-linking to a list that cannot select a row is worse
- * than not linking. `expense_payment` has no page of any kind. Adding either
- * one means shipping the route first.
+ * than not linking. `expense_payment` has no page of any kind. Nor do a loan
+ * adjustment, a share capital entry (a ledger row) or a GCash transaction:
+ * their screens are lists, never a page per record. Adding any of them means
+ * shipping the route first.
  */
 const POSTABLE_ROUTES: Record<string, ((id: number) => string) | undefined> = {
   loan: (id) => `/loans/${id}`,
@@ -70,6 +73,9 @@ const POSTABLE_NAMES: Record<string, string | undefined> = {
   repayment: "Payment",
   expense: "Expense",
   expense_payment: "Expense payment",
+  loan_adjustment: "Loan adjustment",
+  share_capital_entry: "Share capital entry",
+  gcash_transaction: "GCash transaction",
 };
 
 /** "expense_payment" → "expense payment". Matches how the register renders `source`. */

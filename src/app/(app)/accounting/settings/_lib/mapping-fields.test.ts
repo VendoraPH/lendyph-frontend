@@ -33,3 +33,30 @@ test("the tax roles can be re-pointed, to liability accounts only", () => {
     ]
   );
 });
+
+test("the Phase 2 roles can be re-pointed, each to the account type it must be", () => {
+  const byKey = new Map(FIELDS.map((field) => [field.key, field]));
+  const expected = {
+    gcash_service_income: ["income"],
+    loan_adjustments: ["asset"],
+    unearned_restructure_income: ["asset"],
+    net_surplus: ["equity"],
+    suspense: ["liability"],
+  } as const;
+  for (const [key, types] of Object.entries(expected)) {
+    const field = byKey.get(key as keyof typeof expected);
+    assert.ok(field, `${key} is on the screen`);
+    assert.deepEqual(field.types, types, key);
+    assert.ok(field.label.trim() && field.hint.trim(), `${key} has a label and a hint`);
+  }
+});
+
+test("every label and hint reads in plain words: Member, never Borrower, and no dollar sign", () => {
+  for (const field of FIELDS) {
+    for (const text of [field.label, field.hint]) {
+      assert.doesNotMatch(text, /borrower/i, field.key);
+      assert.doesNotMatch(text, /\$|USD/, field.key);
+      assert.doesNotMatch(text, /_/, field.key);
+    }
+  }
+});

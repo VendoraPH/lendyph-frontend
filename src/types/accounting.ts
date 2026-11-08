@@ -109,7 +109,8 @@ export type JournalSource =
   | "adjustment"
   | "reversal"
   | "opening_balance"
-  | "credit_loss";
+  | "credit_loss"
+  | "share_capital";
 
 /**
  * `draft` is editable and affects nothing. `posted` is live and immutable —
@@ -121,8 +122,9 @@ export type JournalStatus = "draft" | "posted" | "reversed";
 /**
  * What kind of document raised an entry.
  *
- * An API alias, never a class name: the server maps its four known classes to
- * `loan` / `repayment` / `expense` / `expense_payment` and snake-cases the
+ * An API alias, never a class name: the server maps its known classes to
+ * `loan` / `repayment` / `expense` / `expense_payment` / `loan_adjustment` /
+ * `share_capital_entry` / `gcash_transaction` and snake-cases the
  * basename of anything it has not curated. So this is deliberately OPEN — a
  * posting type nobody has mapped yet arrives as an unrecognised string rather
  * than not arriving at all, and code that switches on it needs a default.
@@ -132,6 +134,9 @@ export type JournalPostableType =
   | "repayment"
   | "expense"
   | "expense_payment"
+  | "loan_adjustment"
+  | "share_capital_entry"
+  | "gcash_transaction"
   | (string & {});
 
 export interface JournalEntry {
@@ -358,6 +363,19 @@ export interface AccountMapping {
    * chart already carries, so this adds a role without adding an account.
    */
   borrower_advances: number;
+  /** The charge on a GCash Cash In or Cash Out (4090). */
+  gcash_service_income: number;
+  /** Where a balance adjustment clears against loans receivable (1180). */
+  loan_adjustments: number;
+  /**
+   * Interest and penalty a restructure capitalised into the new loan's
+   * principal, not yet earned (1210). A contra asset, like the allowance.
+   */
+  unearned_restructure_income: number;
+  /** Where the year-end close moves the year's result (3030 on a company chart). */
+  net_surplus: number;
+  /** Money received that cannot be identified yet, held until it is (2390). */
+  suspense: number;
 }
 
 /** Accounting periods lock the books once an accountant signs them off. */
