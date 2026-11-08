@@ -3,7 +3,7 @@
  * the rules that keep the panel honest are unit-tested.
  */
 
-import { formatCurrencyExact, formatDateLong } from "@/lib/format";
+import { formatCurrencyExact } from "@/lib/format";
 import type {
   LindaBlock,
   LindaField,
@@ -22,13 +22,6 @@ export const LINDA_MAX_MESSAGE_LENGTH = 500;
  * last month?" to resolve, small enough to keep the request lean.
  */
 export const LINDA_HISTORY_LIMIT = 10;
-
-/**
- * Longest answer text sent back in history. A follow-up needs the gist, not
- * a whole long answer, and this keeps a runaway reply from growing every
- * request after it.
- */
-export const LINDA_HISTORY_CONTENT_LIMIT = 2000;
 
 /** Longest link kept from a reply. No in-app page needs more. */
 export const LINDA_MAX_LINK_LENGTH = 2048;
@@ -50,9 +43,12 @@ export const LINDA_MESSAGES = {
   forbidden: "Your role doesn't have access to Linda. Please ask your administrator.",
   notSetUp: "Linda isn't available on this account yet.",
   rateLimited: "You're sending questions a little fast. Please wait a moment and try again.",
+  monthlyLimit:
+    "Linda has reached this month's question limit for your cooperative. The suggested questions still work.",
+  dailyLimit: "You've reached today's question limit. Please try again tomorrow.",
   invalidQuestion: "Linda can't take that question as written. Please rephrase it.",
   noHistory:
-    "Linda does not save your chat history. Please take note of any important information before closing this chat.",
+    "Linda does not save your chat history. Please take note of any important information before closing this chat. Questions Linda can't answer itself may be sent to an outside AI service; your Lendy records are never sent.",
 } as const;
 
 /** A message in the open panel. Lives in component state only, never stored. */
@@ -67,11 +63,16 @@ export interface LindaMessage {
 
 /**
  * The earlier turns sent with a new question: the most recent
- * `LINDA_HISTORY_LIMIT`, as question-and-answer pairs. A question goes back
- * only with the answer Linda gave it, so a failed answer (it carries no data
- * the backend should build on) and a question whose request ended silently
- * (cancelled, 401, 423) are both left out. The server therefore always gets
- * alternating turns that start with a question, even after trimming.
+ * `LINDA_HISTORY_LIMIT`, as question-and-answer pairs. An answer goes back as
+ * its intent alone, with empty `content`: answers carry member names and
+ * figures, and the model must never see them. The intent is all a follow-up
+ * ("How about last month?") needs.
+ *
+ * A question goes back only with the answer Linda gave it, so a failed answer
+ * (it carries no data the backend should build on) and a question whose
+ * request ended silently (cancelled, 401, 423) are both left out. The server
+ * therefore always gets alternating turns that start with a question, even
+ * after trimming.
  */
 export function buildLindaHistory(
   messages: readonly LindaMessage[],
@@ -84,26 +85,11 @@ export function buildLindaHistory(
     if (question.role !== "user" || answer.role !== "assistant" || !answer.reply) continue;
     pairs.push([
       { role: "user", content: question.content },
-      {
-        role: "assistant",
-        content: truncate(answer.content, LINDA_HISTORY_CONTENT_LIMIT),
-        intent: answer.reply.intent,
-      },
+      { role: "assistant", content: "", intent: answer.reply.intent },
     ]);
   }
   const keep = Math.floor(limit / 2);
   return keep > 0 ? pairs.slice(-keep).flat() : [];
-}
-
-/**
- * `s` cut to at most `max` UTF-16 units, never through a surrogate pair: a
- * lone surrogate is not valid JSON text to many servers (PHP rejects it).
- */
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  const cut = s.slice(0, max);
-  const last = cut.charCodeAt(cut.length - 1);
-  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
 /**
@@ -267,12 +253,77 @@ export function lindaErrorMessage(
 ): string | null {
   if (canceled || status === 401 || status === 423) return null;
   if (errorCode === "data_unavailable") return LINDA_MESSAGES.dataUnavailable;
+  // Each limit is named before the general 429, so the user knows which one was hit.
+  if (errorCode === "monthly_limit") return LINDA_MESSAGES.monthlyLimit;
+  if (errorCode === "daily_limit") return LINDA_MESSAGES.dailyLimit;
   if (status === 403) return LINDA_MESSAGES.forbidden;
   if (status === 404 || status === 501) return LINDA_MESSAGES.notSetUp;
   if (status === 429) return LINDA_MESSAGES.rateLimited;
   // The server refused the question itself; sending it again changes nothing.
   if (status === 400 || status === 422) return LINDA_MESSAGES.invalidQuestion;
   return LINDA_MESSAGES.aiUnavailable;
+}
+
+// ---------------------------------------------------------------------------
+// Links
+// ---------------------------------------------------------------------------
+
+/** Record pages a row can link to, by path. Only an id opens a record. */
+const RECORD_LINK_LABELS: readonly [RegExp, string][] = [
+  [/^\/borrowers\/\d+(?:[/?#]|$)/, "View member"],
+  [/^\/loans\/\d+(?:[/?#]|$)/, "View loan"],
+  [/^\/payments\/\d+(?:[/?#]|$)/, "View payment"],
+];
+
+/** A row link's visible text: what the in-app path opens, or "View". */
+export function lindaLinkLabel(path: string): string {
+  return RECORD_LINK_LABELS.find(([pattern]) => pattern.test(path))?.[1] ?? "View";
+}
+
+/** A row link's accessible name, with the row's title so each link is told apart. */
+export function lindaLinkAriaLabel(path: string, title: string): string {
+  return `${lindaLinkLabel(path)}: ${title}`;
+}
+
+// ---------------------------------------------------------------------------
+// Dates
+// ---------------------------------------------------------------------------
+
+/** Linda's dates read in Philippine time, whatever the computer is set to. */
+const PHILIPPINE_TIME = "Asia/Manila";
+
+const longDateFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+const dateTimeFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const NO_ZONE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * A server date as an instant, or null. A date alone parses as midnight UTC,
+ * which is the same day in Manila. A time with no zone is the server's own
+ * Manila time, which `new Date()` would read in the computer's zone instead.
+ */
+function parseLindaDate(value: string): Date | null {
+  const date = NO_ZONE.test(value) ? new Date(`${value.replace(" ", "T")}+08:00`) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "Dec 5, 2026, 02:05 PM" in Philippine time, e.g. a reply's as-of line. */
+export function formatLindaDateTime(value: string): string {
+  const date = parseLindaDate(value);
+  return date ? dateTimeFmt.format(date) : value;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +363,8 @@ export function formatLindaValue(field: LindaField): string {
       return Number.isFinite(n) ? `${exactNumber.format(n)}%` : String(value);
     case "date": {
       const s = String(value);
-      return Number.isNaN(new Date(s).getTime()) ? s : formatDateLong(s);
+      const date = parseLindaDate(s);
+      return date ? longDateFmt.format(date) : s;
     }
     default:
       return String(value);
