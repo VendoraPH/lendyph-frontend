@@ -8,6 +8,8 @@ import {
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanDisplayStatus,
+  loanRowStatusLabel,
   loanStatusLabel,
 } from "./loan-status";
 import type { LoanStatus } from "@/types/loan";
@@ -221,7 +223,71 @@ test("a step without a Status falls back to the step name", () => {
   assert.equal(loanStatusLabel("for_review", null, null), "For Approval");
 });
 
-test("a step Status never relabels a loan that is not under approval", () => {
-  assert.equal(loanStatusLabel("approved", "Manager", "Credit Check"), "Approved");
+test("a step Status relabels only a loan under approval or awaiting release", () => {
+  assert.equal(loanStatusLabel("approved", "Manager", "Credit Check"), "Approved - Credit Check");
   assert.equal(loanStatusLabel("released", null, "Credit Check"), "Current");
+});
+
+// ── the label at the Release step ──────────────────────────────────────────
+
+test("an approved loan reads the Release step's Status when it has one", () => {
+  assert.equal(loanStatusLabel("approved", null, "Ready for Release"), "Approved - Ready for Release");
+});
+
+test("an approved loan with no Status reads plain Approved, never the approver", () => {
+  assert.equal(loanStatusLabel("approved"), "Approved");
+  assert.equal(loanStatusLabel("approved", null, "   "), "Approved");
+  assert.equal(loanStatusLabel("approved", "Release Officer", null), "Approved");
+});
+
+test("a loan under approval keeps its step Status, then its approver", () => {
+  assert.equal(loanStatusLabel("for_review", "Manager", "Credit Check"), "For Approval - Credit Check");
+  assert.equal(loanStatusLabel("for_review", "Manager", null), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review"), "For Approval");
+});
+
+// ── the status a loan shows ────────────────────────────────────────────────
+
+test("a loan past grace shows the server's display_status, in red", () => {
+  const display = loanDisplayStatus({ status: "ongoing", display_status: "past_due" });
+  assert.equal(display, "past_due");
+  assert.equal(LOAN_STATUS_LABELS[display], "Past Due");
+  assert.ok(LOAN_STATUS_COLORS[display].includes("text-red-700"));
+});
+
+test("a row with no display_status, or one the screen doesn't know, shows its status", () => {
+  assert.equal(loanDisplayStatus({ status: "ongoing" }), "ongoing");
+  assert.equal(loanDisplayStatus({ status: "ongoing", display_status: null }), "ongoing");
+  assert.equal(loanDisplayStatus({ status: "released", display_status: "someday" }), "released");
+});
+
+test("display_status never changes a loan that is not past due", () => {
+  assert.equal(loanDisplayStatus({ status: "completed", display_status: "completed" }), "completed");
+});
+
+// ── one label for every list of loans ──────────────────────────────────────
+
+test("a list row reads the same label on the Loans list and a member's Loans tab", () => {
+  assert.equal(
+    loanRowStatusLabel({ status: "for_review", current_approver: "Manager" }),
+    "For Approval - Manager",
+  );
+  assert.equal(
+    loanRowStatusLabel({ status: "for_review", current_approver: "Manager", current_status_label: "Credit Check" }),
+    "For Approval - Credit Check",
+  );
+  assert.equal(
+    loanRowStatusLabel({ status: "approved", current_status_label: "Ready for Release" }),
+    "Approved - Ready for Release",
+  );
+  assert.equal(loanRowStatusLabel({ status: "ongoing", display_status: "past_due" }), "Past Due");
+  assert.equal(loanRowStatusLabel({ status: "ongoing" }), "Current");
+});
+
+test("a restructure's row says so, except once it has itself been restructured", () => {
+  assert.equal(
+    loanRowStatusLabel({ status: "ongoing", display_status: "past_due", is_restructure: true }),
+    "Restructured — Past Due",
+  );
+  assert.equal(loanRowStatusLabel({ status: "restructured", is_restructure: true }), "Restructured");
 });

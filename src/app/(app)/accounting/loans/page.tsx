@@ -73,7 +73,7 @@ const POSTING_RULES = [
     event: "Provision for credit losses",
     debit: "Credit Loss Expense",
     credit: "Allowance for Credit Losses",
-    note: "The allowance is a contra-asset: it reduces net loans receivable without touching the gross balance a borrower still owes.",
+    note: "The allowance is a contra-asset: it reduces net loans receivable without touching the gross balance a member still owes.",
   },
 ];
 

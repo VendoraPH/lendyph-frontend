@@ -45,6 +45,8 @@ interface Props {
   disabled?: boolean;
   /** Non-null when the drain behind `options` came up short. */
   shortfall?: GCashPartyShortfall | null;
+  /** The line under the list, e.g. that a search has more matches than it shows. */
+  status?: string;
 }
 
 /**
@@ -71,19 +73,22 @@ export function GCashPartyPicker({
   error = null,
   disabled = false,
   shortfall = null,
+  status = "",
 }: Props) {
   const [open, setOpen] = useState(false);
   const singular = noun.replace(/s$/, "");
+  // However the list closes (a pick, Escape or a click outside), the next
+  // opening starts from a fresh search, not the last one's text and results.
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next) onQueryChange("");
+  };
 
   return (
     <div className="space-y-2">
       <Popover
         open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          // Reopening starts from a fresh search, not the last one's results.
-          if (!next) onQueryChange("");
-        }}
+        onOpenChange={changeOpen}
       >
         <PopoverTrigger
           render={
@@ -151,7 +156,7 @@ export function GCashPartyPicker({
                       value={optionValue}
                       onSelect={() => {
                         onChange(isSelected ? null : option);
-                        setOpen(false);
+                        changeOpen(false);
                       }}
                       className="items-start"
                     >
@@ -182,6 +187,11 @@ export function GCashPartyPicker({
                 })}
               </CommandGroup>
             </CommandList>
+            {status && !searching && (
+              <p role="status" className="border-t px-2.5 py-2 text-xs text-muted-foreground">
+                {status}
+              </p>
+            )}
           </Command>
         </PopoverContent>
       </Popover>

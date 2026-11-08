@@ -45,18 +45,18 @@ function RiskMonitoringContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Risk Monitoring"
-        description="Borrowers whose risk has changed and alerts that need review."
+        description="Members whose risk has changed and alerts that need review."
       />
 
       <DataState
         resource={resource}
-        summary="Risk alerts and affected-borrower details will appear here once the backend is connected."
+        summary="Risk alerts and affected-member details will appear here once the backend is connected."
         endpoints={["GET /credit-scoring/risk-monitoring"]}
       >
         {(data) => (
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Figure label="Total Borrowers" value={String(data.summary.total_borrowers)} />
+              <Figure label="Total Members" value={String(data.summary.total_borrowers)} />
               <Figure label="High Risk" value={String(data.summary.high_risk_count)} />
               <Figure label="Score Declines (30d)" value={String(data.summary.score_declines_30d)} />
               <Figure label="New Hard Flags (30d)" value={String(data.summary.new_hard_flags_30d)} />
@@ -89,7 +89,7 @@ function RiskMonitoringContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Borrower</TableHead>
+                    <TableHead>Member</TableHead>
                     <TableHead>Branch</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Risk Level</TableHead>

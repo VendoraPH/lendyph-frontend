@@ -67,7 +67,7 @@ export const GROUPS: MappingGroup[] = [
     ],
   },
   {
-    title: "What borrowers owe",
+    title: "What members owe",
     description: "The receivables a release and its charges create.",
     fields: [
       {
@@ -178,7 +178,7 @@ export const GROUPS: MappingGroup[] = [
       {
         key: "allowance_credit_losses",
         label: "Allowance for credit losses",
-        hint: "A contra-asset. It reduces net receivables without changing what a borrower owes.",
+        hint: "A contra-asset. It reduces net receivables without changing what a member owes.",
         types: ["asset"],
       },
       {
@@ -189,8 +189,8 @@ export const GROUPS: MappingGroup[] = [
       },
       {
         key: "borrower_advances",
-        label: "Borrower advances",
-        hint: "Money received beyond what was due. Held on the borrower's behalf until it is applied or refunded — never income.",
+        label: "Member advances",
+        hint: "Money received beyond what was due. Held on the member's behalf until it is applied or refunded — never income.",
         types: ["liability"],
       },
     ],

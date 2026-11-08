@@ -44,8 +44,8 @@ export function ReminderFilters<F extends SharedFilters>({ value, onChange, date
         {/* Commits on Enter or blur, not per keystroke — each change is a
             request. Uncontrolled so typing doesn't need state of its own. */}
         <Input
-          aria-label="Search borrower or loan"
-          placeholder="Borrower or loan number, then Enter"
+          aria-label="Search member or loan"
+          placeholder="Member or loan number, then Enter"
           className="pl-8"
           defaultValue={value.search ?? ""}
           onKeyDown={(e) => {

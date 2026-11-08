@@ -32,15 +32,15 @@ interface PauseDialogProps {
 const SCOPE_COPY: Record<ReminderPauseScope, { title: string; body: string }> = {
   global: {
     title: "Pause all reminders",
-    body: "No automated reminder goes to any borrower until someone resumes them. Manual reminders are blocked too.",
+    body: "No automated reminder goes to any member until someone resumes them. Manual reminders are blocked too.",
   },
   borrower: {
-    title: "Pause reminders for this borrower",
-    body: "Stops automated reminders for every loan this borrower holds.",
+    title: "Pause reminders for this member",
+    body: "Stops automated reminders for every loan this member holds.",
   },
   loan: {
     title: "Pause reminders for this loan",
-    body: "Stops automated reminders for this loan only. The borrower's other loans are unaffected.",
+    body: "Stops automated reminders for this loan only. The member's other loans are unaffected.",
   },
 };
 
@@ -108,7 +108,7 @@ export function PauseDialog({
               id="pause-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Borrower is under restructuring negotiation"
+              placeholder="e.g. Member is under restructuring negotiation"
               rows={3}
             />
           </div>

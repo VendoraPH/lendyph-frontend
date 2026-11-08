@@ -10,7 +10,7 @@
  * import path changes.
  */
 
-import type { LoanStatus } from "@/types/loan";
+import type { Loan, LoanStatus } from "@/types/loan";
 
 export const LOAN_STATUS = {
   DRAFT: "draft",
@@ -76,8 +76,10 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
  * The label for a loan status pill. A loan under approval reads "For Approval"
  * followed by the Status set on the step it waits at ("For Approval - Credit
  * Check", the API's `current_status_label`), or by that step's approver when
- * the step has no Status ("For Approval - Manager"). Every other status, and a
- * `for_review` loan with neither, reads as plain `LOAN_STATUS_LABELS`.
+ * the step has no Status ("For Approval - Manager"). An approved loan reads
+ * "Approved - <Status>" from the pending Release step, and plain "Approved" with
+ * none: the approver is not named there. Every other status, and a `for_review`
+ * loan with neither, reads as plain `LOAN_STATUS_LABELS`.
  */
 export function loanStatusLabel(
   status: LoanStatus,
@@ -85,8 +87,44 @@ export function loanStatusLabel(
   stepStatus?: string | null,
 ): string {
   const label = LOAN_STATUS_LABELS[status] ?? status;
-  const suffix = stepStatus?.trim() || approver?.trim();
+  const step = stepStatus?.trim();
+  if (status === LOAN_STATUS.APPROVED) return step ? `${label} - ${step}` : label;
+  const suffix = step || approver?.trim();
   return status === LOAN_STATUS.FOR_REVIEW && suffix ? `${label} - ${suffix}` : label;
+}
+
+/**
+ * The status a loan's badge shows: the server's `display_status` (`past_due` for
+ * a released or ongoing loan past grace), else `status`. Read for the badge only;
+ * what a loan may do still goes by `status`. A value this screen has no label
+ * for falls back to `status`, so a badge is never unstyled.
+ */
+export function loanDisplayStatus(loan: Pick<Loan, "status" | "display_status">): LoanStatus {
+  const display = loan.display_status;
+  return display && Object.hasOwn(LOAN_STATUS_LABELS, display)
+    ? (display as LoanStatus)
+    : loan.status;
+}
+
+/**
+ * The status label of a loan in a list, the same on the Loans list and a
+ * member's Loans tab. A restructure application says so until it has itself
+ * been restructured.
+ */
+export function loanRowStatusLabel(
+  loan: Pick<
+    Loan,
+    "status" | "display_status" | "current_approver" | "current_status_label" | "is_restructure"
+  >,
+): string {
+  const label = loanStatusLabel(
+    loanDisplayStatus(loan),
+    loan.current_approver,
+    loan.current_status_label,
+  );
+  return loan.is_restructure && loan.status !== LOAN_STATUS.RESTRUCTURED
+    ? `Restructured — ${label}`
+    : label;
 }
 
 /**

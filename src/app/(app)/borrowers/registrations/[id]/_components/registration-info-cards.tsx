@@ -123,8 +123,14 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 </div>
                 <div className="space-y-1">
                   <Label>Civil Status</Label>
-                  <Select value={d.civil_status || null} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <Select items={CIVIL_STATUS_OPTIONS} value={d.civil_status || null} onValueChange={(v) => onDraftChange("civil_status", v ?? "")}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select">
+                        {(value: string | null) =>
+                          value ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value) : "Select"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {CIVIL_STATUS_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>

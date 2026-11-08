@@ -27,7 +27,7 @@ const CHART_HEX: Record<RiskLevel, string> = {
 };
 
 const SHORTCUTS: { title: string; href: string; icon: LucideIcon }[] = [
-  { title: "Borrower Scores", href: "/credit-scoring/borrowers", icon: Users },
+  { title: "Member Scores", href: "/credit-scoring/borrowers", icon: Users },
   { title: "Credit Assessment", href: "/credit-scoring/assessment", icon: TrendingUp },
   { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", icon: ShieldAlert },
   { title: "Score History", href: "/credit-scoring/score-history", icon: History },
@@ -48,7 +48,7 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Figure label="Scored Borrowers" value={String(data.total_scored_borrowers)} />
+        <Figure label="Scored Members" value={String(data.total_scored_borrowers)} />
         <Figure label="Average Score" value={Number(data.average_score ?? 0).toFixed(1)} />
       </div>
 
@@ -118,12 +118,12 @@ function CreditScoringDashboardContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Credit Scoring"
-        description="Portfolio-wide view of borrower credit scores and risk distribution."
+        description="Portfolio-wide view of member credit scores and risk distribution."
       />
 
       <DataState
         resource={resource}
-        summary="The credit scoring dashboard will summarize scored borrowers, average score, and risk distribution once the backend is connected."
+        summary="The credit scoring dashboard will summarize scored members, average score, and risk distribution once the backend is connected."
         endpoints={["GET /credit-scoring/dashboard"]}
       >
         {(data) => <DashboardBody data={data} />}

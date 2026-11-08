@@ -29,7 +29,9 @@ import { LoanFilters } from "./_components/loan-filters";
 import {
   FILTER_TABS,
   ACTIVE_STATUSES,
-  VIRTUAL_TAB_VALUES,
+  allCountFromStats,
+  currentCountFromStats,
+  loanListParams,
   numOrNull,
   dateOrNull,
   isoDateOrNull,
@@ -37,6 +39,7 @@ import {
   tabFromParam,
   type FilterTab,
   type LoanSortKey,
+  type LoanStats,
   type SortDir,
 } from "./_components/utils";
 
@@ -50,48 +53,6 @@ const SORT_KEYS: LoanSortKey[] = [
   "status",
   "created_at",
 ];
-
-/**
- * Global loan counts by status, read straight from the list response's
- * `meta.stats`. Deliberately an open record rather than a fixed shape: the API
- * reports every status it knows about — including legacy ones such as `ongoing`
- * and `restructured` that have no tab of their own — and each consumer here
- * only reads the keys it needs.
- *
- * These counts ignore the request's own `status`/`search`/product/date filters,
- * which is exactly why the KPI cards and tab badges can be driven from the same
- * request that fetches one page of rows.
- */
-type LoanStats = Record<string, number>;
-
-/**
- * Keys in `meta.stats` that are NOT statuses of their own, and so must never be
- * added into a total alongside the statuses they overlap.
- *
- * Derived from `VIRTUAL_TAB_VALUES` rather than typed out, so a virtual filter
- * cannot be added to the tab strip without also being excluded here. That
- * mattered immediately: `past_due` is a live `meta.stats` key now, it counts
- * `released`, `ongoing` AND `defaulted` loans that are already counted under
- * their own keys, and summing the record blind would have inflated "Total
- * Applications" by every overdue loan in the book.
- *
- *  - `active` = the sum of `Loan::ACTIVE_STATUSES` (released + ongoing).
- *  - `past_due` = `Loan::scopePastDue()`, which cuts ACROSS statuses instead of
- *    partitioning alongside them.
- *
- * `all` is here for the case where the API ever sends a total of its own; today
- * it does not, and `allCountFromStats` falls back to summing the real statuses.
- */
-const AGGREGATE_STAT_KEYS = new Set<string>(["all", ...VIRTUAL_TAB_VALUES]);
-
-function allCountFromStats(stats: LoanStats): number {
-  if (typeof stats.all === "number") return stats.all;
-  let sum = 0;
-  for (const [key, value] of Object.entries(stats)) {
-    if (!AGGREGATE_STAT_KEYS.has(key)) sum += value;
-  }
-  return sum;
-}
 
 function activeCountFromStats(stats: LoanStats): number {
   // Prefer the server's aggregate. The fallback re-adds the same four statuses
@@ -195,26 +156,24 @@ function LoansContent() {
   const dateFrom = useMemo(() => dateOrNull(dateFromParam), [dateFromParam]);
   const dateTo = useMemo(() => dateOrNull(dateToParam), [dateToParam]);
 
-  // Two tab values are virtual — `active` and `past_due` (VIRTUAL_TAB_VALUES).
-  // Both go to the API verbatim, because both are the API's OWN shorthand and
-  // both are resolved there from the same definition their `meta.stats` entry
-  // is counted through, so the rows and the badge above them cannot disagree:
+  // Three values are virtual: `active`, `current` and `past_due`
+  // (VIRTUAL_TAB_VALUES). All go to the API verbatim, because all are the API's
+  // OWN shorthand, each resolved there from the same definition its `meta.stats`
+  // entry is counted through, so the rows and the count above them cannot
+  // disagree:
   //
   //   - `status=active` expands to Loan::ACTIVE_STATUSES server-side. Spelling
   //     those statuses out here would work today and would be a second copy of
-  //     the definition — the copy that goes stale the day the set changes.
-  //   - `status=past_due` resolves to Loan::scopePastDue(). It CANNOT be
-  //     spelled out here at any price: it is derived from the amortization
+  //     the definition, the copy that goes stale the day the set changes.
+  //   - `status=current` is the same loans less the past-due ones, and
+  //     `status=past_due` resolves to Loan::scopePastDue(). Neither can be
+  //     spelled out here at any price: both are derived from the amortization
   //     schedule (an unpaid installment past its due date and past the loan's
-  //     `grace_period_days`), so there is no set of statuses that expresses it
-  //     and no way for this client to compute it from a loan row.
+  //     `grace_period_days`), so there is no set of statuses that expresses them
+  //     and no way for this client to compute them from a loan row.
   //
-  // The Current tab IS the `active` value: `released` and `ongoing` both read
-  // "Current", so it sends `status=active` and its badge reads `stats.active`
-  // (with the Active card's fallback). Every other tab value IS its status, so
-  // it goes as-is. Nothing reads `stats.current` — that one is not a status any
-  // row can hold and is absent from `meta.stats` on purpose.
-  const statusParam = tab === "all" ? null : tab;
+  // Every other tab value IS its status, so it goes as-is. loanListParams sends
+  // them.
   const search = q.trim();
 
   // ── Local-only state (not in URL) ──
@@ -281,17 +240,19 @@ function LoansContent() {
     try {
       setLoading(true);
       setError(null);
-      const res = await loanService.list({
-        page,
-        per_page: perPage,
-        sort: sortKey,
-        dir: sortDir,
-        ...(statusParam && { status: statusParam }),
-        ...(search && { search }),
-        ...(productId != null && { loan_product_id: productId }),
-        ...(dateFromParam && { date_from: dateFromParam }),
-        ...(dateToParam && { date_to: dateToParam }),
-      });
+      const res = await loanService.list(
+        loanListParams({
+          tab,
+          page,
+          perPage,
+          sortKey,
+          sortDir,
+          search,
+          productId,
+          dateFrom: dateFromParam,
+          dateTo: dateToParam,
+        }),
+      );
       if (requestId !== requestIdRef.current) return;
       const rows = res.data ?? [];
 
@@ -335,7 +296,7 @@ function LoansContent() {
     perPage,
     sortKey,
     sortDir,
-    statusParam,
+    tab,
     search,
     productId,
     dateFromParam,
@@ -397,6 +358,7 @@ function LoansContent() {
   const countsKnown = Object.keys(stats).length > 0;
   const allCount = allCountFromStats(stats);
   const activeCount = activeCountFromStats(stats);
+  const currentCount = currentCountFromStats(stats);
 
   // ── Handlers ──
   function handleTabChange(next: FilterTab) {
@@ -528,8 +490,8 @@ function LoansContent() {
                 ? "—"
                 : t.value === "all"
                   ? allCount
-                  : t.value === "active"
-                    ? activeCount
+                  : t.value === "current"
+                    ? (currentCount ?? "—")
                     : (stats[t.value] ?? 0)}
             </span>
           </button>

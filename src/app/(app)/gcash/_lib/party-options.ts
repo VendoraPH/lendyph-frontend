@@ -25,6 +25,8 @@ export interface GCashPartyShortfall {
 export interface GCashPartyListState {
   options: GCashPartyOption[];
   shortfall: GCashPartyShortfall | null;
+  /** The line under the list when a page of a search leaves some out. */
+  status?: string;
 }
 
 export const EMPTY_PARTY_LIST: GCashPartyListState = {
