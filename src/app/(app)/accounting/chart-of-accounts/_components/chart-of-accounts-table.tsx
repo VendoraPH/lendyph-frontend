@@ -15,6 +15,7 @@ import {
 import { sortAccounts } from "@/lib/accounting/account";
 import { cn } from "@/lib/utils";
 import type { Account, AccountType } from "@/types";
+import { accountTypeLabel, cashKindLabel } from "../../_lib/display-labels";
 
 const TYPE_STYLES: Record<AccountType, string> = {
   asset: "bg-blue-500/10 text-blue-700 border-blue-500/30",
@@ -131,24 +132,24 @@ export function ChartOfAccountsTable({ accounts }: ChartOfAccountsTableProps) {
                     {account.name}
                     {account.is_contra && (
                       <Badge variant="outline" className="text-[10px]">
-                        contra
+                        Contra
                       </Badge>
                     )}
                     {account.cash_kind && (
                       <Badge variant="outline" className="text-[10px]">
-                        {account.cash_kind}
+                        {cashKindLabel(account.cash_kind)}
                       </Badge>
                     )}
                     {!account.is_active && (
                       <Badge variant="outline" className="text-[10px]">
-                        inactive
+                        Inactive
                       </Badge>
                     )}
                   </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={TYPE_STYLES[account.type]}>
-                    {account.type}
+                    {accountTypeLabel(account.type)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm capitalize text-muted-foreground">

@@ -458,7 +458,7 @@ function DashboardContent() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent bg-muted/50">
-                  <TableHead className="pl-6 text-muted-foreground">Borrower</TableHead>
+                  <TableHead className="pl-6 text-muted-foreground">Member</TableHead>
                   <TableHead className="text-muted-foreground">Loan ID</TableHead>
                   <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
                   <TableHead className="text-right text-muted-foreground">Paid</TableHead>

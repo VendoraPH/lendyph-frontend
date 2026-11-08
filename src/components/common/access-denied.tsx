@@ -7,6 +7,7 @@ import { usePermission } from "@/hooks";
 import { useRoleLabel } from "@/hooks/use-role-label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { viewableModuleNames } from "@/lib/permission-module-names";
 
 interface AccessDeniedProps {
   pageName?: string;
@@ -16,14 +17,9 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
   const router = useRouter();
   const { role, permissions } = usePermission();
 
-  const titleCase = (name: string) =>
-    name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
   const roleLabel = useRoleLabel(role) || "Unknown";
 
-  const accessibleModules = permissions
-    .filter((p) => p.endsWith(":view"))
-    .map((p) => titleCase(p.split(":")[0]));
+  const accessibleModules = viewableModuleNames(permissions);
 
   return (
     <div className="flex min-h-[80vh] flex-col items-center justify-center px-4">

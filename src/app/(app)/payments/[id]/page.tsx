@@ -15,6 +15,8 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { readablePaymentRemarks } from "@/lib/printables/legacy-remarks";
+import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,7 @@ interface ReceiptData {
   next_due_date: string;
   collected_by: string;
   remarks: string;
+  voided_by: string;
   status: "completed" | "voided" | "pending";
 }
 
@@ -121,7 +124,8 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     new_balance: (p.new_balance as number) || 0,
     next_due_date: (p.next_due_date as string) || "—",
     collected_by: (p.collected_by as string) || "—",
-    remarks: p.remarks || "",
+    remarks: readablePaymentRemarks(p.remarks),
+    voided_by: voidedByName(p),
     status: p.status,
   };
 }
@@ -384,6 +388,9 @@ function PaymentReceiptContent({
                   <p className="text-xs text-destructive/80">
                     This receipt has been voided
                   </p>
+                  <p className="text-xs text-destructive/80">
+                    Voided by {receipt.voided_by}
+                  </p>
                 </div>
               )}
 
@@ -391,7 +398,7 @@ function PaymentReceiptContent({
 
               {/* Borrower information */}
               <div className="space-y-2">
-                <SectionHeading>Borrower Information</SectionHeading>
+                <SectionHeading>Member Information</SectionHeading>
                 <div className="space-y-1.5">
                   <ReceiptRow label="Name" value={receipt.borrower_name} />
                   <ReceiptRow

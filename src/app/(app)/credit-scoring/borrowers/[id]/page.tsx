@@ -47,7 +47,7 @@ function BorrowerCreditProfileContent({
     <div className="space-y-6">
       <DataState
         resource={profileResource}
-        summary="This borrower's full credit score, breakdown, and factors will appear here once the backend is connected."
+        summary="This member's full credit score, breakdown, and factors will appear here once the backend is connected."
         endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
       >
         {(profile) => (
@@ -86,8 +86,8 @@ function BorrowerCreditProfileContent({
             {flagsResource.unavailable || flagsResource.error ? (
               <Card>
                 <CardContent className="pt-6 text-sm text-muted-foreground">
-                  Policy flags unavailable — this borrower&apos;s hard-flag status
-                  could not be loaded. Treat this borrower as unscreened for hard
+                  Policy flags unavailable — this member&apos;s hard-flag status
+                  could not be loaded. Treat this member as unscreened for hard
                   flags until this is resolved.
                 </CardContent>
               </Card>
@@ -126,7 +126,7 @@ export default function BorrowerCreditProfilePage({
   params: Promise<{ id: string }>;
 }) {
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Borrower Credit Profile">
+    <RouteGuard permission="credit_scoring:view" pageName="Member Credit Profile">
       <BorrowerCreditProfileContent params={params} />
     </RouteGuard>
   );

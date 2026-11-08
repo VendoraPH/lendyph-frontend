@@ -15,7 +15,7 @@ import { getInitials } from "@/lib/initials";
 // live here was `Record<string, string>` and had only the three member
 // statuses, so a `pending` or `rejected` borrower opened by URL drew an
 // unstyled pill — the same drift that hid `rejected` from the status tabs.
-import { statusBadgeColor } from "@/app/(app)/borrowers/_components/utils";
+import { memberStatusLabel, statusBadgeColor } from "@/app/(app)/borrowers/_components/utils";
 import {
   Dialog,
   DialogContent,
@@ -92,7 +92,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Borrowers
+        Back to Members
       </Link>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -155,7 +155,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
                 variant="outline"
                 className={statusBadgeColor[borrower.status]}
               >
-                {borrower.status}
+                {memberStatusLabel(borrower.status)}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground font-mono">

@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
-import type { FormattableColumn } from "@/lib/report-format";
+import { DASH, type FormattableColumn } from "@/lib/report-format";
 
 export type ReportId =
   | "daily_collection"
@@ -75,6 +75,13 @@ export type ReportSection =
       rows: Record<string, unknown>[];
       totals?: { column: string; label?: string; value: string }[];
       emptyText?: string;
+      /**
+       * Print in smaller type in the PDF and Word files. A landscape A4 page
+       * holds about ten columns of "PHP 1,080,000.00" at the regular size; past
+       * that the table squeezes its narrow columns until words break mid-letter
+       * ("overdu/e").
+       */
+      compact?: boolean;
     }
   | {
       kind: "note";
@@ -97,6 +104,8 @@ export type ReportSection =
   | {
       kind: "signatures";
       roles: string[];
+      /** Blank lines under each role, such as "Name" and "Date". */
+      lines?: string[];
     };
 
 /**
@@ -125,6 +134,12 @@ export interface ReportDocument {
     title: string;
     subtitle?: string;
     period?: string;
+    /**
+     * Set instead of `period` on a report that covers everything up to a day,
+     * as the Statement of Account does: every output then prints "As of <date>"
+     * and no Period line. Read both through `reportScope`.
+     */
+    asOf?: string;
     generatedAt: string;
     /**
      * The organization the report is issued by. Builders emit an empty string
@@ -132,6 +147,9 @@ export interface ReportDocument {
      * it from branding settings, falling back to `siteConfig.name`.
      */
     org: string;
+    /** The organization's address and contact, printed under its name. */
+    orgAddress?: string | null;
+    orgContact?: string | null;
     /** Organization logo, resolved from branding settings at generate time. */
     logoUrl?: string | null;
     /**
@@ -147,8 +165,30 @@ export interface ReportDocument {
     branchLabel?: string | null;
     /** Human-quotable document reference, e.g. `AGE-20260806-1432`. */
     reference?: string | null;
+    /**
+     * What makes this document's reference its own, when it covers one record:
+     * a statement's loan number.
+     */
+    referenceKey?: string;
   };
   sections: ReportSection[];
+}
+
+/** What a report covers, for the one line every output prints it on. */
+export function reportScope(meta: ReportDocument["meta"]): { label: string; value: string } {
+  return meta.asOf !== undefined
+    ? { label: "As of", value: meta.asOf }
+    : { label: "Period:", value: meta.period ?? DASH };
+}
+
+/** The organization's address and contact on one line, or null without either. */
+export function orgDetailsLine(meta: ReportDocument["meta"]): string | null {
+  return [meta.orgAddress, meta.orgContact].filter(Boolean).join("  •  ") || null;
+}
+
+export function reportScopeLine(meta: ReportDocument["meta"]): string {
+  const { label, value } = reportScope(meta);
+  return `${label} ${value}`;
 }
 
 export interface DateRange {
@@ -242,6 +282,8 @@ export interface ReportDefinition {
   supportsBranch?: boolean;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
+  /** Set when the API takes no dates, which hides the date range controls. */
+  noDateRange?: boolean;
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 
@@ -259,7 +301,7 @@ export const CATEGORY_META: Record<
   },
   member: {
     label: "Member Activity",
-    description: "Borrower and repayment activity",
+    description: "Member and repayment activity",
   },
   disbursement: {
     label: "Disbursement",

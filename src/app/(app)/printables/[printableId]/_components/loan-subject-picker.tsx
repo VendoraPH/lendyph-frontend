@@ -13,6 +13,7 @@ import { usePermission } from "@/hooks";
 import type { Loan } from "@/types";
 import { Loader2 } from "lucide-react";
 import { BorrowerLoansTable, loanNumber } from "./borrower-loans-table";
+import { memberLoanParams } from "../_lib/member-loans";
 
 /**
  * Pick the member first, then the loan.
@@ -80,7 +81,7 @@ export function LoanSubjectPicker({
     let cancelled = false;
     setLoading(true);
     loanService
-      .listAll({ borrower_id: borrowerId })
+      .listAll(memberLoanParams(borrowerId))
       .then(({ rows, truncated, total }) => {
         if (cancelled) return;
         setLoans(rows);

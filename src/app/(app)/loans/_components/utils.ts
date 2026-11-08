@@ -13,28 +13,30 @@ import type { LoanStatus, Loan } from "@/types/loan";
 /**
  * `?status=` values the API accepts that NO ROW CAN HOLD.
  *
- * Both are resolved server-side and both agree with their own `meta.stats`
- * entry, so a tab built on either cannot disagree with the badge above it:
+ * All three are resolved server-side and each agrees with its own `meta.stats`
+ * entry, so a tab or card built on one cannot disagree with its count:
  *
- *  - `active` expands to `Loan::ACTIVE_STATUSES` — a `whereIn` on
- *    `loans.status`, so it is a set of statuses.
+ *  - `active` expands to `Loan::ACTIVE_STATUSES` (a `whereIn` on `loans.status`),
+ *    past-due loans included. The Active Loans card selects it.
+ *  - `current` is the same loans less the past-due ones: what the Current tab
+ *    lists, so a loan past grace is not badged "Past Due" under "Current".
  *  - `past_due` does NOT expand to statuses at all. It resolves to
  *    `Loan::scopePastDue()`: a COLLECTIBLE loan (`released`, `ongoing` or
  *    `defaulted`) holding an unpaid amortization schedule that is past its due
  *    date AND past the loan's `grace_period_days`. It is derived from the
  *    schedule, so it is a subquery rather than a status.
  *
- * The two OVERLAP and neither contains the other. `past_due` reaches
- * `defaulted` loans, which are collectible but not active; `active` holds
- * loans with nothing late. So the badges are free to disagree, they do not sum
- * to the book total, and nothing in this module or the screen above it may
+ * `active` and `past_due` OVERLAP and neither contains the other: `past_due`
+ * reaches `defaulted` loans, which are collectible but not active, and `active`
+ * holds loans with nothing late. So the badges are free to disagree, they do not
+ * sum to the book total, and nothing in this module or the screen above it may
  * imply otherwise.
  *
- * Listed here, once, because `AGGREGATE_STAT_KEYS` on the loans page has to
- * skip exactly these when it sums `meta.stats` into the All count — counting a
- * roll-up alongside the statuses it rolls up is a double count.
+ * Listed here, once, because `allCountFromStats` has to skip exactly these when
+ * it sums `meta.stats` into the All count: counting a roll-up alongside the
+ * statuses it rolls up is a double count.
  */
-export const VIRTUAL_TAB_VALUES = ["active", "past_due"] as const;
+export const VIRTUAL_TAB_VALUES = ["active", "current", "past_due"] as const;
 
 export type VirtualTabValue = (typeof VIRTUAL_TAB_VALUES)[number];
 
@@ -79,14 +81,13 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "for_review", label: "For Approval" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
-  // "Current" is `released` and `ongoing` together: LOAN_STATUS_LABELS badges
-  // both "Current" (decision 5a), so the tab sends the API's own `active`
-  // shorthand (Loan::ACTIVE_STATUSES) and its badge reads `meta.stats.active`.
-  // It is the same set the Active Loans card selects. There is no separate
-  // Released tab: it would list rows badged "Current" under another name.
-  // The tab once filtered `status=current`, a value no row can hold, so it
-  // read 0 while rows badged "Current" sat in the table underneath it.
-  { value: "active", label: "Current" },
+  // "Current" is `released` and `ongoing` loans with nothing past grace: the tab
+  // sends the API's own `current` and its badge reads `meta.stats.current`. A
+  // loan past grace reads "Past Due" and is listed under the Past Due tab
+  // instead. There is no separate Released tab: it would list rows badged
+  // "Current" under another name. The Active Loans card keeps `active`, which
+  // has no tab of its own and still counts past-due loans.
+  { value: "current", label: "Current" },
   // Past due is a FILTER, not a status — see VIRTUAL_TAB_VALUES. It sends
   // `status=past_due`, which the API resolves through Loan::scopePastDue(), and
   // its badge reads `meta.stats.past_due`, which is counted through that same
@@ -99,17 +100,16 @@ export const FILTER_TABS: { value: FilterTab; label: string }[] = [
   // tab documented above. The value looks identical; what changed is that there
   // is now something on the other end of it.
   //
-  // It deliberately overlaps Current and the Active card, and it
-  // reaches `defaulted` loans that no other tab shows. The tab counts are not a
-  // partition and never were.
+  // It deliberately overlaps the Active card, and it reaches `defaulted` loans
+  // that no other tab shows. The tab counts are not a partition and never were.
   { value: "past_due", label: "Past Due" },
   { value: "completed", label: "Completed" },
 ];
 
 /**
- * Every value `?tab=` accepts, in tab-strip order with the two virtual values
- * first. Derived from FILTER_TABS so a tab cannot exist in one and not the
- * other.
+ * Every value `?tab=` accepts: the tab strip's, plus `active`, the Active Loans
+ * card's filter. Derived from FILTER_TABS so a tab cannot exist in one and not
+ * the other.
  */
 export const TAB_VALUES: FilterTab[] = [
   "all",
@@ -121,22 +121,13 @@ export const TAB_VALUES: FilterTab[] = [
  * `?tab=` values this screen used to accept, mapped to what they mean now.
  *
  * The page keeps its whole state in the URL, so those URLs are bookmarked and
- * shared and cannot simply stop working. `current` was a rename, not a removal,
- * and so were the `ongoing` and `released` tabs when both statuses came to read
- * "Current": all three point at `active`, the Current tab, so an old link lands
- * on the tab it meant rather than on All.
- *
- * `past_due` is deliberately NOT aliased, and its absence now means the
- * opposite of what it used to. It was absent because there was nothing to point
- * it at; it is absent now because it needs no alias — it is a live tab value
- * again, so `tabFromParam` resolves it to itself through TAB_VALUES. A
- * bookmarked Past Due link from before the tab was removed lands back on Past
- * Due, which is where it always meant to go.
+ * shared and cannot simply stop working. The `ongoing` and `released` tabs were
+ * folded into Current when both statuses came to read "Current", so an old link
+ * lands on the tab it meant rather than on All.
  */
 const LEGACY_TAB_ALIASES: Record<string, FilterTab> = {
-  current: "active",
-  ongoing: "active",
-  released: "active",
+  ongoing: "current",
+  released: "current",
 };
 
 /**
@@ -149,6 +140,44 @@ const LEGACY_TAB_ALIASES: Record<string, FilterTab> = {
 export function tabFromParam(raw: string | null): FilterTab {
   const value = (raw != null && LEGACY_TAB_ALIASES[raw]) || raw;
   return clampOneOf<FilterTab>((value ?? "all") as FilterTab, TAB_VALUES, "all");
+}
+
+// ── Counts (`meta.stats`) ──
+
+/**
+ * Global loan counts by status, read straight from the list response's
+ * `meta.stats`. Deliberately an open record rather than a fixed shape: the API
+ * reports every status it knows about, including legacy ones such as `ongoing`
+ * and `restructured` that have no tab of their own, and each consumer only reads
+ * the keys it needs.
+ *
+ * These counts ignore the request's own `status`/search/product/date filters,
+ * which is exactly why the KPI cards and tab badges can be driven from the same
+ * request that fetches one page of rows.
+ */
+export type LoanStats = Record<string, number>;
+
+/**
+ * Keys in `meta.stats` that are NOT statuses of their own, and so must never be
+ * added into a total alongside the statuses they overlap. Derived from
+ * `VIRTUAL_TAB_VALUES`, so a virtual filter cannot reach the tab strip without
+ * being excluded here. `all` is here for the case where the API ever sends a
+ * total of its own.
+ */
+const AGGREGATE_STAT_KEYS = new Set<string>(["all", ...VIRTUAL_TAB_VALUES]);
+
+export function allCountFromStats(stats: LoanStats): number {
+  if (typeof stats.all === "number") return stats.all;
+  let sum = 0;
+  for (const [key, value] of Object.entries(stats)) {
+    if (!AGGREGATE_STAT_KEYS.has(key)) sum += value;
+  }
+  return sum;
+}
+
+/** The Current tab's count, or null when the server sent none (shown as a dash). */
+export function currentCountFromStats(stats: LoanStats): number | null {
+  return typeof stats.current === "number" ? stats.current : null;
 }
 
 // ── Field-fallback helpers (Loan carries both flat and nested shapes) ──
@@ -189,6 +218,38 @@ export type LoanSortKey =
   | "term"
   | "status"
   | "created_at";
+
+// ── The list request ──
+
+/**
+ * `GET /loans` for what the screen shows. `view=summary` is enough: the table
+ * reads no schedules, and those rows are what make the full list heavy. Each tab
+ * value goes as `status` verbatim, and All sends none.
+ */
+export function loanListParams(state: {
+  tab: FilterTab;
+  page: number;
+  perPage: number;
+  sortKey: LoanSortKey;
+  sortDir: SortDir;
+  search: string;
+  productId: number | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+}): Record<string, string | number> {
+  return {
+    view: "summary",
+    page: state.page,
+    per_page: state.perPage,
+    sort: state.sortKey,
+    dir: state.sortDir,
+    ...(state.tab !== "all" && { status: state.tab }),
+    ...(state.search && { search: state.search }),
+    ...(state.productId != null && { loan_product_id: state.productId }),
+    ...(state.dateFrom && { date_from: state.dateFrom }),
+    ...(state.dateTo && { date_to: state.dateTo }),
+  };
+}
 
 // ── URL parsers ──
 

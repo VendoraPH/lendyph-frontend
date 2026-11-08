@@ -67,7 +67,7 @@ function toLocalPledge(p: Pledge): LocalPledge {
   return {
     id: p.id,
     borrowerId: p.borrower_id,
-    borrower: p.borrower?.full_name ?? p.borrower?.name ?? p.borrower_name ?? `Borrower #${p.borrower_id}`,
+    borrower: p.borrower?.full_name ?? p.borrower?.name ?? p.borrower_name ?? `Member #${p.borrower_id}`,
     amount: p.amount,
     schedule: p.schedule,
     autoCredit: p.auto_credit,
@@ -851,7 +851,7 @@ function PledgeEntryContent() {
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       <p>No pledges found.</p>
-                      <p className="text-xs mt-1">Pledges are created when borrowers are added to the system.</p>
+                      <p className="text-xs mt-1">Pledges are created when members are added to the system.</p>
                     </TableCell>
                   </TableRow>
                 )}

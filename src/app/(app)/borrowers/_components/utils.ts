@@ -1,5 +1,27 @@
 import type { Borrower } from "@/types";
 
+const MEMBER_STATUS_LABELS: Record<Borrower["status"], string> = {
+  active: "Active",
+  inactive: "Inactive",
+  blacklisted: "Blacklisted",
+  pending: "Pending",
+  rejected: "Rejected",
+};
+
+/** A member's status as a badge reads it. */
+export function memberStatusLabel(status: Borrower["status"]): string {
+  return MEMBER_STATUS_LABELS[status] ?? statusInWords(status);
+}
+
+/** A payment's or schedule period's status in words: "past_due" reads "Past Due". */
+export function statusInWords(status: string | null | undefined): string {
+  if (!status) return "—";
+  return status
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 // Keyed off `Borrower["status"]` rather than a hand-written union: a new status
 // on the model then fails the build here instead of silently rendering
 // `className={undefined}`, which is how `rejected` slipped through unstyled.
@@ -36,4 +58,29 @@ export function reviewerLabel(source: {
   if (user?.name) return user.name;
   if (source.rejected_by != null) return `Reviewer #${source.rejected_by}`;
   return null;
+}
+
+/**
+ * Messages that are already full sentences ("Enter the ID number for ID 1."),
+ * shown as they are. `notifyValidation` is for field names only: it would wrap
+ * a sentence in "Please enter a valid …".
+ */
+export function sentencesMessage(messages: string[]): string {
+  return messages.map((m) => m.trim()).filter(Boolean).join(" ");
+}
+
+/**
+ * When a registration was submitted: the record is created by the submission
+ * itself (POST /borrowers) and later edits don't move `created_at`. The API
+ * sends no `submitted_at` for registrations.
+ */
+export function registrationSubmittedAt(registration: {
+  created_at?: string | null;
+}): string | null {
+  return registration.created_at || null;
+}
+
+/** A payment's Reference cell: its reference number, else a dash. */
+export function paymentReferenceCell(payment: { reference_number?: string | null }): string {
+  return payment.reference_number?.trim() || "—";
 }

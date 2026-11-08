@@ -160,7 +160,7 @@ test("dates: a fields row formats the date instead of printing the API string", 
 test("dates: dateTimeField keeps the minute a void happened at", () => {
   assert.equal(
     dateTimeField("Voided on", "2026-08-27 10:02:00").value,
-    formatValue(new Date(2026, 7, 27, 10, 2), "datetime")
+    formatValue("2026-08-27T10:02:00+08:00", "datetime")
   );
   assert.notEqual(
     dateTimeField("Voided on", "2026-08-27 10:02:00").value,

@@ -163,6 +163,7 @@ export function NewTransactionDialog({ open, onOpenChange, onCreated }: Props) {
                 searching={searching || query.trim() !== debouncedQuery}
                 error={error}
                 shortfall={shortfall}
+                status={members.status}
               />
               {error && (
                 <p role="alert" className="text-sm text-destructive">

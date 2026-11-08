@@ -162,6 +162,9 @@ export const env = {
     // screens show only to users the server grants `savings:*`. Literal
     // reference for the same reason as above.
     savings: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_SAVINGS),
+    // Credit Scoring. Off by default: the menu and every route stay hidden until
+    // its endpoints stop answering 501. Literal reference for the same reason.
+    creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

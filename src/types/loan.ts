@@ -94,6 +94,20 @@ export interface LoanReleasePreview {
 }
 
 /**
+ * `GET /loans/{id}/deductions-preview`: what the release would withhold, built
+ * by the same code as `release-preview`, for a loan not yet released (`draft`,
+ * `for_review`, `approved`) and anyone with `loans:view`. There is no
+ * `fee_fingerprint`: nothing can be released from it. `provisional` is true
+ * until the loan is approved. The totals arrive as 2-decimal strings.
+ */
+export interface LoanDeductionsPreview {
+  deductions: LoanDeduction[];
+  total_deductions: string;
+  net_proceeds: string;
+  provisional?: boolean;
+}
+
+/**
  * `POST /loans/preview`: what the loan form shows for the terms and
  * collaterals entered so far. Every field is optional; the server works out
  * whatever sections it can and writes nothing.
@@ -372,10 +386,17 @@ export interface Loan {
   current_approver?: string | null;
   /**
    * The Status set on the pending approval step, shown as "For Approval -
-   * <label>" while the loan waits there. Null when that step has no Status,
-   * and the badge falls back to `current_approver`.
+   * <label>" while the loan waits there, or "Approved - <label>" while an
+   * approved loan waits at the Release step. Null when that step has no Status,
+   * and the "For Approval" badge falls back to `current_approver`.
    */
   current_status_label?: string | null;
+  /**
+   * What the badge shows: `past_due` for a released or ongoing loan past grace,
+   * otherwise `status`. `status` itself is unchanged. Read it through
+   * `loanDisplayStatus`, which handles a row that lacks it.
+   */
+  display_status?: string | null;
   approval_remarks?: string;
   approved_at?: string;
   released_at?: string;
@@ -621,7 +642,10 @@ export interface LoanSummary {
   advance_presets?: LoanAdvancePreset[];
   /** What clears the loan today. */
   payoff_amount?: number | string | null;
+  /** Principal, interest and penalty paid only; narrower than Total Paid. */
   total_paid?: number;
+  /** Every posted receipt: what the loan page shows as Total Paid. */
+  total_repaid?: number | string | null;
   principal_paid?: number;
   interest_paid?: number;
   overdue_amount?: number;

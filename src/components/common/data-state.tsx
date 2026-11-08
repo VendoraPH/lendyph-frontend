@@ -9,7 +9,7 @@ import type { ApiResource } from "@/hooks";
 
 interface DataStateProps<T> {
   resource: ApiResource<T>;
-  /** Endpoints this screen needs, shown when they are not built yet. */
+  /** Endpoints this screen needs. Development builds list them while they are not built yet. */
   endpoints: string[];
   /** What the screen would show, in the user's terms. */
   summary: string;
@@ -35,8 +35,9 @@ function Panel({ children }: { children: ReactNode }) {
  * `unavailable` is separated from `error` on purpose. Until the backend lands
  * every one of these screens gets a 404, and rendering that as a red failure
  * would make a module that is merely unfinished look broken. One says "not
- * connected yet" and names what it is waiting on; the other says something
- * went wrong and offers a retry.
+ * connected yet" (development builds also list the endpoints it is waiting
+ * on; users never see raw API paths); the other says something went wrong and
+ * offers a retry.
  */
 export function DataState<T>({
   resource,
@@ -67,18 +68,20 @@ export function DataState<T>({
           <p className="font-medium">Not connected yet</p>
           <p className="text-sm text-muted-foreground">{summary}</p>
         </div>
-        <div className="w-full max-w-lg rounded-lg border bg-muted/40 p-3 text-left">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Waiting on
-          </p>
-          <ul className="space-y-1">
-            {endpoints.map((endpoint) => (
-              <li key={endpoint} className="font-mono text-xs text-muted-foreground">
-                {endpoint}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {process.env.NODE_ENV === "development" && (
+          <div className="w-full max-w-lg rounded-lg border bg-muted/40 p-3 text-left">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Waiting on
+            </p>
+            <ul className="space-y-1">
+              {endpoints.map((endpoint) => (
+                <li key={endpoint} className="font-mono text-xs text-muted-foreground">
+                  {endpoint}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
     );
   }

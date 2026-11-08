@@ -121,6 +121,8 @@ export type PrintBlock =
       /** Footer row, keyed by column. Values are pre-formatted strings. */
       totals?: Record<string, string>;
       emptyText?: string;
+      /** Smaller type, for a table too wide for the page at the normal size. */
+      compact?: boolean;
     }
   | { kind: "charges"; title?: string; lines: PrintChargeLine[] }
   | {
@@ -138,6 +140,11 @@ export type PrintBlock =
 
 export interface PrintableDocument {
   id: PrintableId;
+  /**
+   * The record this document was built from. The catalog sets it, and only when
+   * the record was read: a blank form is not that record's document.
+   */
+  subjectId?: number;
   org: PrintableOrg;
   title: string;
   /**
@@ -201,7 +208,7 @@ export const SUBJECT_META: Record<
   PrintableSubject,
   { label: string; placeholder: string }
 > = {
-  loan: { label: "Loan", placeholder: "Search loan or borrower…" },
+  loan: { label: "Loan", placeholder: "Search loan or member…" },
   borrower: { label: "Member", placeholder: "Search member…" },
   repayment: { label: "Payment", placeholder: "Search receipt number…" },
 };

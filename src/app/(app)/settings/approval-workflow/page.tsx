@@ -61,7 +61,7 @@ const KIND_META: Record<
   submit: {
     label: "Submit",
     icon: Send,
-    description: "Prepares and submits the draft for review",
+    description: "Prepares and submits the draft for approval",
     colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30",
   },
   approve: {

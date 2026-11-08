@@ -58,7 +58,7 @@ test("official receipt: prints two copies and reuses the receipt number", () => 
   const doc = buildOfficialReceiptDoc(PAYMENT);
   assertPrintableShape(doc, "official_receipt");
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   // Reprinting must quote the number the receipt was issued under, not mint a
   // second one for the same payment.
   assert.equal(doc.reference, "OR-20260826-0142");
@@ -71,7 +71,7 @@ test("official receipt: payment particulars come off the wire intact", () => {
   assert.equal(fieldValue(doc, "Receipt No."), "OR-20260826-0142");
   assert.equal(fieldValue(doc, "Received from"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
-  assert.equal(fieldValue(doc, "Payment Method"), "Bank transfer");
+  assert.equal(fieldValue(doc, "Payment Method"), "Bank Transfer");
   assert.equal(fieldValue(doc, "Reference No."), "BDO-99881");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
 });
@@ -160,7 +160,7 @@ test("official receipt: a voided payment prints conspicuously as VOID", () => {
     titleBlock(doc).subtitle,
     "VOID — CANCELLED, NOT VALID PROOF OF PAYMENT"
   );
-  assert.deepEqual(doc.copies, ["VOID — Borrower's Copy", "VOID — File Copy"]);
+  assert.deepEqual(doc.copies, ["VOID — Member's Copy", "VOID — File Copy"]);
   assert.match(prose(doc), /\*\*\* V O I D \*\*\*/);
   assert.match(prose(doc), /not<\/strong> valid proof of payment/);
   assert.equal(doc.footerNote, "VOIDED PAYMENT — NOT A VALID OFFICIAL RECEIPT");
@@ -235,7 +235,7 @@ test("official receipt: an unreadable payment states no amount at all", () => {
 test("official receipt: a null payload still prints a blank two-copy form", () => {
   const doc = buildOfficialReceiptDoc(null);
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   assert.equal(doc.reference, undefined);
   assert.ok(isBlankField(doc, "Receipt No."));
   assert.ok(isBlankField(doc, "Received from"));
@@ -249,4 +249,53 @@ test("official receipt: a payment that did load is never flagged incomplete", ()
   const zero = buildOfficialReceiptDoc({ ...PAYMENT, amount_paid: 0, amount: 0 });
   assert.equal(zero.incomplete, undefined);
   assert.equal(chargeAmount(zero, "TOTAL AMOUNT PAID"), formatCurrency(0));
+});
+
+test("official receipt: the legacy method line prints as a clean remark", () => {
+  const typed = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    remarks: "Over the counter\n[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
+  });
+  assert.equal(
+    fieldValue(typed, "Remarks"),
+    "Over the counter. Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
+
+  const onlyLegacy = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    remarks: "[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
+  });
+  assert.equal(
+    fieldValue(onlyLegacy, "Remarks"),
+    "Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
+});
+
+test("official receipt: the voider is named, never shown as a user id", () => {
+  assert.equal(
+    fieldValue(buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12 }), "Voided by"),
+    "Ana Bautista",
+  );
+
+  const noUser = buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12, voided_by_user: undefined });
+  assert.ok(isBlankField(noUser, "Voided by"));
+});
+
+test("official receipt: Member No. reads the repayment's own borrower_code", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, borrower_code: "BRW-000123" });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the repayment's borrower_code wins over a nested member's", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    borrower_code: "BRW-000123",
+    borrower: { borrower_code: "BRW-999999" },
+  });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the payment method reads its label", () => {
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "gcash" }), "Payment Method"), "GCash");
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto-Pay");
 });

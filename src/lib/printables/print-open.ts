@@ -1,3 +1,4 @@
+import { logPrint, printLogRequest } from "./print-log";
 import { renderPrintable } from "./print-render";
 import type { PrintableDocument } from "./types";
 
@@ -85,6 +86,8 @@ export function openPrintable(doc: PrintableDocument): PrintOpenResult {
     written = false;
   }
 
+  if (written) logPrintsFrom(win, doc);
+
   // A nicety, and separately guarded: a browser that refuses `focus()` has not
   // failed to open the document.
   try {
@@ -93,7 +96,31 @@ export function openPrintable(doc: PrintableDocument): PrintOpenResult {
     // Nothing to do — the tab is open either way.
   }
 
-  return written ? "opened" : openViaBlob(win, html);
+  if (written) return "opened";
+
+  // A tab the opener can't reach can't be listened to either, so for a logged
+  // document opening it is the closest record there is.
+  const fallback = openViaBlob(win, html);
+  if (fallback === "opened") logPrint(doc);
+  return fallback;
+}
+
+/**
+ * Log each print of a logged document. `beforeprint` is the one signal that
+ * covers the tab's Print button, the keyboard shortcut and Save as PDF (the same
+ * dialog); opening the tab is only a preview. It fires before the browser knows
+ * whether the dialog will be cancelled, so a cancelled print is still logged.
+ *
+ * Attached after the document is written, because `document.open()` erases a
+ * window's listeners. A refusal here costs the log line, never the print.
+ */
+function logPrintsFrom(win: Window, doc: PrintableDocument): void {
+  if (!printLogRequest(doc)) return;
+  try {
+    win.addEventListener("beforeprint", () => logPrint(doc));
+  } catch {
+    // The document is open and printable either way.
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,22 +10,15 @@ import { usePermission } from "@/hooks";
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { LoanSubjectPicker } from "./_components/loan-subject-picker";
+import { fetchReceiptPage, type ReceiptOption } from "./_lib/receipt-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
+import { SearchPicker } from "@/components/common/search-picker";
+import { searchEmptyMessage, searchStatus, useSearchPage } from "@/hooks/use-search-page";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
@@ -225,23 +218,13 @@ export default function PrintableDetailPage() {
 // widening its union would make every caller handle a case it cannot produce.
 // ---------------------------------------------------------------------------
 
-interface RepaymentOption {
-  id: number;
-  label: string;
-  hint?: string;
-}
+const fetchReceipts = (query: string) => fetchReceiptPage(repaymentService.listPage, query);
 
-/** The fields `RepaymentResource` sends that the `Repayment` type omits. */
-interface RepaymentListRow {
-  id: number;
-  receipt_number?: string;
-  borrower_name?: string;
-  loan_account_number?: string;
-  amount_paid?: number;
-  payment_date?: string;
-  status?: string;
-}
-
+/**
+ * Searches the server as you type, 25 rows at a time. The chosen receipt stays
+ * shown whatever the search has moved on to. Payments need `payments:view`,
+ * which the documents screen does not; without it the picker is locked.
+ */
 function RepaymentPicker({
   value,
   onChange,
@@ -249,121 +232,46 @@ function RepaymentPicker({
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
-  // Payments need `payments:view`, which the documents screen does not. Without
-  // it they are not asked for, and the picker has nothing to offer.
   const canListPayments = usePermission().can("payments:view");
-  const [options, setOptions] = useState<RepaymentOption[]>([]);
-  const [loading, setLoading] = useState(canListPayments);
-  const [error, setError] = useState<string | null>(null);
-  // Set only when the drain gave up with pages outstanding, so this picker is
-  // knowingly missing payments. Null means complete.
-  const [shortfall, setShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!canListPayments) return;
-    let cancelled = false;
-    repaymentService
-      // Drained across pages, filtered in the browser — the same trade-off
-      // `SubjectPicker` makes, and the same reason: no debounce, no request per
-      // keystroke. It asked for `per_page: 200`, which the server clamps to
-      // 100 in silence.
-      //
-      // The clamp was the smaller of the two bugs here. `listAll` was an
-      // `api.get`, which unwraps the paginator to a bare array, so `res?.data`
-      // was `undefined` on EVERY response and this picker rendered "No payment
-      // found." with a full book of payments behind it. Identical to the bug
-      // `SubjectPicker` documents having had, in the file next door.
-      .listAll()
-      .then(({ rows: repayments, truncated, total }) => {
-        if (cancelled) return;
-        const rows = repayments as unknown as RepaymentListRow[];
-        setShortfall(truncated ? { shown: rows.length, total } : null);
-        setOptions(
-          rows.map((row) => ({
-            id: row.id,
-            label: row.receipt_number ?? `Payment #${row.id}`,
-            hint: [
-              row.borrower_name,
-              row.amount_paid !== undefined ? formatCurrency(row.amount_paid) : null,
-              row.payment_date ? formatDate(row.payment_date) : null,
-              // A voided payment is still printable — as a VOID receipt — so
-              // it stays in the list, but it is labelled before it is chosen.
-              row.status === "voided" ? "VOID" : null,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }))
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError("Unable to load payments.");
-          setShortfall(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canListPayments]);
-
-  const selected = useMemo(
-    () => options.find((o) => o.id === value) ?? null,
-    [options, value]
-  );
+  const [everOpened, setEverOpened] = useState(false);
+  const [chosen, setChosen] = useState<ReceiptOption | null>(null);
+  const { query, setQuery, reset, rows, view } = useSearchPage({
+    enabled: canListPayments && everOpened,
+    fetchPage: fetchReceipts,
+  });
+  const selected = chosen?.id === value ? chosen : null;
 
   return (
     <div className="space-y-1">
       <Label className="text-xs">Payment</Label>
-      <Combobox
-        items={options}
-        value={selected}
-        onValueChange={(item: RepaymentOption | null) => onChange(item?.id ?? null)}
-        itemToStringLabel={(item: RepaymentOption) => item.label}
-      >
-        <ComboboxInput
-          placeholder={
-            loading
-              ? "Loading payments…"
-              : (error ?? SUBJECT_META.repayment.placeholder)
-          }
-          disabled={loading || !!error}
-          showClear
-          className="h-9 w-72"
-        />
-        <ComboboxContent>
-          <ComboboxEmpty>No payment found.</ComboboxEmpty>
-          <ComboboxList>
-            {(item: RepaymentOption) => (
-              <ComboboxItem key={item.id} value={item}>
-                <div className="flex flex-col min-w-0">
-                  <span className="truncate">{item.label}</span>
-                  {item.hint && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      {item.hint}
-                    </span>
-                  )}
-                </div>
-              </ComboboxItem>
+      <SearchPicker
+        valueLabel={selected?.label ?? null}
+        selectedId={selected?.id ?? null}
+        placeholder={SUBJECT_META.repayment.placeholder}
+        searchPlaceholder="Search receipt, member or loan account..."
+        disabled={!canListPayments}
+        search={{ query, setQuery, reset }}
+        rows={rows}
+        renderRow={(item) => (
+          <div className="flex flex-col min-w-0">
+            <span className="truncate">{item.label}</span>
+            {item.hint && (
+              <span className="text-xs text-muted-foreground truncate">{item.hint}</span>
             )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      {shortfall && (
-        <IncompleteListNotice
-          shown={shortfall.shown}
-          total={shortfall.total}
-          noun="payments"
-          consequence="A payment missing from this list cannot be selected, so its receipt cannot be printed from here."
-          className="mt-2"
-        />
-      )}
+          </div>
+        )}
+        pending={view.pending}
+        status={searchStatus(view, { plural: "payments", firstHint: "a receipt number" })}
+        emptyMessage={searchEmptyMessage(view, "payment")}
+        onPick={(item) => {
+          const next = item.id === selected?.id ? null : item;
+          setChosen(next);
+          onChange(next?.id ?? null);
+        }}
+        onOpen={() => setEverOpened(true)}
+        aria-label="Payment"
+        className="h-9 w-72"
+      />
     </div>
   );
 }

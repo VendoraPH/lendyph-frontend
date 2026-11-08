@@ -23,7 +23,7 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   aging_report: "Aging Report",
   portfolio_by_product: "Loan Portfolio by Product",
   due_past_due_list: "Due / Past Due List",
-  borrower_report: "Borrower Report",
+  borrower_report: "Member Report",
   disbursement_report: "Disbursement Summary",
   releases_list: "Releases List",
   statement_of_account: "Statement of Account",
@@ -57,6 +57,19 @@ const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
 const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   reports: REPORT_TITLES,
   printables: PRINTABLE_TITLES,
+  "credit-scoring": {
+    borrowers: "Member Scores",
+    assessment: "Credit Assessment",
+    "scorecard-configuration": "Scorecard Configuration",
+    "risk-monitoring": "Risk Monitoring",
+    "score-history": "Score History",
+  },
+  payments: { history: "Payment History" },
+  "share-capital": {
+    ledger: "Subsidiary Ledger",
+    pledges: "Pledge Entry",
+    "auto-credit": "Auto-Credit",
+  },
 };
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {

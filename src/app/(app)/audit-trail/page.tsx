@@ -52,9 +52,11 @@ import type { AuditLog, AuditAction } from "@/types";
 import {
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
+  auditChangePair,
   auditDescription,
   auditFieldLabel,
   auditModuleLabel,
+  auditTargetType,
   auditUserName,
   auditUserRole,
 } from "./_lib/audit-labels";
@@ -195,7 +197,7 @@ function AuditDetailDrawer({
                 <div className="flex-1">
                   <p className="text-sm font-medium">{log.target.label}</p>
                   <p className="text-xs text-muted-foreground capitalize">
-                    {log.target.type} #{log.target.id}
+                    {auditTargetType(log.target.type)} #{log.target.id}
                   </p>
                 </div>
               </div>
@@ -217,27 +219,27 @@ function AuditDetailDrawer({
                   >
                     <div className="bg-muted/50 px-3 py-1.5">
                       <p className="text-xs font-medium capitalize">
-                        {auditFieldLabel(change.field)}
+                        {auditFieldLabel(change.field, log.target)}
                       </p>
                     </div>
                     <div className="px-3 py-2 space-y-1">
                       {change.old !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-red-100 text-red-600 text-xs font-bold">
-                            &minus;
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-red-100 px-1.5 text-red-600 text-xs font-medium">
+                            Old
                           </span>
                           <span className="text-red-700 break-all">
-                            {change.old}
+                            {auditChangePair(log, change).old}
                           </span>
                         </div>
                       )}
                       {change.new !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-green-100 text-green-600 text-xs font-bold">
-                            +
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-green-100 px-1.5 text-green-600 text-xs font-medium">
+                            New
                           </span>
                           <span className="text-green-700 break-all">
-                            {change.new}
+                            {auditChangePair(log, change).new}
                           </span>
                         </div>
                       )}
