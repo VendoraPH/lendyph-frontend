@@ -194,7 +194,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Amortization dues with a due_date within this range will be included.
+          Amortization dues whose due date falls within this range will be included.
         </p>
       </div>
 

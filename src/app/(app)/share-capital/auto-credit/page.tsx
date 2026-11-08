@@ -38,7 +38,7 @@ function toLocalMember(m: AutoCreditMember): LocalMember {
   const raw = m as AutoCreditMember & Record<string, unknown>;
   return {
     id: m.id,
-    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Borrower #${m.borrower_id}`,
+    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Member #${m.borrower_id}`,
     pledgeAmount: m.pledge_amount ?? (raw.amount as number) ?? 0,
     autoCredit: m.auto_credit ?? (raw.autoCredit as boolean) ?? false,
   };
@@ -123,7 +123,7 @@ function AutoCreditContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Auto-Credit Pledges</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Auto-Credit</h1>
         <p className="text-muted-foreground">
           Initiate auto-credit of all active pledge entries
         </p>

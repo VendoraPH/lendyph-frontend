@@ -64,7 +64,7 @@ test("release voucher: header identifies the payee and the loan", () => {
   assertPrintableShape(doc, "release_voucher");
 
   assert.equal(titleBlock(doc).text, "Loan Release Voucher");
-  assert.equal(fieldValue(doc, "Payee / Borrower"), "Juana Dela Cruz");
+  assert.equal(fieldValue(doc, "Payee / Member"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
   assert.equal(fieldValue(doc, "Member No."), "MBR-0001");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
@@ -89,7 +89,7 @@ test("release voucher: net proceeds are the server's", () => {
 
   assert.equal(chargeAmount(doc, "Principal Loan Amount"), formatCurrency(100000));
   assert.equal(
-    chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
+    chargeAmount(doc, "NET PROCEEDS (Amount Released to Member)"),
     formatCurrency(96500)
   );
   assert.equal(
@@ -99,7 +99,7 @@ test("release voucher: net proceeds are the server's", () => {
 
   // The grand rule is what makes the net proceeds read as the bottom line.
   const netLine = allChargeLines(doc).find(
-    (l) => l.label === "NET PROCEEDS (Amount Released to Borrower)"
+    (l) => l.label === "NET PROCEEDS (Amount Released to Member)"
   );
   assert.equal(netLine?.rule, "grand");
 });
@@ -109,7 +109,7 @@ test("release voucher: the server's net proceeds win over a local subtraction", 
   // actually left the drawer is what the server recorded.
   const doc = buildReleaseVoucherDoc({ ...LOAN, net_proceeds: 96000 });
   assert.equal(
-    chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
+    chargeAmount(doc, "NET PROCEEDS (Amount Released to Member)"),
     formatCurrency(96000)
   );
 });
@@ -121,7 +121,7 @@ test("release voucher: a total or net the server did not send is a dash, never w
   const doc = buildReleaseVoucherDoc(rest);
 
   assert.equal(chargeAmount(doc, "Total Deductions"), DASH);
-  assert.equal(chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"), DASH);
+  assert.equal(chargeAmount(doc, "NET PROCEEDS (Amount Released to Member)"), DASH);
   assert.equal(fieldValue(doc, "Net proceeds in words"), DASH);
   // The items themselves are still listed as sent.
   assert.equal(chargeAmount(doc, "Processing Fee"), `(${formatCurrency(2000)})`);
@@ -155,7 +155,7 @@ test("release voucher: a loan with no deductions still balances", () => {
   assert.equal(chargeAmount(doc, "No deductions applied"), formatCurrency(0));
   assert.equal(chargeAmount(doc, "Total Deductions"), `(${formatCurrency(0)})`);
   assert.equal(
-    chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
+    chargeAmount(doc, "NET PROCEEDS (Amount Released to Member)"),
     formatCurrency(100000)
   );
 });
@@ -239,7 +239,7 @@ test("release voucher: a null payload prints a blank form, not a zero-peso relea
   const doc = buildReleaseVoucherDoc(null);
   assertPrintableShape(doc, "release_voucher");
 
-  assert.ok(isBlankField(doc, "Payee / Borrower"));
+  assert.ok(isBlankField(doc, "Payee / Member"));
   assert.ok(isBlankField(doc, "Loan Account No."));
 
   // A voucher is a form, so an unreadable loan still prints one to complete by
@@ -249,7 +249,7 @@ test("release voucher: a null payload prints a blank form, not a zero-peso relea
   assert.notEqual(chargeAmount(doc, "Principal Loan Amount"), formatCurrency(0));
   assert.equal(chargeAmount(doc, "Principal Loan Amount"), BLANK_LINE);
   assert.equal(
-    chargeAmount(doc, "NET PROCEEDS (Amount Released to Borrower)"),
+    chargeAmount(doc, "NET PROCEEDS (Amount Released to Member)"),
     BLANK_LINE
   );
 

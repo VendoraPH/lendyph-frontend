@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     template: "%s | Lendy.PH",
   },
   description:
-    "Lending management platform for lending business owners to manage borrowers, loans, payments, and collections.",
+    "Lending management platform for lending business owners to manage members, loans, payments, and collections.",
 };
 
 export default function RootLayout({

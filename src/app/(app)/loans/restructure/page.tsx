@@ -71,10 +71,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { completeRows, emptyDrain } from "@/lib/paginate";
+import { completeRows } from "@/lib/paginate";
 
 import {
-  borrowerService,
   collateralService,
   collateralTypeService,
   loanProductService,
@@ -118,7 +117,10 @@ import {
   LOAN_STATUS_LABELS,
 } from "@/constants";
 
-import type { Borrower, CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
+import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
+import { loanMemberOptions } from "@/app/(app)/loans/new/_lib/member-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
+import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
 import type { LoanProduct } from "@/types/loan";
 import {
   ratePeriodWord,
@@ -204,13 +206,14 @@ function RestructureLoanInner() {
   const canWriteOff = can("loans:write_off");
 
   // ── Seed data ──
-  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  // The members this form has picked or the source loan names, so their names
+  // show whatever the pickers' searches have moved on to.
+  const [knownMembers, setKnownMembers] = useState<Record<number, MemberOption>>({});
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   // ── Source loan selection ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
-  const [borrowerOpen, setBorrowerOpen] = useState(false);
   const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
   const [loadingLoans, setLoadingLoans] = useState(false);
   const [sourceLoanId, setSourceLoanId] = useState<number | null>(null);
@@ -221,7 +224,6 @@ function RestructureLoanInner() {
 
   // ── Form state ──
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
-  const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
   const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
   const [productId, setProductId] = useState<string | null>(null);
@@ -248,13 +250,7 @@ function RestructureLoanInner() {
 
   const [submitting, setSubmitting] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
-  // Set only when the member drain gave up with pages outstanding, i.e. the
-  // borrower picker is knowingly missing people. Null means complete.
-  const [memberShortfall, setMemberShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-  // Same, for the selected member's loan list: set only when that drain gave up
+  // Set only when the selected member's loan list drain gave up
   // with pages outstanding, so the "which loan to restructure" picker is
   // knowingly missing loans. Null means complete.
   const [loanShortfall, setLoanShortfall] = useState<{
@@ -268,25 +264,11 @@ function RestructureLoanInner() {
     // unmount) neither writes state nor toasts.
     let cancelled = false;
     async function fetchData() {
-      const [borrowersRes, productsRes] = await Promise.allSettled([
-        // members_only: a rejected applicant must never be restructurable.
-        // Drained across pages. `per_page: 200` was clamped to 100 by
-        // BorrowerController without a word, so member 101 onwards could not be
-        // picked and their loans could not be restructured from this screen.
-        canListMembers ? borrowerService.listAll({ members_only: 1 }) : emptyDrain<Borrower>(),
+      const [productsRes] = await Promise.allSettled([
         loanProductService.listAll().then(completeRows),
       ]);
       if (cancelled) return;
 
-      if (borrowersRes.status === "fulfilled") {
-        const memberDrain = borrowersRes.value;
-        setBorrowers(memberDrain.rows);
-        setMemberShortfall(
-          memberDrain.truncated
-            ? { shown: memberDrain.rows.length, total: memberDrain.total }
-            : null,
-        );
-      }
       if (productsRes.status === "fulfilled") {
         setProducts(productsRes.value);
       } else {
@@ -299,7 +281,7 @@ function RestructureLoanInner() {
     return () => {
       cancelled = true;
     };
-  }, [canListMembers]);
+  }, []);
 
   // ── Load borrower's eligible loans when borrower changes ──
   useEffect(() => {
@@ -310,7 +292,7 @@ function RestructureLoanInner() {
       return;
     }
     setLoadingLoans(true);
-    // Drained across pages, like the member fetch above. `per_page: 200` was
+    // Drained across pages. `per_page: 200` was
     // clamped to 100 by LoanController without a word, so a member past their
     // hundredth loan simply had no restructurable loans on this screen — which
     // reads as "there is nothing to restructure", not as a bug. The filter runs
@@ -351,7 +333,8 @@ function RestructureLoanInner() {
         ? (summaryRes.value as unknown as Record<string, unknown>)
         : null;
 
-      // Pre-fill co-makers
+      // Pre-fill co-makers. The loan names them, so they show unsearched.
+      setKnownMembers((known) => rememberMembers(known, loanMemberOptions(loan)));
       const cmIds = Array.isArray(loan.co_makers)
         ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
         : [];
@@ -515,10 +498,7 @@ function RestructureLoanInner() {
   }, [sourceLoanId, collateralTypes, availableCollaterals]);
 
   // ── Derived values ──
-  const selectedBorrower = useMemo(
-    () => borrowers.find((b) => b.id === borrowerId) ?? null,
-    [borrowers, borrowerId],
-  );
+  const selectedBorrower = borrowerId !== null ? knownMembers[borrowerId] ?? null : null;
 
   const selectedProduct = useMemo(
     () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
@@ -662,8 +642,9 @@ function RestructureLoanInner() {
   }, [termValue, term, termUnit, selectedProduct]);
 
   // ── Handlers ──
-  const handleBorrowerChange = useCallback((id: number | null) => {
-    setBorrowerId(id);
+  const handleBorrowerChange = useCallback((picked: MemberOption | null) => {
+    if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+    setBorrowerId(picked?.id ?? null);
     setSourceLoanId(null);
     setSelectedCollaterals([]);
     setFormVisible(false);
@@ -691,21 +672,11 @@ function RestructureLoanInner() {
     [products],
   );
 
-  const availableCoMakersFor = useCallback(
-    (currentIndex: number) => {
-      const pickedElsewhere = new Set(
-        coMakerIds.filter((id, i) => id !== null && i !== currentIndex) as number[],
-      );
-      return borrowers.filter((b) => b.id !== borrowerId && !pickedElsewhere.has(b.id));
-    },
-    [borrowers, borrowerId, coMakerIds],
-  );
-
   const handleSubmit = async () => {
     // Collect every field the user still needs to fix and surface them in a
     // single consolidated pop-up instead of inline red messages.
     const missing: string[] = [];
-    if (borrowerId === null) missing.push("Borrower");
+    if (borrowerId === null) missing.push("Member");
     if (sourceLoanId === null) missing.push("Source loan");
     if (productId === null) missing.push("Loan product");
     if (!(principal > 0) || principalError) missing.push("Principal amount");
@@ -789,16 +760,16 @@ function RestructureLoanInner() {
         }
       }
 
-      // Forward it for review. Submitting a restructure application needs only
+      // Forward it for approval. Submitting a restructure application needs only
       // `loans:restructure`, the same permission as this page, so everyone
       // who gets here can. Exactly one outcome is reported.
       const forwarded = await loanService.submit(newLoan.id).then(() => true, () => false);
       if (forwarded) {
         toast.success("Restructure application submitted", {
-          description: "Forwarded for review.",
+          description: "Forwarded for approval.",
         });
       } else {
-        toast.warning("Restructure created but could not be forwarded for review. Submit it manually from the loan detail page.");
+        toast.warning("Restructure created but could not be forwarded for approval. Submit it manually from the loan detail page.");
       }
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
@@ -831,19 +802,10 @@ function RestructureLoanInner() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Restructure Loan</h1>
             <p className="text-sm text-muted-foreground">
-              Select a borrower and an active loan to restructure. All fields are pre-filled from the existing loan.
+              Select a member and an active loan to restructure. All fields are pre-filled from the existing loan.
             </p>
           </div>
         </div>
-
-        {memberShortfall && (
-          <IncompleteListNotice
-            shown={memberShortfall.shown}
-            total={memberShortfall.total}
-            noun="members"
-            consequence="Some members are missing from the borrower picker below and cannot be selected."
-          />
-        )}
 
         {loanShortfall && (
           <IncompleteListNotice
@@ -862,45 +824,15 @@ function RestructureLoanInner() {
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {/* Borrower combobox */}
             <div className="space-y-1.5">
-              <Label>Borrower</Label>
-              <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
-                <PopoverTrigger
-                  render={<Button variant="outline" role="combobox" className="w-full justify-between font-normal" />}
-                >
-                  {selectedBorrower
-                    ? `${selectedBorrower.full_name} (${selectedBorrower.borrower_code})`
-                    : "Select borrower…"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search borrower…" />
-                    <CommandList>
-                      <CommandEmpty>No borrower found.</CommandEmpty>
-                      <CommandGroup>
-                        {borrowers.map((b) => (
-                          <CommandItem
-                            key={b.id}
-                            value={`${b.full_name} ${b.borrower_code}`}
-                            onSelect={() => {
-                              handleBorrowerChange(b.id === borrowerId ? null : b.id);
-                              setBorrowerOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn("mr-2 h-4 w-4", borrowerId === b.id ? "opacity-100" : "opacity-0")}
-                            />
-                            {b.full_name}
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              ({b.borrower_code})
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Label>Member</Label>
+              <MemberSearchPicker
+                aria-label="Member"
+                value={selectedBorrower}
+                onChange={handleBorrowerChange}
+                canSearch={canListMembers}
+                showCode
+                placeholder={canListMembers ? "Select member…" : "Your role can't view members"}
+              />
             </div>
 
             {/* Active loan combobox */}
@@ -921,7 +853,7 @@ function RestructureLoanInner() {
                       ? borrowerLoans.length === 0
                         ? "No eligible loans"
                         : "Select loan…"
-                      : "Select a borrower first"}
+                      : "Select a member first"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </PopoverTrigger>
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -984,7 +916,7 @@ function RestructureLoanInner() {
               <CardContent className="space-y-4">
                 {/* Borrower (locked) */}
                 <div className="space-y-1.5">
-                  <Label>Borrower</Label>
+                  <Label>Member</Label>
                   <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
                     {selectedBorrower?.full_name ?? "—"}
                     <Badge variant="outline" className="ml-2 text-xs">
@@ -998,50 +930,19 @@ function RestructureLoanInner() {
                   <Label>Co-Maker(s)</Label>
                   {coMakerIds.map((cmId, idx) => (
                     <div key={idx} className="flex gap-2">
-                      <Popover
-                        open={openCoMakerIndex === idx}
-                        onOpenChange={(open) => setOpenCoMakerIndex(open ? idx : null)}
-                      >
-                        <PopoverTrigger
-                          render={<Button variant="outline" role="combobox" className="flex-1 justify-between font-normal" />}
-                        >
-                          {cmId
-                            ? (() => {
-                                const b = borrowers.find((b) => b.id === cmId);
-                                return b ? `${b.full_name} (${b.borrower_code})` : "Unknown";
-                              })()
-                            : "Select co-maker (optional)"}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search co-maker…" />
-                            <CommandList>
-                              <CommandEmpty>No members found.</CommandEmpty>
-                              <CommandGroup>
-                                {availableCoMakersFor(idx).map((b) => (
-                                  <CommandItem
-                                    key={b.id}
-                                    value={`${b.full_name} ${b.borrower_code}`}
-                                    onSelect={() => {
-                                      setCoMakerIds((prev) =>
-                                        prev.map((v, i) => (i === idx ? (v === b.id ? null : b.id) : v)),
-                                      );
-                                      setOpenCoMakerIndex(null);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn("mr-2 h-4 w-4", cmId === b.id ? "opacity-100" : "opacity-0")}
-                                    />
-                                    {b.full_name}
-                                    <span className="ml-1 text-xs text-muted-foreground">({b.borrower_code})</span>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <MemberSearchPicker
+                        aria-label={`Co-maker ${idx + 1}`}
+                        className="flex-1"
+                        value={cmId ? knownMembers[cmId] ?? null : null}
+                        onChange={(picked) => {
+                          if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+                          setCoMakerIds((prev) => prev.map((v, i) => (i === idx ? (picked?.id ?? null) : v)));
+                        }}
+                        canSearch={canListMembers}
+                        showCode
+                        exclude={[borrowerId, ...coMakerIds.filter((_, i) => i !== idx)]}
+                        placeholder={canListMembers ? "Select co-maker (optional)" : "Your role can't view members"}
+                      />
                       {coMakerIds.length > 1 && (
                         <Button
                           variant="ghost"
@@ -1337,7 +1238,7 @@ function RestructureLoanInner() {
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {pickerRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">
-                      No collaterals found for this borrower.
+                      No collaterals found for this member.
                     </p>
                   ) : (
                     pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (

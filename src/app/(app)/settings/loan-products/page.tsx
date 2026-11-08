@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useDialogOpening, usePermission } from "@/hooks";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
@@ -10,6 +11,7 @@ import { decimalInputValue } from "@/lib/percent";
 import { PermissionGate, RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +63,7 @@ import {
   XCircle,
   AlertTriangle,
   ChevronDown,
-  Clock,
+  Info,
 } from "lucide-react";
 import {
   INTEREST_TYPE_OPTIONS,
@@ -71,14 +73,14 @@ import {
   INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
-import { customFormulaFeesError, FORMULA_FEE_HELP } from "@/lib/fee-form";
 import { formatCurrency } from "@/lib/format";
 import {
-  EMPTY_FEE,
   EMPTY_FORM,
-  customFeeEntriesFromApi,
+  PRODUCT_FIELD_LABELS,
+  defaultTermError,
   formToApiPayload,
-  type CustomFeeEntry,
+  productToForm,
+  retiredCustomFeesNotice,
   type ProductForm,
 } from "./_lib/product-form";
 
@@ -152,53 +154,6 @@ const INTEREST_METHOD_LABELS: Record<string, string> = {
   diminishing: "Diminishing",
 };
 
-function productToForm(p: LoanProduct): ProductForm {
-  // Map API response fields to form fields
-  const apiProduct = p as unknown as Record<string, unknown>;
-  const gracePeriod = Number(apiProduct.grace_period_days ?? p.grace_period ?? 0);
-
-  // Parse frequencies - could be array or single value
-  const rawFreq = apiProduct.frequencies ?? apiProduct.frequency ?? p.payment_frequency ?? "monthly";
-  const frequencies = Array.isArray(rawFreq)
-    ? (rawFreq as string[])
-    : [String(rawFreq)];
-
-  // Parse interest rate range — exact, with the API's trailing zeros stripped
-  const minRateRaw = apiProduct.min_interest_rate ?? p.interest_rate;
-  const maxRateRaw = apiProduct.max_interest_rate ?? p.interest_rate;
-  const minRate = minRateRaw != null ? formatRate(minRateRaw) : "";
-  const maxRate = maxRateRaw != null ? formatRate(maxRateRaw) : "";
-
-  const rawFees = (apiProduct.custom_fees ?? []) as Array<Record<string, unknown>>;
-
-  return {
-    name: p.name,
-    description: p.description ?? "",
-    min_amount: String(apiProduct.min_amount ?? p.min_amount ?? ""),
-    max_amount: String(apiProduct.max_amount ?? p.max_amount ?? ""),
-    min_term: String(apiProduct.min_term ?? p.min_term ?? ""),
-    max_term: String(apiProduct.max_term ?? p.max_term ?? ""),
-    term_unit: String(apiProduct.term_unit ?? "months"),
-    frequencies,
-    min_interest_rate: minRate,
-    max_interest_rate: maxRate,
-    interest_method: String(apiProduct.interest_method ?? p.interest_type ?? "straight"),
-    interest_rate_frequency: String(apiProduct.interest_rate_frequency ?? "monthly"),
-    min_processing_fee: formatRate(apiProduct.min_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    max_processing_fee: formatRate(apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? p.processing_fee),
-    min_service_fee: formatRate(apiProduct.min_service_fee ?? apiProduct.service_fee ?? p.service_fee),
-    max_service_fee: formatRate(apiProduct.max_service_fee ?? apiProduct.service_fee ?? p.service_fee),
-    notarial_fee: formatRate(apiProduct.notarial_fee),
-    penalty_rate: (apiProduct.penalty_rate ?? p.penalty_rate) != null ? formatRate(apiProduct.penalty_rate ?? p.penalty_rate) : "",
-    grace_period_enabled: gracePeriod > 0,
-    grace_period_days: gracePeriod > 0 ? String(gracePeriod) : "",
-    scb_required: Boolean(apiProduct.scb_required ?? p.scb_required ?? false),
-    min_scb: String(apiProduct.min_scb ?? p.min_scb ?? ""),
-    max_scb: String(apiProduct.max_scb ?? p.max_scb ?? ""),
-    custom_fees: customFeeEntriesFromApi(rawFees),
-  };
-}
-
 // ── Product Form Dialog ──
 
 function ProductFormDialog({
@@ -206,6 +161,7 @@ function ProductFormDialog({
   onOpenChange,
   onSubmit,
   initialData,
+  retiredFeesNotice,
   title,
   description,
 }: {
@@ -213,50 +169,25 @@ function ProductFormDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (form: ProductForm) => void;
   initialData?: ProductForm;
+  /** Shown read-only when the product still holds retired `custom_fees`. */
+  retiredFeesNotice?: string | null;
   title: string;
   description: string;
 }) {
   const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
-  const [expandedFee, setExpandedFee] = useState<number | null>(null);
 
   if (useDialogOpening(open, initialData)) {
     setForm(initialData ?? EMPTY_FORM);
-    setExpandedFee(null);
   }
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const addFee = () => {
-    setForm((prev) => ({
-      ...prev,
-      custom_fees: [...prev.custom_fees, { ...EMPTY_FEE }],
-    }));
-    setExpandedFee(form.custom_fees.length);
-  };
-
-  const removeFee = (idx: number) => {
-    setForm((prev) => ({
-      ...prev,
-      custom_fees: prev.custom_fees.filter((_, i) => i !== idx),
-    }));
-    if (expandedFee === idx) setExpandedFee(null);
-  };
-
-  const updateFee = (idx: number, field: keyof CustomFeeEntry, value: string | boolean) => {
-    setForm((prev) => ({
-      ...prev,
-      custom_fees: prev.custom_fees.map((f, i) =>
-        i === idx ? { ...f, [field]: value } : f
-      ),
-    }));
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const feeError = customFormulaFeesError(form.custom_fees);
-    if (feeError) {
-      toast.error(feeError);
+    const termError = defaultTermError(form);
+    if (termError) {
+      toast.error(termError);
       return;
     }
     onSubmit(form);
@@ -278,7 +209,7 @@ function ProductFormDialog({
               Basic Info
             </h3>
             <div className="space-y-2">
-              <Label htmlFor="product-name">Product Name *</Label>
+              <Label htmlFor="product-name">{PRODUCT_FIELD_LABELS.name} *</Label>
               <Input
                 id="product-name"
                 placeholder="e.g. Salary Loan"
@@ -288,7 +219,7 @@ function ProductFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="product-description">Description</Label>
+              <Label htmlFor="product-description">{PRODUCT_FIELD_LABELS.description}</Label>
               <Textarea
                 id="product-description"
                 placeholder="Brief description of this loan product"
@@ -305,7 +236,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-amount">Minimum Amount (PHP) *</Label>
+                <Label htmlFor="min-amount">{PRODUCT_FIELD_LABELS.min_amount} (₱) *</Label>
                 <Input
                   id="min-amount"
                   type="number"
@@ -318,7 +249,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-amount">Maximum Amount (PHP) *</Label>
+                <Label htmlFor="max-amount">{PRODUCT_FIELD_LABELS.max_amount} (₱) *</Label>
                 <Input
                   id="max-amount"
                   type="number"
@@ -333,7 +264,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-term">Minimum Term <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-term">{PRODUCT_FIELD_LABELS.min_term} <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-term"
                   type="number"
@@ -345,7 +276,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-term">Maximum Term <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-term">{PRODUCT_FIELD_LABELS.max_term} <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-term"
                   type="number"
@@ -357,27 +288,46 @@ function ProductFormDialog({
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="term-unit">Term Unit <span className="text-red-500">*</span></Label>
-              <Select
-                value={form.term_unit}
-                onValueChange={(v) => update("term_unit", v ?? "months")}
-              >
-                <SelectTrigger id="term-unit" className="w-full sm:w-1/2">
-                  <SelectValue>
-                    {(v: string | null) =>
-                      TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TERM_UNIT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="default-term">{PRODUCT_FIELD_LABELS.term} <span className="text-red-500">*</span></Label>
+                <Input
+                  id="default-term"
+                  type="number"
+                  min={form.min_term || 1}
+                  max={form.max_term || undefined}
+                  placeholder="12"
+                  value={form.term}
+                  onChange={(e) => update("term", e.target.value)}
+                  aria-describedby="default-term-help"
+                  required
+                />
+                <p id="default-term-help" className="text-xs text-muted-foreground">
+                  Between the minimum and maximum term.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="term-unit">{PRODUCT_FIELD_LABELS.term_unit} <span className="text-red-500">*</span></Label>
+                <Select
+                  value={form.term_unit}
+                  onValueChange={(v) => update("term_unit", v ?? "months")}
+                >
+                  <SelectTrigger id="term-unit" className="w-full">
+                    <SelectValue>
+                      {(v: string | null) =>
+                        TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TERM_UNIT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -388,7 +338,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-interest-rate">Min Interest Rate (%) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="min-interest-rate">{PRODUCT_FIELD_LABELS.min_interest_rate} (%) <span className="text-red-500">*</span></Label>
                 <Input
                   id="min-interest-rate"
                   type="number"
@@ -401,7 +351,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-interest-rate">Max Interest Rate (%) <span className="text-red-500">*</span></Label>
+                <Label htmlFor="max-interest-rate">{PRODUCT_FIELD_LABELS.max_interest_rate} (%) <span className="text-red-500">*</span></Label>
                 <Input
                   id="max-interest-rate"
                   type="number"
@@ -416,7 +366,7 @@ function ProductFormDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="interest-rate-frequency">
-                Interest Rate Frequency <span className="text-red-500">*</span>
+                {PRODUCT_FIELD_LABELS.interest_rate_frequency} <span className="text-red-500">*</span>
               </Label>
               <p className="text-xs text-muted-foreground">
                 The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
@@ -443,7 +393,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Interest Method *</Label>
+                <Label>{PRODUCT_FIELD_LABELS.interest_method} *</Label>
                 <Select
                   value={form.interest_method}
                   onValueChange={(v) => update("interest_method", v as string)}
@@ -467,7 +417,7 @@ function ProductFormDialog({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Payment Frequency <span className="text-red-500">*</span></Label>
+                <Label>{PRODUCT_FIELD_LABELS.frequencies} <span className="text-red-500">*</span></Label>
                 <Popover>
                   <PopoverTrigger
                     className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -551,7 +501,7 @@ function ProductFormDialog({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Processing Fee (%)</Label>
+                <Label>{PRODUCT_FIELD_LABELS.processing_fee} (%)</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -573,7 +523,7 @@ function ProductFormDialog({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Service Fee (%)</Label>
+                <Label>{PRODUCT_FIELD_LABELS.service_fee} (%)</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -597,7 +547,7 @@ function ProductFormDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="notarial-fee">Notarial Fee (%)</Label>
+                <Label htmlFor="notarial-fee">{PRODUCT_FIELD_LABELS.notarial_fee} (%)</Label>
                 <Input
                   id="notarial-fee"
                   type="number"
@@ -609,7 +559,7 @@ function ProductFormDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="penalty-rate">Penalty Rate (% per month)</Label>
+                <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
                 <Input
                   id="penalty-rate"
                   type="number"
@@ -626,7 +576,7 @@ function ProductFormDialog({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="grace-period-toggle" className="cursor-pointer">
-                  Grace Period
+                  {PRODUCT_FIELD_LABELS.grace_period_days}
                 </Label>
                 <Switch
                   id="grace-period-toggle"
@@ -642,7 +592,7 @@ function ProductFormDialog({
               </div>
               {form.grace_period_enabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="grace-period">Grace Period (days)</Label>
+                  <Label htmlFor="grace-period">{PRODUCT_FIELD_LABELS.grace_period_days} (days)</Label>
                   <Input
                     id="grace-period"
                     type="number"
@@ -671,7 +621,7 @@ function ProductFormDialog({
                   <p className="text-xs text-muted-foreground">
                     When enabled, every loan using this product will include an
                     SCB amount added to each amortization period. When the
-                    borrower pays, the SCB portion is credited to their share
+                    member pays, the SCB portion is credited to their share
                     capital.
                   </p>
                 </div>
@@ -692,7 +642,7 @@ function ProductFormDialog({
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                   <div className="space-y-2">
                     <Label htmlFor="min-scb">
-                      Minimum SCB (PHP){" "}
+                      {PRODUCT_FIELD_LABELS.min_scb} (₱){" "}
                       <span className="text-destructive">*</span>
                     </Label>
                     <Input
@@ -708,7 +658,7 @@ function ProductFormDialog({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="max-scb">
-                      Maximum SCB (PHP){" "}
+                      {PRODUCT_FIELD_LABELS.max_scb} (₱){" "}
                       <span className="text-destructive">*</span>
                     </Label>
                     <Input
@@ -731,241 +681,25 @@ function ProductFormDialog({
             </div>
           </div>
 
-          {/* Additional Fees */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Additional Fees
-              </h3>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addFee}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Add Fee
-              </Button>
-            </div>
-
-            {form.custom_fees.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No additional fees. Click &quot;Add Fee&quot; to add custom deductions.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {form.custom_fees.map((fee, idx) => (
-                  <div key={idx} className="rounded-lg border p-3 space-y-3">
-                    {/* Fee header row: name, type, value, remove */}
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 space-y-2">
-                        <Label className="text-xs">Fee Name *</Label>
-                        <Input
-                          placeholder="e.g. Notarial Fee"
-                          value={fee.name}
-                          onChange={(e) => updateFee(idx, "name", e.target.value)}
-                        />
-                      </div>
-                      <div className="w-36 space-y-2">
-                        <Label className="text-xs">Type *</Label>
-                        <Select
-                          value={fee.type}
-                          onValueChange={(v) => updateFee(idx, "type", v as string)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue>
-                              {(v: string | null) =>
-                                v === "fixed" ? "Fixed (PHP)"
-                                : v === "percentage" ? "Percentage (%)"
-                                : v === "formula" ? "Formula (%)"
-                                : v ?? ""
-                              }
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="fixed">Fixed (PHP)</SelectItem>
-                            <SelectItem value="percentage">Percentage (%)</SelectItem>
-                            <SelectItem value="formula">Formula (%)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="w-28 space-y-2">
-                        <Label className="text-xs">
-                          {fee.type === "fixed" ? "Amount" : "Rate (%)"} *
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={fee.type === "fixed" ? "0.01" : "0.0001"}
-                          placeholder={fee.type === "fixed" ? "500" : "2"}
-                          value={fee.value}
-                          onChange={(e) => updateFee(idx, "value", e.target.value)}
-                        />
-                      </div>
-                      <div className="pt-7">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeFee(idx)}
-                          className="text-destructive hover:text-destructive h-8 w-8"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {fee.type === "formula" && (
-                      <div className="space-y-2 rounded-md border p-2.5">
-                        <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>
-                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={fee.per_month}
-                            onChange={(e) => updateFee(idx, "per_month", e.target.checked)}
-                            className="rounded border-input"
-                          />
-                          Per month of term
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">Minimum (₱)</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              placeholder="None"
-                              value={fee.min_amount}
-                              onChange={(e) => updateFee(idx, "min_amount", e.target.value)}
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">Maximum (₱)</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              placeholder="None"
-                              value={fee.max_amount}
-                              onChange={(e) => updateFee(idx, "max_amount", e.target.value)}
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Expandable conditions */}
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => setExpandedFee(expandedFee === idx ? null : idx)}
-                    >
-                      {expandedFee === idx ? "▾ Hide conditions" : "▸ Additional conditions (optional)"}
-                    </button>
-
-                    {expandedFee === idx && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        {/* Term (Days) conditions */}
-                        <div className="rounded-md border p-2.5 space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Term (Days)
-                          </p>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Greater than</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.term_days_gt}
-                                onChange={(e) => updateFee(idx, "term_days_gt", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Less than</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.term_days_lt}
-                                onChange={(e) => updateFee(idx, "term_days_lt", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Equal to</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.term_days_eq}
-                                onChange={(e) => updateFee(idx, "term_days_eq", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Loan Amount conditions */}
-                        <div className="rounded-md border p-2.5 space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Loan Amount
-                          </p>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Greater than</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.loan_amount_gt}
-                                onChange={(e) => updateFee(idx, "loan_amount_gt", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Less than</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.loan_amount_lt}
-                                onChange={(e) => updateFee(idx, "loan_amount_lt", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="w-20 text-xs text-muted-foreground shrink-0">Equal to</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                placeholder="—"
-                                value={fee.loan_amount_eq}
-                                onChange={(e) => updateFee(idx, "loan_amount_eq", e.target.value)}
-                                className="h-7 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Tiered Charges — Coming Soon */}
-            <div className="rounded-lg border p-3 opacity-50">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Tiered Charges</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Coming Soon</Badge>
-              </div>
-            </div>
-          </div>
+          {retiredFeesNotice && (
+            <Alert>
+              <Info aria-hidden="true" />
+              <AlertTitle>Additional fees are retired</AlertTitle>
+              <AlertDescription className="space-y-2">
+                <p>{retiredFeesNotice}</p>
+                <PermissionGate permission="fees:view">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    nativeButton={false}
+                    render={<Link href="/settings/fees" />}
+                  >
+                    Open Fees settings
+                  </Button>
+                </PermissionGate>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <Button
@@ -1104,6 +838,10 @@ function ProductActionsCell({
   // form whenever this changes while it is open, which would drop what the
   // user has typed on any unrelated re-render.
   const initialData = useMemo(() => productToForm(product), [product]);
+  const retiredFeesNotice = useMemo(
+    () => retiredCustomFeesNotice((product as unknown as Record<string, unknown>).custom_fees),
+    [product],
+  );
 
   return (
     <>
@@ -1140,6 +878,7 @@ function ProductActionsCell({
         onOpenChange={(v) => !v && setOpenDialog(null)}
         onSubmit={onEdit}
         initialData={initialData}
+        retiredFeesNotice={retiredFeesNotice}
         title="Edit Loan Product"
         description={`Update the configuration for ${product.name}.`}
       />

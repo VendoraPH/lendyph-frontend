@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
-import { RouteGuard } from "@/components/common";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PermissionButton, RouteGuard, TablePagination } from "@/components/common";
+import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,14 +44,18 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  firstLastNameFrom,
-  inPaymentDateRange,
-  matchesPaymentSearch,
+  PAYMENT_PAGE_SIZE,
+  pageToStepBackTo,
   paymentAmountFigures,
-  paymentTotalsParams,
-  readPaymentTotals,
+  paymentListKey,
+  paymentListParams,
+  paymentRemarks,
+  paymentStatusBreakdown,
+  readPaymentPage,
+  shownPaymentPage,
   totalFigure,
-  type PaymentTotals,
+  voidedByName,
+  type PaymentPage,
 } from "./_lib/payment-history";
 import {
   formatCurrency as formatPHP,
@@ -70,8 +74,6 @@ interface MockPayment {
   borrower_name: string;
   borrower_id: number;
   loan_account: string;
-  loan_account_number: string | null;
-  first_last_name: string | null;
   loan_id: number;
   date: string;
   amount: number;
@@ -127,8 +129,6 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.loan_account_number as string) ||
       (p.loan_account as string) ||
       "—",
-    loan_account_number: loanRel?.loan_account_number || (p.loan_account_number as string) || null,
-    first_last_name: firstLastNameFrom(p as Parameters<typeof firstLastNameFrom>[0]),
     loan_id: p.loan_id ?? loanRel?.id ?? 0,
     date: p.payment_date,
     amount:
@@ -147,9 +147,9 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
     balance_before: (p.balance_before as number) || 0,
     balance_after: (p.balance_after as number) || 0,
     reference_number: p.reference_number as string | undefined,
-    remarks: p.remarks || undefined,
+    remarks: paymentRemarks(p.remarks),
     void_reason: p.void_reason || undefined,
-    voided_by: p.voided_by || undefined,
+    voided_by: p.status === "voided" ? voidedByName(p) : undefined,
     voided_at: p.voided_at || undefined,
   };
 }
@@ -163,6 +163,9 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   maya: "Maya",
   online: "Online",
 };
+
+/** Why Void is disabled for a role without `payments:void`. */
+const VOID_DENIED_TOOLTIP = "Your role doesn't have permission to void payments";
 
 // ── Void Payment Dialog ──
 
@@ -226,7 +229,7 @@ function VoidPaymentDialog({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Borrower</span>
+              <span className="text-muted-foreground">Member</span>
               <span className="font-medium">{payment.borrower_name}</span>
             </div>
             <div className="flex justify-between">
@@ -431,7 +434,10 @@ function PaymentCard({
             </Button>
           </Link>
           {!isVoided && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip={VOID_DENIED_TOOLTIP}
+              wrapperClassName="flex-1"
               variant="outline"
               size="sm"
               className="flex-1 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -439,7 +445,7 @@ function PaymentCard({
             >
               <Ban className="h-3 w-3" />
               Void
-            </Button>
+            </PermissionButton>
           )}
         </div>
       </CardContent>
@@ -450,107 +456,74 @@ function PaymentCard({
 // ── Main Page ──
 
 function PaymentHistoryContent() {
-  const [payments, setPayments] = useState<MockPayment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
-  const [totalsReload, setTotalsReload] = useState(0);
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
-  // Set only when the drain gave up with pages outstanding, i.e. this screen is
-  // knowingly missing payments. Null means complete.
-  const [shortfall, setShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
 
-  const fetchPayments = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Drained across pages. This asked for `per_page: 100` — exactly the
-      // server's ceiling, so it was never clamped and never looked wrong, and
-      // that was the trap: a co-op with 101 payments got 100 of them in a
-      // response shaped identically to a complete one, and payment #101 could
-      // not be found, filtered to, or voided from this screen. Sitting ON the
-      // limit is worse than sitting above it, because nothing is even
-      // theoretically available to notice.
-      //
-      // The whole set is needed rather than a page of it: the search box, the
-      // date range and the status tabs below all filter in the browser, so a
-      // server-side page would silently scope every one of them to whatever
-      // happened to load.
-      const { rows, truncated, total } = await repaymentService.listAll();
-      setPayments(rows.map(mapRepaymentToRow));
-      setShortfall(truncated ? { shown: rows.length, total } : null);
-    } catch (err) {
-      console.error("Failed to load payment history", err);
-      setPayments([]);
-      setShortfall(null);
-      notifyError(err, "We couldn't load the payment history. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
-
-  // Filter logic
-  const filtered = useMemo(() => {
-    return payments.filter((p) => {
-      // Same fields and date rule as the server's totals, so the cards and the
-      // table never describe different payments.
-      const matchSearch = matchesPaymentSearch(p, search);
-
-      const matchStatus =
-        statusTab === "all" ||
-        (statusTab === "completed" && p.status === "completed") ||
-        (statusTab === "voided" && p.status === "voided");
-
-      return matchSearch && matchStatus && inPaymentDateRange(p.date, dateFrom, dateTo);
-    });
-  }, [payments, search, statusTab, dateFrom, dateTo]);
-
-  // Summary cards: the server's totals over the same search and date range
-  // (`meta.totals`), asked once the filters settle. A dash shows while they
-  // load, until they match the filters on screen, and when the server sent
-  // none; the browser never sums the rows for them.
-  const totalsParams = useMemo(
-    () => paymentTotalsParams({ search, dateFrom, dateTo }),
-    [search, dateFrom, dateTo]
+  // One request per settled change: the rows, the count and the cards all come
+  // from its answer. Only the latest request's answer is kept, so a slow answer
+  // never replaces a newer one.
+  const params = useMemo(
+    () => paymentListParams({ search, dateFrom, dateTo, status: statusTab, page }),
+    [search, dateFrom, dateTo, statusTab, page]
   );
-  const totalsKey = `${JSON.stringify(totalsParams)}#${totalsReload}`;
-  const [totalsRequest, setTotalsRequest] = useState(() => ({ key: totalsKey, params: totalsParams }));
-  const [totals, setTotals] = useState<{ key: string; figures: PaymentTotals } | null>(null);
+  const requestKey = paymentListKey(params, reload);
+  const [request, setRequest] = useState(() => ({ key: requestKey, params }));
+  const [answer, setAnswer] = useState<PaymentPage<MockPayment> | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(
-      () => setTotalsRequest((prev) => (prev.key === totalsKey ? prev : { key: totalsKey, params: totalsParams })),
-      300
+      () => setRequest((prev) => (prev.key === requestKey ? prev : { key: requestKey, params })),
+      SEARCH_DEBOUNCE_MS
     );
     return () => clearTimeout(t);
-  }, [totalsKey, totalsParams]);
+  }, [requestKey, params]);
 
   useEffect(() => {
     let current = true;
     repaymentService
-      .listPage(totalsRequest.params)
+      .listPage(request.params)
       .then((body) => {
-        if (current) setTotals({ key: totalsRequest.key, figures: readPaymentTotals(body) });
+        if (!current) return;
+        const rows = (body?.data ?? []).map(mapRepaymentToRow);
+        const stepBack = pageToStepBackTo({
+          rows: rows.length,
+          page: Number(request.params.page),
+          lastPage: body?.meta?.last_page,
+        });
+        if (stepBack !== null) {
+          setPage(stepBack);
+          return;
+        }
+        setAnswer(readPaymentPage({ data: rows, meta: body?.meta }, request.key));
+        setFailedKey(null);
       })
-      .catch(() => {
-        if (current) setTotals({ key: totalsRequest.key, figures: { collected: null, voided: null, insurance: null } });
+      .catch((err) => {
+        if (!current) return;
+        setAnswer(readPaymentPage<MockPayment>(null, request.key));
+        setFailedKey(request.key);
+        notifyError(err, "We couldn't load the payment history. Please try again.");
       });
     return () => {
       current = false;
     };
-  }, [totalsRequest]);
+  }, [request]);
 
-  const shownTotals = totals?.key === totalsKey ? totals.figures : null;
-  const transactionCount = filtered.length;
+  const shown = shownPaymentPage(answer, requestKey);
+  const payments = shown.rows;
+  const loading = shown.pending;
+  const failed = !loading && failedKey === requestKey;
+
+  const changeFilter = <T,>(set: (value: T) => void) => (value: T) => {
+    set(value);
+    setPage(1);
+  };
 
   const handleVoidClick = (p: MockPayment) => {
     setVoidTarget(p);
@@ -561,10 +534,10 @@ function PaymentHistoryContent() {
     try {
       await repaymentService.void(id, { void_reason: reason });
       toast.success("Payment voided");
-      fetchPayments();
-      setTotalsReload((n) => n + 1);
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+      setReload((n) => n + 1);
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     }
   };
 
@@ -578,15 +551,6 @@ function PaymentHistoryContent() {
         </p>
       </div>
 
-      {shortfall && (
-        <IncompleteListNotice
-          shown={shortfall.shown}
-          total={shortfall.total}
-          noun="payments"
-          consequence="The search box and the status tabs describe only the payments that loaded, and a payment that is missing cannot be voided from this screen. The Total Collected, Total Voided and Insurance Premium Collected cards come from the server and cover every payment."
-        />
-      )}
-
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -598,7 +562,7 @@ function PaymentHistoryContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-700">
-              {totalFigure(shownTotals?.collected)}
+              {totalFigure(shown.totals?.collected)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               From completed payments
@@ -613,7 +577,7 @@ function PaymentHistoryContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-destructive">
-              {totalFigure(shownTotals?.voided)}
+              {totalFigure(shown.totals?.voided)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Reversed transactions
@@ -628,7 +592,7 @@ function PaymentHistoryContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-              {totalFigure(shownTotals?.insurance)}
+              {totalFigure(shown.totals?.insurance)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Included in Total Collected
@@ -644,11 +608,9 @@ function PaymentHistoryContent() {
             <ReceiptText className="h-4 w-4 text-brand-orange" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{transactionCount}</p>
+            <p className="text-2xl font-bold">{shown.total ?? "—"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {filtered.filter((p) => p.status === "completed").length}{" "}
-              completed,{" "}
-              {filtered.filter((p) => p.status === "voided").length} voided
+              {paymentStatusBreakdown(shown.stats, { search, dateFrom, dateTo })}
             </p>
           </CardContent>
         </Card>
@@ -664,9 +626,9 @@ function PaymentHistoryContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Receipt #, borrower name, or loan account..."
+                  placeholder="Receipt #, member name, or loan account..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => changeFilter(setSearch)(e.target.value)}
                   className="pl-9"
                 />
               </div>
@@ -679,7 +641,7 @@ function PaymentHistoryContent() {
                 <Input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  onChange={(e) => changeFilter(setDateFrom)(e.target.value)}
                   className="w-36"
                 />
               </div>
@@ -688,7 +650,7 @@ function PaymentHistoryContent() {
                 <Input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  onChange={(e) => changeFilter(setDateTo)(e.target.value)}
                   className="w-36"
                 />
               </div>
@@ -703,6 +665,7 @@ function PaymentHistoryContent() {
                   setSearch("");
                   setDateFrom("");
                   setDateTo("");
+                  setPage(1);
                 }}
               >
                 Clear
@@ -717,9 +680,9 @@ function PaymentHistoryContent() {
         <CardHeader className="pb-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle className="text-sm font-medium">
-              Transactions ({filtered.length})
+              Transactions ({shown.total ?? "—"})
             </CardTitle>
-            <Tabs value={statusTab} onValueChange={setStatusTab}>
+            <Tabs value={statusTab} onValueChange={changeFilter(setStatusTab)}>
               <TabsList>
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="completed">Completed</TabsTrigger>
@@ -729,14 +692,14 @@ function PaymentHistoryContent() {
           </div>
         </CardHeader>
 
-        <CardContent className="pt-4">
+        <CardContent className={cn("pt-4 transition-opacity", loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
           {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Receipt #</TableHead>
-                  <TableHead>Borrower</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Loan Account</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -746,7 +709,7 @@ function PaymentHistoryContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((payment) => {
+                {payments.map((payment) => {
                   const isVoided = payment.status === "voided";
                   const figures = paymentAmountFigures(payment);
                   return (
@@ -827,7 +790,9 @@ function PaymentHistoryContent() {
                             </Button>
                           </Link>
                           {!isVoided && (
-                            <Button
+                            <PermissionButton
+                              permission="payments:void"
+                              tooltip={VOID_DENIED_TOOLTIP}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -835,14 +800,14 @@ function PaymentHistoryContent() {
                             >
                               <Ban className="h-3 w-3" />
                               Void
-                            </Button>
+                            </PermissionButton>
                           )}
                         </div>
                       </TableCell>
                     </TableRow>
                   );
                 })}
-                {loading && (
+                {loading && payments.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={8}
@@ -855,13 +820,13 @@ function PaymentHistoryContent() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!loading && filtered.length === 0 && (
+                {!loading && payments.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={8}
                       className="h-32 text-center text-muted-foreground"
                     >
-                      No payments found.
+                      {failed ? "The payments couldn't be loaded." : "No payments found."}
                     </TableCell>
                   </TableRow>
                 )}
@@ -869,12 +834,12 @@ function PaymentHistoryContent() {
             </Table>
 
             {/* Void audit details under the table */}
-            {filtered.some((p) => p.status === "voided") && (
+            {payments.some((p) => p.status === "voided") && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Void Audit Trail
                 </p>
-                {filtered
+                {payments
                   .filter((p) => p.status === "voided")
                   .map((p) => (
                     <div
@@ -904,25 +869,36 @@ function PaymentHistoryContent() {
 
           {/* Mobile Cards */}
           <div className="grid gap-3 md:hidden">
-            {filtered.map((payment) => (
+            {payments.map((payment) => (
               <PaymentCard
                 key={payment.id}
                 payment={payment}
                 onVoidClick={handleVoidClick}
               />
             ))}
-            {loading && (
+            {loading && payments.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm inline-flex w-full items-center justify-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
                 Loading payments...
               </div>
             )}
-            {!loading && filtered.length === 0 && (
+            {!loading && payments.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm">
-                No payments found.
+                {failed ? "The payments couldn't be loaded." : "No payments found."}
               </div>
             )}
           </div>
+
+          {answer?.total != null && (
+            <TablePagination
+              page={page}
+              perPage={PAYMENT_PAGE_SIZE}
+              total={answer.total}
+              perPageOptions={[PAYMENT_PAGE_SIZE]}
+              onPageChange={setPage}
+              onPerPageChange={() => setPage(1)}
+            />
+          )}
         </CardContent>
       </Card>
 

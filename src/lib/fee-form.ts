@@ -1,7 +1,7 @@
 import type { CreateFeeData, FeeConditions, FeeType } from "@/types/fee";
 import { formatCurrency, formatRate } from "@/lib/format";
 
-/** The help line shown under a formula fee's fields, on Fees and on Loan Products. */
+/** The help line shown under a formula fee's fields on Fees. */
 export const FORMULA_FEE_HELP =
   "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.";
 
@@ -56,21 +56,6 @@ export function buildFormulaFields(input: FormulaFieldsInput): { fields: Formula
     return { error: `The minimum (${formatCurrency(min.value)}) cannot be more than the maximum (${formatCurrency(max.value)}).` };
   }
   return { fields: { per_month: input.perMonth, min_amount: min.value, max_amount: max.value } };
-}
-
-/**
- * The first problem with a loan product's custom formula fees, named by fee,
- * or null when every one is valid. Fixed and percentage entries are skipped.
- */
-export function customFormulaFeesError(
-  fees: readonly { name: string; type: string; per_month: boolean; min_amount: string; max_amount: string }[],
-): string | null {
-  for (const fee of fees) {
-    if (fee.type !== "formula") continue;
-    const result = buildFormulaFields({ perMonth: fee.per_month, minAmount: fee.min_amount, maxAmount: fee.max_amount });
-    if ("error" in result) return `${fee.name.trim() || "Custom fee"}: ${result.error}`;
-  }
-  return null;
 }
 
 /**

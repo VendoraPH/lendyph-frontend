@@ -58,6 +58,14 @@ export interface User {
    * predate this field rehydrate with it `undefined`.
    */
   must_change_password: boolean;
+  /**
+   * `GET /users` rows only: whether the caller may edit, reset the password
+   * of, deactivate or activate this user. False when those requests would
+   * answer 404 for the caller (a super_admin target, a branch the caller
+   * doesn't hold, or permissions the caller doesn't have). Missing on every
+   * other endpoint and on an API that predates it: read it as unknown.
+   */
+  can_manage?: boolean;
   created_at: string;
   updated_at: string;
 }

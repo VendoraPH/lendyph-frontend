@@ -32,6 +32,7 @@ import {
   toShareCapitalLedgerFallback,
 } from "./templates/share-capital-certificate";
 import { PRINT_PAGE_SIZE, type PrintableBuildOptions } from "./templates/shared";
+import { PRINTABLE_TITLES } from "@/lib/page-titles";
 
 /**
  * Fetch wiring + the catalog itself, mirroring
@@ -63,7 +64,8 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
     // guards a malformed call rather than an expected state.
     if (!ctx.subjectId) return build(null, { org: ctx.org });
     const raw = await fetcher(ctx.subjectId).catch(() => null);
-    return build(raw, { org: ctx.org });
+    const doc = build(raw, { org: ctx.org });
+    return raw === null ? doc : { ...doc, subjectId: ctx.subjectId };
   };
 }
 
@@ -111,7 +113,7 @@ async function fetchShareCapitalStatement(borrowerId: number): Promise<unknown> 
 export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   {
     id: "disclosure_statement",
-    title: "Disclosure Statement",
+    title: PRINTABLE_TITLES.disclosure_statement,
     description:
       "Finance charges, net proceeds and rate disclosure required by R.A. 3765.",
     subject: "loan",
@@ -123,9 +125,9 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "promissory_note",
-    title: "Promissory Note",
+    title: PRINTABLE_TITLES.promissory_note,
     description:
-      "The borrower's undertaking to pay, with co-maker clause and notarial block.",
+      "The member's undertaking to pay, with co-maker clause and notarial block.",
     subject: "loan",
     icon: FileSignature,
     build: printableBuilder(
@@ -135,7 +137,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "release_voucher",
-    title: "Loan Release Voucher",
+    title: PRINTABLE_TITLES.release_voucher,
     description:
       "Principal, itemised deductions and net proceeds, signed on release.",
     subject: "loan",
@@ -144,7 +146,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "amortization_schedule",
-    title: "Amortization Schedule",
+    title: PRINTABLE_TITLES.amortization_schedule,
     description: "Per-period principal, interest and balance for one loan.",
     subject: "loan",
     icon: CalendarClock,
@@ -155,7 +157,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "demand_letter",
-    title: "Demand Letter",
+    title: PRINTABLE_TITLES.demand_letter,
     description:
       "Notice of past due: installments in arrears, total demanded, cure period.",
     subject: "loan",
@@ -167,9 +169,9 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "official_receipt",
-    title: "Official Receipt",
+    title: PRINTABLE_TITLES.official_receipt,
     description:
-      "Two copies — borrower's and file — with the payment's full application.",
+      "Two copies — member's and file — with the payment's full application.",
     subject: "repayment",
     icon: ReceiptText,
     build: printableBuilder(
@@ -179,7 +181,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "share_capital_certificate",
-    title: "Share Capital Certificate",
+    title: PRINTABLE_TITLES.share_capital_certificate,
     description:
       "Member's share capital ledger with running balance and closing balance.",
     subject: "borrower",
@@ -191,7 +193,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
   },
   {
     id: "member_ledger_card",
-    title: "Member Ledger Card",
+    title: PRINTABLE_TITLES.member_ledger_card,
     description: "Every loan account a member holds, with payments and balances.",
     subject: "borrower",
     icon: BookUser,

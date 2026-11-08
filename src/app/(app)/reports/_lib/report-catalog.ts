@@ -17,7 +17,9 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { api } from "@/lib/api-client";
 import { reportService } from "@/services";
+import { REPORT_TITLES } from "@/lib/page-titles";
 import {
   LIST_PAGE_SIZE,
   buildAgingDoc,
@@ -92,7 +94,22 @@ function subjectReportBuilder(
   };
 }
 
+/**
+ * A report of the whole book as of today. The API narrows by release date when
+ * dates are sent, so none are: hiding the date controls alone would still report
+ * only the loans released in the default month.
+ */
+function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
+  return async (ctx: ReportContext): Promise<ReportDocument> => {
+    const raw = await fetcher(ctx.branchId ? { branch_id: ctx.branchId } : {}).catch(() => null);
+    return map(raw, ctx.range);
+  };
+}
+
 const listParams = { per_page: LIST_PAGE_SIZE };
+
+/** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
+const MEMBER_LIST_ENDPOINT = "/reports/borrowers/list";
 
 // ---------------------------------------------------------------------------
 // Accent palettes — chosen per category to give the catalog visual rhythm.
@@ -121,7 +138,7 @@ const ACCENT = {
 export const REPORT_CATALOG: ReportDefinition[] = [
   {
     id: "daily_collection",
-    title: "Daily Collection Report",
+    title: REPORT_TITLES.daily_collection,
     description: "Today's collections versus the schedule.",
     category: "operations",
     icon: ClipboardList,
@@ -142,7 +159,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "repayments_list",
-    title: "Repayments List",
+    title: REPORT_TITLES.repayments_list,
     description: "Every repayment recorded in the period.",
     category: "operations",
     icon: ReceiptText,
@@ -152,7 +169,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "collection_efficiency",
-    title: "Collection Efficiency",
+    title: REPORT_TITLES.collection_efficiency,
     description: "Amounts due against collected, by branch and by month.",
     category: "performance",
     icon: Gauge,
@@ -165,7 +182,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "performance",
-    title: "Officer / Branch Performance",
+    title: REPORT_TITLES.performance,
     description: "Releases, collections, and risk per account officer.",
     category: "performance",
     icon: Target,
@@ -175,7 +192,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "cash_flow",
-    title: "Cash Flow Statement",
+    title: REPORT_TITLES.cash_flow,
     description: "Cash received against cash paid out for the period.",
     category: "financial",
     icon: ArrowLeftRight,
@@ -185,7 +202,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "share_capital",
-    title: "Share Capital Report",
+    title: REPORT_TITLES.share_capital,
     description: "Member share capital movement and subscription status.",
     category: "financial",
     icon: PiggyBank,
@@ -198,7 +215,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "provisioning",
-    title: "Loan Loss Provisioning",
+    title: REPORT_TITLES.provisioning,
     description: "Required allowance for probable losses by aging bucket.",
     category: "financial",
     icon: ShieldAlert,
@@ -208,17 +225,18 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "portfolio_summary",
-    title: "Portfolio Summary",
+    title: REPORT_TITLES.portfolio_summary,
     description: "Active loans, outstanding balance, portfolio at risk.",
     category: "portfolio",
     icon: PieChart,
     accent: ACCENT.blue,
     supportsBranch: true,
-    build: reportBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
+    noDateRange: true,
+    build: pointInTimeBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
   },
   {
     id: "income_report",
-    title: "Income Report",
+    title: REPORT_TITLES.income_report,
     description: "Interest, processing fees, and penalty income.",
     category: "portfolio",
     icon: TrendingUp,
@@ -239,7 +257,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "aging_report",
-    title: "Aging Report",
+    title: REPORT_TITLES.aging_report,
     description: "Overdue balances by 1–30, 31–60, 61–90, and 90+ buckets.",
     category: "portfolio",
     icon: Clock,
@@ -249,7 +267,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "portfolio_by_product",
-    title: "Loan Portfolio by Product",
+    title: REPORT_TITLES.portfolio_by_product,
     description: "Released, outstanding, and risk for each loan product.",
     category: "portfolio",
     icon: Layers,
@@ -259,7 +277,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "due_past_due_list",
-    title: "Due / Past Due List",
+    title: REPORT_TITLES.due_past_due_list,
     description: "Schedules due or overdue as of the selected period.",
     category: "portfolio",
     icon: AlertTriangle,
@@ -269,8 +287,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "borrower_report",
-    title: "Borrower Report",
-    description: "Active, new, and repeat borrower counts.",
+    title: REPORT_TITLES.borrower_report,
+    description: "Active, new, and repeat member counts.",
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
@@ -281,16 +299,16 @@ export const REPORT_CATALOG: ReportDefinition[] = [
         ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
       };
       // Independent reads: either failing leaves the other's section intact.
-      const [summary, released] = await Promise.all([
+      const [summary, members] = await Promise.all([
         reportService.borrowers(params).catch(() => null),
-        reportService.borrowersReleased({ ...params, ...listParams }).catch(() => null),
+        api.getRaw(MEMBER_LIST_ENDPOINT, { params: { ...params, ...listParams } }).catch(() => null),
       ]);
-      return buildBorrowerDoc(summary, ctx.range, released);
+      return buildBorrowerDoc(summary, ctx.range, members);
     },
   },
   {
     id: "disbursement_report",
-    title: "Disbursement Summary",
+    title: REPORT_TITLES.disbursement_report,
     description: "Totals for releases during the period.",
     category: "disbursement",
     icon: Banknote,
@@ -312,7 +330,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "releases_list",
-    title: "Releases List",
+    title: REPORT_TITLES.releases_list,
     description: "Every loan released in the period with key terms.",
     category: "disbursement",
     icon: ListChecks,
@@ -322,12 +340,13 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "statement_of_account",
-    title: "Statement of Account",
+    title: REPORT_TITLES.statement_of_account,
     description: "Full schedule, payments, and balance for one loan.",
     category: "member",
     icon: FileText,
     accent: ACCENT.emerald,
     subject: "loan",
+    noDateRange: true,
     build: subjectReportBuilder(
       (id) => reportService.statementOfAccount(id),
       buildStatementOfAccountDoc
@@ -335,8 +354,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "subsidiary_ledger",
-    title: "Subsidiary Ledger",
-    description: "Every loan and payment for one borrower.",
+    title: REPORT_TITLES.subsidiary_ledger,
+    description: "Every loan and payment for one member.",
     category: "member",
     icon: BookOpen,
     accent: ACCENT.purple,

@@ -12,7 +12,9 @@
  * alongside them.
  */
 
+import { knownPaymentMethodName } from "@/constants/payment-methods";
 import { amountInWords } from "../amount-in-words";
+import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
@@ -33,7 +35,12 @@ import {
   type PrintableBuildOptions,
 } from "./shared";
 
-const COPIES = ["Borrower's Copy", "File Copy"];
+const COPIES = ["Member's Copy", "File Copy"];
+
+/** A payment method as the app labels it ("GCash", "Bank Transfer", "Auto-Pay"). */
+function methodLabel(method: unknown): string | null {
+  return knownPaymentMethodName(method) ?? humanize(method);
+}
 
 export function buildOfficialReceiptDoc(
   raw: unknown,
@@ -154,10 +161,8 @@ export function buildOfficialReceiptDoc(
         columns: 2,
         items: presentFields([
           dateTimeField("Voided on", pick(payment, ["voided_at"])),
-          field(
-            "Voided by",
-            personName(payment, "voided_by_user", ["voided_by"])
-          ),
+          // `voided_by` is the user's id, so only the loaded user names anyone.
+          field("Voided by", personName(payment, "voided_by_user")),
           field("Reason", pick(payment, ["void_reason"])),
         ]),
       }
@@ -176,13 +181,14 @@ export function buildOfficialReceiptDoc(
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
-          pick(borrower, ["borrower_code", "member_no", "code"])
+          pick(payment, ["borrower_code"]) ??
+            pick(borrower, ["borrower_code", "member_no", "code"])
         ),
         field(
           "Loan Product",
           pick(payment, ["loan_product_name"]) ?? pick(loan, ["loan_product_name"])
         ),
-        field("Payment Method", humanize(pick(payment, ["method"]))),
+        field("Payment Method", methodLabel(pick(payment, ["method"]))),
         field("Reference No.", pick(payment, ["reference_number"])),
       ]),
     },
@@ -210,7 +216,7 @@ export function buildOfficialReceiptDoc(
         field("Principal balance after payment", currencyOrDash(balanceAfter)),
         (insurance ?? 0) > 0 ? field("Insurance premium collected", formatCurrency(insurance ?? 0)) : null,
         dateField("Next due date", pick(payment, ["next_due_date"])),
-        field("Remarks", pick(payment, ["remarks"])),
+        field("Remarks", readablePaymentRemarks(pick<string>(payment, ["remarks"]))),
       ]),
     },
     {

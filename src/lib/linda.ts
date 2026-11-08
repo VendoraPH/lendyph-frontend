@@ -35,7 +35,7 @@ export const LINDA_MAX_LINK_LENGTH = 2048;
 
 export const LINDA_SUGGESTED_QUESTIONS = [
   "How much have we collected this month?",
-  "Which borrowers currently have overdue payments?",
+  "Which members currently have overdue payments?",
   "How many active loans do we have?",
   "How much have we disbursed this month?",
   "Give me a summary of our lending operation this month.",

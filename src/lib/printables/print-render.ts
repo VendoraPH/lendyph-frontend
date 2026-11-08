@@ -194,7 +194,7 @@ function renderTableBlock(block: Extract<PrintBlock, { kind: "table" }>): string
 
   return (
     `<div class="section">${title}` +
-    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>` +
+    `<table${block.compact ? ' class="compact"' : ""}><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>` +
     `</div>`
   );
 }

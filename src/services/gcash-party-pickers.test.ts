@@ -351,22 +351,38 @@ describe("GCash New Transaction — server search as the teller types", () => {
     }
   });
 
-  test("an empty search sends no search and drains both lists whole", async () => {
+  test("an empty search asks for one page of members, and drains the walk-ins", async () => {
     requests = [];
     const { members, nonMembers } = await loadGCashPartyLists({
       search: "",
       canListMembers: true,
     });
     assert.equal(nonMembers.options.length, NON_MEMBER_COUNT);
-    assert.equal(
-      members.options.length,
-      seedMembers().filter((r) => r.status === "active").length,
-    );
-    assert.equal(members.shortfall, null);
     assert.equal(nonMembers.shortfall, null);
+
+    const memberCount = seedMembers().filter((r) => r.status === "active").length;
+    assert.equal(memberRequests().length, 1);
+    assert.equal(memberRequests()[0].query.per_page, "25");
+    assert.equal(members.options.length, 25);
+    assert.equal(members.shortfall, null, "a page of a search is not a list cut short");
+    assert.equal(members.status, `Showing 25 of ${memberCount}. Type a name to narrow.`);
     for (const r of [...walkInRequests(), ...memberRequests()]) {
       assert.equal("search" in r.query, false);
     }
+  });
+
+  test("a search that fits the page has nothing to add", async () => {
+    const { members } = await loadGCashPartyLists({
+      search: "Maria",
+      canListMembers: true,
+    });
+    assert.equal(members.status, "");
+  });
+
+  test("what was typed reaches the server with its spaces tidied", async () => {
+    requests = [];
+    await loadGCashPartyLists({ search: "  Maria   Dela  ", canListMembers: true });
+    assert.equal(memberRequests()[0].query.search, "Maria Dela");
   });
 
   test("without borrowers:view only the walk-ins are asked for", async () => {

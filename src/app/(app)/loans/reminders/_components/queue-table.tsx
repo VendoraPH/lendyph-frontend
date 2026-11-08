@@ -23,7 +23,7 @@ export function QueueTable({ items }: { items: ReminderQueueItem[] }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Borrower</TableHead>
+            <TableHead>Member</TableHead>
             <TableHead>Loan</TableHead>
             <TableHead>Installment</TableHead>
             <TableHead className="text-right">Amount due</TableHead>

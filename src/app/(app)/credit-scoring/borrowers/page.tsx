@@ -53,8 +53,8 @@ function BorrowerScoresContent() {
   return (
     <div className="space-y-6">
       <CreditScoringPageHeader
-        title="Borrower Scores"
-        description="Every borrower's current Lendy Credit Score and risk level."
+        title="Member Scores"
+        description="Every member's current Lendy Credit Score and risk level."
       />
 
       <FilterBar>
@@ -64,17 +64,17 @@ function BorrowerScoresContent() {
 
       <DataState
         resource={resource}
-        summary="The borrower scores table will list every scored borrower with their current score, risk level, and trend once the backend is connected."
+        summary="The member scores table will list every scored member with their current score, risk level, and trend once the backend is connected."
         endpoints={["GET /credit-scoring/borrowers"]}
         isEmpty={(rows) => rows.length === 0}
-        emptyMessage="No borrowers match this filter."
+        emptyMessage="No members match this filter."
       >
         {(rows) => (
           <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Borrower</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Risk Level</TableHead>
@@ -110,7 +110,7 @@ function BorrowerScoresContent() {
 
 export default function BorrowerScoresPage() {
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Borrower Scores">
+    <RouteGuard permission="credit_scoring:view" pageName="Member Scores">
       <BorrowerScoresContent />
     </RouteGuard>
   );

@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, ReceiptText, Ban, Loader2 } from "lucide-react";
 import { usePrintables } from "@/hooks";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import { repaymentService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
+import { readablePaymentRemarks } from "@/lib/printables/legacy-remarks";
+import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +43,7 @@ interface ReceiptData {
   next_due_date: string;
   collected_by: string;
   remarks: string;
+  voided_by: string;
   status: "completed" | "voided" | "pending";
 }
 
@@ -120,7 +124,8 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     new_balance: (p.new_balance as number) || 0,
     next_due_date: (p.next_due_date as string) || "—",
     collected_by: (p.collected_by as string) || "—",
-    remarks: p.remarks || "",
+    remarks: readablePaymentRemarks(p.remarks),
+    voided_by: voidedByName(p),
     status: p.status,
   };
 }
@@ -204,8 +209,9 @@ function PaymentReceiptContent({
       setShowVoidConfirm(false);
       setVoidReason("");
       fetchReceipt();
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     } finally {
       setVoiding(false);
     }
@@ -258,14 +264,16 @@ function PaymentReceiptContent({
 
         <div className="flex gap-2">
           {receipt.status === "completed" && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip="Your role doesn't have permission to void payments"
               variant="destructive"
               size="sm"
               onClick={() => setShowVoidConfirm(true)}
             >
               <Ban className="mr-2 h-4 w-4" />
               Void Payment
-            </Button>
+            </PermissionButton>
           )}
           {/* Both buttons open the same document, and that is deliberate: an
               Official Receipt is issued under the payment's own receipt number,
@@ -380,6 +388,9 @@ function PaymentReceiptContent({
                   <p className="text-xs text-destructive/80">
                     This receipt has been voided
                   </p>
+                  <p className="text-xs text-destructive/80">
+                    Voided by {receipt.voided_by}
+                  </p>
                 </div>
               )}
 
@@ -387,7 +398,7 @@ function PaymentReceiptContent({
 
               {/* Borrower information */}
               <div className="space-y-2">
-                <SectionHeading>Borrower Information</SectionHeading>
+                <SectionHeading>Member Information</SectionHeading>
                 <div className="space-y-1.5">
                   <ReceiptRow label="Name" value={receipt.borrower_name} />
                   <ReceiptRow

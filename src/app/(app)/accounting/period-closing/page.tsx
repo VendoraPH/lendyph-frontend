@@ -30,6 +30,7 @@ import type { AccountingPeriod } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
+import { periodStatusLabel } from "../_lib/display-labels";
 
 function PeriodClosingContent() {
   const [confirming, setConfirming] = useState<AccountingPeriod | null>(null);
@@ -138,7 +139,7 @@ function PeriodClosingContent() {
                           ) : (
                             <Lock className="mr-1 h-3 w-3" />
                           )}
-                          {period.status}
+                          {periodStatusLabel(period.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">

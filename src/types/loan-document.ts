@@ -13,8 +13,8 @@
  * ever printed came from an inline reconstruction of the loan object instead.
  *
  * Fields are typed as nullable where the underlying column is nullable, so a
- * consumer has to decide what to print for a member with no e-mail address
- * rather than interpolating `null` onto a signed document.
+ * consumer has to decide what to print for a member with no address rather than
+ * interpolating `null` onto a signed document.
  */
 
 import type { LoanDeduction } from "./loan";
@@ -23,11 +23,6 @@ import type { LoanDeduction } from "./loan";
 export interface LoanDocumentBorrower {
   borrower_code: string | null;
   full_name: string;
-  address: string | null;
-  contact_number: string | null;
-  email: string | null;
-  employer_or_business: string | null;
-  monthly_income: number;
 }
 
 /** One period of the amortization table carried by the disclosure. */
@@ -140,11 +135,9 @@ export interface LoanDisclosureRates {
   effective_rate_annual: number | null;
 }
 
-/** Co-maker as the disclosure carries it — name and contact only. */
+/** Co-maker as the disclosure carries it: the name only. */
 export interface LoanDisclosureCoMaker {
   full_name: string;
-  address: string | null;
-  contact_number: string | null;
 }
 
 export interface LoanDisclosure {
@@ -172,11 +165,9 @@ export interface LoanDisclosure {
 // Promissory Note — GET /loans/{id}/promissory-note
 // ---------------------------------------------------------------------------
 
-/** The note repeats the disclosure's borrower block and adds civil details. */
+/** The note repeats the disclosure's borrower block and adds the address. */
 export interface LoanPromissoryNoteBorrower extends LoanDocumentBorrower {
-  birthdate: string | null;
-  civil_status: string | null;
-  gender: string | null;
+  address: string | null;
 }
 
 /**
@@ -187,10 +178,6 @@ export interface LoanPromissoryNoteCoMaker {
   co_maker_code: string | null;
   full_name: string;
   address: string | null;
-  contact_number: string | null;
-  occupation: string | null;
-  employer: string | null;
-  monthly_income: number;
   relationship_to_borrower: string | null;
 }
 

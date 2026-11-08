@@ -24,6 +24,7 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import { orgDetailsLine, reportScopeLine } from "./types";
 
 // Hex without # — same palette as preview/excel/pdf so the document
 // reads as a sibling artifact, not a different format.
@@ -94,6 +95,7 @@ function decodeLogo(
 
 function buildHeaderTable(report: ReportDocument): Table {
   const logo = decodeLogo(report.meta.logoData);
+  const orgDetails = orgDetailsLine(report.meta);
 
   const brandCell = new TableCell({
     shading: { type: ShadingType.SOLID, fill: BRAND_ORANGE, color: "auto" },
@@ -122,6 +124,13 @@ function buildHeaderTable(report: ReportDocument): Table {
           }),
         ],
       }),
+      ...(orgDetails
+        ? [
+            new Paragraph({
+              children: [new TextRun({ text: orgDetails, color: "FFFFFF", size: 16 })],
+            }),
+          ]
+        : []),
       new Paragraph({
         children: [
           new TextRun({
@@ -196,7 +205,7 @@ function buildHeaderTable(report: ReportDocument): Table {
       children: paragraphs.length ? paragraphs : [new Paragraph({ children: [] })],
     });
 
-  const leftMeta = [metaLine(`Period: ${report.meta.period ?? "—"}`, AlignmentType.LEFT)];
+  const leftMeta = [metaLine(reportScopeLine(report.meta), AlignmentType.LEFT)];
   if (report.meta.branchLabel) {
     leftMeta.push(metaLine(`Branch: ${report.meta.branchLabel}`, AlignmentType.LEFT));
   }
@@ -305,6 +314,9 @@ function buildKpiTable(section: ReportSection): Table | null {
 function buildDataTable(section: ReportSection): Table | null {
   if (section.kind !== "table" || section.rows.length === 0) return null;
 
+  // In half-points, as the docx library takes it.
+  const textSize = section.compact ? 15 : 18;
+
   const headerCells = section.columns.map(
     (col) =>
       new TableCell({
@@ -322,7 +334,7 @@ function buildDataTable(section: ReportSection): Table | null {
                 text: col.header,
                 bold: true,
                 color: FOREGROUND,
-                size: 18,
+                size: textSize,
               }),
             ],
           }),
@@ -345,8 +357,8 @@ function buildDataTable(section: ReportSection): Table | null {
                   children: [
                     new TextRun({
                       text: formatCell(row, col),
-                      size: 18,
-                      color: FOREGROUND,
+                      size: textSize,
+                      color: row.voided === true ? MUTED : FOREGROUND,
                     }),
                   ],
                 }),
@@ -380,7 +392,7 @@ function buildDataTable(section: ReportSection): Table | null {
                   text: t ? t.value : isLabel ? "Total" : "",
                   bold: true,
                   color: FOREGROUND,
-                  size: 18,
+                  size: textSize,
                 }),
               ],
             }),
@@ -464,6 +476,14 @@ function buildSignatureTable(section: ReportSection): Table | null {
         new Paragraph({
           children: [new TextRun({ text: role, color: MUTED, size: 16 })],
         }),
+        // Blank lines under the role, such as the printed name and the date.
+        ...(section.lines ?? []).map(
+          (line) =>
+            new Paragraph({
+              spacing: { before: 120 },
+              children: [new TextRun({ text: `${line}: ______________`, color: MUTED, size: 16 })],
+            })
+        ),
       ],
     });
 
