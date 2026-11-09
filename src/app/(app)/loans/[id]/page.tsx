@@ -31,8 +31,9 @@ import {
 } from "@/lib/insurance-premium";
 import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
-import { sortWorkflowEvents, workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
-import { revisionRoundView, sentBackEvents } from "./_lib/approval-rounds";
+import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import { chainEvents, revisionRoundView, withChainEvents } from "./_lib/approval-rounds";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
 import {
   SEND_BACK_REASON_MAX,
   canSendBackApproved,
@@ -40,7 +41,7 @@ import {
   sendBackFailureAction,
   sendBackReasonError,
 } from "./_lib/send-back-approved";
-import type { LoanApprovalRound } from "@/types/loan-approval";
+import type { LoanApprovalRound, LoanApprovalStep as ChainStep } from "@/types/loan-approval";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -568,10 +569,18 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
 };
 
-function WorkflowHistory({ loan, rounds }: { loan: Loan; rounds: LoanApprovalRound[] }) {
-  // The loan's own milestones, plus each round the chain sent back (a release
-  // step included, when an approved restructure went back before release).
-  const events = sortWorkflowEvents([...workflowEvents(loan), ...sentBackEvents(rounds)], loan.created_at);
+function WorkflowHistory({
+  loan,
+  rounds,
+  steps,
+}: {
+  loan: Loan;
+  rounds: LoanApprovalRound[];
+  steps: ChainStep[];
+}) {
+  // The loan's own milestones, with every round's sign-offs, send-back and
+  // re-submission from the chain (the loan keeps only its latest approval).
+  const events = withChainEvents(workflowEvents(loan), chainEvents(rounds, steps), loan.created_at);
 
   return (
     <div className="space-y-4">
@@ -3024,23 +3033,36 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs text-muted-foreground">Contract Total</p>
                 <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                <p className="text-sm font-semibold">
-                  {cardPreview
-                    ? cardPreview.status === "loaded"
-                      ? formatCurrencyExact(cardPreview.preview.net_proceeds)
-                      : "—"
-                    : loan.net_proceeds != null
-                      ? formatCurrency(loan.net_proceeds)
-                      : "N/A"}
-                </p>
-                {cardEstimated && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Estimated until release
-                  </p>
-                )}
-              </div>
+              {/* A restructure pays nothing out: what is collected from the
+                  member and Paid out, in place of Net Proceeds. Each figure
+                  is the server's (the preview before release, the loan's
+                  own after), a dash when it sent none. */}
+              {proceedsFigures(!!loan.is_restructure, {
+                totalDeductions: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.total_deductions
+                    : null
+                  : loan.total_deductions,
+                netProceeds: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.net_proceeds
+                    : null
+                  : loan.net_proceeds,
+                restructure:
+                  cardSource === "release-preview" && releasePreview.status === "loaded"
+                    ? releasePreview.preview.restructure
+                    : null,
+              }).map((figure) => (
+                <div key={figure.label}>
+                  <p className="text-xs text-muted-foreground">{figure.label}</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
+                  {cardEstimated && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Estimated until release
+                    </p>
+                  )}
+                </div>
+              ))}
               {/* Insurance premium left unpaid at release: part of the
                   server's Total Payable, collected before anything else. */}
               {insuranceOwed !== null && (
@@ -3298,7 +3320,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </CardHeader>
             <CollapsibleContent>
               <CardContent>
-                <WorkflowHistory loan={loan} rounds={approvalRounds} />
+                <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -3465,52 +3487,57 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
                   );
 
+                // A restructured loan with rows left (paid ones) still shows
+                // the two write-off figures above them.
                 const scheduleTable = scheduleNotice ?? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
-                            <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                  <div className="space-y-3">
+                    <RestructuredBalanceFigures loan={loan} />
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12 text-center">#</TableHead>
+                            <TableHead>Due Date</TableHead>
+                            <TableHead className="text-right">Principal Due</TableHead>
+                            <TableHead className="text-right">Interest</TableHead>
+                            {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                            <TableHead className="text-right">Total Payment</TableHead>
+                            <TableHead className="text-right">Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {storedSchedule.map((row) => (
+                            <TableRow key={row.period}>
+                              <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
+                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                              {hasScb && (
+                                <TableCell className="text-right text-brand-orange">
+                                  {currencyOrDash(row.shareCapitalBuildUp)}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
                             {hasScb && (
-                              <TableCell className="text-right text-brand-orange">
-                                {currencyOrDash(row.shareCapitalBuildUp)}
+                              <TableCell className="text-right font-semibold text-brand-orange">
+                                {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                               </TableCell>
                             )}
-                            <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
+                            <TableCell />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
-                          {hasScb && (
-                            <TableCell className="text-right font-semibold text-brand-orange">
-                              {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
+                        </TableFooter>
+                      </Table>
+                    </div>
                   </div>
                 );
 

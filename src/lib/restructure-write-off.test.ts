@@ -58,6 +58,16 @@ test("a figure the server didn't send is null, shown as a dash; zero is ₱0.00"
   assert.equal(writeOffFigureText(5000.01), "₱5,000.01");
 });
 
+test("the Schedule tab shows both figures above paid rows too, on every restructured loan", () => {
+  const notice = readFileSync(
+    join(process.cwd(), "src/app/(app)/loans/[id]/_components/schedule-notice.tsx"),
+    "utf8",
+  );
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.ok(!notice.includes('loan.status !== "restructured" || loan.restructured_balance == null'));
+  assert.equal((page.match(/<RestructuredBalanceFigures loan=\{loan\} \/>/g) ?? []).length, 2);
+});
+
 test("the info card and the Balance tab show both labels, and no bare Written Off", () => {
   const notice = readFileSync(
     join(process.cwd(), "src/app/(app)/loans/[id]/_components/schedule-notice.tsx"),

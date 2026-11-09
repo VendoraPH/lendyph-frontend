@@ -166,16 +166,17 @@ export function ScheduleNotice({ load, loan, onRetry }: ScheduleNoticeProps) {
 
 /**
  * What a restructure's release recorded on the loan it closed, in the style of
- * the Balances tab's summary strip. Nothing for any other loan.
+ * the Balances tab's summary strip: on every restructured loan, paid rows or
+ * not, each figure the server's or a dash. Nothing for any other loan.
  */
 export function RestructuredBalanceFigures({ loan }: { loan: Loan }) {
-  if (loan.status !== "restructured" || loan.restructured_balance == null) return null;
+  if (loan.status !== "restructured") return null;
   return (
     <div className="flex flex-wrap gap-4 px-1">
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Restructured Balance</p>
         <p className="text-base font-bold tabular-nums">
-          {formatCurrencyExact(loan.restructured_balance)}
+          {writeOffFigureText(loan.restructured_balance ?? null)}
         </p>
       </div>
       {restructureWriteOffFigures(loan).map((f) => (

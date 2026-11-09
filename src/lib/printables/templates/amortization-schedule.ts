@@ -53,14 +53,11 @@ function normalizeRow(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * Why the schedule table is empty. A loan closed by a restructure has had its
- * unpaid periods deleted, so it has no schedule left rather than none yet, and
- * the member holding this page needs to know where the balance went.
+ * Where a restructured loan's balance went, with the forgiveness approved and
+ * the principal the books wrote off; null for any other loan.
  */
-function emptyScheduleText(loan: Record<string, unknown> | null): string {
-  if (pick(loan, ["status"]) !== "restructured") {
-    return "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released.";
-  }
+function restructuredText(loan: Record<string, unknown> | null): string | null {
+  if (pick(loan, ["status"]) !== "restructured") return null;
   const restructuredAt = pick(loan, ["restructured_at"]);
   const balance = pickNumber(loan, ["restructured_balance"]);
   const restructuredInto = asArray(pick(loan, ["restructured_into"]));
@@ -82,9 +79,20 @@ function emptyScheduleText(loan: Record<string, unknown> | null): string {
     (balance !== null ? ` of ${formatCurrency(balance)}` : "") +
     (successorNumber ? ` moved to loan ${String(successorNumber)}` : " moved to a new loan") +
     "." +
-    writeOffs +
-    " No instalments remain on it."
+    writeOffs
   );
+}
+
+/**
+ * Why the schedule table is empty. A loan closed by a restructure has had its
+ * unpaid periods deleted, so it has no schedule left rather than none yet, and
+ * the member holding this page needs to know where the balance went.
+ */
+function emptyScheduleText(loan: Record<string, unknown> | null): string {
+  const restructured = restructuredText(loan);
+  return restructured === null
+    ? "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released."
+    : `${restructured} No instalments remain on it.`;
 }
 
 export function buildAmortizationScheduleDoc(
@@ -109,6 +117,10 @@ export function buildAmortizationScheduleDoc(
   // "period(s)" — two different units for one loan, on one page. Both now come
   // from the loan's own frequency.
   const rawFrequency = pick(loan, ["frequency", "payment_frequency"]);
+
+  // A restructured loan with rows left (paid ones) still says where its
+  // balance went, with both write-off figures, under the table.
+  const restructuredNote = rows.length > 0 ? restructuredText(loan) : null;
 
   const blocks: PrintBlock[] = [
     {
@@ -172,6 +184,7 @@ export function buildAmortizationScheduleDoc(
           : undefined,
       emptyText: emptyScheduleText(loan),
     },
+    ...(restructuredNote !== null ? [{ kind: "note" as const, text: restructuredNote }] : []),
     {
       kind: "note",
       text:

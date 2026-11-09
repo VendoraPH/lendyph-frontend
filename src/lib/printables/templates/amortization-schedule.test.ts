@@ -198,6 +198,29 @@ test("amortization schedule: a restructured loan with no released successor name
   );
 });
 
+test("amortization schedule: a restructured loan with paid rows still prints both figures", () => {
+  const doc = buildAmortizationScheduleDoc({
+    ...LOAN,
+    status: "restructured",
+    restructured_at: "2026-09-20T02:30:00.000000Z",
+    restructured_balance: 33850.5,
+    write_off_amount: 850.5,
+    restructured_into: [
+      { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20", restructure_written_off_principal: 400.25 },
+    ],
+  });
+  const notes = doc.blocks.filter((b): b is Extract<typeof b, { kind: "note" }> => b.kind === "note").map((b) => b.text);
+  const restructured = notes.find((text) => text.startsWith("This loan was restructured"));
+  assert.ok(restructured, "a note says where the balance went");
+  assert.match(restructured, /Forgiven \(approved\): ₱850\.50\./);
+  assert.match(restructured, /Principal written off in the books: ₱400\.25\./);
+});
+
+test("amortization schedule: an ordinary loan with rows prints no restructure note", () => {
+  const doc = buildAmortizationScheduleDoc(LOAN);
+  assert.ok(!doc.blocks.some((b) => b.kind === "note" && b.text.startsWith("This loan was restructured")));
+});
+
 test("amortization schedule: a null payload still prints a blank schedule form", () => {
   const doc = buildAmortizationScheduleDoc(null);
   assertPrintableShape(doc, "amortization_schedule");
