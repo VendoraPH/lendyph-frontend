@@ -20,3 +20,8 @@ test("a decision without a reason or remarks shows neither", () => {
 test("a history row without a reason shows an empty cell", () => {
   assert.match(history, /<TableCell>\{row\.reason \?\? ""\}<\/TableCell>/);
 });
+
+test("a loan's list and a member's list share one row renderer", () => {
+  assert.match(list, /export function DecisionItems\(\{ decisions \}: \{ decisions: CreditDecision\[\] \}\)/);
+  assert.match(list, /<DecisionItems decisions=\{decisions\} \/>/);
+});

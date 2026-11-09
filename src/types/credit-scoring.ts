@@ -188,6 +188,11 @@ export interface PolicyFlag {
   loan_id: number | null;
 }
 
+/** A member's decisions, newest first. A summary caller's leave out reason and remarks. */
+export interface CreditDecisionPage extends CreditScoringPage<CreditDecision> {
+  details_hidden: boolean;
+}
+
 export type CreditDecisionValue = "approve" | "decline" | "refer" | "hold";
 
 export interface CreditDecision {
@@ -288,6 +293,8 @@ export interface BorrowerScoreRow {
 }
 
 export interface BorrowerScoreFilters {
+  /** A name or member code, matched on the server (at most 100 characters). */
+  search?: string;
   branch_id?: number;
   risk_level?: RiskLevel;
   min_score?: number;

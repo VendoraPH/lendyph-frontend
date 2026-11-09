@@ -14,12 +14,14 @@ import { CapacitySection } from "../../_components/capacity-section";
 import { PolicyFlagAlert } from "../../_components/policy-flag-alert";
 import { ScoreHistoryChart } from "./_components/score-history-chart";
 import { MemberScoreHistory } from "./_components/member-score-history";
+import { MemberDecisions } from "./_components/member-decisions";
 import { ManualOverrideDialog } from "./_components/manual-override-dialog";
 import { LindaChatPlaceholder } from "./_components/linda-chat-placeholder";
 import { CicPlaceholder } from "./_components/cic-placeholder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SCORE_TYPE_LABELS } from "@/lib/credit-scoring/labels";
+import { env } from "@/config/env";
 import { isDetailsHidden } from "@/lib/credit-scoring/score-state";
 import type { CreditScore, PolicyFlagList } from "@/types/credit-scoring";
 
@@ -31,6 +33,7 @@ function BorrowerCreditProfileContent({
   const { id } = use(params);
   const borrowerId = Number(id);
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [decisionsVersion, setDecisionsVersion] = useState(0);
 
   const profileFetcher = useCallback(
     () => creditScoringService.getBorrowerCreditProfile(borrowerId),
@@ -97,10 +100,11 @@ function BorrowerCreditProfileContent({
               )}
 
               <ScoreHistoryChart borrowerId={borrowerId} />
+              <MemberDecisions key={decisionsVersion} borrowerId={borrowerId} />
               <MemberScoreHistory borrowerId={borrowerId} />
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <LindaChatPlaceholder />
+                {env.features.linda && <LindaChatPlaceholder />}
                 <CicPlaceholder />
               </div>
 
@@ -110,7 +114,10 @@ function BorrowerCreditProfileContent({
                   onOpenChange={setOverrideOpen}
                   borrowerId={borrowerId}
                   creditScoreId={profile.id}
-                  onDecisionRecorded={() => profileResource.refetch()}
+                  onDecisionRecorded={() => {
+                    profileResource.refetch();
+                    setDecisionsVersion((v) => v + 1);
+                  }}
                 />
               )}
             </>

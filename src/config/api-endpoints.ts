@@ -424,6 +424,7 @@ export const API_ENDPOINTS = {
     BORROWERS_LIST: "/credit-scoring/borrowers",
     BORROWER_PROFILE: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}`,
     BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
+    BORROWER_DECISIONS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/decisions`,
     SCORE_HISTORY: "/credit-scoring/score-history",
     RISK_MONITORING: "/credit-scoring/risk-monitoring",
     SCORECARD_CONFIG: "/credit-scoring/scorecard-config",

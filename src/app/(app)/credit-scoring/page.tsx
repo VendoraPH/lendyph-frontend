@@ -12,6 +12,7 @@ import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
 import { formatDateTime } from "@/lib/format";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import { averageScoreText, rowScoreView } from "@/lib/credit-scoring/score-state";
+import { riskLegend } from "@/lib/credit-scoring/risk-level";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
@@ -82,6 +83,21 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
               </ResponsiveContainer>
             )}
           </div>
+          <ul aria-label="Risk distribution legend" className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            {riskLegend(data.risk_distribution).map((item) => (
+              <li key={item.level} className="flex items-center justify-between gap-3 rounded-md border px-3 py-1.5">
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: CHART_HEX[item.level] }}
+                  />
+                  {item.label}
+                </span>
+                <span className="font-medium tabular-nums">{item.count}</span>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 

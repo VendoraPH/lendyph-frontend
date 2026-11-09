@@ -231,3 +231,26 @@ test("policy flags read the nested list and its details_hidden; a bare list is t
   respond = () => ({ rows: [] });
   await assert.rejects(creditScoringService.listPolicyFlags(7));
 });
+
+test("the members list sends the search to the server", async () => {
+  respond = (r) => paginator([], r.query);
+  await creditScoringService.listBorrowerScores({ search: "Ana Cruz" }, { page: 1 });
+  assert.equal(requests[0].query.search, "Ana Cruz");
+  assert.equal(requests[0].query.per_page, "25");
+});
+
+test("a member's decisions page on their own route, with the server's details_hidden", async () => {
+  respond = (r) => ({ ...paginator(rows(30), r.query), details_hidden: true });
+  const page = await creditScoringService.listBorrowerDecisions(7, { page: 2 });
+  assert.equal(requests[0].path, "/credit-scoring/borrowers/7/decisions");
+  assert.equal(requests[0].query.page, "2");
+  assert.equal(requests[0].query.per_page, "25");
+  assert.equal(page.data.length, 5);
+  assert.equal(page.total, 30);
+  assert.equal(page.details_hidden, true);
+
+  respond = (r) => paginator(rows(1), r.query);
+  assert.equal((await creditScoringService.listBorrowerDecisions(7)).details_hidden, false);
+  respond = () => ({ data: [] });
+  await assert.rejects(creditScoringService.listBorrowerDecisions(7));
+});

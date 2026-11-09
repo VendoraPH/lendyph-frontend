@@ -13,6 +13,7 @@ import type {
   BorrowerScoreRow,
   CreateCreditDecisionData,
   CreditDecision,
+  CreditDecisionPage,
   CreditScore,
   CreditScoreHistoryEntry,
   CreditScoringDashboardSummary,
@@ -131,6 +132,14 @@ export const creditScoringService = {
    * `{ data, details_hidden }`; a bare list (an older API) reads as not
    * hidden. An unrecognised shape throws, as every list does.
    */
+  listBorrowerDecisions: async (borrowerId: number, paging: PageParams = {}): Promise<CreditDecisionPage> => {
+    const res = await api.get(API_ENDPOINTS.CREDIT_SCORING.BORROWER_DECISIONS(borrowerId), {
+      params: pageParams(paging),
+    });
+    const hidden = (res as { details_hidden?: unknown } | null)?.details_hidden === true;
+    return { ...unwrapPage<CreditDecision>(res), details_hidden: hidden };
+  },
+
   listPolicyFlags: async (borrowerId: number): Promise<PolicyFlagList> => {
     const res = await api.get(API_ENDPOINTS.CREDIT_SCORING.POLICY_FLAGS(borrowerId));
     const hidden = !Array.isArray(res) && (res as { details_hidden?: unknown } | null)?.details_hidden === true;

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, Minus, Search } from "lucide-react";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import { useApiResource, usePermission } from "@/hooks";
+import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import { creditScoringService } from "@/services";
 import { CREDIT_SCORING_PER_PAGE } from "@/services/credit-scoring.service";
 import { CREDIT_SCORING_PER_PAGE_OPTIONS } from "@/lib/credit-scoring/paging";
@@ -31,6 +32,9 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import { borrowerScoreFilters, yesNoOrDash } from "@/lib/credit-scoring/loan-facts";
+import { MEMBER_SEARCH_MAX, memberSearchParam } from "@/lib/credit-scoring/member-search";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { BorrowerScoreFilters, BorrowerScoreRow, CreditScoringPage } from "@/types/credit-scoring";
 
 const TREND_LABELS = { up: "Score went up", down: "Score went down", flat: "No change" } as const;
@@ -46,18 +50,30 @@ function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
 function BorrowerScoresContent() {
   const [branch, setBranch] = useState(ALL_BRANCHES);
   const [riskLevel, setRiskLevel] = useState(ALL_RISK_LEVELS);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
   const { can } = usePermission();
   const canViewLoans = can("loans:view");
 
+  // The search goes to the server once typing settles, from page one.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const fetcher = useCallback((): Promise<CreditScoringPage<BorrowerScoreRow>> => {
     const filters: BorrowerScoreFilters = {
       branch_id: branchParam(branch),
       risk_level: riskLevelParam(riskLevel),
+      search: memberSearchParam(search),
     };
     return creditScoringService.listBorrowerScores(borrowerScoreFilters(filters, canViewLoans), { page, per_page: perPage });
-  }, [branch, riskLevel, page, perPage, canViewLoans]);
+  }, [branch, riskLevel, search, page, perPage, canViewLoans]);
 
   const resource = useApiResource<CreditScoringPage<BorrowerScoreRow>>(fetcher);
 
@@ -69,6 +85,23 @@ function BorrowerScoresContent() {
       />
 
       <FilterBar>
+        <div className="space-y-1.5">
+          <Label htmlFor="member-score-search" className="text-xs text-muted-foreground">
+            Search
+          </Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="member-score-search"
+              type="search"
+              value={searchInput}
+              maxLength={MEMBER_SEARCH_MAX}
+              placeholder="Name or member code"
+              className="w-[240px] pl-9"
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
+        </div>
         <BranchFilter
           value={branch}
           onChange={(v) => {
@@ -90,7 +123,7 @@ function BorrowerScoresContent() {
         summary="The member scores table lists every scored member with their current score, risk level and trend."
         endpoints={["GET /credit-scoring/borrowers"]}
         isEmpty={(res) => res.total === 0}
-        emptyMessage="No members match this filter."
+        emptyMessage="No members match this search or filter."
       >
         {(res) => (
           <div className="rounded-lg border p-2">

@@ -17,3 +17,13 @@ test("a summary-only profile skips the flags and capacity sections", () => {
   assert.match(page, /<ScoreDetail score=\{profile\} detailsHidden=\{summaryOnly\} \/>/);
   assert.match(page, /\{!summaryOnly && profile\.status !== "not_scored" && \(/);
 });
+
+test("the Ask Linda panel shows only with the Linda flag on", () => {
+  assert.match(page, /\{env\.features\.linda && <LindaChatPlaceholder \/>\}/);
+  assert.match(page, /import \{ env \} from "@\/config\/env";/);
+});
+
+test("the profile lists the member's decisions, reloaded after one is recorded", () => {
+  assert.match(page, /<MemberDecisions key=\{decisionsVersion\} borrowerId=\{borrowerId\} \/>/);
+  assert.match(page, /setDecisionsVersion\(\(v\) => v \+ 1\)/);
+});

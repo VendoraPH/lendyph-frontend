@@ -19,3 +19,10 @@ test("the list's filters pass the loans:view gate before they're sent", () => {
   assert.match(page, /listBorrowerScores\(borrowerScoreFilters\(filters, canViewLoans\), \{ page, per_page: perPage \}\)/);
   assert.match(page, /const canViewLoans = can\("loans:view"\)/);
 });
+
+test("the search box asks the server once typing settles, from page one, never filtering rows itself", () => {
+  assert.match(page, /<Input\s+id="member-score-search"\s+type="search"/);
+  assert.match(page, /setSearch\(searchInput\);\s*setPage\(1\);\s*\}, SEARCH_DEBOUNCE_MS\)/);
+  assert.match(page, /search: memberSearchParam\(search\),/);
+  assert.doesNotMatch(page, /res\.data\.filter\(|\.data\.filter\(/);
+});
