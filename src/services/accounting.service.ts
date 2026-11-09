@@ -295,22 +295,6 @@ export const accountingService = {
     }),
 
   /**
-   * An account's whole history over the range, not the first page of it.
-   *
-   * Worse here than on any other list in the module, because each row carries a
-   * `running_balance`: a ledger cut off at row 15 does not merely hide
-   * movements, it presents the balance AFTER the fifteenth entry as the
-   * account's current position. The number is on screen, formatted, and wrong,
-   * and there is nothing about it that looks partial.
-   */
-  generalLedgerListAll: (
-    query: LedgerQuery,
-  ): Promise<DrainResult<LedgerEntry>> =>
-    fetchAllPages<LedgerEntry>(({ page, per_page }) =>
-      accountingService.generalLedgerList({ ...query, page, per_page }),
-    ),
-
-  /**
    * One page of an account's ledger. `meta` carries the opening and closing
    * balances and the range's totals; with `source` each row keeps the
    * account's true running balance.
