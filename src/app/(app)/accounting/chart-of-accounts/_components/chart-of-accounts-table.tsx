@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -16,6 +17,7 @@ import { sortAccounts } from "@/lib/accounting/account";
 import { cn } from "@/lib/utils";
 import type { Account, AccountType } from "@/types";
 import { accountTypeLabel, cashKindLabel } from "../../_lib/display-labels";
+import { accountBalanceText, accountStatusLabel } from "../_lib/account-form";
 
 const TYPE_STYLES: Record<AccountType, string> = {
   asset: "bg-blue-500/10 text-blue-700 border-blue-500/30",
@@ -51,10 +53,15 @@ function depthOf(account: Account, byId: Map<number, Account>): number {
 
 interface ChartOfAccountsTableProps {
   accounts: Account[];
+  /** Given only when the caller may edit (and the chart is the organisation's own). */
+  onEdit?: (account: Account) => void;
+  onToggleActive?: (account: Account) => void;
 }
 
-/** The account tree as a flat, searchable table. */
-export function ChartOfAccountsTable({ accounts }: ChartOfAccountsTableProps) {
+/** The account tree as a flat, searchable table, with the server's balances. */
+export function ChartOfAccountsTable({ accounts, onEdit, onToggleActive }: ChartOfAccountsTableProps) {
+  const hasActions = Boolean(onEdit || onToggleActive);
+  const columnCount = hasActions ? 7 : 6;
   const [query, setQuery] = useState("");
 
   const sorted = useMemo(() => sortAccounts(accounts), [accounts]);
@@ -100,13 +107,16 @@ export function ChartOfAccountsTable({ accounts }: ChartOfAccountsTableProps) {
             <TableHead>Account</TableHead>
             <TableHead className="w-28">Type</TableHead>
             <TableHead className="w-32">Normal Balance</TableHead>
+            <TableHead className="w-36 text-right">Balance</TableHead>
+            <TableHead className="w-24">Status</TableHead>
+            {hasActions && <TableHead className="w-44 text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={4}
+                colSpan={columnCount}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 No account matches &ldquo;{query}&rdquo;.
@@ -140,11 +150,6 @@ export function ChartOfAccountsTable({ accounts }: ChartOfAccountsTableProps) {
                         {cashKindLabel(account.cash_kind)}
                       </Badge>
                     )}
-                    {!account.is_active && (
-                      <Badge variant="outline" className="text-[10px]">
-                        Inactive
-                      </Badge>
-                    )}
                   </div>
                 </TableCell>
                 <TableCell>
@@ -156,6 +161,48 @@ export function ChartOfAccountsTable({ accounts }: ChartOfAccountsTableProps) {
                   {/* Group headings never carry a balance of their own. */}
                   {account.is_group ? "—" : account.normal_balance}
                 </TableCell>
+                <TableCell className="text-right font-mono text-sm">
+                  {accountBalanceText(account)}
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      account.is_active
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {accountStatusLabel(account)}
+                  </Badge>
+                </TableCell>
+                {hasActions && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      {onEdit && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onEdit(account)}
+                          aria-label={`Edit ${account.code} ${account.name}`}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {onToggleActive && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onToggleActive(account)}
+                          aria-label={`${account.is_active ? "Deactivate" : "Reactivate"} ${account.code} ${account.name}`}
+                        >
+                          {account.is_active ? "Deactivate" : "Reactivate"}
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))
           )}

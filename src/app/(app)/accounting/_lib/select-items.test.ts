@@ -7,6 +7,8 @@ import {
   accountSelectItems,
   agingBucketItems,
   agingGroupItems,
+  allowanceBucketItems,
+  chartTemplateItems,
   expenseStatusItems,
   journalSourceItems,
   journalStatusItems,
@@ -57,8 +59,8 @@ test("journal source items label every source in words, after any source", () =>
     { value: "penalty", label: "Penalty" },
     { value: "loan_fee", label: "Loan Fee" },
     { value: "gcash", label: "GCash" },
-    { value: "cash_transaction", label: "Cash Transaction" },
-    { value: "bank_transaction", label: "Bank Transaction" },
+    { value: "cash_transaction", label: "Cash count entry" },
+    { value: "bank_transaction", label: "Bank statement entry" },
     { value: "cash_in", label: "Cash In" },
     { value: "cash_out", label: "Cash Out" },
     { value: "expense", label: "Expense" },
@@ -70,6 +72,7 @@ test("journal source items label every source in words, after any source", () =>
     { value: "opening_balance", label: "Opening Balance" },
     { value: "credit_loss", label: "Credit Loss" },
     { value: "share_capital", label: "Share Capital" },
+    { value: "closing", label: "Year-end closing" },
   ]);
 });
 
@@ -93,5 +96,22 @@ test("aging group items offer by loan and by member", () => {
   assert.deepEqual(agingGroupItems, [
     { value: "loan", label: "By loan" },
     { value: "member", label: "By member" },
+  ]);
+});
+
+test("chart template items offer the lending company chart first, then the cooperative", () => {
+  assert.deepEqual(chartTemplateItems, [
+    { value: "lending_company", label: "Lending company" },
+    { value: "cooperative", label: "Cooperative" },
+  ]);
+});
+
+test("allowance bucket items label every bucket, youngest first", () => {
+  assert.deepEqual(allowanceBucketItems, [
+    { value: "1_30", label: "1–30 days" },
+    { value: "31_60", label: "31–60 days" },
+    { value: "61_90", label: "61–90 days" },
+    { value: "91_120", label: "91–120 days" },
+    { value: "over_120", label: "Over 120 days" },
   ]);
 });
