@@ -48,7 +48,13 @@ export function MessageDetailSheet({
   const wentOut = message !== null && deliveryStatusWentOut(message.status);
   const loggedOnly = wentOut && mode === true;
   const redacted = message !== null && isMessageRedacted(message);
-  const failure = message ? reminderReason({ reason: message.failure_reason }) : null;
+  // A failed message always has a reason; without its text the server hid it.
+  const failure = message
+    ? reminderReason(
+        { reason: message.failure_reason },
+        { failed: ["failed", "rejected", "bounced"].includes(message.status) },
+      )
+    : null;
   return (
     <Sheet open={message !== null} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="overflow-y-auto sm:max-w-md">

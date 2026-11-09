@@ -42,7 +42,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
           {items.map((item) => {
             const mode = rowTestMode(item, testMode);
             const loggedOnly = mode === true && queueStatusWentOut(item.status);
-            const reason = reminderReason(item);
+            const reason = reminderReason(item, { failed: item.status === "failed" });
             return (
               <TableRow key={item.id}>
                 <TableCell>

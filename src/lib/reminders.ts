@@ -419,12 +419,25 @@ function codeInWords(code: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Why a reminder was cancelled, skipped or failed, in words; null when none. */
+/**
+ * Shown where a failure's reason would be, when the server leaves the
+ * provider's text out (a caller without `borrowers:view` or the member's
+ * branch).
+ */
+export const HIDDEN_DETAILS = "Details hidden (needs access to member details)";
+
+/**
+ * Why a reminder was cancelled, skipped or failed, in words; null when none.
+ * A failed row (`failed: true`) always has a reason, so one without its text
+ * was hidden by the server: it reads `HIDDEN_DETAILS`.
+ */
 export function reminderReason(
   item: Pick<ReminderQueueItem, "reason"> & { reason_code?: string | null },
+  options: { failed?: boolean } = {},
 ): string | null {
   const text = item.reason?.trim();
   if (text) return text;
+  if (options.failed) return HIDDEN_DETAILS;
   const code = item.reason_code?.trim();
   if (!code) return null;
   return Object.hasOwn(REMINDER_REASON_LABELS, code)
@@ -653,6 +666,23 @@ export function validateContactWindow(window: ContactWindow): string | null {
 export const MAX_RULE_DAYS = 90;
 
 /**
+ * The templates a rule may use, by its trigger, as R2's
+ * `TemplateFit::FOR_TRIGGER` (422 otherwise). The payment-state templates
+ * (partial payment, payment confirmation) don't apply to rules.
+ */
+export const RULE_TEMPLATES_FOR_TRIGGER: Record<ReminderTrigger, readonly ReminderTemplateType[]> = {
+  before_due: ["upcoming"],
+  on_due: ["due_today"],
+  after_due: ["past_due", "long_past_due"],
+};
+
+/** The template after a trigger change: kept when it fits, else the trigger's first. */
+export function fitRuleTemplate(trigger: ReminderTrigger, current: ReminderTemplateType): ReminderTemplateType {
+  const fits = RULE_TEMPLATES_FOR_TRIGGER[trigger];
+  return fits.includes(current) ? current : fits[0];
+}
+
+/**
  * Field-level problems with a rule, in form order. Empty when valid.
  * `allBranches: false` (no `branches:view_all`): a rule with no branch is
  * refused, as the API refuses it (403).
@@ -681,6 +711,10 @@ export function validateRule(
   } else if (start !== null && end !== null && send >= end) {
     // The end is exclusive, as the engine reads it.
     problems.push(`Send time (before contact hours end at ${formatSendTime(contactHours.end)})`);
+  }
+  const fits = RULE_TEMPLATES_FOR_TRIGGER[rule.trigger];
+  if (fits && !fits.includes(rule.template_type)) {
+    problems.push(`Template (${fits.map((t) => TEMPLATE_TYPE_LABELS[t]).join(" or ")} for this trigger)`);
   }
   if (rule.channels.length === 0) problems.push("At least one channel");
   if (options.allBranches === false && rule.branch_id === null) {

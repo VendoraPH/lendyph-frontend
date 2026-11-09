@@ -9,6 +9,9 @@ import {
   deliveryStatusOptions,
   describeRule,
   KPI_LABELS,
+  HIDDEN_DETAILS,
+  RULE_TEMPLATES_FOR_TRIGGER,
+  fitRuleTemplate,
   COMPANY_WIDE_REASON,
   NO_TEMPLATE_FITS,
   contactValueLabel,
@@ -161,8 +164,8 @@ test("validateRule bounds days, and pins on-due rules to 0", () => {
   assert.equal(validateRule(rule({ days: 0 }), HOURS).length, 1);
   assert.equal(validateRule(rule({ days: 91 }), HOURS).length, 1);
   assert.equal(validateRule(rule({ days: 2.5 }), HOURS).length, 1);
-  assert.deepEqual(validateRule(rule({ trigger: "on_due", days: 0 }), HOURS), []);
-  assert.deepEqual(validateRule(rule({ trigger: "on_due", days: 2 }), HOURS), [
+  assert.deepEqual(validateRule(rule({ trigger: "on_due", days: 0, template_type: "due_today" }), HOURS), []);
+  assert.deepEqual(validateRule(rule({ trigger: "on_due", days: 2, template_type: "due_today" }), HOURS), [
     "Days must be 0 on the due date",
   ]);
 });
@@ -634,4 +637,48 @@ test("a null recipient or pause reason shows a dash or nothing", () => {
   assert.equal(pauseReasonSuffix({ reason: "Restructure talks" }), " — Restructure talks");
   assert.equal(pauseReasonSuffix({ reason: null }), "");
   assert.equal(pauseReasonSuffix({ reason: "  " }), "");
+});
+
+// R2 re-review: a failed row's provider text is null for callers without
+// borrowers:view or the member's branch.
+test("a failed row without its reason reads Details hidden, never blank", () => {
+  assert.equal(HIDDEN_DETAILS, "Details hidden (needs access to member details)");
+  assert.equal(reminderReason({ reason: null, reason_code: "provider_error" }, { failed: true }), HIDDEN_DETAILS);
+  assert.equal(reminderReason({ reason: null }, { failed: true }), HIDDEN_DETAILS);
+  assert.equal(reminderReason({ reason: "  " }, { failed: true }), HIDDEN_DETAILS);
+  assert.equal(
+    reminderReason({ reason: "Sending is not set up", reason_code: "not_set_up" }, { failed: true }),
+    "Sending is not set up",
+  );
+  assert.equal(reminderReason({ reason: null, reason_code: "auto_pay" }), "Collected by Auto-Pay");
+  assert.equal(reminderReason({ reason: null }), null);
+});
+
+// Mirrors R2's TemplateFit::FOR_TRIGGER; the payment-state templates don't
+// apply to rules.
+test("a rule's templates follow its trigger", () => {
+  assert.deepEqual(RULE_TEMPLATES_FOR_TRIGGER, {
+    before_due: ["upcoming"],
+    on_due: ["due_today"],
+    after_due: ["past_due", "long_past_due"],
+  });
+});
+
+test("changing the trigger keeps a fitting template and resets one that doesn't", () => {
+  assert.equal(fitRuleTemplate("after_due", "long_past_due"), "long_past_due");
+  assert.equal(fitRuleTemplate("after_due", "upcoming"), "past_due");
+  assert.equal(fitRuleTemplate("before_due", "past_due"), "upcoming");
+  assert.equal(fitRuleTemplate("on_due", "upcoming"), "due_today");
+  assert.equal(fitRuleTemplate("before_due", "partial_payment"), "upcoming");
+});
+
+test("validateRule refuses a template that doesn't fit the trigger", () => {
+  assert.deepEqual(validateRule(rule({ trigger: "before_due", template_type: "past_due" }), HOURS), [
+    "Template (Upcoming due for this trigger)",
+  ]);
+  assert.deepEqual(
+    validateRule(rule({ trigger: "after_due", days: 3, template_type: "due_today" }), HOURS),
+    ["Template (Past due or Long past due for this trigger)"],
+  );
+  assert.deepEqual(validateRule(rule({ trigger: "after_due", days: 15, template_type: "long_past_due" }), HOURS), []);
 });
