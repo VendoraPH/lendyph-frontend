@@ -169,7 +169,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: BookOpenCheck,
     permission: "accounting:view",
     /**
-     * Fourteen children, which is the most any menu here has. Two of them —
+     * Fifteen children, which is the most any menu here has. Two of them —
      * Financial Statements and Accounting Books — have a third level in the
      * spec (Balance Sheet, Income Statement, … / General Journal, Cash
      * Receipts, …). `NavSubItem` has no `children`, and rather than grow the
