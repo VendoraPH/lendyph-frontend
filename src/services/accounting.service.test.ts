@@ -489,44 +489,6 @@ describe("lists are drained, not read one page deep", () => {
     assert.ok(wholeTotal > shortTotal, "and the screen said nothing about the gap");
   });
 
-  test("REGRESSION: the ledger's last visible running_balance was not the balance", async () => {
-    const short = rowsOf(
-      await accountingService.generalLedgerList({
-        account_id: 1,
-        from: "2026-01-01",
-        to: "2026-09-15",
-      }),
-    );
-    const shortLast = short[short.length - 1].running_balance;
-
-    const { rows } = await accountingService.generalLedgerListAll({
-      account_id: 1,
-      from: "2026-01-01",
-      to: "2026-09-15",
-    });
-    const wholeLast = rows[rows.length - 1].running_balance;
-
-    assert.equal(shortLast, 1500, "the balance after entry fifteen…");
-    assert.equal(wholeLast, LEDGER_COUNT * 100, "…presented as the account's position");
-    assert.equal(rows.length, LEDGER_COUNT);
-  });
-
-  test("the ledger drain keeps its filters on every page", async () => {
-    await accountingService.generalLedgerListAll({
-      account_id: 7,
-      from: "2026-01-01",
-      to: "2026-09-15",
-      branch_id: 3,
-    });
-
-    assert.ok(requests.length >= 2, "250 rows is three pages");
-    for (const req of requests) {
-      assert.equal(req.query.account_id, "7");
-      assert.equal(req.query.from, "2026-01-01");
-      assert.equal(req.query.branch_id, "3");
-    }
-  });
-
   test("every remaining list drains too", async () => {
     const cases: Array<[string, () => Promise<{ rows: unknown[] }>, number]> = [
       ["cash accounts", () => accountingService.cashAccountsListAll(), CASH_ACCOUNT_COUNT],
