@@ -14,6 +14,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/initials";
 import { auditService } from "@/services";
+import { usePermission } from "@/hooks";
+import { auditLoadRestriction, auditTrailRestriction } from "./_lib/audit-access";
 import {
   Table,
   TableBody,
@@ -44,6 +46,7 @@ import {
   Monitor,
   X,
   Cog,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAX_PER_PAGE } from "@/lib/paginate";
@@ -286,6 +289,8 @@ function AuditTrailContent() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(DEFAULT_PER_PAGE);
   const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
+  // Set when the list answers 403: the table says why instead of "No audit logs found".
+  const [loadRestriction, setLoadRestriction] = useState<string | null>(null);
 
   // Guards against out-of-order responses: rapid page clicks or a fast-changing
   // filter can land an older request last and repaint the previous page's rows
@@ -335,9 +340,12 @@ function AuditTrailContent() {
       }
 
       setLogs(rows);
-    } catch {
+      setLoadRestriction(null);
+    } catch (err) {
       if (requestId === requestIdRef.current) {
-        toast.error("We couldn't load the audit logs. Please try again.");
+        const restriction = auditLoadRestriction(err);
+        if (!restriction) toast.error("We couldn't load the audit logs. Please try again.");
+        setLoadRestriction(restriction);
         setLogs([]);
         setMeta(null);
       }
@@ -684,9 +692,10 @@ function AuditTrailContent() {
                       colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      {hasFilters
-                        ? "No audit logs match these filters."
-                        : "No audit logs found."}
+                      {loadRestriction ??
+                        (hasFilters
+                          ? "No audit logs match these filters."
+                          : "No audit logs found.")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -726,10 +735,41 @@ function AuditTrailContent() {
   );
 }
 
+/** The Audit Trail in place of its logs, for a user the API would refuse them to. */
+function AuditTrailRestricted({ message }: { message: string }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
+        <p className="text-muted-foreground">
+          Track and review all user actions across the system
+        </p>
+      </div>
+      <Card>
+        <CardContent className="flex items-start gap-3 py-6">
+          <ShieldAlert className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="font-medium">{message}</p>
+            <p className="text-sm text-muted-foreground">
+              Ask your administrator for the &quot;See all branches&quot; permission.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Checks branch access before the logs are requested. */
+function AuditTrailAccess() {
+  const restriction = auditTrailRestriction(usePermission().can("branches:view_all"));
+  return restriction ? <AuditTrailRestricted message={restriction} /> : <AuditTrailContent />;
+}
+
 export default function AuditTrailPage() {
   return (
     <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
-      <AuditTrailContent />
+      <AuditTrailAccess />
     </RouteGuard>
   );
 }
