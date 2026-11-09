@@ -98,7 +98,7 @@ export function matchBody(lineId: number, journalLineId: number | null): MatchRe
 
 export const ACCEPT_SUGGESTIONS_BODY: MatchReconciliationBody = { accept_suggestions: true };
 
-/** A books-only row, which always carries its ledger line. */
+/** A row that carries its ledger line: books-only, or a pair. */
 export type LedgerCandidate = ReconciliationRow & { journal_line_id: number };
 
 /** Ledger lines no statement line claims, outstanding items included, in the server's order. */
@@ -107,11 +107,20 @@ export function bookRows(lines: ReconciliationRow[]): LedgerCandidate[] {
 }
 
 /**
- * The books-only rows a statement line can be matched to by hand: those the
- * server marks `matchable`. An older API that sends no `matchable` offers them all.
+ * Whether the server accepts this row's ledger line in a hand match: a
+ * books-only row it marks `matchable` (or any, from an older API that sends no
+ * `matchable`), or a suggested pair it marks `matchable`, since a suggestion
+ * claims nothing. A matched pair's line belongs to its statement line.
  */
+function offered(row: ReconciliationRow): row is LedgerCandidate {
+  if (row.journal_line_id === null) return false;
+  if (row.source === "ledger") return row.matchable ?? true;
+  return row.source === "both" && row.match === "possible" && row.matchable === true;
+}
+
+/** The ledger lines a statement line can be matched to by hand, in the server's order. */
 export function matchCandidates(lines: ReconciliationRow[]): LedgerCandidate[] {
-  return bookRows(lines).filter((r) => r.matchable ?? true);
+  return lines.filter(offered);
 }
 
 function postable(account: Account): boolean {

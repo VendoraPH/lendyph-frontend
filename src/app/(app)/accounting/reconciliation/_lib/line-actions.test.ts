@@ -159,6 +159,26 @@ describe("match and unmatch per line", () => {
     const live = row({ source: "ledger", statement_line_id: null, journal_line_id: 90, matchable: true });
     assert.deepEqual(bookRows([row(), deadLeg, live]), [deadLeg, live]);
   });
+
+  test("the picker offers every matchable row, suggested ones included, never a matched one", () => {
+    const books = row({ source: "ledger", statement_line_id: null, journal_line_id: 90, matchable: true });
+    const suggested = row({ source: "both", match: "possible", statement_line_id: 42, journal_line_id: 95, matchable: true });
+    const staleSuggestion = row({
+      source: "both",
+      match: "possible",
+      statement_line_id: 43,
+      journal_line_id: 96,
+      matchable: false,
+    });
+    const matched = row({ source: "both", match: "matched", statement_line_id: 44, journal_line_id: 97, matchable: true });
+    assert.deepEqual(matchCandidates([row(), books, suggested, staleSuggestion, matched]), [books, suggested]);
+  });
+
+  test("an older API that sends no matchable offers no suggested row", () => {
+    const books = row({ source: "ledger", statement_line_id: null, journal_line_id: 90 });
+    const suggested = row({ source: "both", match: "possible", statement_line_id: 42, journal_line_id: 95 });
+    assert.deepEqual(matchCandidates([books, suggested]), [books]);
+  });
 });
 
 describe("account pickers", () => {

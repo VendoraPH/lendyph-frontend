@@ -25,6 +25,7 @@ import type { LineRecordRequest } from "../_lib/reconciliation-api";
 import {
   accountLabel,
   candidateDateText,
+  candidateTitle,
   directionLabel,
   type RequestFailure,
 } from "../_lib/reconciliation-view";
@@ -175,7 +176,7 @@ export function ResolveLineDialog({
                   className="flex items-center justify-between gap-3 rounded-lg border p-2 text-sm"
                 >
                   <div className="min-w-0">
-                    <p className="truncate">{candidate.description}</p>
+                    <p className="truncate">{candidateTitle(candidate)}</p>
                     <p className="text-xs text-muted-foreground">
                       {`${candidateDateText(candidate)} · ${candidate.journal_no ?? "Journal"}`}
                     </p>

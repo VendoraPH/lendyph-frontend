@@ -14,7 +14,8 @@ import {
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import { bookRows as booksOnly, rowMatchAction } from "../_lib/line-actions";
-import { journalHref, ledgerLineText, pairedFiguresCaption } from "../_lib/reconciliation-view";
+import { journalHref, ledgerLineText, rowFigures } from "../_lib/reconciliation-view";
+import { FigureWithNote } from "./figure-with-note";
 import type { ReconciliationDetail, ReconciliationRow } from "../_lib/types";
 import { MatchBadge } from "./match-badge";
 
@@ -56,37 +57,38 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {statementRows.map((row) => (
-                  <TableRow key={`s${row.statement_line_id}`}>
-                    <TableCell className="text-sm">
-                      {formatDate(row.date)}
-                      <FiguresCaption row={row} />
-                    </TableCell>
-                    <TableCell className="text-sm">{row.description}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {row.external_reference || "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatCentavos(row.amount)}
-                      <FiguresCaption row={row} />
-                    </TableCell>
-                    <TableCell>
-                      <MatchBadge match={row.match} />
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <LedgerLine row={row} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <RowAction
-                        row={row}
-                        busy={busy}
-                        onConfirm={onConfirm}
-                        onUnmatch={onUnmatch}
-                        onResolve={onResolve}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {statementRows.map((row) => {
+                  const figures = rowFigures(row);
+                  return (
+                    <TableRow key={`s${row.statement_line_id}`}>
+                      <TableCell className="text-sm">
+                        <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                      </TableCell>
+                      <TableCell className="text-sm">{row.description}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {row.external_reference || "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        <FigureWithNote figure={figures.amount} note={figures.amountNote} />
+                      </TableCell>
+                      <TableCell>
+                        <MatchBadge match={row.match} />
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <LedgerLine row={row} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <RowAction
+                          row={row}
+                          busy={busy}
+                          onConfirm={onConfirm}
+                          onUnmatch={onUnmatch}
+                          onResolve={onResolve}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -140,12 +142,6 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
   );
 }
 
-/** Says the figure above it is the books entry's, on a paired row. */
-function FiguresCaption({ row }: { row: ReconciliationRow }) {
-  const caption = pairedFiguresCaption(row);
-  if (!caption) return null;
-  return <span className="block font-sans text-xs text-muted-foreground">{caption}</span>;
-}
 
 function LedgerLine({ row }: { row: ReconciliationRow }) {
   const text = ledgerLineText(row);
