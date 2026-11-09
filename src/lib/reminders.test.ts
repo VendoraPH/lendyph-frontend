@@ -9,6 +9,13 @@ import {
   deliveryStatusOptions,
   describeRule,
   KPI_LABELS,
+  COMPANY_WIDE_REASON,
+  NO_TEMPLATE_FITS,
+  contactValueLabel,
+  offeredTemplates,
+  pauseReasonSuffix,
+  recipientLabel,
+  ruleLockReason,
   kpiLabels,
   sendingStatusUnreadable,
   smsMonthLabel,
@@ -580,4 +587,51 @@ test("chart: a Logged bar, and Sent stays Sent when the answer carries logged", 
   assert.equal(chartSeriesLabel("sent", null, true), "Sent");
   assert.equal(chartSeriesLabel("sent", true, false), "Logged");
   assert.equal(chartSeriesLabel("sent", null), "Processed");
+});
+
+// R2 security fixes: the server lists the templates that fit the loan today.
+test("the Send dialog offers exactly the server's allowed templates, in its order", () => {
+  assert.deepEqual(offeredTemplates(["past_due", "partial_payment"]), ["past_due", "partial_payment"]);
+  assert.deepEqual(offeredTemplates(["payment_confirmation"]), ["payment_confirmation"]);
+  assert.deepEqual(offeredTemplates(["upcoming", "nonsense" as never, "upcoming"]), ["upcoming"]);
+  assert.deepEqual(offeredTemplates([]), []);
+  assert.match(NO_TEMPLATE_FITS, /no reminder fits this loan today/i);
+});
+
+test("an answer without allowed templates falls back to every manual reminder type", () => {
+  assert.deepEqual(offeredTemplates(undefined), ["upcoming", "due_today", "past_due", "long_past_due", "partial_payment"]);
+  assert.deepEqual(offeredTemplates(null), offeredTemplates(undefined));
+});
+
+// Every-branch rules need branches:view_all (403 otherwise).
+test("validateRule: without every-branch access a rule needs a branch", () => {
+  const problems = validateRule(rule({ branch_id: null }), HOURS, { allBranches: false });
+  assert.deepEqual(problems, ["Branch (rules for every branch need access to every branch)"]);
+  assert.deepEqual(validateRule(rule({ branch_id: 3 }), HOURS, { allBranches: false }), []);
+  assert.deepEqual(validateRule(rule({ branch_id: null }), HOURS, { allBranches: true }), []);
+  assert.deepEqual(validateRule(rule({ branch_id: null }), HOURS), []);
+});
+
+test("a stored every-branch rule is locked, with a reason, for a branch user", () => {
+  assert.equal(ruleLockReason({ branch_id: null }, false), COMPANY_WIDE_REASON);
+  assert.equal(ruleLockReason({ branch_id: 3 }, false), null);
+  assert.equal(ruleLockReason({ branch_id: null }, true), null);
+  assert.match(COMPANY_WIDE_REASON, /every branch/);
+});
+
+// Without borrowers:view the server leaves contacts out; that is not "none".
+test("a hidden contact reads hidden, never None on file", () => {
+  assert.equal(contactValueLabel("63917*****01", true), "63917*****01");
+  assert.equal(contactValueLabel(null, true), "None on file");
+  assert.equal(contactValueLabel(null, false), "Hidden (needs access to member details)");
+  assert.equal(contactValueLabel("63917*****01", false), "63917*****01");
+});
+
+test("a null recipient or pause reason shows a dash or nothing", () => {
+  assert.equal(recipientLabel(null), "—");
+  assert.equal(recipientLabel(undefined), "—");
+  assert.equal(recipientLabel("ju***@example.com"), "ju***@example.com");
+  assert.equal(pauseReasonSuffix({ reason: "Restructure talks" }), " — Restructure talks");
+  assert.equal(pauseReasonSuffix({ reason: null }), "");
+  assert.equal(pauseReasonSuffix({ reason: "  " }), "");
 });

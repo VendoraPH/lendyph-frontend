@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { BellRing, PauseCircle, PlayCircle } from "lucide-react";
+import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { PauseDialog } from "@/components/reminders/pause-dialog";
 import {
@@ -9,10 +10,10 @@ import {
   TestModeBanner,
   useReminderTestMode,
 } from "@/components/reminders/test-mode";
-import { Button } from "@/components/ui/button";
 import { useApiResource } from "@/hooks";
 import { formatDateTime } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { COMPANY_WIDE_REASON, pauseReasonSuffix } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import { RemindersNav } from "./reminders-nav";
 
@@ -66,10 +67,17 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
               claims "not paused" about a state it could not read. */}
           {pauses.data && !globalPause && (
             <PermissionGate permission="reminders:pause">
-              <Button variant="outline" onClick={() => setPauseOpen(true)}>
+              {/* A global pause covers every branch: it also needs
+                  `branches:view_all` (the API answers 403 otherwise). */}
+              <PermissionButton
+                permission="branches:view_all"
+                tooltip={COMPANY_WIDE_REASON}
+                variant="outline"
+                onClick={() => setPauseOpen(true)}
+              >
                 <PauseCircle className="mr-1.5 h-4 w-4" />
                 Pause all reminders
-              </Button>
+              </PermissionButton>
             </PermissionGate>
           )}
         </div>
@@ -82,14 +90,21 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
               <p className="font-semibold">Automated reminders are paused</p>
               <p>
                 Paused by {globalPause.paused_by_name} on {formatDateTime(globalPause.paused_at)}
-                {globalPause.until ? `, until ${formatDateTime(globalPause.until)}` : ""} — {globalPause.reason}
+                {globalPause.until ? `, until ${formatDateTime(globalPause.until)}` : ""}
+                {pauseReasonSuffix(globalPause)}
               </p>
             </div>
             <PermissionGate permission="reminders:pause">
-              <Button size="sm" onClick={resume} disabled={resuming}>
+              <PermissionButton
+                permission="branches:view_all"
+                tooltip={COMPANY_WIDE_REASON}
+                size="sm"
+                onClick={resume}
+                disabled={resuming}
+              >
                 <PlayCircle className="mr-1.5 h-4 w-4" />
                 {resuming ? "Resuming…" : "Resume"}
-              </Button>
+              </PermissionButton>
             </PermissionGate>
           </div>
         )}

@@ -6,14 +6,28 @@ import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatDate } from "@/lib/format";
-import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
+import { COMPANY_WIDE_REASON, TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
 import { reminderService } from "@/services";
+import type { Permission } from "@/types";
 import type { ReminderTemplate } from "@/types/reminder";
 import { TemplateFormDialog } from "./_components/template-form-dialog";
 
+/**
+ * Templates are shared by every branch, so creating and editing them needs
+ * `branches:view_all` as well (the API answers 403 otherwise). A branch user
+ * sees the button locked with that reason; the server stays the source.
+ */
+function useTemplateWrite(): { permission: Permission; tooltip?: string } {
+  const { can } = usePermission();
+  return can("branches:view_all")
+    ? { permission: "reminders:settings" }
+    : { permission: "branches:view_all", tooltip: COMPANY_WIDE_REASON };
+}
+
 function TemplateCard({ template, onEdit }: { template: ReminderTemplate; onEdit: () => void }) {
+  const write = useTemplateWrite();
   const Icon = template.channel === "sms" ? MessageSquare : Mail;
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
@@ -35,7 +49,7 @@ function TemplateCard({ template, onEdit }: { template: ReminderTemplate; onEdit
           {template.language.toUpperCase()}
           {template.updated_at ? ` · updated ${formatDate(template.updated_at)}` : ""}
         </span>
-        <PermissionButton permission="reminders:settings" size="sm" variant="ghost" onClick={onEdit}>
+        <PermissionButton permission={write.permission} tooltip={write.tooltip} size="sm" variant="ghost" onClick={onEdit}>
           Edit
         </PermissionButton>
       </div>
@@ -47,6 +61,7 @@ export default function ReminderTemplatesPage() {
   const fetchTemplates = useCallback(() => reminderService.listTemplates(), []);
   const templates = useApiResource(fetchTemplates);
   const [dialog, setDialog] = useState<{ template: ReminderTemplate | null } | null>(null);
+  const write = useTemplateWrite();
 
   return (
     <div className="space-y-4">
@@ -55,7 +70,8 @@ export default function ReminderTemplatesPage() {
           One template per reminder type and channel. Amounts and dates are filled in from the loan when it sends.
         </p>
         <PermissionButton
-          permission="reminders:settings"
+          permission={write.permission}
+          tooltip={write.tooltip}
           // Nothing to save to while the reminder service is not connected.
           disabled={templates.unavailable}
           onClick={() => setDialog({ template: null })}

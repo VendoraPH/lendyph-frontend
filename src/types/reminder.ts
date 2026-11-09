@@ -205,7 +205,8 @@ export interface ReminderMessage {
   loan_account_number: string;
   installment_number: number | null;
   channel: ReminderChannel;
-  recipient: string;
+  /** Masked; null for a caller without `borrowers:view` or the member's branch. */
+  recipient: string | null;
   template_type: ReminderTemplateType | null;
   /**
    * Exactly what was handed over, frozen at send time. Both are blanked
@@ -268,7 +269,8 @@ export interface ReminderPause {
   borrower_name?: string | null;
   loan_id: number | null;
   loan_account_number?: string | null;
-  reason: string;
+  /** Null on a member pause for a caller without `borrowers:view` or the member's branch. */
+  reason: string | null;
   paused_by_name: string;
   paused_at: string;
   /** Optional automatic end; `null` means until resumed. */
@@ -306,6 +308,8 @@ export interface LoanReminderSummary {
    * out from dates.
    */
   suggested_template_type?: ReminderTemplateType | null;
+  /** The templates that fit the loan today; the Send dialog offers only these. */
+  allowed_template_types?: ReminderTemplateType[];
   events: ReminderTimelineEvent[];
 }
 
@@ -493,6 +497,8 @@ export interface ManualReminderPreview {
     body: string;
   }[];
   blocked_reasons: string[];
+  /** The templates that fit the loan today (R2). */
+  allowed_template_types?: ReminderTemplateType[];
   /** When it would go, e.g. "Will go at 8:00 AM" before contact hours open. */
   notes?: string[];
   /** The server's own answer: true when this send would only be logged. */

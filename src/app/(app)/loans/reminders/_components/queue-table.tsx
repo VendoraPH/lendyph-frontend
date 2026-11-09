@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
-import { queueStatusWentOut, reminderReason, rowTestMode, type SendMode } from "@/lib/reminders";
+import { queueStatusWentOut, recipientLabel, reminderReason, rowTestMode, type SendMode } from "@/lib/reminders";
 import type { ReminderQueueItem } from "@/types/reminder";
 
 /**
@@ -70,7 +70,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                     ) : (
                       <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
-                    {item.recipient ?? "—"}
+                    {recipientLabel(item.recipient)}
                   </span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>

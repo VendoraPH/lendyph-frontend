@@ -20,6 +20,7 @@ import {
   TEMPLATE_TYPE_LABELS,
   deliveryStatusOptions,
   deliveryStatusWentOut,
+  recipientLabel,
   rowTestMode,
 } from "@/lib/reminders";
 import { reminderService } from "@/services";
@@ -101,7 +102,7 @@ export default function ReminderHistoryPage() {
                           ) : (
                             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
-                          {m.recipient}
+                          {recipientLabel(m.recipient)}
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">

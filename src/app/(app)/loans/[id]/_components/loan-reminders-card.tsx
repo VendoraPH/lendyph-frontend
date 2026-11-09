@@ -23,7 +23,7 @@ import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog"
 import { TestModeBanner, useReminderTestMode } from "@/components/reminders/test-mode";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
-import { rowTestMode, type SendMode } from "@/lib/reminders";
+import { pauseReasonSuffix, rowTestMode, type SendMode } from "@/lib/reminders";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
@@ -75,7 +75,8 @@ function Summary({ data, testMode }: { data: LoanReminderSummary; testMode: Send
             : pause.scope === "borrower"
               ? "Reminders for this member are paused"
               : "All automated reminders are paused"}{" "}
-          by {pause.paused_by_name} on {formatDate(pause.paused_at)} — {pause.reason}
+          by {pause.paused_by_name} on {formatDate(pause.paused_at)}
+          {pauseReasonSuffix(pause)}
         </p>
       )}
 
@@ -187,6 +188,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
         onOpenChange={setSendOpen}
         loanId={loanId}
         defaultTemplate={summary.data?.suggested_template_type ?? null}
+        allowedTemplates={summary.data?.allowed_template_types}
         testMode={testMode.testMode}
         onSent={summary.refetch}
       />
@@ -204,10 +206,11 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
 
 /**
  * The loan's reminder story, plus manual send and a loan-only pause. Renders
- * nothing — and requests nothing — without `reminders:view`.
+ * nothing — and requests nothing — without `reminders:view` and `loans:view`
+ * (the API answers 403 without either).
  */
 export function LoanRemindersCard({ loanId }: { loanId: number }) {
   const { can } = usePermission();
-  if (!can("reminders:view")) return null;
+  if (!can("reminders:view") || !can("loans:view")) return null;
   return <LoanRemindersContent loanId={loanId} />;
 }

@@ -122,7 +122,7 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
     form.loan_product_id !== null && !products.some((p) => p.id === form.loan_product_id);
 
   const save = () => {
-    const problems = validateRule(form, contactHours);
+    const problems = validateRule(form, contactHours, { allBranches: viewAll });
     if (problems.length) {
       notifyValidation(problems);
       return;
@@ -234,7 +234,15 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               value={form.branch_id ?? ""}
               onChange={(e) => set("branch_id", e.target.value ? Number(e.target.value) : null)}
             >
-              <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+              {/* An every-branch rule needs `branches:view_all`; a branch user
+                  picks one of their branches (the API answers 403 otherwise). */}
+              {viewAll ? (
+                <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+              ) : (
+                <NativeSelectOption value="" disabled>
+                  Choose a branch
+                </NativeSelectOption>
+              )}
               {picker.branches.map((b) => (
                 <NativeSelectOption key={b.id} value={b.id}>
                   {b.name}

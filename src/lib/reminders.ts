@@ -274,6 +274,66 @@ export function sendingStatusUnreadable(
   return active && !settings.loading && reminderTestMode(settings.data) === null;
 }
 
+// ---------------------------------------------------------------------------
+// Access (R2 security fixes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a branch user can't change something company-wide: settings shared by
+ * every branch, templates, and rules for every branch need
+ * `branches:view_all`. The server is the source (403); this only explains.
+ */
+export const COMPANY_WIDE_REASON = "Only users with access to every branch can change this; it applies to every branch.";
+
+/** A stored rule a branch user can't edit or switch off: one for every branch. */
+export function ruleLockReason(rule: { branch_id: number | null }, allBranches: boolean): string | null {
+  return rule.branch_id === null && !allBranches ? COMPANY_WIDE_REASON : null;
+}
+
+/** The manual send types offered when the server doesn't list them. */
+const MANUAL_FALLBACK: readonly ReminderTemplateType[] = [
+  "upcoming",
+  "due_today",
+  "past_due",
+  "long_past_due",
+  "partial_payment",
+];
+
+export const NO_TEMPLATE_FITS =
+  "No reminder fits this loan today: nothing is due yet, it is still within its grace period, or it has nothing to confirm.";
+
+/**
+ * The templates the Send dialog offers: the server's `allowed_template_types`
+ * (what fits the loan today), known types only, in its order. An answer
+ * without the list offers every manual reminder type; the server still
+ * refuses one that doesn't fit (422).
+ */
+export function offeredTemplates(allowed: readonly ReminderTemplateType[] | null | undefined): ReminderTemplateType[] {
+  if (!Array.isArray(allowed)) return [...MANUAL_FALLBACK];
+  const known = new Set<string>(Object.keys(TEMPLATE_TYPE_LABELS));
+  return [...new Set(allowed)].filter((t) => known.has(t));
+}
+
+/**
+ * A member contact on the preferences card. Without `borrowers:view` the
+ * server leaves contacts out (null), which is not "none on file".
+ */
+export function contactValueLabel(value: string | null, canSeeContacts: boolean): string {
+  if (value) return value;
+  return canSeeContacts ? "None on file" : "Hidden (needs access to member details)";
+}
+
+/** A masked recipient, or a dash when the server leaves it out or there is none. */
+export function recipientLabel(recipient: string | null | undefined): string {
+  return recipient?.trim() ? recipient : "—";
+}
+
+/** " — <reason>" after a pause line, or nothing when the server leaves it out. */
+export function pauseReasonSuffix(pause: { reason: string | null }): string {
+  const reason = pause.reason?.trim();
+  return reason ? ` — ${reason}` : "";
+}
+
 export interface ManualSendWording {
   title: string;
   button: string;
@@ -592,8 +652,16 @@ export function validateContactWindow(window: ContactWindow): string | null {
 
 export const MAX_RULE_DAYS = 90;
 
-/** Field-level problems with a rule, in form order. Empty when valid. */
-export function validateRule(rule: ReminderRuleInput, contactHours: ContactWindow): string[] {
+/**
+ * Field-level problems with a rule, in form order. Empty when valid.
+ * `allBranches: false` (no `branches:view_all`): a rule with no branch is
+ * refused, as the API refuses it (403).
+ */
+export function validateRule(
+  rule: ReminderRuleInput,
+  contactHours: ContactWindow,
+  options: { allBranches?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   if (!rule.name.trim()) problems.push("Rule name");
   if (rule.trigger !== "on_due") {
@@ -615,6 +683,9 @@ export function validateRule(rule: ReminderRuleInput, contactHours: ContactWindo
     problems.push(`Send time (before contact hours end at ${formatSendTime(contactHours.end)})`);
   }
   if (rule.channels.length === 0) problems.push("At least one channel");
+  if (options.allBranches === false && rule.branch_id === null) {
+    problems.push("Branch (rules for every branch need access to every branch)");
+  }
   return problems;
 }
 

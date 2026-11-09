@@ -19,7 +19,15 @@ import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { getErrorMessage } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { TestModeBanner } from "./test-mode";
-import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS, manualSendWording, rowTestMode, type SendMode } from "@/lib/reminders";
+import {
+  NO_TEMPLATE_FITS,
+  TEMPLATE_TYPE_LABELS,
+  manualSendWording,
+  offeredTemplates,
+  recipientLabel,
+  rowTestMode,
+  type SendMode,
+} from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
   ManualReminderPreview,
@@ -39,6 +47,11 @@ interface SendReminderDialogProps {
   onSent?: () => void;
   /** The deployment's test mode, from the settings; null when not known. */
   testMode?: SendMode;
+  /**
+   * The server's `allowed_template_types` for the loan today; only these are
+   * offered. Absent on an older answer: every manual reminder type.
+   */
+  allowedTemplates?: ReminderTemplateType[];
 }
 
 const CHANNEL_OPTIONS: { value: ManualSendChannel; label: string }[] = [
@@ -47,11 +60,10 @@ const CHANNEL_OPTIONS: { value: ManualSendChannel; label: string }[] = [
   { value: "both", label: "SMS and Email" },
 ];
 
-/** A payment confirmation is not a reminder, so it is never sent by hand. */
-const MANUAL_TEMPLATES: ReminderTemplateType[] = TEMPLATE_TYPES.filter((t) => t !== "payment_confirmation");
-
-const offeredOrNull = (t: ReminderTemplateType | null): ReminderTemplateType | null =>
-  t && MANUAL_TEMPLATES.includes(t) ? t : null;
+const offeredOrNull = (
+  t: ReminderTemplateType | null,
+  offered: readonly ReminderTemplateType[],
+): ReminderTemplateType | null => (t && offered.includes(t) ? t : null);
 
 /** The preview for one channel/template choice, tagged with what it answers. */
 interface PreviewResult {
@@ -73,9 +85,11 @@ export function SendReminderDialog({
   defaultTemplate = null,
   onSent,
   testMode = null,
+  allowedTemplates,
 }: SendReminderDialogProps) {
+  const summaryOffered = offeredTemplates(allowedTemplates);
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
-  const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate));
+  const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate, summaryOffered));
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -83,7 +97,7 @@ export function SendReminderDialog({
   // since, or paid), so each opening waits for a fresh one.
   if (useDialogOpening(open, loanId)) {
     setChannel("sms");
-    setTemplate(offeredOrNull(defaultTemplate));
+    setTemplate(offeredOrNull(defaultTemplate, summaryOffered));
     setResult(null);
   }
 
@@ -113,6 +127,9 @@ export function SendReminderDialog({
   // it arrives, the settings' mode. Live words only on a known live mode.
   const mode = preview ? rowTestMode(preview, testMode) : testMode;
   const wording = manualSendWording(mode);
+  // The preview's own list is the latest answer; the summary's until then.
+  const offered = preview?.allowed_template_types ? offeredTemplates(preview.allowed_template_types) : summaryOffered;
+  const nothingFits = offered.length === 0;
   const blocked = preview ? preview.blocked_reasons.length > 0 : true;
 
   const send = () => {
@@ -166,12 +183,13 @@ export function SendReminderDialog({
               id="manual-template"
               className="w-full"
               value={template ?? ""}
+              disabled={nothingFits && !template}
               onChange={(e) => setTemplate((e.target.value || null) as ReminderTemplateType | null)}
             >
               <NativeSelectOption value="" disabled>
                 Choose a template
               </NativeSelectOption>
-              {MANUAL_TEMPLATES.map((t) => (
+              {offered.map((t) => (
                 <NativeSelectOption key={t} value={t}>
                   {TEMPLATE_TYPE_LABELS[t]}
                 </NativeSelectOption>
@@ -183,7 +201,7 @@ export function SendReminderDialog({
         <div className="max-h-[50vh] space-y-3 overflow-y-auto">
           {!template ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Choose a template to see the message the member would get.
+              {nothingFits ? NO_TEMPLATE_FITS : "Choose a template to see the message the member would get."}
             </p>
           ) : !current ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
@@ -244,7 +262,7 @@ export function SendReminderDialog({
                 <div key={m.channel} className="rounded-lg border p-3">
                   <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {m.channel === "sms" ? <MessageSquare className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    {m.channel === "sms" ? "SMS" : "Email"} · {m.recipient ?? "no contact on file"}
+                    {m.channel === "sms" ? "SMS" : "Email"} · {recipientLabel(m.recipient)}
                   </p>
                   {m.subject && <p className="mb-1 text-sm font-medium">{m.subject}</p>}
                   <p className="whitespace-pre-wrap text-sm">{m.body}</p>

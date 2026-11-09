@@ -20,6 +20,7 @@ import {
   DEFAULT_RULES,
   TEMPLATE_TYPE_LABELS,
   describeRule,
+  ruleLockReason,
 } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { ReminderRule, ReminderRuleInput } from "@/types/reminder";
@@ -61,6 +62,7 @@ function SuggestedRules({ onUse }: { onUse: (draft: Partial<ReminderRuleInput>) 
 export default function ReminderRulesPage() {
   const { can } = usePermission();
   const canManage = can("reminders:settings");
+  const viewAll = can("branches:view_all");
   const fetchRules = useCallback(() => reminderService.listRules(), []);
   const rules = useApiResource(fetchRules);
   // Contact hours bound the send time. Settings are only readable with
@@ -129,53 +131,60 @@ export default function ReminderRulesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((rule) => (
-                    <TableRow key={rule.id}>
-                      <TableCell className="font-medium">{rule.name}</TableCell>
-                      <TableCell className="text-sm">{describeRule(rule)}</TableCell>
-                      <TableCell className="text-sm">{TEMPLATE_TYPE_LABELS[rule.template_type]}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {[
-                          rule.branch_name ?? "All branches",
-                          rule.loan_product_name ?? "All products",
-                          BORROWER_TYPE_LABELS[rule.borrower_type],
-                        ].join(" · ")}
-                      </TableCell>
-                      <TableCell>
-                        {rule.is_active ? (
-                          <Badge variant="outline" className="border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-500/15 dark:text-green-400">
-                            Active
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            Inactive
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        <PermissionButton
-                          permission="reminders:settings"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDialog({ rule })}
-                        >
-                          <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-                        </PermissionButton>
-                        {rule.is_active && (
+                  {rows.map((rule) => {
+                    // Every-branch rules need `branches:view_all` (403 otherwise).
+                    const lock = ruleLockReason(rule, viewAll);
+                    const write = lock ? ("branches:view_all" as const) : ("reminders:settings" as const);
+                    return (
+                      <TableRow key={rule.id}>
+                        <TableCell className="font-medium">{rule.name}</TableCell>
+                        <TableCell className="text-sm">{describeRule(rule)}</TableCell>
+                        <TableCell className="text-sm">{TEMPLATE_TYPE_LABELS[rule.template_type]}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {[
+                            rule.branch_name ?? "All branches",
+                            rule.loan_product_name ?? "All products",
+                            BORROWER_TYPE_LABELS[rule.borrower_type],
+                          ].join(" · ")}
+                        </TableCell>
+                        <TableCell>
+                          {rule.is_active ? (
+                            <Badge variant="outline" className="border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-500/15 dark:text-green-400">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Inactive
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
                           <PermissionButton
-                            permission="reminders:settings"
+                            permission={write}
+                            tooltip={lock ?? undefined}
                             size="sm"
                             variant="ghost"
-                            className="text-destructive"
-                            disabled={deactivating === rule.id}
-                            onClick={() => deactivate(rule)}
+                            onClick={() => setDialog({ rule })}
                           >
-                            {deactivating === rule.id ? "Deactivating…" : "Deactivate"}
+                            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                           </PermissionButton>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {rule.is_active && (
+                            <PermissionButton
+                              permission={write}
+                              tooltip={lock ?? undefined}
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              disabled={deactivating === rule.id}
+                              onClick={() => deactivate(rule)}
+                            >
+                              {deactivating === rule.id ? "Deactivating…" : "Deactivate"}
+                            </PermissionButton>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

@@ -79,11 +79,8 @@ export function MessageDetailSheet({
 
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {loggedOnly
-                    ? `Logged for ${message.recipient}, not sent`
-                    : mode === false && wentOut
-                      ? `Message sent to ${message.recipient}`
-                      : `Message for ${message.recipient}`}
+                  {(loggedOnly ? "Logged, not sent" : mode === false && wentOut ? "Message sent" : "Message") +
+                    (message.recipient ? ` · ${message.recipient}` : "")}
                 </p>
                 {redacted ? (
                   <p className="text-sm italic text-muted-foreground">Message text removed after 2 years</p>
