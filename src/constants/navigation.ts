@@ -169,7 +169,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: BookOpenCheck,
     permission: "accounting:view",
     /**
-     * Thirteen children, which is the most any menu here has. Two of them —
+     * Fourteen children, which is the most any menu here has. Two of them —
      * Financial Statements and Accounting Books — have a third level in the
      * spec (Balance Sheet, Income Statement, … / General Journal, Cash
      * Receipts, …). `NavSubItem` has no `children`, and rather than grow the
@@ -192,6 +192,9 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Financial Statements", href: "/accounting/statements" },
       { title: "Accounting Books", href: "/accounting/books" },
       { title: "Period Closing", href: "/accounting/period-closing", permission: "accounting:close" },
+      // The page itself opens on `accounting:view` (+ `branches:view_all`);
+      // the menu shows it to those who set the entry up.
+      { title: "Opening Balances", href: "/accounting/opening-balances", permission: "accounting:settings" },
       { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
     ],
   },
