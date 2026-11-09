@@ -29,10 +29,24 @@ export const LOAN_ADJUSTMENT_CREATE_GATE: PermissionGate = {
   tooltip: "Your role doesn't have permission to request loan adjustments",
 };
 
-/** POST /pledges/{pledge}/entries (ShareCapitalManualEntryRequest). */
+/**
+ * Pledge Entry's row Entry, POST /share-capital/ledger
+ * (StoreShareCapitalLedgerRequest), and its bulk Manual Entry, POST
+ * /pledges/bulk-entries (ShareCapitalBulkEntryRequest).
+ */
 export const PLEDGE_ENTRY_CREATE_GATE: PermissionGate = {
   permission: "share_capital:create",
   tooltip: "Your role doesn't have permission to record share capital entries",
+};
+
+/**
+ * A pledge's amount and schedule, PUT /pledges/{pledge}
+ * (UpdateShareCapitalPledgeRequest), and its auto-credit switch, PATCH
+ * /pledges/{pledge}/auto-credit (authorized in the controller).
+ */
+export const PLEDGE_UPDATE_GATE: PermissionGate = {
+  permission: "share_capital:update",
+  tooltip: "Your role doesn't have permission to change share capital pledges",
 };
 
 /** PATCH /loans/{loan}/auto-pay (ToggleAutoPayRequest). */

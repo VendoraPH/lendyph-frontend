@@ -8,6 +8,7 @@ import {
   LOAN_ADJUSTMENT_CREATE_GATE,
   PAYMENT_CREATE_GATE,
   PLEDGE_ENTRY_CREATE_GATE,
+  PLEDGE_UPDATE_GATE,
   UPON_MATURITY_PREVIEW_GATE,
   recordPaymentGate,
 } from "./lending-write-gates";
@@ -24,7 +25,9 @@ test("each lending write is gated by the permission the server checks", () => {
   assert.equal(LOAN_ADJUSTMENT_CREATE_GATE.permission, "loan_adjustments:create");
   assert.equal(PLEDGE_ENTRY_CREATE_GATE.permission, "share_capital:create");
   assert.equal(AUTO_PAY_TOGGLE_GATE.permission, "auto_pay:toggle");
+  assert.equal(PLEDGE_UPDATE_GATE.permission, "share_capital:update");
   for (const gate of [
+    PLEDGE_UPDATE_GATE,
     PAYMENT_CREATE_GATE,
     LOAN_ADJUSTMENT_CREATE_GATE,
     PLEDGE_ENTRY_CREATE_GATE,
@@ -88,4 +91,26 @@ test("the Loans list's Auto-Pay button needs auto_pay:toggle", () => {
     cell,
     /<PermissionButton\s+permission=\{AUTO_PAY_TOGGLE_GATE\.permission\}\s+tooltip=\{AUTO_PAY_TOGGLE_GATE\.tooltip\}/,
   );
+});
+
+test("Pledge Entry's bulk Manual Entry needs share_capital:create", () => {
+  const page = read("src/app/(app)/share-capital/pledges/page.tsx");
+  const start = page.indexOf("Bulk Entry Action Bar");
+  const bar = page.slice(start, page.indexOf("Manual Entry", start) + "Manual Entry".length);
+  assert.ok(start > -1 && bar.length > 0);
+  assert.doesNotMatch(bar, /<Button\b/);
+  assert.match(
+    bar,
+    /<PermissionButton\s+permission=\{PLEDGE_ENTRY_CREATE_GATE\.permission\}\s+tooltip=\{PLEDGE_ENTRY_CREATE_GATE\.tooltip\}/,
+  );
+});
+
+test("a pledge's amount, schedule and auto-credit need share_capital:update, with the reason in words", () => {
+  const page = read("src/app/(app)/share-capital/pledges/page.tsx");
+  assert.match(page, /const canUpdatePledge = can\(PLEDGE_UPDATE_GATE\.permission\)/);
+  assert.match(page, /const pledgeUpdateReason = canUpdatePledge \? null : PLEDGE_UPDATE_GATE\.tooltip/);
+  assert.equal(page.match(/<DisabledReason reason=\{pledgeUpdateReason\}>/g)?.length, 3);
+  assert.match(page, /onClick=\{canUpdatePledge \? \(\) => startAmountEdit\(pledge\) : undefined\}/);
+  assert.match(page, /onClick=\{canUpdatePledge \? \(\) => startScheduleEdit\(pledge\) : undefined\}/);
+  assert.match(page, /<Switch\s+checked=\{pledge\.autoCredit\}\s+disabled=\{!canUpdatePledge\}/);
 });
