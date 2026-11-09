@@ -14,6 +14,7 @@ import {
   buildDraft,
   editorLinesFrom,
   equityAccountId,
+  SUGGESTION_REMOVE_LABEL,
   requestFailure,
   suggestionOffer,
   withSuggestedLine,
@@ -27,7 +28,8 @@ interface OpeningBalanceEditorProps {
   /** The server's last answer. The parent remounts this editor on each new one. */
   opening: OpeningBalance;
   onAnswer: (opening: OpeningBalance) => void;
-  onConflict: () => void;
+  /** The server refused: reload the entry and show its message. */
+  onReload: (message: string) => void;
 }
 
 /**
@@ -36,7 +38,7 @@ interface OpeningBalanceEditorProps {
  * edit. It never balances the entry itself: the 3050 line is the server's
  * offer, added only when the user asks.
  */
-export function OpeningBalanceEditor({ opening, onAnswer, onConflict }: OpeningBalanceEditorProps) {
+export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBalanceEditorProps) {
   const { postable, isTemplate, truncated, total } = useChartOfAccounts();
   const [asOf, setAsOf] = useState(opening.as_of ?? "");
   const [lines, setLines] = useState<EditorLine[]>(() => editorLinesFrom(opening));
@@ -72,8 +74,8 @@ export function OpeningBalanceEditor({ opening, onAnswer, onConflict }: OpeningB
       })
       .catch((err: unknown) => {
         const failure = requestFailure(err, built.rowOf);
-        if (failure.kind === "conflict") {
-          onConflict();
+        if (failure.kind === "reload") {
+          onReload(failure.message);
           return;
         }
         setErrors([failure.message]);
@@ -159,8 +161,14 @@ export function OpeningBalanceEditor({ opening, onAnswer, onConflict }: OpeningB
       {offer && (
         <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm">
-            The server suggests <span className="font-medium">{offer.amount}</span> on 3050
-            Opening Balance Equity for the difference.
+            {offer.label === SUGGESTION_REMOVE_LABEL ? (
+              "The entry balances without its 3050 Opening Balance Equity line."
+            ) : (
+              <>
+                The server suggests <span className="font-medium">{offer.amount}</span> on 3050
+                Opening Balance Equity for the difference.
+              </>
+            )}
           </p>
           <Button variant="outline" onClick={putDifferenceOnEquity} disabled={saving || isTemplate}>
             <Scale className="mr-2 h-4 w-4" />
@@ -170,7 +178,7 @@ export function OpeningBalanceEditor({ opening, onAnswer, onConflict }: OpeningB
       )}
 
       {opening.status === "draft" && (
-        <FinalisePanel opening={opening} dirty={dirty} onAnswer={onAnswer} onConflict={onConflict} />
+        <FinalisePanel opening={opening} dirty={dirty} onAnswer={onAnswer} onReload={onReload} />
       )}
     </div>
   );

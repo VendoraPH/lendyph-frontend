@@ -14,7 +14,7 @@ import { DataState } from "../_components/data-state";
 import { openingBalanceStatusLabel } from "../_lib/display-labels";
 import { OpeningBalanceEditor } from "./_components/opening-balance-editor";
 import { OpeningBalanceReadOnly } from "./_components/opening-balance-read-only";
-import { CONFLICT_MESSAGE, accessNotice, viewFor } from "./_lib/opening-balances";
+import { accessNotice, viewFor } from "./_lib/opening-balances";
 
 const DESCRIPTION = "The balances the books start from, entered once for the whole organisation.";
 
@@ -31,17 +31,18 @@ function OpeningBalancesContent() {
   // until a reload. Each answer remounts the editor from the server's lines.
   const [latest, setLatest] = useState<OpeningBalance | null>(null);
   const [generation, setGeneration] = useState(0);
-  const [conflict, setConflict] = useState(false);
+  // The server's message after a refusal that reloaded the entry.
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const answer = (opening: OpeningBalance) => {
     setLatest(opening);
-    setConflict(false);
+    setRefusal(null);
     setGeneration((n) => n + 1);
   };
 
-  const reload = () => {
+  const reload = (message: string | null) => {
     setLatest(null);
-    setConflict(false);
+    setRefusal(message);
     setGeneration((n) => n + 1);
     resource.refetch();
   };
@@ -69,13 +70,13 @@ function OpeningBalancesContent() {
         </Card>
       ) : (
         <>
-          {conflict && (
+          {refusal && (
             <div
               role="alert"
               className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
             >
-              <span>{CONFLICT_MESSAGE}. Reload to see the latest version; your unsaved changes will be lost.</span>
-              <Button size="sm" variant="outline" onClick={reload}>
+              <span>{refusal} The opening balances were reloaded from the server.</span>
+              <Button size="sm" variant="outline" onClick={() => reload(null)}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Reload
               </Button>
@@ -99,7 +100,7 @@ function OpeningBalancesContent() {
                       key={generation}
                       opening={opening}
                       onAnswer={answer}
-                      onConflict={() => setConflict(true)}
+                      onReload={reload}
                     />
                   ) : (
                     <OpeningBalanceReadOnly opening={opening} />

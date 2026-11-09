@@ -120,11 +120,28 @@ describe("the editor's rows", () => {
     ]);
   });
 
-  test("the 3050 line is kept even if the server lists it only as opening_equity_line", () => {
-    const rows = editorLinesFrom(opening({ lines: [CASH, LOANS], opening_equity_line: EQUITY }));
+  test("a saved 3050 line, sent in lines[] and as opening_equity_line, is one row", () => {
+    const equityAgain = { ...EQUITY, id: 99 };
+    const rows = editorLinesFrom(
+      opening({ lines: [CASH, LOANS, EQUITY], opening_equity_line: equityAgain }),
+    );
+    assert.equal(rows.length, 3);
+    assert.equal(rows.filter((row) => row.account_id === 30).length, 1);
     assert.deepEqual(rows.at(-1), { account_id: 30, debit: "", credit: "1200.00" });
-    const once = editorLinesFrom(opening({ lines: [CASH, LOANS, EQUITY], opening_equity_line: EQUITY }));
-    assert.equal(once.filter((row) => row.account_id === 30).length, 1);
+  });
+
+  test("the editor never adds a balancing line the user didn't add", () => {
+    const rows = editorLinesFrom(
+      opening({ lines: [CASH, LOANS], opening_equity_line: EQUITY }),
+    );
+    assert.deepEqual(rows, [
+      { account_id: 10, debit: "1500.00", credit: "" },
+      { account_id: 20, debit: "500.00", credit: "" },
+    ]);
+    assert.deepEqual(editorLinesFrom({ ...NONE, opening_equity_line: EQUITY }), [
+      { account_id: null, debit: "", credit: "" },
+      { account_id: null, debit: "", credit: "" },
+    ]);
   });
 
   test("centavos become input text by string, never through a float", () => {
@@ -275,6 +292,25 @@ describe("the 3050 suggestion", () => {
       { account_id: 30, debit: "", credit: "1500.00" },
     ]);
   });
+
+  test("a suggestion of ₱0.00 on both sides takes the 3050 line out, as the server says", () => {
+    const zero = { ...suggested, debit: 0, credit: 0 };
+    assert.deepEqual(suggestionOffer(opening({ suggested_opening_equity_line: zero }), false), {
+      line: zero,
+      label: "Remove the 3050 Opening Balance Equity line",
+      amount: "₱0.00",
+    });
+    assert.deepEqual(
+      withSuggestedLine(
+        [
+          { account_id: 10, debit: "1500.00", credit: "" },
+          { account_id: 30, debit: "", credit: "1500.00" },
+        ],
+        zero,
+      ),
+      [{ account_id: 10, debit: "1500.00", credit: "" }],
+    );
+  });
 });
 
 describe("the posted journals warning", () => {
@@ -311,6 +347,22 @@ describe("finalising", () => {
     });
   });
 
+  test("the server's new reasons show as sent, with Finalise disabled", () => {
+    const reasons = [
+      "Months after 31 August 2026 are already closed. Reopen them before recording opening balances.",
+      "The chart has no 3050 Opening Balance Equity. Add it under 3000 Equity first.",
+      "1000 Assets is a heading. Move its balance to the accounts under it.",
+      "2300 Other Liabilities is deactivated. Reactivate it or move its balance to another account.",
+    ];
+    assert.deepEqual(finaliseState(opening({ can_finalise: false, blocking_reasons: reasons }), false), {
+      enabled: false,
+      reasons,
+      hint: null,
+    });
+    // Any reason disables it, even if can_finalise were to say otherwise.
+    assert.equal(finaliseState(opening({ can_finalise: true, blocking_reasons: reasons }), false).enabled, false);
+  });
+
   test("the confirm dialog says it posts once and can't be undone", () => {
     assert.equal(
       FINALISE_CONFIRM,
@@ -320,22 +372,71 @@ describe("finalising", () => {
 });
 
 describe("refusals", () => {
-  test("a 409 is a conflict with Reload", () => {
-    assert.deepEqual(requestFailure(httpError(409, { message: "stale" }), [0]), { kind: "conflict" });
+  const STALE = "Someone else changed the opening balances; reload and try again.";
+
+  test("a 409 reloads and shows the server's message", () => {
+    assert.deepEqual(requestFailure(httpError(409, { message: STALE }), [0]), {
+      kind: "reload",
+      message: STALE,
+    });
+    assert.deepEqual(requestFailure(httpError(409, {}), [0]), {
+      kind: "reload",
+      message: `${CONFLICT_MESSAGE}; reload and try again.`,
+    });
     assert.equal(CONFLICT_MESSAGE, "Someone else changed the opening balances");
   });
 
-  test("a 422 keeps the server's words and points at the row it names", () => {
+  test("a 422 on edit_version reloads and shows the server's message", () => {
+    const missing = "Send the edit_version the opening balances were loaded at; a draft already exists.";
+    assert.deepEqual(
+      requestFailure(httpError(422, { message: missing, errors: { edit_version: [missing] } }), []),
+      { kind: "reload", message: missing },
+    );
+  });
+
+  test("finalise after the command line posted, with no draft, is a 409 that reloads into the posted view", () => {
+    const posted = "An opening balance has already been posted (JE-000123).";
+    assert.deepEqual(
+      requestFailure(httpError(409, { message: posted }), [], "Could not post the opening balances."),
+      { kind: "reload", message: posted },
+    );
+  });
+
+  test("a closed later month on save is shown as the server sends it, on the date", () => {
+    const closed = "Months after 31 August 2026 are already closed. Reopen them before recording opening balances.";
+    assert.deepEqual(
+      requestFailure(httpError(422, { message: closed, errors: { as_of: [closed] } }), [0]),
+      { kind: "error", message: closed, rows: [] },
+    );
+  });
+
+  test("a finalise 422 reloads, so the server's reasons show and Finalise is disabled", () => {
+    const no3050 =
+      "This chart has no 3050 Opening Balance Equity, so there is nowhere for the opening equity to go. Nothing was written.";
+    assert.deepEqual(
+      requestFailure(httpError(422, { message: no3050, errors: { account: [no3050] } }), [], "Could not post the opening balances.", {
+        reloadOnInvalid: true,
+      }),
+      { kind: "reload", message: no3050 },
+    );
+  });
+
+  test("a 422 on a line keeps the server's words and points at the row it names", () => {
     const failure = requestFailure(
       httpError(422, {
         message: "The given data was invalid.",
-        errors: { "lines.1.account_id": ["This account is already on another line."] },
+        errors: {
+          "lines.1.account_id": [
+            "Line 2 is on 2300 Other Liabilities, which is deactivated. Reactivate it or use the account that replaced it.",
+          ],
+        },
       }),
       [0, 2],
     );
     assert.deepEqual(failure, {
       kind: "error",
-      message: "This account is already on another line.",
+      message:
+        "Line 2 is on 2300 Other Liabilities, which is deactivated. Reactivate it or use the account that replaced it.",
       rows: [2],
     });
   });

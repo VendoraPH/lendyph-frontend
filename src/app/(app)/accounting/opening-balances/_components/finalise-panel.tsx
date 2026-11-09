@@ -18,11 +18,12 @@ interface FinalisePanelProps {
   opening: OpeningBalance;
   dirty: boolean;
   onAnswer: (opening: OpeningBalance) => void;
-  onConflict: () => void;
+  /** The server refused: reload the entry and show its message. */
+  onReload: (message: string) => void;
 }
 
 /** Finalise posts the draft once. The server decides whether it can, and says why not. */
-export function FinalisePanel({ opening, dirty, onAnswer, onConflict }: FinalisePanelProps) {
+export function FinalisePanel({ opening, dirty, onAnswer, onReload }: FinalisePanelProps) {
   const [confirming, setConfirming] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +40,12 @@ export function FinalisePanel({ opening, dirty, onAnswer, onConflict }: Finalise
         onAnswer(answer);
       })
       .catch((err: unknown) => {
-        const failure = requestFailure(err, [], "Could not post the opening balances.");
-        if (failure.kind === "conflict") {
+        const failure = requestFailure(err, [], "Could not post the opening balances.", {
+          reloadOnInvalid: true,
+        });
+        if (failure.kind === "reload") {
           setConfirming(false);
-          onConflict();
+          onReload(failure.message);
         } else {
           setError(failure.message);
         }
