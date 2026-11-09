@@ -15,7 +15,7 @@ const source = readFileSync(
 
 test("decisions page on the server and reuse the decision rows", () => {
   assert.match(source, /creditScoringService\.listBorrowerDecisions\(borrowerId, \{ page, per_page: perPage \}\)/);
-  assert.match(source, /<DecisionItems decisions=\{res\.data\} \/>/);
+  assert.match(source, /<DecisionItems decisions=\{res\.data\} showLoan \/>/);
   assert.match(source, /<TablePagination/);
   assert.match(source, /emptyMessage="No decisions recorded for this member\."/);
   assert.doesNotMatch(source, /\.sort\(|\.filter\(/);

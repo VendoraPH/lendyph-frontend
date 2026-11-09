@@ -25,3 +25,8 @@ export function permissionChipLabel(permission: string): string {
 export function userStatusLabel(status: string): string {
   return actionName(status);
 }
+
+/** "1 permission", "29 permissions": a role card's count. */
+export function permissionCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "permission" : "permissions"}`;
+}

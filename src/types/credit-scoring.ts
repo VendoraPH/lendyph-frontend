@@ -199,6 +199,11 @@ export interface CreditDecision {
   id: number;
   borrower_id: number;
   loan_id: number | null;
+  /**
+   * The loan's account number when the decision names a loan the caller can
+   * see; null for a member-level decision. Absent on an API that predates it.
+   */
+  loan_account_number?: string | null;
   credit_score_id: number;
   decision: CreditDecisionValue;
   /** Absent for a summary caller (`details_hidden`). */

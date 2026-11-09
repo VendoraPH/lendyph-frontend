@@ -11,6 +11,11 @@ export function canToggleActive(roleKey: string): boolean {
   return !PROTECTED_ROLE_KEYS.includes(roleKey);
 }
 
+/** The mark the roles list shows beside a deactivated role's name, in words. */
+export function roleStatusMark(isActive: boolean): string | null {
+  return isActive ? null : "Inactive";
+}
+
 /**
  * What to show when activating or deactivating a role fails.
  *

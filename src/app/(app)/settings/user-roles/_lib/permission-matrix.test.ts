@@ -76,3 +76,15 @@ test("the Accounting toggle-all leaves out the allowance, which has its own chec
   assert.ok(MODULE_ACTIONS.accounting.includes("allowance"));
   assert.deepEqual(moduleToggleActions("loans").includes("write_off"), false);
 });
+
+// `expenses:pay` (settling a payable) is seeded by the API; the editor offers it
+// so a custom role can be given it, and its "toggle all" covers it like the rest.
+test("the matrix offers the four expenses permissions, pay included", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("expenses:")), [
+    "expenses:view",
+    "expenses:create",
+    "expenses:update",
+    "expenses:pay",
+  ]);
+  assert.ok(moduleToggleActions("expenses").includes("pay"));
+});

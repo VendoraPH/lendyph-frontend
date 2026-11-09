@@ -1,14 +1,20 @@
 import { formatDateTime } from "@/lib/format";
 import { DECISION_LABELS } from "@/lib/credit-scoring/labels";
+import { decisionLoanLabel } from "@/lib/credit-scoring/decision-loan";
 import type { CreditDecision } from "@/types/credit-scoring";
 
-/** Decisions as the server sent them, in its order. Reason and remarks show only when sent. */
-export function DecisionItems({ decisions }: { decisions: CreditDecision[] }) {
+/**
+ * Decisions as the server sent them, in its order. Reason and remarks show only
+ * when sent. `showLoan` names each decision's loan, for a member's list, where
+ * decisions span several loans.
+ */
+export function DecisionItems({ decisions, showLoan = false }: { decisions: CreditDecision[]; showLoan?: boolean }) {
   return (
     <ul className="space-y-2">
       {decisions.map((d) => (
         <li key={d.id} className="rounded-md border p-3 text-sm">
           <p className="font-medium">{DECISION_LABELS[d.decision]}</p>
+          {showLoan && decisionLoanLabel(d) && <p className="text-xs text-muted-foreground">{decisionLoanLabel(d)}</p>}
           {d.reason && <p>{d.reason}</p>}
           {d.remarks && <p className="text-muted-foreground">{d.remarks}</p>}
           <p className="text-xs text-muted-foreground">

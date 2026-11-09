@@ -1,3 +1,4 @@
+import { daysFromToday } from "@/lib/format";
 import { toNumber } from "@/lib/report-format";
 import { mergeLoanFigure, readRowOutstanding } from "./past-due-outstanding";
 
@@ -44,15 +45,15 @@ const str = (v: unknown, fallback = ""): string =>
 /**
  * The server's days past due, as sent: 0 for a period still inside its grace
  * window, so such a loan never reads late. Counted from the due date only when
- * the row carries neither field.
+ * the row carries neither field, in Manila's calendar days.
  */
 const computeDaysPastDue = (raw: RawPastDueRow): number => {
   const direct = toNumber(raw.days_past_due ?? raw.days_overdue);
   if (direct !== null) return direct;
   const dueDate = raw.due_date ?? raw.dueDate;
   if (typeof dueDate === "string") {
-    const ms = Date.now() - new Date(dueDate).getTime();
-    if (Number.isFinite(ms) && ms > 0) return Math.floor(ms / 86_400_000);
+    const days = -daysFromToday(dueDate);
+    if (Number.isFinite(days) && days > 0) return days;
   }
   return 0;
 };

@@ -66,6 +66,7 @@ import { getErrorMessage } from "@/lib/api-error";
 import {
   ACTIVE_LOANS_PER_PAGE_OPTIONS,
   activeLoanDueCell,
+  isDueSoon,
   type ActiveLoan,
 } from "./_lib/active-loans";
 import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-body";
@@ -104,12 +105,7 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
       className: "bg-destructive/10 text-destructive",
     };
   if (!loan.next_due_date) return { label: "Current", icon: CheckCircle2, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" };
-  const dueDate = new Date(loan.next_due_date);
-  const today = new Date();
-  const daysUntilDue = Math.ceil(
-    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (daysUntilDue <= 3)
+  if (isDueSoon(loan.next_due_date))
     return {
       label: "Due Soon",
       icon: Clock,

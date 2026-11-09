@@ -4,18 +4,21 @@ import { useEffect, useState } from "react";
 import { completeRows } from "@/lib/paginate";
 import { roleLabelForKey } from "@/lib/role-display-name";
 import { roleService, type ApiRole } from "@/services/role.service";
+import { useAuthStore } from "@/store";
 import { usePermission } from "./use-permission";
 
 /**
  * The label for a role key, by its saved display name when one is set.
  *
- * The user payload carries role keys only, so the display name comes from
- * `GET /roles`, which needs `users:view`. Without that permission, or while the
- * list loads or if it fails, the role reads by its catalog label.
+ * The signed-in user's own roles come with their display names from
+ * `GET /auth/me` (`role_details`). Any other name comes from `GET /roles`,
+ * which needs `users:view`. Without either, or while the list loads or if it
+ * fails, the role reads by its catalog label.
  */
 export function useRoleLabel(key: string | null | undefined): string {
   const { can } = usePermission();
   const canListRoles = can("users:view");
+  const ownRoles = useAuthStore((state) => state.user?.role_details);
   const [roles, setRoles] = useState<ApiRole[] | undefined>(undefined);
 
   useEffect(() => {
@@ -35,5 +38,5 @@ export function useRoleLabel(key: string | null | undefined): string {
     };
   }, [key, canListRoles]);
 
-  return roleLabelForKey(key, canListRoles ? roles : undefined);
+  return roleLabelForKey(key, canListRoles ? roles : undefined, ownRoles);
 }

@@ -12,6 +12,7 @@ import {
   Upload, FileText, Trash2, Loader2, IdCard,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import { borrowerService, type BorrowerValidId } from "@/services/borrower.service";
 import type { Document } from "@/services/document.service";
@@ -72,8 +73,9 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       await documentService.borrowerUpload(borrowerId, formData);
       toast.success("Document uploaded");
       fetchData();
-    } catch {
-      toast.error("We couldn't upload the document. Please try again.");
+    } catch (err) {
+      // A 422 (the file's type or size) in the server's words.
+      notifyError(err, "We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

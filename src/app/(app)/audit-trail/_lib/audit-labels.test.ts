@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AuditLog } from "@/types";
 import {
+  AUDIT_ACTION_OPTIONS,
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditChangePair,
@@ -323,4 +326,39 @@ test("reminder rows read under the Reminders module", () => {
     auditModuleLabel(log({ module: "reminders" as AuditLog["module"], target: { id: 1, type: "ReminderRule", label: "Due today" } })),
     "Reminders",
   );
+});
+
+// Round 2: document and attachment rows are written as `uploaded` and
+// `attachment_removed`, so the Action filter offers both, in words.
+test("the Action filter offers Uploaded and Attachment removed", () => {
+  const options = new Map(AUDIT_ACTION_OPTIONS.map((o) => [o.value, o.label]));
+  assert.equal(options.get("uploaded"), "Uploaded");
+  assert.equal(options.get("attachment_removed"), "Attachment removed");
+  assert.equal(auditActionLabel("uploaded"), "Uploaded");
+  assert.equal(auditActionLabel("attachment_removed"), "Attachment removed");
+  for (const { value, label } of AUDIT_ACTION_OPTIONS) assert.equal(auditActionLabel(value), label, value);
+  assert.equal(new Set(options.keys()).size, AUDIT_ACTION_OPTIONS.length);
+});
+
+test("the Audit Trail's Action filter is built from AUDIT_ACTION_OPTIONS", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
+  assert.match(page, /\.\.\.AUDIT_ACTION_OPTIONS\]/);
+});
+
+// f2d-be: voiding a loan that still had approvals pending cancels them and
+// writes `loan_chain_cancelled`.
+test("the Action filter offers Approvals cancelled", () => {
+  const option = AUDIT_ACTION_OPTIONS.find((o) => o.value === "loan_chain_cancelled");
+  assert.equal(option?.label, "Approvals cancelled");
+  assert.equal(auditActionLabel("loan_chain_cancelled"), "Approvals cancelled");
+});
+
+// Journal links on accounting rows (f2e-be words their values as "JE-000014"),
+// so the field names read in words too, never "reversed by journal id".
+test("journal id fields read in words", () => {
+  assert.equal(auditFieldLabel("reversed_by_journal_id"), "reversed by");
+  assert.equal(auditFieldLabel("matched_journal_line_id"), "matched to");
+  assert.equal(auditFieldLabel("reverses_journal_id"), "reverses");
+  assert.equal(auditFieldLabel("journal_id"), "journal");
+  assert.equal(auditFieldLabel("accounting_journal_id"), "journal");
 });

@@ -27,6 +27,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
@@ -102,8 +103,9 @@ export function CoMakerDocumentsDialog({
       await documentService.coMakerUpload(coMakerId, formData);
       toast.success("Document uploaded");
       fetchDocuments();
-    } catch {
-      toast.error("We couldn't upload the document. Please try again.");
+    } catch (err) {
+      // A 422 (the file's type or size) in the server's words.
+      notifyError(err, "We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

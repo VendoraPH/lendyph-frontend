@@ -138,6 +138,34 @@ test("dates: timestamps, Date objects and junk all round-trip sensibly", () => {
   assert.equal(parseApiDate(new Date("nope")), null);
 });
 
+/** Run `check` on a computer set to New York, Auckland and Manila. */
+function onEveryComputer(check: (zone: string) => void) {
+  const original = process.env.TZ;
+  try {
+    for (const zone of ["America/New_York", "Pacific/Auckland", "Asia/Manila"]) {
+      process.env.TZ = zone;
+      check(zone);
+    }
+  } finally {
+    process.env.TZ = original;
+  }
+}
+
+test("dates: every API value reads as Manila's clock, on any computer", () => {
+  onEveryComputer((zone) => {
+    const day = parseApiDate("2026-11-10");
+    const zoned = parseApiDate("2026-11-09T20:00:00.000000Z"); // 04:00 on the 10th in Manila
+    const local = parseApiDate("2026-11-09 23:30:00");
+    assert.ok(day && zoned && local);
+    assert.deepEqual([day.getDate(), day.getHours()], [10, 0], zone);
+    assert.deepEqual([zoned.getDate(), zoned.getHours()], [10, 4], zone);
+    assert.deepEqual([local.getDate(), local.getHours(), local.getMinutes()], [9, 23, 30], zone);
+    // So a ledger mixing date-only entries and zoned timestamps keeps Manila's order.
+    assert.ok(local.getTime() < day.getTime(), zone);
+    assert.ok(day.getTime() < zoned.getTime(), zone);
+  });
+});
+
 test("dates: a fields row formats the date instead of printing the API string", () => {
   // The bug: `field()` stringifies, so one receipt carried "Date: 2026-08-26"
   // in its fields block and "Date: Aug 26, 2026" in the signature detail

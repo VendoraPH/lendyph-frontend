@@ -164,6 +164,59 @@ export function todayDate(): Date {
   return calendarDate(new Date());
 }
 
+/** Date and time in the app's zone, as numeric parts. */
+const appClockFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * A server time as Manila's clock reads it, held at the computer's own clock:
+ * its local year, month, day, hour and minute are Manila's reading, so it
+ * orders with `calendarDate` days and reads back with `formatDateISO`. A date
+ * alone is that day's midnight, and a server time with no zone keeps its
+ * reading. A timestamp with a zone, or a `Date`, is an instant, read in
+ * Manila. Anything else is an invalid `Date`.
+ *
+ * `new Date("2026-11-09T20:00:00Z")` holds 15:00 on the 9th on a computer in
+ * New York, though it is 04:00 on the 10th in Manila.
+ */
+export function clockDate(value: string | Date): Date {
+  const text = typeof value === "string" ? value.trim() : null;
+  if (text !== null && (DATE_ONLY.test(text) || NO_ZONE.test(text))) {
+    const reading = new Date(DATE_ONLY.test(text) ? `${text}T00:00:00Z` : `${text.replace(" ", "T")}Z`);
+    return new Date(
+      reading.getUTCFullYear(),
+      reading.getUTCMonth(),
+      reading.getUTCDate(),
+      reading.getUTCHours(),
+      reading.getUTCMinutes(),
+      reading.getUTCSeconds(),
+      reading.getUTCMilliseconds(),
+    );
+  }
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return new Date(Number.NaN);
+  const part = Object.fromEntries(
+    appClockFmt.formatToParts(instant).map(({ type, value: v }) => [type, Number(v)]),
+  ) as Record<Intl.DateTimeFormatPartTypes, number>;
+  return new Date(
+    part.year,
+    part.month - 1,
+    part.day,
+    part.hour,
+    part.minute,
+    part.second,
+    instant.getUTCMilliseconds(),
+  );
+}
+
 /**
  * A server date as the calendar day it names in the app's zone, held as a date
  * picker holds a day: a `Date` at the computer's own midnight, for
@@ -174,16 +227,29 @@ export function todayDate(): Date {
  * holds as the evening of the 8th, so a due date read a day early there.
  */
 export function calendarDate(value: string | Date): Date {
-  let day: string;
-  if (typeof value === "string" && (DATE_ONLY.test(value.trim()) || NO_ZONE.test(value.trim()))) {
-    day = value.trim().slice(0, 10);
-  } else {
-    const instant = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(instant.getTime())) return new Date(Number.NaN);
-    day = appDayFmt.format(instant);
-  }
-  const [year, month, date] = day.split("-").map(Number);
-  return new Date(year, month - 1, date);
+  const held = clockDate(value);
+  if (Number.isNaN(held.getTime())) return held;
+  return new Date(held.getFullYear(), held.getMonth(), held.getDate());
+}
+
+const DAY_MS = 86_400_000;
+
+/** A held day's own parts as a UTC midnight, so a clock change never shortens a day. */
+function dayNumber(day: Date): number {
+  return Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()) / DAY_MS;
+}
+
+/**
+ * Whole calendar days from Manila's today to the day a server date names:
+ * 0 today, 3 three days ahead, -2 two days ago. NaN when it isn't a date.
+ *
+ * Counting `new Date(due) - Date.now()` is off by up to a day: the due date
+ * is midnight UTC (08:00 in Manila) and "now" is the computer's clock.
+ */
+export function daysFromToday(value: string | Date): number {
+  const day = calendarDate(value);
+  if (Number.isNaN(day.getTime())) return Number.NaN;
+  return dayNumber(day) - dayNumber(todayDate());
 }
 
 // ---------------------------------------------------------------------------

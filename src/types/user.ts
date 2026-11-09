@@ -11,6 +11,14 @@ export interface UserBranch {
   is_active?: boolean;
 }
 
+/** One of the signed-in user's own roles, as `GET /auth/me` sends it. */
+export interface UserRoleDetail {
+  /** The role key. Some responses name it `name`. */
+  key?: string | null;
+  name?: string | null;
+  display_name?: string | null;
+}
+
 export interface User {
   id: number;
   first_name: string;
@@ -44,6 +52,12 @@ export interface User {
    */
   branch?: UserBranch | null;
   roles: string[];
+  /**
+   * `GET /auth/me` only: the caller's own roles with their saved display
+   * names, readable without `users:view`. Absent on an API that predates it,
+   * and in sessions persisted before it.
+   */
+  role_details?: UserRoleDetail[];
   permissions: Permission[];
   avatar?: string | null;
   /**

@@ -11,6 +11,8 @@ import type { Action, Module } from "@/types";
  * - `collections` is retired and no longer used in the system.
  * - `loan_adjustments` is named in the type so pages can check it; the matrix
  *   has never offered it, and a role keeps whatever it holds on save.
+ * - `auto_credit` (`auto_credit:process`) is named so the catalog can list the
+ *   API's full set; the matrix doesn't offer it either.
  *
  * `credit_scoring` is offered again: the backend seeds
  * `credit_scoring:view|override|settings` (admin and super_admin hold them by
@@ -22,7 +24,7 @@ import type { Action, Module } from "@/types";
  * `reminders` is offered too (Phase 2): the backend seeds
  * `reminders:view|send|pause|settings` for admin and super_admin.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
@@ -65,7 +67,8 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // correction is `reverse`, which writes a second entry rather than editing
   // the first. Granting "edit a journal" would be granting "rewrite history".
   journals: ["view", "create", "post", "reverse"],
-  expenses: ["view", "create", "update"],
+  // `pay` settles a payable: it posts the payment out of a cash account.
+  expenses: ["view", "create", "update", "pay"],
   cash_accounts: ["view", "transfer"],
   // `settings` (not `configure`) mirrors `accounting:settings`; `override` is
   // the human decision verb, an action on the borrower profile, not a page.

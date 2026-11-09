@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   PAST_DUE_REQUEST_PARAMS,
@@ -64,10 +64,40 @@ test("days past due is the server's figure as sent, 0 included", () => {
   assert.equal(mapRow(periodRow({ days_past_due: undefined, days_overdue: 14 })).daysPastDue, 14);
 });
 
+/** Run `check` with the clock stopped at `instant`, on a computer set to each zone. */
+function atOnEveryComputer(instant: number, check: (zone: string) => void) {
+  const original = process.env.TZ;
+  mock.timers.enable({ apis: ["Date"], now: instant });
+  try {
+    for (const zone of ["America/New_York", "Pacific/Auckland", "Asia/Manila"]) {
+      process.env.TZ = zone;
+      check(zone);
+    }
+  } finally {
+    mock.timers.reset();
+    process.env.TZ = original;
+  }
+}
+
 test("days past due falls back to the due date only when the server sends neither field", () => {
-  const due = new Date(Date.now() - 10 * 86_400_000 - 3_600_000).toISOString();
-  const loan = mapRow(periodRow({ days_past_due: undefined, due_date: due }));
-  assert.equal(loan.daysPastDue, 10);
+  // Noon in Manila, so the 10 days and 1 hour stay 10 calendar days.
+  atOnEveryComputer(Date.UTC(2026, 10, 9, 4, 0), () => {
+    const due = new Date(Date.now() - 10 * 86_400_000 - 3_600_000).toISOString();
+    const loan = mapRow(periodRow({ days_past_due: undefined, due_date: due }));
+    assert.equal(loan.daysPastDue, 10);
+  });
+});
+
+test("the fallback counts Manila's calendar days, on any computer", () => {
+  // 07:00 on 10 Nov in Manila: 18:00 the 9th in New York, 12:00 the 10th in Auckland.
+  atOnEveryComputer(Date.UTC(2026, 10, 9, 23, 0), (zone) => {
+    const daysFor = (due: string) =>
+      mapRow(periodRow({ days_past_due: undefined, due_date: due })).daysPastDue;
+    assert.equal(daysFor("2026-11-09"), 1, zone);
+    assert.equal(daysFor("2026-11-01"), 9, zone);
+    assert.equal(daysFor("2026-11-10"), 0, zone);
+    assert.equal(daysFor("2026-11-12"), 0, zone);
+  });
 });
 
 test("a row without loan_id is never keyed by its period id", () => {

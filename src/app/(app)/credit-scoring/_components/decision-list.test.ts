@@ -22,6 +22,9 @@ test("a history row without a reason shows an empty cell", () => {
 });
 
 test("a loan's list and a member's list share one row renderer", () => {
-  assert.match(list, /export function DecisionItems\(\{ decisions \}: \{ decisions: CreditDecision\[\] \}\)/);
+  assert.match(
+    list,
+    /export function DecisionItems\(\{ decisions, showLoan = false \}: \{ decisions: CreditDecision\[\]; showLoan\?: boolean \}\)/,
+  );
   assert.match(list, /<DecisionItems decisions=\{decisions\} \/>/);
 });

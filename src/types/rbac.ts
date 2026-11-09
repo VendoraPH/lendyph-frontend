@@ -1,20 +1,13 @@
 /**
- * KNOWN GAP — `super_admin` is missing from this union, and it is a real role
- * on the API side: the backend grants `imports:process` to `super_admin` and
- * `admin`. The gate is unaffected (it reads `user.permissions`, never this
- * list), but every screen that LABELS a role goes through `ROLES[role]` and
- * therefore has no entry for it:
+ * The roles the frontend catalog (`ROLES` in @/constants/rbac) documents.
  *
- *   - `AccessDenied` renders the badge as "Unknown".
- *   - `user-roles` falls back to `titleCase(key)` → "Super Admin", which reads
- *     fine but carries no description and no seeded permission list.
- *
- * Not fixed here on purpose. `ROLES` is `Record<Role, RoleConfig>`, so adding
- * the key also adds a row to `ROLE_OPTIONS`, which is the list a role picker
- * would offer — making the highest-privilege role assignable from the UI is a
- * product decision, not a typo fix. Raised with the lead.
+ * `super_admin` is the platform team's role: the backend grants it every
+ * permission (`Permission::all()`). It is here so screens that label a role
+ * name it, never so a picker offers it: `ROLE_OPTIONS` leaves it out, and the
+ * Users screen builds its role list from `GET /roles`.
  */
 export type Role =
+  | "super_admin"
   | "admin"
   // Keeps the books (round C). A system role nobody gets from a seeder; the
   // owner assigns it in Users.
@@ -59,6 +52,9 @@ export type Module =
   | "share_capital"
   | "collaterals"
   | "auto_pay"
+  // Crediting members' share capital in a batch (`auto_credit:process`).
+  // Seeded by the API; the role editor has no checkbox for it.
+  | "auto_credit"
   | "gcash"
   // CSV migration. Its own module rather than an action on `borrowers` or
   // `loans`, because one import writes BOTH — a permission that named either
@@ -135,6 +131,11 @@ export type Action =
   | "restructure"
   // Writing off a loan's remaining balance; seeded as `loans:write_off`.
   | "write_off"
+  // Extending a loan's term (`loans:extend`) and resetting another user's
+  // password (`users:reset_password`). Seeded by the API; the role editor has
+  // no checkbox for either, and a role keeps whatever it holds on save.
+  | "extend"
+  | "reset_password"
   | "void"
   | "mark_collected"
   | "export"
@@ -169,8 +170,7 @@ export type Action =
   | "pause"
   // Loan products: one verb for create, edit and delete, as the API seeds it.
   | "manage"
-  // Expenses: settle a payable (`expenses:pay`, seeded by the server). Not
-  // offered in the role editor's matrix.
+  // Expenses: settle a payable (`expenses:pay`, seeded by the server).
   | "pay"
   // Branch access: see every branch, not only the ones a user is assigned to.
   | "view_all";

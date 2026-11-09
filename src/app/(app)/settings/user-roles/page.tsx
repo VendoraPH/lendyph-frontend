@@ -25,7 +25,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import type { Action, Permission } from "@/types";
-import { MODULE_ACTIONS, moduleToggleActions, type UIModule } from "./_lib/permission-matrix";
+import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
 import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
 import {
   roleItemFromApi,
@@ -76,7 +76,15 @@ import { notifyValidation } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { roleConflictMessage } from "./_lib/role-conflict";
-import { canToggleActive, roleActivationError } from "./_lib/role-activation";
+import { canToggleActive, roleActivationError, roleStatusMark } from "./_lib/role-activation";
+import {
+  GRANT_LOCK_REASON,
+  canGrant,
+  editLockReason,
+  grantLockReason,
+  moduleToggleTargets,
+  type GrantingCaller,
+} from "./_lib/role-grant";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -346,6 +354,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
   write_off: { label: "Write off restructure shortfall", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  extend: { label: "Extend", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  reset_password: { label: "Reset password", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
@@ -419,6 +429,9 @@ function RoleFormDialog({
   saving = false,
 }: RoleFormDialogProps) {
   const isEdit = !!role;
+  const callerUser = useAuthStore((s) => s.user);
+  const caller: GrantingCaller = { roles: callerUser?.roles ?? [], permissions: callerUser?.permissions ?? [] };
+  const editLock = role ? editLockReason(role.key, caller) : null;
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
@@ -434,7 +447,7 @@ function RoleFormDialog({
   }
 
   function toggleModule(mod: UIModule, enable: boolean) {
-    setPermissions((prev) => setModulePermissions(prev, mod, enable));
+    setPermissions((prev) => setModulePermissions(prev, mod, enable, (p) => canGrant(caller, p)));
   }
 
   function handleSave() {
@@ -472,6 +485,15 @@ function RoleFormDialog({
 
   const modules = Object.keys(MODULE_META) as UIModule[];
   const totalSelected = permissions.size;
+  // A caller who isn't a super_admin can't add a permission they don't hold.
+  const someLocked =
+    !readOnly &&
+    modules.some((mod) =>
+      MODULE_ACTIONS[mod].some((act) => {
+        const perm = `${mod}:${act}` as Permission;
+        return grantLockReason(caller, perm, permissions.has(perm)) !== null;
+      })
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -533,6 +555,11 @@ function RoleFormDialog({
                 {totalSelected} selected
               </Badge>
             </div>
+            {someLocked && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {GRANT_LOCK_REASON}, so the boxes for the others are locked.
+              </p>
+            )}
 
             <div className="space-y-3">
               {modules.map((mod) => {
@@ -543,11 +570,12 @@ function RoleFormDialog({
                   permissions.has(`${mod}:${a}` as Permission)
                 ).length;
                 // The header toggle covers every action but the own-checkbox
-                // ones (write_off), so it reads checked when those are all on.
-                const toggleActions = moduleToggleActions(mod);
-                const allSelected = toggleActions.every((a) =>
-                  permissions.has(`${mod}:${a}` as Permission)
-                );
+                // ones (write_off) that the role has or the caller can grant,
+                // so it reads checked when those are all on.
+                const toggleTargets = moduleToggleTargets(mod, permissions, caller);
+                const allSelected =
+                  toggleTargets.length > 0 &&
+                  toggleTargets.every((a) => permissions.has(`${mod}:${a}` as Permission));
                 const someSelected = grantedCount > 0 && !allSelected;
 
                 return (
@@ -583,7 +611,8 @@ function RoleFormDialog({
                           checked={allSelected}
                           indeterminate={someSelected}
                           onCheckedChange={() => toggleModule(mod, !allSelected)}
-                          disabled={readOnly}
+                          disabled={readOnly || toggleTargets.length === 0}
+                          title={!readOnly && toggleTargets.length === 0 ? GRANT_LOCK_REASON : undefined}
                           aria-label={`Toggle all ${meta.label} permissions`}
                         />
                       </div>
@@ -593,24 +622,30 @@ function RoleFormDialog({
                       {actions.map((act) => {
                         const perm = `${mod}:${act}` as Permission;
                         const granted = permissions.has(perm);
+                        const lockReason = readOnly ? null : grantLockReason(caller, perm, granted);
                         return (
                           <label
                             key={act}
+                            title={lockReason ?? undefined}
                             className={cn(
                               "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
-                              readOnly ? "cursor-default" : "cursor-pointer",
+                              readOnly ? "cursor-default" : lockReason ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                               granted
                                 ? ACTION_META[act].colorClass
                                 : "bg-background text-muted-foreground border-border",
-                              !readOnly && !granted && "hover:bg-muted"
+                              !readOnly && !granted && !lockReason && "hover:bg-muted"
                             )}
                           >
                             <Checkbox
                               checked={granted}
                               onCheckedChange={() => togglePermission(mod, act)}
-                              disabled={readOnly}
+                              disabled={readOnly || lockReason !== null}
                               className="h-3.5 w-3.5"
-                              aria-label={`${meta.label} ${ACTION_META[act].label}`}
+                              aria-label={
+                                lockReason
+                                  ? `${meta.label} ${ACTION_META[act].label} (${lockReason})`
+                                  : `${meta.label} ${ACTION_META[act].label}`
+                              }
                             />
                             {ACTION_META[act].label}
                           </label>
@@ -634,13 +669,17 @@ function RoleFormDialog({
           </Button>
           {readOnly && onEdit && (
             <PermissionGate permission="settings:update">
-              <Button
-                onClick={onEdit}
-                className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              >
-                <Pencil className="h-4 w-4" />
-                Edit
-              </Button>
+              <span title={editLock ?? undefined} className="inline-flex">
+                <Button
+                  onClick={onEdit}
+                  disabled={editLock !== null}
+                  aria-label={editLock ? `Edit (${editLock})` : undefined}
+                  className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Button>
+              </span>
             </PermissionGate>
           )}
           {!readOnly && (
@@ -673,6 +712,8 @@ function UserRolesContent() {
   const [actionLoading, setActionLoading] = useState(false);
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+  const callerUser = useAuthStore((s) => s.user);
+  const caller: GrantingCaller = { roles: callerUser?.roles ?? [], permissions: callerUser?.permissions ?? [] };
 
   const maybeRefreshCurrentUser = async (affectedRoleKey?: string) => {
     if (!affectedRoleKey) return;
@@ -921,6 +962,7 @@ function UserRolesContent() {
                 {!loading &&
                   filtered.map((r) => {
                     const moduleCount = roleModuleCount(r.permissions);
+                    const editLock = editLockReason(r.key, caller);
                     return (
                       <TableRow
                         key={r.key}
@@ -943,6 +985,11 @@ function UserRolesContent() {
                             >
                               {r.label}
                             </Badge>
+                            {roleStatusMark(r.isActive) && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                {roleStatusMark(r.isActive)}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -964,18 +1011,22 @@ function UserRolesContent() {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <PermissionGate permission="settings:update">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1 text-xs"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEdit(r);
-                                }}
-                              >
-                                <Pencil className="h-3 w-3" />
-                                Edit
-                              </Button>
+                              <span title={editLock ?? undefined} className="inline-flex">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 gap-1 text-xs"
+                                  disabled={editLock !== null}
+                                  aria-label={editLock ? `Edit (${editLock})` : undefined}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEdit(r);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  Edit
+                                </Button>
+                              </span>
                             </PermissionGate>
                             {canToggleActive(r.key) && (
                               <PermissionGate permission="settings:update">

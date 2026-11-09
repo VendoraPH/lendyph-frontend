@@ -14,6 +14,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/initials";
 import { auditService } from "@/services";
+import { usePermission } from "@/hooks";
+import { auditLoadRestriction, auditTrailRestriction } from "./_lib/audit-access";
 import {
   Table,
   TableBody,
@@ -44,12 +46,14 @@ import {
   Monitor,
   X,
   Cog,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction } from "@/types";
 import {
+  AUDIT_ACTION_OPTIONS,
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditChangePair,
@@ -76,27 +80,15 @@ const ACTION_COLOR: Record<AuditAction, string> = {
   printed: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
   reset_password: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
   status_changed: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  uploaded: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  attachment_removed: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  loan_chain_cancelled: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
 };
-
-const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
-  { value: "login", label: "Login" },
-  { value: "logout", label: "Logout" },
-  { value: "created", label: "Created" },
-  { value: "updated", label: "Updated" },
-  { value: "deleted", label: "Deleted" },
-  { value: "voided", label: "Voided" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "released", label: "Released" },
-  { value: "printed", label: "Printed" },
-  { value: "reset_password", label: "Reset Password" },
-  { value: "status_changed", label: "Status Changed" },
-];
 
 // Each filter's options, "all" first. The same list is the Select's `items`,
 // which is what lets the closed trigger show the label, not the raw value.
 const MODULE_FILTER_ITEMS = [{ value: "all", label: "All Modules" }, ...AUDIT_MODULE_OPTIONS];
-const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...ACTION_OPTIONS];
+const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...AUDIT_ACTION_OPTIONS];
 
 
 
@@ -297,6 +289,8 @@ function AuditTrailContent() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(DEFAULT_PER_PAGE);
   const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
+  // Set when the list answers 403: the table says why instead of "No audit logs found".
+  const [loadRestriction, setLoadRestriction] = useState<string | null>(null);
 
   // Guards against out-of-order responses: rapid page clicks or a fast-changing
   // filter can land an older request last and repaint the previous page's rows
@@ -346,9 +340,12 @@ function AuditTrailContent() {
       }
 
       setLogs(rows);
-    } catch {
+      setLoadRestriction(null);
+    } catch (err) {
       if (requestId === requestIdRef.current) {
-        toast.error("We couldn't load the audit logs. Please try again.");
+        const restriction = auditLoadRestriction(err);
+        if (!restriction) toast.error("We couldn't load the audit logs. Please try again.");
+        setLoadRestriction(restriction);
         setLogs([]);
         setMeta(null);
       }
@@ -695,9 +692,10 @@ function AuditTrailContent() {
                       colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      {hasFilters
-                        ? "No audit logs match these filters."
-                        : "No audit logs found."}
+                      {loadRestriction ??
+                        (hasFilters
+                          ? "No audit logs match these filters."
+                          : "No audit logs found.")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -737,10 +735,41 @@ function AuditTrailContent() {
   );
 }
 
+/** The Audit Trail in place of its logs, for a user the API would refuse them to. */
+function AuditTrailRestricted({ message }: { message: string }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
+        <p className="text-muted-foreground">
+          Track and review all user actions across the system
+        </p>
+      </div>
+      <Card>
+        <CardContent className="flex items-start gap-3 py-6">
+          <ShieldAlert className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="font-medium">{message}</p>
+            <p className="text-sm text-muted-foreground">
+              Ask your administrator for the &quot;See all branches&quot; permission.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Checks branch access before the logs are requested. */
+function AuditTrailAccess() {
+  const restriction = auditTrailRestriction(usePermission().can("branches:view_all"));
+  return restriction ? <AuditTrailRestricted message={restriction} /> : <AuditTrailContent />;
+}
+
 export default function AuditTrailPage() {
   return (
     <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
-      <AuditTrailContent />
+      <AuditTrailAccess />
     </RouteGuard>
   );
 }
