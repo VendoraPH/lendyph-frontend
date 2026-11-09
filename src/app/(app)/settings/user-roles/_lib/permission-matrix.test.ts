@@ -26,10 +26,15 @@ test("every offered permission is a well-formed module:action pair", () => {
   assert.equal(new Set(offered).size, offered.length);
 });
 
-// Same hazard as credit_scoring: the API seeds no reminders:* permission yet,
-// so ticking one would make every later save of that role answer 422.
-test("the matrix offers no reminders permission", () => {
-  assert.deepEqual(offered.filter((p) => p.startsWith("reminders:")), []);
+// Phase 2: the API seeds exactly these four (admin and super_admin). Any
+// other `reminders:*` would be refused whole on save (422).
+test("the matrix offers exactly the four reminders permissions", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("reminders:")), [
+    "reminders:view",
+    "reminders:send",
+    "reminders:pause",
+    "reminders:settings",
+  ]);
 });
 
 // The API seeds one loan products permission, held by admin and super_admin.

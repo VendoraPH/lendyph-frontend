@@ -459,4 +459,12 @@ describe("badge and labels", () => {
     assert.equal(notificationTone("restructure_applied"), "info");
     assert.equal(notificationTone("something_new"), "info");
   });
+
+  // Reminders staff notices (backend #232): a bad contact and a long-overdue
+  // follow-up need someone to act; a reminder that could not go out failed.
+  test("reminder notices: contact invalid and follow up warn, failed is danger", () => {
+    assert.equal(notificationTone("reminder_contact_invalid"), "warning");
+    assert.equal(notificationTone("reminder_follow_up"), "warning");
+    assert.equal(notificationTone("reminder_failed"), "danger");
+  });
 });

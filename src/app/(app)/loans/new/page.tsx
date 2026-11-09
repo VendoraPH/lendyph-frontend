@@ -139,6 +139,16 @@ import {
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
+import {
+  amountInputValue,
+  principalRangeError,
+  REMARKS_SAVED_HINT,
+  remarksRefusal,
+  remarksRequired,
+  restructureEditFields,
+  scbRuleError,
+} from "./_lib/restructure-edit";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
 
 // ── Helpers ──
@@ -205,6 +215,11 @@ function NewLoanApplicationInner() {
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
+  // A restructure's remarks. The server asks for them (422 on `remarks`) when
+  // the edit moves its principal below the outstanding balance; its message is
+  // kept here and the field turns required.
+  const [restructureRemarks, setRestructureRemarks] = useState("");
+  const [remarksRequiredMessage, setRemarksRequiredMessage] = useState<string | null>(null);
 
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
@@ -495,15 +510,21 @@ function NewLoanApplicationInner() {
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
 
+  // A restructure edited here (one sent back for approval is): the server
+  // exempts it from the product's minimum and build-up range, and it carries
+  // remarks of its own.
+  const isRestructureEdit = isEditMode && existingLoan?.is_restructure === true;
+  const storedPrincipal =
+    isRestructureEdit && existingLoan?.principal_amount != null ? Number(existingLoan.principal_amount) : null;
+  // Asked for by the server, and only while the principal differs from the
+  // stored one (the server keeps the stored remarks otherwise).
+  const remarksNeeded = remarksRequired(remarksRequiredMessage, principal, storedPrincipal);
+
   // Validation messages
   const principalError = useMemo(() => {
-    if (!selectedProduct || !principalAmount) return null;
-    if (principal < selectedProduct.min_amount)
-      return `Minimum amount is ${formatCurrency(selectedProduct.min_amount)}`;
-    if (principal > selectedProduct.max_amount)
-      return `Maximum amount is ${formatCurrency(selectedProduct.max_amount)}`;
-    return null;
-  }, [selectedProduct, principalAmount, principal]);
+    if (!principalAmount) return null;
+    return principalRangeError(principal, selectedProduct, { isRestructure: isRestructureEdit, storedPrincipal });
+  }, [selectedProduct, principalAmount, principal, isRestructureEdit, storedPrincipal]);
 
   const termError = useMemo(() => {
     if (!selectedProduct || !termValue) return null;
@@ -515,21 +536,12 @@ function NewLoanApplicationInner() {
   }, [selectedProduct, termValue, term, termUnit]);
 
   // SCB validation — required when the product says so; range-checked when
-  // the product defines min/max. Otherwise optional (any value >= 0 is fine).
-  const scbError = useMemo(() => {
-    if (!scbAmount || scb === 0) {
-      // Empty/zero SCB is only an error when the product requires it
-      return selectedProduct?.scb_required
-        ? "Share Capital Build-Up amount is required"
-        : null;
-    }
-    if (scb < 0) return "SCB cannot be negative";
-    const min = selectedProduct?.min_scb ?? 0;
-    const max = selectedProduct?.max_scb ?? 0;
-    if (min > 0 && scb < min) return `Minimum SCB is ${formatCurrency(min)}`;
-    if (max > 0 && scb > max) return `Maximum SCB is ${formatCurrency(max)}`;
-    return null;
-  }, [selectedProduct, scbAmount, scb]);
+  // the product defines min/max. A restructure is held to the server's rule
+  // only (any amount from ₱0.00).
+  const scbError = useMemo(
+    () => scbRuleError(scbAmount, selectedProduct, isRestructureEdit),
+    [selectedProduct, scbAmount, isRestructureEdit],
+  );
 
   // Fees — percent × principal. The percent is user-editable but bounded
   // by the product's min/max range (if defined on the product).
@@ -738,6 +750,7 @@ function NewLoanApplicationInner() {
     if (scbError) missing.push("Share Capital Build-Up");
     if (processingFeePercentError) missing.push("Processing fee");
     if (serviceFeePercentError) missing.push("Service fee");
+    if (isRestructureEdit && remarksNeeded && !restructureRemarks.trim()) missing.push("Remarks");
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
@@ -785,6 +798,10 @@ function NewLoanApplicationInner() {
           policy_exception: true,
           policy_exception_details: policyExceptionDetails.trim() || undefined,
         }),
+        // A restructure: its build-up as typed (₱0.00 included) and, when the
+        // principal moved, its remarks.
+        ...(isRestructureEdit &&
+          restructureEditFields({ principal, storedPrincipal, scb, remarks: restructureRemarks })),
       };
 
       // Edit mode — update existing loan, skip auto-submit (the loan is
@@ -867,6 +884,9 @@ function NewLoanApplicationInner() {
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
+      // The server asks for a restructure's remarks: the field turns required.
+      const remarksAsked = remarksRefusal(err);
+      if (remarksAsked !== null) setRemarksRequiredMessage(remarksAsked);
       toast.error(
         formatProductRangeMessage(
           getErrorMessage(
@@ -1163,10 +1183,11 @@ function NewLoanApplicationInner() {
               </Label>
               <Input
                 type="number"
-                placeholder="0"
-                step="1"
+                placeholder="0.00"
+                step="0.01"
+                inputMode="decimal"
                 value={principalAmount}
-                onChange={(e) => setPrincipalAmount(e.target.value.replace(/\D/g, ""))}
+                onChange={(e) => setPrincipalAmount(amountInputValue(e.target.value))}
                 min={selectedProduct?.min_amount}
                 max={selectedProduct?.max_amount}
               />
@@ -1259,14 +1280,16 @@ function NewLoanApplicationInner() {
               <div className="space-y-0.5">
                 <Label htmlFor="scb-amount" className="text-sm font-medium">
                   Share Capital Build-Up{" "}
-                  {selectedProduct.scb_required ? (
+                  {selectedProduct.scb_required && !isRestructureEdit ? (
                     <span className="text-destructive">*</span>
                   ) : (
                     <span className="text-muted-foreground font-normal">(optional)</span>
                   )}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {selectedProduct.scb_required
+                  {isRestructureEdit
+                    ? "A restructure takes any build-up from ₱0.00 per period."
+                    : selectedProduct.scb_required
                     ? "This product requires a Share Capital Build-Up amount per period."
                     : "Enter an amount to add Share Capital Build-Up to each amortization period."}{" "}
                   The SCB portion will be credited to the member&rsquo;s share
@@ -1278,15 +1301,15 @@ function NewLoanApplicationInner() {
                   <Input
                     id="scb-amount"
                     type="number"
-                    min={selectedProduct.min_scb ?? 0}
-                    max={selectedProduct.max_scb ?? undefined}
+                    min={isRestructureEdit ? 0 : (selectedProduct.min_scb ?? 0)}
+                    max={isRestructureEdit ? undefined : (selectedProduct.max_scb ?? undefined)}
                     step="1"
                     placeholder="0"
                     value={scbAmount}
                     onChange={(e) => setScbAmount(e.target.value)}
                   />
                 </div>
-                {selectedProduct.scb_required && (selectedProduct.min_scb ?? 0) > 0 && (
+                {selectedProduct.scb_required && !isRestructureEdit && (selectedProduct.min_scb ?? 0) > 0 && (
                   <div className="flex items-center text-xs text-muted-foreground">
                     Allowed range:{" "}
                     <span className="ml-1 font-medium text-foreground">
@@ -1296,6 +1319,41 @@ function NewLoanApplicationInner() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* A restructure's remarks: required once the server says the
+              principal is below the outstanding balance (it writes the
+              difference off), and sent only with a changed principal. */}
+          {isRestructureEdit && (
+            <div className="mt-4 space-y-1.5">
+              <Label htmlFor="restructure-remarks">
+                Remarks{" "}
+                {remarksNeeded ? (
+                  <span className="text-destructive">*</span>
+                ) : (
+                  <span className="text-muted-foreground font-normal">(needed when the principal is below the outstanding balance)</span>
+                )}
+              </Label>
+              <Textarea
+                id="restructure-remarks"
+                value={restructureRemarks}
+                onChange={(e) => setRestructureRemarks(e.target.value)}
+                maxLength={1000}
+                rows={2}
+                required={remarksNeeded}
+                aria-invalid={remarksNeeded && !restructureRemarks.trim()}
+                aria-describedby={remarksNeeded ? "restructure-remarks-saved restructure-remarks-hint" : "restructure-remarks-saved"}
+                placeholder="Why the restructured principal is below the outstanding balance"
+              />
+              <p id="restructure-remarks-saved" className="text-xs text-muted-foreground">
+                {REMARKS_SAVED_HINT}
+              </p>
+              {remarksNeeded && (
+                <p id="restructure-remarks-hint" className="text-xs text-destructive">
+                  {remarksRequiredMessage}
+                </p>
+              )}
             </div>
           )}
         </CardContent>
@@ -1561,7 +1619,7 @@ function NewLoanApplicationInner() {
       {/* ── Card 4: Deductions & Net Proceeds ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Deductions & Net Proceeds</CardTitle>
+          <CardTitle>{isRestructureEdit ? "Deductions" : "Deductions & Net Proceeds"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1751,12 +1809,20 @@ function NewLoanApplicationInner() {
                 {currencyOrDash(previewDeductions?.total_deductions)}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3">
-              <span className="text-sm font-medium">Net Proceeds</span>
-              <span className="text-lg font-bold text-brand-orange">
-                {currencyOrDash(previewDeductions?.net_proceeds)}
-              </span>
-            </div>
+            {/* A restructure pays nothing out: what is collected from the
+                member, and Paid out, in place of Net Proceeds. */}
+            {proceedsFigures(isRestructureEdit, {
+              totalDeductions: previewDeductions?.total_deductions,
+              netProceeds: previewDeductions?.net_proceeds,
+            }).map((figure) => (
+              <div
+                key={figure.label}
+                className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3"
+              >
+                <span className="text-sm font-medium">{figure.label}</span>
+                <span className="text-lg font-bold text-brand-orange">{currencyOrDash(figure.amount)}</span>
+              </div>
+            ))}
           </div>
           {previewDeductions?.error && (
             <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">

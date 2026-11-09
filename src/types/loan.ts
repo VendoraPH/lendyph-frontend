@@ -91,6 +91,27 @@ export interface LoanReleasePreview {
   net_proceeds_after_insurance: string;
   /** The premium withheld is more than the fees leave; the release refuses it. */
   exceeds_net_proceeds: boolean;
+  /**
+   * A restructure only: how the release settles the old loan, worked out by the
+   * same code the release posts with. Absent on any other loan.
+   */
+  restructure?: LoanReleaseRestructure | null;
+}
+
+/**
+ * `release-preview`'s `restructure` block, in the preview's 2-decimal strings:
+ * the principal carried from the old loan, the interest and penalty
+ * capitalised into it, the principal written off, the deductions collected from
+ * the member at release, and what is paid out (₱0.00: a restructure pays
+ * nothing out).
+ */
+export interface LoanReleaseRestructure {
+  carried_principal: string;
+  capitalised_interest: string;
+  capitalised_penalty: string;
+  written_off_principal: string;
+  collected_now: string;
+  paid_out: string;
 }
 
 /**
@@ -282,6 +303,8 @@ export interface RestructureSourceLoan extends RestructureLinkedLoan {
 
 /** One entry of `Loan.restructured_into`. */
 export interface RestructuredIntoLoan extends RestructureLinkedLoan {
+  /** Principal written off in the books when this restructure released; null before it was recorded. */
+  restructure_written_off_principal?: number | null;
   start_date: string | null;
 }
 
@@ -400,6 +423,18 @@ export interface Loan {
   approval_remarks?: string;
   approved_at?: string;
   released_at?: string;
+  /**
+   * How the release paid the proceeds out (`cash`, `gcash`, …) and its
+   * reference; null on loans released before they were recorded.
+   */
+  release_method?: string | null;
+  release_reference?: string | null;
+  /**
+   * The server's answer to whether the caller may send this loan back for
+   * approval: an approved, unreleased restructure and `loans:release`. The
+   * screen never works it out.
+   */
+  can_send_back_approved?: boolean;
   rejection_remarks?: string;
   rejected_at?: string;
   amortization_schedules?: ApiScheduleRow[];
@@ -412,8 +447,18 @@ export interface Loan {
   restructured_at?: string | null;
   /** What was still owed on this loan when the restructure closed it. */
   restructured_balance?: number | null;
-  /** The part of `restructured_balance` the new loan did not take on. */
+  /**
+   * On a closed (restructured) loan: the forgiveness approved, the part of the
+   * approved balance the new loan did not take on. Not what the books wrote
+   * off; that is the new loan's `restructure_written_off_principal`.
+   */
   write_off_amount?: number | null;
+  /**
+   * On a restructure released since Phase 2: the old loan's unpaid principal
+   * it did not carry, written off in the books. Null on other loans and on
+   * restructures released before it was recorded.
+   */
+  restructure_written_off_principal?: number | null;
   /** The loan this one was restructured out of. Only `GET /loans/{id}` loads it. */
   source_loan?: RestructureSourceLoan | null;
   /**

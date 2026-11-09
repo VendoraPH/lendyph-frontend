@@ -66,6 +66,7 @@ import {
   ReceiptText,
   Wallet,
   Gauge,
+  BellRing,
   Package,
   Building2,
   type LucideIcon,
@@ -320,6 +321,17 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Configure the scorecard and credit scoring settings",
     ],
   },
+  reminders: {
+    label: "Reminders",
+    description: "Automated SMS and email payment reminders to members. In test mode they are logged, not sent.",
+    icon: BellRing,
+    features: [
+      "View the reminders dashboard, queue, message history and a loan's reminders",
+      "Send one reminder to a member by hand",
+      "Pause and resume reminders for everyone, one member or one loan",
+      "Configure rules, templates and the SMS and email set-up",
+    ],
+  },
 };
 
 
@@ -348,6 +360,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
   send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  pay: { label: "Pay", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
   manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
 };

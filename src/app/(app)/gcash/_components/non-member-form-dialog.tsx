@@ -57,6 +57,10 @@ const ID_TYPES = [
   "Other",
 ] as const;
 
+// The stored value is the label itself, but Base UI still reads the trigger's
+// text from `items`, so the dropdown is given them like every other one.
+const ID_TYPE_ITEMS = ID_TYPES.map((t) => ({ value: t, label: t }));
+
 /** The input each field's error belongs to, and takes focus when it fails. */
 const FIELD_IDS: Record<WalkInField, string> = {
   full_name: "nm-name",
@@ -257,6 +261,7 @@ export function NonMemberFormDialog({
               error={errors.id_type}
             >
               <Select
+                items={ID_TYPE_ITEMS}
                 // `null`, not `undefined`: Base UI reads `undefined` as "this
                 // Select is uncontrolled", so an empty id_type made the very
                 // first render uncontrolled and picking an ID flipped it to

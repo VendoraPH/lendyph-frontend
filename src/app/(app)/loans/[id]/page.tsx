@@ -32,6 +32,16 @@ import {
 import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import { chainEvents, revisionRoundView, withChainEvents } from "./_lib/approval-rounds";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
+import {
+  SEND_BACK_REASON_MAX,
+  canSendBackApproved,
+  sendBackApprovedPayload,
+  sendBackFailureAction,
+  sendBackReasonError,
+} from "./_lib/send-back-approved";
+import type { LoanApprovalRound, LoanApprovalStep as ChainStep } from "@/types/loan-approval";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -73,7 +83,13 @@ import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
-import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-figures";
+import {
+  releaseDialogView,
+  releaseInsuranceQuery,
+  releaseMethodDetails,
+  releaseRequest,
+} from "./_lib/release-figures";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
@@ -82,6 +98,8 @@ import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions
 import {
   DEFAULT_PAYMENT_METHOD,
   PAYMENT_METHOD_OPTIONS,
+  extensionMethodFields,
+  extensionReferenceError,
   paymentMethodFields,
   paymentMethodLabel,
   paymentReferenceError,
@@ -206,6 +224,7 @@ import {
   Zap,
   RefreshCw,
   Info,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
@@ -547,15 +566,26 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   approved: <UserCheck className="h-4 w-4 text-blue-600" />,
   rejected: <Ban className="h-4 w-4 text-red-600" />,
   released: <Unlock className="h-4 w-4 text-cyan-600" />,
+  sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
 };
 
-function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events = workflowEvents(loan);
+function WorkflowHistory({
+  loan,
+  rounds,
+  steps,
+}: {
+  loan: Loan;
+  rounds: LoanApprovalRound[];
+  steps: ChainStep[];
+}) {
+  // The loan's own milestones, with every round's sign-offs, send-back and
+  // re-submission from the chain (the loan keeps only its latest approval).
+  const events = withChainEvents(workflowEvents(loan), chainEvents(rounds, steps), loan.created_at);
 
   return (
     <div className="space-y-4">
-      {events.map((event) => (
-        <div key={event.key} className="flex items-start gap-3">
+      {events.map((event, i) => (
+        <div key={`${event.key}-${i}`} className="flex items-start gap-3">
           <div className="mt-0.5">{WORKFLOW_ICONS[event.key]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{event.label}</p>
@@ -743,6 +773,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Bumped on every open, so a reopened dialog asks the server again rather
   // than showing the figures from before the last extension.
   const [extendPreviewRound, setExtendPreviewRound] = useState(0);
+  // How "pay" collects what the extension takes, and its reference. Every
+  // opening starts at Cash with no reference, as Record Payment does.
+  const [extendMethod, setExtendMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [extendReference, setExtendReference] = useState("");
+  if (useDialogOpening(extendOpen, loanId)) {
+    setExtendMethod(DEFAULT_PAYMENT_METHOD);
+    setExtendReference("");
+  }
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -997,6 +1035,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
+  // "Send back for approval" on an approved restructure: its reason, cleared
+  // each time the dialog opens.
+  const [sendBackApprovedOpen, setSendBackApprovedOpen] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState("");
+  const [sendBackApprovedLoading, setSendBackApprovedLoading] = useState(false);
+  if (useDialogOpening(sendBackApprovedOpen, loanId)) setSendBackReason("");
+  // How the proceeds are paid out, and its reference. Every opening starts at
+  // Cash with no reference, so a later release can't go out under an old one.
+  const [releaseMethod, setReleaseMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [releaseReference, setReleaseReference] = useState("");
+  if (useDialogOpening(releaseOpen, loanId)) {
+    setReleaseMethod(DEFAULT_PAYMENT_METHOD);
+    setReleaseReference("");
+  }
   const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
   const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
@@ -1383,7 +1435,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Release stays off until then.
   const releaseAnswer = releaseConfirm.status === "ready" ? releaseConfirm.answer : null;
   const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
-  const canConfirmRelease = releaseAnswer !== null && !releaseExceedsNet && !actionLoading;
+  // A restructure pays nothing out: the dialog shows how the release settles
+  // the old loan, from the server's `restructure` block, instead of a net, and
+  // its method is how the deductions were collected from the member.
+  const releaseView = releaseDialogView(loan.is_restructure, releaseAnswer);
+  const releaseRestructureRows = releaseView.restructureRows;
+  const releaseReferenceProblem = paymentReferenceError(
+    releaseMethod,
+    releaseReference,
+    releaseView.referenceSubject,
+  );
+  const canConfirmRelease =
+    releaseAnswer !== null && !releaseExceedsNet && releaseReferenceProblem === null && !actionLoading;
+  const loanReleaseMethod = releaseMethodDetails(loan);
 
   const handleRelease = async () => {
     if (releaseAnswer === null || !canConfirmRelease) return;
@@ -1393,10 +1457,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       // since, the server refuses the release (409) rather than pay out a
       // different amount from the one the cashier just read. The premium sent
       // is the server's own from the same answer; it refuses any other (422).
-      await loanService.release(loan.id, {
-        ...releaseInsurancePayload(releaseInsurance, releaseAnswer.insurance),
-        fee_fingerprint: releaseAnswer.fee_fingerprint,
-      });
+      // How the proceeds are paid out goes with it, for the release journal.
+      await loanService.release(
+        loan.id,
+        releaseRequest(releaseInsurance, releaseAnswer, releaseMethod, releaseReference),
+      );
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
       const conflict = releaseConflictOf(err);
@@ -1455,6 +1520,37 @@ function LoanDetail({ loanId }: { loanId: number }) {
     } else {
       notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
+  };
+
+  const sendBackReasonProblem = sendBackReasonError(sendBackReason);
+
+  // An approved, unreleased restructure back into review, offered only on the
+  // server's `can_send_back_approved`. The loan and its chain are read again
+  // after, since the server reopened the chain.
+  const handleSendBackApproved = async () => {
+    if (sendBackReasonProblem !== null || sendBackApprovedLoading) return;
+    setSendBackApprovedLoading(true);
+    try {
+      await loanService.sendBackApproved(loan.id, sendBackApprovedPayload(sendBackReason));
+    } catch (err) {
+      notifyError(err, "We couldn't send this restructure back for approval. Please try again.");
+      if (sendBackFailureAction(err) === "reload") {
+        // The loan moved on meanwhile (released, voided, already sent back):
+        // show where it now stands.
+        setSendBackApprovedOpen(false);
+        reloadLoan();
+        void refreshApproval();
+      }
+      setSendBackApprovedLoading(false);
+      return;
+    }
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setSendBackApprovedLoading(false);
+    setSendBackApprovedOpen(false);
+    toast.success("Restructure sent back for approval");
+    void refreshApproval();
+    if (reloaded) setLoan(reloaded);
+    else notifyWarning("The page couldn't refresh", "Reload to see the loan back in approval.");
   };
 
   // ── Multi-step approval handlers ──
@@ -1795,7 +1891,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
+  const extendReferenceProblem = extensionReferenceError(extendInterestOption, extendMethod, extendReference);
+
   const handleExtendLoan = async () => {
+    if (extendReferenceProblem !== null) return;
     setActionLoading(true);
     try {
       // The API collects the interest itself when "pay" is chosen, in the same
@@ -1803,9 +1902,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       // call followed by extend(): if the extend failed, the payment was
       // already committed, and the only thing stopping a second charge was a
       // ref that reset whenever this dialog was reopened.
+      // "pay" says how the collection was received; "defer" sends neither.
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
         interest_option: extendInterestOption,
+        ...extensionMethodFields(extendInterestOption, extendMethod, extendReference),
       });
       toast.success(
         extendInterestOption === "pay"
@@ -2156,6 +2257,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
+            {canSendBackApproved(loan) && (
+              <Button
+                variant="outline"
+                onClick={() => setSendBackApprovedOpen(true)}
+                className="w-full sm:w-auto"
+              >
+                <Undo2 className="mr-2 h-4 w-4" />
+                Send back for approval
+              </Button>
+            )}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanTotalOutstanding ?? 0) > 0 && (
@@ -2420,43 +2531,48 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Previous Revisions
                 </p>
-                {approvalRounds.map((round) => (
-                  <div
-                    key={round.round}
-                    className="rounded-lg border border-dashed bg-muted/30 p-3"
-                  >
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                        Round {round.round}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Sent back by {round.sent_back_by} ·{" "}
-                        {formatDateTime(round.sent_back_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
-                      &ldquo;{round.sent_back_remarks}&rdquo;
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {round.steps
-                        .filter((s) => s.status === "approved" || s.status === "sent_back")
-                        .map((s) => (
+                {approvalRounds.map((round) => {
+                  // Any step kind can close a round, a release step included
+                  // (an approved restructure sent back before release).
+                  const view = revisionRoundView(round);
+                  return (
+                    <div
+                      key={round.round}
+                      className="rounded-lg border border-dashed bg-muted/30 p-3"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          Round {round.round}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {view.heading} ·{" "}
+                          {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
+                        </span>
+                      </div>
+                      {view.remarks !== null && (
+                        <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                          &ldquo;{view.remarks}&rdquo;
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {view.badges.map((badge) => (
                           <Badge
-                            key={s.index}
+                            key={badge.key}
                             variant="outline"
                             className={cn(
                               "text-[10px] h-4 px-1.5",
-                              s.status === "approved"
+                              badge.outcome === "approved"
                                 ? "bg-green-500/10 text-green-700 border-green-500/30"
                                 : "bg-red-500/10 text-red-700 border-red-500/30"
                             )}
                           >
-                            {s.status === "approved" ? "✓" : "✗"} {s.name}
+                            {badge.text}
                           </Badge>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {/* Current step action panel — matches the original screenshot
@@ -2917,23 +3033,36 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs text-muted-foreground">Contract Total</p>
                 <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                <p className="text-sm font-semibold">
-                  {cardPreview
-                    ? cardPreview.status === "loaded"
-                      ? formatCurrencyExact(cardPreview.preview.net_proceeds)
-                      : "—"
-                    : loan.net_proceeds != null
-                      ? formatCurrency(loan.net_proceeds)
-                      : "N/A"}
-                </p>
-                {cardEstimated && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Estimated until release
-                  </p>
-                )}
-              </div>
+              {/* A restructure pays nothing out: what is collected from the
+                  member and Paid out, in place of Net Proceeds. Each figure
+                  is the server's (the preview before release, the loan's
+                  own after), a dash when it sent none. */}
+              {proceedsFigures(!!loan.is_restructure, {
+                totalDeductions: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.total_deductions
+                    : null
+                  : loan.total_deductions,
+                netProceeds: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.net_proceeds
+                    : null
+                  : loan.net_proceeds,
+                restructure:
+                  cardSource === "release-preview" && releasePreview.status === "loaded"
+                    ? releasePreview.preview.restructure
+                    : null,
+              }).map((figure) => (
+                <div key={figure.label}>
+                  <p className="text-xs text-muted-foreground">{figure.label}</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
+                  {cardEstimated && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Estimated until release
+                    </p>
+                  )}
+                </div>
+              ))}
               {/* Insurance premium left unpaid at release: part of the
                   server's Total Payable, collected before anything else. */}
               {insuranceOwed !== null && (
@@ -3191,7 +3320,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </CardHeader>
             <CollapsibleContent>
               <CardContent>
-                <WorkflowHistory loan={loan} />
+                <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -3227,6 +3356,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
               <div>
                 <p className="text-xs text-muted-foreground">Release Date</p>
                 <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Release Method</p>
+                <p className="text-sm font-medium">{loanReleaseMethod.method}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Release Reference</p>
+                <p className="text-sm font-medium break-all">{loanReleaseMethod.reference}</p>
               </div>
               {loan.maturity_date && (
                 <div>
@@ -3350,52 +3487,57 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
                   );
 
+                // A restructured loan with rows left (paid ones) still shows
+                // the two write-off figures above them.
                 const scheduleTable = scheduleNotice ?? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
-                            <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                  <div className="space-y-3">
+                    <RestructuredBalanceFigures loan={loan} />
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12 text-center">#</TableHead>
+                            <TableHead>Due Date</TableHead>
+                            <TableHead className="text-right">Principal Due</TableHead>
+                            <TableHead className="text-right">Interest</TableHead>
+                            {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                            <TableHead className="text-right">Total Payment</TableHead>
+                            <TableHead className="text-right">Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {storedSchedule.map((row) => (
+                            <TableRow key={row.period}>
+                              <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
+                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                              {hasScb && (
+                                <TableCell className="text-right text-brand-orange">
+                                  {currencyOrDash(row.shareCapitalBuildUp)}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
                             {hasScb && (
-                              <TableCell className="text-right text-brand-orange">
-                                {currencyOrDash(row.shareCapitalBuildUp)}
+                              <TableCell className="text-right font-semibold text-brand-orange">
+                                {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                               </TableCell>
                             )}
-                            <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
+                            <TableCell />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
-                          {hasScb && (
-                            <TableCell className="text-right font-semibold text-brand-orange">
-                              {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
+                        </TableFooter>
+                      </Table>
+                    </div>
                   </div>
                 );
 
@@ -3717,6 +3859,63 @@ function LoanDetail({ loanId }: { loanId: number }) {
         </DialogContent>
       </Dialog>
 
+      {/* Send an approved restructure back for approval */}
+      <Dialog
+        open={sendBackApprovedOpen}
+        onOpenChange={(open) => {
+          if (!sendBackApprovedLoading) setSendBackApprovedOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send back for approval</DialogTitle>
+            <DialogDescription>
+              This restructure goes back to its approval chain and must be submitted and approved
+              again before release. Its figures are taken again then.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-back-approved-reason">
+              Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="send-back-approved-reason"
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              maxLength={SEND_BACK_REASON_MAX}
+              rows={3}
+              required
+              disabled={sendBackApprovedLoading}
+              aria-describedby="send-back-approved-hint"
+              placeholder="e.g. the source loan was paid down after approval"
+            />
+            <p id="send-back-approved-hint" className="text-xs text-muted-foreground">
+              {sendBackReasonProblem ?? `${sendBackReason.trim().length} of ${SEND_BACK_REASON_MAX} characters`}
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setSendBackApprovedOpen(false)}
+              disabled={sendBackApprovedLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendBackApproved}
+              disabled={sendBackApprovedLoading || sendBackReasonProblem !== null}
+            >
+              {sendBackApprovedLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Undo2 className="mr-2 h-4 w-4" />
+              )}
+              {sendBackApprovedLoading ? "Sending back..." : "Send back for approval"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Release Dialog */}
       <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
         <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
@@ -3753,14 +3952,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <p className="text-xs text-muted-foreground">Principal Amount</p>
                   <p className="text-sm font-semibold">{formatCurrency(loan.principal_amount)}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                  <p className="text-sm font-semibold text-green-600">
-                    {releaseAnswer && !releaseExceedsNet
-                      ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
-                      : "—"}
-                  </p>
-                </div>
+                {releaseRestructureRows === null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Net Proceeds</p>
+                    <p className="text-sm font-semibold text-green-600">
+                      {releaseAnswer && !releaseExceedsNet
+                        ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
+                        : "—"}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
@@ -3776,7 +3977,40 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
             </div>
 
+            {/* A restructure: how the release settles the old loan, each
+                figure the server's (a dash when it sent none). */}
+            {releaseRestructureRows !== null && (
+              <section aria-labelledby="release-restructure-title" className="rounded-lg border p-4 space-y-2">
+                <h3 id="release-restructure-title" className="text-sm font-semibold">
+                  Restructure settlement
+                </h3>
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
+                  {releaseRestructureRows.map((row) => (
+                    <Fragment key={row.label}>
+                      <dt className="text-muted-foreground">{row.label}</dt>
+                      <dd className="text-right font-medium tabular-nums">{currencyOrDash(row.amount)}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </section>
+            )}
+
             <ReleaseDeductions preview={releasePreview} onRetry={reloadReleasePreview} />
+
+            <MethodReferenceFields
+              idPrefix="release"
+              methodLabel={releaseView.methodLabel}
+              options={PAYMENT_METHOD_OPTIONS}
+              method={releaseMethod}
+              reference={releaseReference}
+              onChange={(next) => {
+                setReleaseMethod(next.method);
+                setReleaseReference(next.reference);
+              }}
+              referenceRequired={releaseMethod !== "cash"}
+              problem={releaseReferenceProblem}
+              disabled={actionLoading}
+            />
 
             <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
 
@@ -3896,7 +4130,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-700">
                   Releasing this loan will lock the principal, interest rate, and term.
-                  {releaseAnswer && (
+                  {releaseAnswer && releaseRestructureRows !== null && (
+                    <>
+                      {" "}The member is paid out{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.paid_out)}</span>, and{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.collected_now)}</span>{" "}
+                      is collected from the member now.
+                    </>
+                  )}
+                  {releaseAnswer && releaseRestructureRows === null && (
                     <>
                       {" "}The member will receive{" "}
                       <span className="font-semibold">
@@ -4919,6 +5161,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </SelectContent>
             </Select>
           </div>
+          {extendInterestOption === "pay" && (
+            <MethodReferenceFields
+              idPrefix="extend"
+              options={PAYMENT_METHOD_OPTIONS}
+              method={extendMethod}
+              reference={extendReference}
+              onChange={(next) => {
+                setExtendMethod(next.method);
+                setExtendReference(next.reference);
+              }}
+              referenceRequired={extendMethod !== "cash"}
+              problem={extendReferenceProblem}
+              disabled={actionLoading}
+            />
+          )}
           <div className="space-y-2">
             <Label className="text-xs">Extension Details</Label>
             {/* Both from the server's preview; a dash until it answers, and
@@ -4954,7 +5211,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleExtendLoan}
-              disabled={actionLoading || !canConfirmExtension(extendPreview.preview)}
+              disabled={
+                actionLoading || extendReferenceProblem !== null || !canConfirmExtension(extendPreview.preview)
+              }
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (
