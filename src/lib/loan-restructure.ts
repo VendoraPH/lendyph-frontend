@@ -165,6 +165,23 @@ export function restructurableBalanceShown(
   return restructure.restructurableBalance ?? summaryBalance;
 }
 
+/**
+ * The line under a restructure's principal: the server's restructurable
+ * balance, or, once the server asks for remarks, its shortfall below it. Null
+ * with no balance from the server. Shared by the restructure page and the
+ * restructure edit form, so both say the same thing.
+ */
+export function restructurableBalanceHint(
+  showsShortfall: boolean,
+  shortfall: number | null,
+  balance: number | null,
+): string | null {
+  if (balance === null) return null;
+  return showsShortfall
+    ? `${currencyOrDash(shortfall)} below the restructurable balance of ${currencyOrDash(balance)} — remarks required.`
+    : `Restructurable balance: ${currencyOrDash(balance)} (any insurance premium owed carries over to the new loan separately)`;
+}
+
 /** What the restructure page shows and requires for the server's shortfall. */
 export interface RestructureShortfallState {
   /** The shortfall notice and the "remarks required" hint are shown. */

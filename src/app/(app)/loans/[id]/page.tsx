@@ -32,8 +32,17 @@ import {
 import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
-import { chainEvents, revisionRoundView, withChainEvents } from "./_lib/approval-rounds";
+import {
+  approvalRemarksHistory,
+  approvalStepState,
+  chainEvents,
+  readyForRelease,
+  revisionRoundView,
+  withChainEvents,
+} from "./_lib/approval-rounds";
 import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { useRoleLabels } from "@/hooks/use-role-labels";
+import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import {
   SEND_BACK_REASON_MAX,
   canSendBackApproved,
@@ -205,6 +214,7 @@ import {
   FileText,
   UserCheck,
   Ban,
+  CircleSlash,
   Send,
   Unlock,
   Lock,
@@ -311,15 +321,15 @@ function canUserActOnStep(
 
 const VISIBLE_LOAN_COUNT = 3;
 
-function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; loanStatus: string; loan?: Loan }) {
+function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, approvalRounds, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; approvalRounds: LoanApprovalRound[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
   const [activeLoansOpen, setActiveLoansOpen] = useState(true);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
 
-  const completedSteps = approvalSteps.filter(
-    (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
-  );
+  // Every round's sign-offs and send-backs, newest first.
+  const completedSteps = approvalRemarksHistory(approvalRounds, approvalSteps);
+  const showsRounds = approvalRounds.length > 0;
 
   // Show the remarks section when the server's chain has signoffs to show, OR
   // when the loan carries top-level approval/rejection remarks. `rejected` and
@@ -452,10 +462,10 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
               <div className="space-y-3">
                 {completedSteps.map((step) => (
                   <div
-                    key={step.index}
+                    key={step.key}
                     className={cn(
                       "rounded-lg border p-3",
-                      step.status === "approved"
+                      step.outcome === "approved"
                         ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
                         : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
                     )}
@@ -464,10 +474,10 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                       <div
                         className={cn(
                           "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
-                          step.status === "approved" ? "bg-green-600" : "bg-red-500"
+                          step.outcome === "approved" ? "bg-green-600" : "bg-red-500"
                         )}
                       >
-                        {step.status === "approved" ? (
+                        {step.outcome === "approved" ? (
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         ) : (
                           <XCircle className="h-3.5 w-3.5" />
@@ -478,16 +488,17 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                         variant="outline"
                         className={cn(
                           "text-[10px] px-1.5 py-0 h-4",
-                          step.status === "approved"
+                          step.outcome === "approved"
                             ? "bg-green-500/10 text-green-700 border-green-500/30"
                             : "bg-red-500/10 text-red-700 border-red-500/30"
                         )}
                       >
-                        {step.status === "approved" ? "Approved" : "Sent back"}
+                        {step.outcome === "approved" ? "Approved" : "Sent back"}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
+                      {showsRounds && <>Round {step.round} · </>}
+                      {step.actedBy ?? "—"} · {step.actedAt ? formatDateTime(step.actedAt) : "—"}
                     </p>
                     {step.remarks ? (
                       <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
@@ -570,6 +581,7 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   rejected: <Ban className="h-4 w-4 text-red-600" />,
   released: <Unlock className="h-4 w-4 text-cyan-600" />,
   sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
+  cancelled: <CircleSlash className="h-4 w-4 text-muted-foreground" />,
 };
 
 function WorkflowHistory({
@@ -846,6 +858,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // used to require `users:view` as well, which only admins hold, so loan
   // officers never saw the control.
   const canUpdateLoan = usePermission().can("loans:update");
+  // Roles read by their display name on the approval panel, never their key.
+  const roleLabel = useRoleLabels();
   const canToggleAutoPay = usePermission().can("auto_pay:toggle");
   const { can } = usePermission();
 
@@ -1627,7 +1641,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const assertCanActOnStep = (verb: string): boolean => {
     if (!currentStep) return false;
     if (!canActOnCurrentStep || !clientCanActOnCurrentStep) {
-      toast.error(`Only a user with the ${currentStep.role} role can ${verb}`);
+      toast.error(`Only a user with the ${roleLabel(currentStep.role)} role can ${verb}`);
       return false;
     }
     return true;
@@ -2468,9 +2482,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="rounded-lg border bg-muted/20 p-3">
               <div className="flex items-center gap-1 overflow-x-auto pb-1">
                 {approvalSteps.map((step, i) => {
-                  const isCurrent = step.status === "pending";
-                  const isDone = step.status === "approved";
-                  const isSentBack = step.status === "sent_back";
+                  const state = approvalStepState(step.status);
+                  const isCurrent = state === "current";
+                  const isDone = state === "done";
+                  const isSentBack = state === "sent_back";
+                  // Closed when the loan was voided: neutral, never the waiting circle.
+                  const isCancelled = state === "cancelled";
                   const isLast = i === approvalSteps.length - 1;
                   return (
                     <div
@@ -2484,11 +2501,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
                             isDone && "bg-green-600",
                             isSentBack && "bg-red-500",
-                            !isCurrent && !isDone && !isSentBack && "bg-muted text-muted-foreground"
+                            isCancelled && "border border-dashed border-muted-foreground/40 bg-background text-muted-foreground",
+                            state === "waiting" && "bg-muted text-muted-foreground"
                           )}
                         >
                           {isDone ? (
                             <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : isCancelled ? (
+                            <CircleSlash className="h-3.5 w-3.5" aria-hidden="true" />
                           ) : isSentBack ? (
                             <XCircle className="h-3.5 w-3.5" />
                           ) : isCurrent ? (
@@ -2509,10 +2529,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             isCurrent && "text-brand-orange",
                             isDone && "text-green-700",
                             isSentBack && "text-red-700",
-                            !isCurrent && !isDone && !isSentBack && "text-muted-foreground"
+                            (isCancelled || state === "waiting") && "text-muted-foreground"
                           )}
                         >
                           {step.name}
+                          {isCancelled && (
+                            <span className="block font-normal">
+                              Cancelled
+                            </span>
+                          )}
                         </span>
                       </div>
                       {!isLast && (
@@ -2661,9 +2686,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           role="status"
                         >
                           Your signed-in roles don&rsquo;t include{" "}
-                          <span className="font-mono bg-muted px-1 py-0.5 rounded">
-                            {currentStep.role}
-                          </span>
+                          <span className="font-medium">{roleLabel(currentStep.role)}</span>
                           , so the actions below are disabled. Sign in again if your
                           access changed recently.
                         </p>
@@ -2837,13 +2860,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </p>
                     <p className="text-muted-foreground mt-0.5">
                       Only users with the{" "}
-                      <span className="font-mono bg-muted px-1 py-0.5 rounded">
-                        {currentStep.role}
-                      </span>{" "}
+                      <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
                       role can act on this step. You are signed in as{" "}
                       {currentUserDisplayName}
                       {currentUser?.roles && currentUser.roles.length > 0
-                        ? ` (${currentUser.roles.join(", ")})`
+                        ? ` (${currentUser.roles.map((role) => roleLabel(role)).join(", ")})`
                         : " (no role assigned)"}
                       .
                     </p>
@@ -2852,7 +2873,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
             )}
 
-            {allStepsApproved && (
+            {readyForRelease(loan.status, allStepsApproved) && (
               <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-green-700 dark:text-green-400">
@@ -2990,8 +3011,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Interest Type
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
-                <p className="text-sm font-medium capitalize">
-                  {loanInterestType || "N/A"}
+                <p className="text-sm font-medium">
+                  {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
                 </p>
               </div>
               <div>
@@ -3168,6 +3189,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           loading={borrowerLoansLoading}
           truncated={borrowerLoansTruncated}
           approvalSteps={approvalSteps}
+          approvalRounds={approvalRounds}
           loanStatus={loan.status}
           loan={loan}
         />
@@ -3964,7 +3986,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
-                    {formatRate(loan.interest_rate)}% / <span className="capitalize">{loanInterestType || "N/A"}</span>
+                    {formatRate(loan.interest_rate)}% / {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
                   </p>
                 </div>
                 <div>
@@ -4314,7 +4336,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             const willFullySettle =
               currentApplied !== null && currentApplied > 0 && currentRemaining !== null && currentRemaining <= 0;
             return (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="shrink-0 rounded-lg border overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                   <p className="text-xs font-medium flex items-center gap-1.5">
                     <CalendarIcon className="size-3.5 shrink-0" />

@@ -13,7 +13,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { LoanApprovalRound, LoanApprovalStep } from "@/types/loan-approval";
-import { chainEvents, revisionRoundView, withChainEvents } from "./approval-rounds";
+import {
+  approvalRemarksHistory,
+  approvalStepState,
+  chainEvents,
+  readyForRelease,
+  revisionRoundView,
+  withChainEvents,
+} from "./approval-rounds";
 
 function step(index: number, kind: LoanApprovalStep["kind"], status: LoanApprovalStep["status"], name: string): LoanApprovalStep {
   return { id: index + 1, index, step_id: name, name, role: "r", kind, status };
@@ -115,4 +122,97 @@ test("with no chain on record the loan's own lines stand", () => {
 test("an acted step with no actor on record reads a dash", () => {
   const events = chainEvents([], [{ ...step(1, "approve", "approved", "Manager"), acted_at: "2026-11-02T01:00:00Z" }]);
   assert.equal(events[0].label, "Approved by — (Manager)");
+});
+
+test("an undated send-back stays after its round's sign-offs, never at the top", () => {
+  const round1: LoanApprovalRound = {
+    ...RELEASE_SENT_BACK,
+    sent_back_at: null as unknown as string,
+    steps: [
+      { ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-01T01:00:00Z", acted_by: "Lea" },
+      { ...step(1, "approve", "approved", "Manager"), acted_at: "2026-11-02T01:00:00Z", acted_by: "Mona" },
+      { ...step(2, "release", "sent_back", "Cashier"), acted_by: "Gina" },
+    ],
+  };
+  const current = [{ ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-09T05:00:00Z", acted_by: "Lea" }];
+  const base = [{ key: "created" as const, label: "Application created", date: "2026-10-31T00:00:00Z" }];
+  const events = withChainEvents(base, chainEvents([round1], current), "2026-10-31T00:00:00Z");
+  assert.deepEqual(
+    events.map((e) => [e.key, e.date]),
+    [
+      ["created", "2026-10-31T00:00:00Z"],
+      ["submitted", "2026-11-01T01:00:00Z"],
+      ["approved", "2026-11-02T01:00:00Z"],
+      // No date on record: shown as a dash, in its place in the chain.
+      ["sent_back", null],
+      ["submitted", "2026-11-09T05:00:00Z"],
+    ],
+  );
+});
+
+test("Previous Approval Remarks lists every round's sign-offs, newest first", () => {
+  const round1: LoanApprovalRound = {
+    ...RELEASE_SENT_BACK,
+    steps: [
+      { ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-01T01:00:00Z", acted_by: "Lea" },
+      { ...step(1, "approve", "approved", "Manager"), acted_at: "2026-11-02T01:00:00Z", acted_by: "Mona", remarks: "ok" },
+      { ...step(2, "release", "sent_back", "Cashier"), acted_by: "Gina" },
+    ],
+  };
+  const current = [
+    { ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-09T05:00:00Z", acted_by: "Lea" },
+    { ...step(1, "approve", "approved", "Manager"), acted_at: "2026-11-09T06:00:00Z", acted_by: "Mona", remarks: "fine now" },
+    step(2, "release", "pending", "Cashier"),
+  ];
+  const history = approvalRemarksHistory([round1], current);
+  assert.deepEqual(
+    history.map((r) => [r.key, r.round, r.name, r.outcome, r.actedBy, r.actedAt, r.remarks]),
+    [
+      ["2-1", 2, "Manager", "approved", "Mona", "2026-11-09T06:00:00Z", "fine now"],
+      ["2-0", 2, "Loan Processor", "approved", "Lea", "2026-11-09T05:00:00Z", null],
+      // The send-back's own date and reason come from its round when the step has none.
+      ["1-2", 1, "Cashier", "sent_back", "Gina", "2026-11-09T03:00:00Z", "To Loan Processor: source paid down after approval"],
+      ["1-1", 1, "Manager", "approved", "Mona", "2026-11-02T01:00:00Z", "ok"],
+      ["1-0", 1, "Loan Processor", "approved", "Lea", "2026-11-01T01:00:00Z", null],
+    ],
+  );
+  // One round only: the same list as before, the current round's acted steps.
+  assert.deepEqual(
+    approvalRemarksHistory([], current).map((r) => r.key),
+    ["1-1", "1-0"],
+  );
+  assert.deepEqual(approvalRemarksHistory([], [step(0, "submit", "pending", "Loan Processor")]), []);
+});
+
+test("ready for release only on an approved loan whose chain is signed off", () => {
+  assert.equal(readyForRelease("approved", true), true);
+  assert.equal(readyForRelease("approved", false), false);
+  assert.equal(readyForRelease("released", true), false);
+  assert.equal(readyForRelease("ongoing", true), false);
+  assert.equal(readyForRelease("restructured", true), false);
+});
+
+test("a voided loan's cancelled steps read as one Cancelled line, never as waiting", () => {
+  const current: LoanApprovalStep[] = [
+    { ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-09T05:00:00Z", acted_by: "Lea" },
+    { ...step(1, "approve", "cancelled", "Manager"), acted_at: "2026-11-09T07:00:00Z", acted_by: "Vic Voider" },
+    { ...step(2, "release", "cancelled", "Cashier"), acted_at: "2026-11-09T07:00:00Z", acted_by: "Vic Voider" },
+  ];
+  assert.deepEqual(
+    chainEvents([], current).map((e) => [e.key, e.label, e.date]),
+    [
+      ["submitted", "Submitted for approval by Lea", "2026-11-09T05:00:00Z"],
+      ["cancelled", "Approval cancelled by Vic Voider (Manager, Cashier)", "2026-11-09T07:00:00Z"],
+    ],
+  );
+  // Cancelled steps are not sign-offs or send-backs.
+  assert.deepEqual(approvalRemarksHistory([], current).map((r) => r.name), ["Loan Processor"]);
+});
+
+test("the approval tracker reads each step's state, cancelled included", () => {
+  assert.equal(approvalStepState("pending"), "current");
+  assert.equal(approvalStepState("approved"), "done");
+  assert.equal(approvalStepState("sent_back"), "sent_back");
+  assert.equal(approvalStepState("cancelled"), "cancelled");
+  assert.equal(approvalStepState("waiting"), "waiting");
 });

@@ -47,8 +47,28 @@ function by(name: string | null | undefined): string {
   return typeof name === "string" && name.trim() !== "" ? name : "—";
 }
 
+/**
+ * One line for the steps a void closed: who voided the loan, when, and which
+ * steps it cancelled. Null when none were cancelled.
+ */
+function cancelledEvent(steps: readonly LoanApprovalStep[]): WorkflowEvent | null {
+  const cancelled = steps.filter((s) => s.status === "cancelled");
+  if (cancelled.length === 0) return null;
+  const first = cancelled[0];
+  return {
+    key: "cancelled",
+    label: `Approval cancelled by ${by(first.acted_by)} (${cancelled.map((s) => s.name).join(", ")})`,
+    date: first.acted_at ?? null,
+  };
+}
+
 /** The events one round's acted steps add, in the chain's order. */
 function roundEvents(steps: readonly LoanApprovalStep[], first: boolean, round: LoanApprovalRound | null): WorkflowEvent[] {
+  const cancelled = cancelledEvent(steps);
+  return [...actedEvents(steps, first, round), ...(cancelled ? [cancelled] : [])];
+}
+
+function actedEvents(steps: readonly LoanApprovalStep[], first: boolean, round: LoanApprovalRound | null): WorkflowEvent[] {
   return steps.flatMap((s): WorkflowEvent[] => {
     const detail = s.remarks && s.remarks.trim() !== "" ? s.remarks : undefined;
     if (s.status === "sent_back") {
@@ -92,10 +112,107 @@ export function chainEvents(
   currentSteps: readonly LoanApprovalStep[],
 ): WorkflowEvent[] {
   const previous = [...rounds].sort((a, b) => a.round - b.round);
-  return [
+  const events = [
     ...previous.flatMap((round, i) => roundEvents(round.steps, i === 0, round)),
     ...roundEvents(currentSteps, previous.length === 0, null),
   ];
+  // A step with no date on record (an older round's send-back) keeps its place
+  // in the chain: it sorts at the date of the event before it, never at the
+  // top, and still shows no date.
+  let lastDate: string | null = null;
+  return events.map((event) => {
+    if (event.date !== null) {
+      lastDate = event.date;
+      return event;
+    }
+    return lastDate === null ? event : { ...event, sortDate: lastDate };
+  });
+}
+
+/** One sign-off or send-back under "Previous Approval Remarks". */
+export interface ApprovalRemark {
+  /** Round and step order: unique across rounds. */
+  key: string;
+  /** 1 for the first round; the round in progress is the last. */
+  round: number;
+  name: string;
+  outcome: "approved" | "sent_back";
+  actedBy: string | null;
+  actedAt: string | null;
+  remarks: string | null;
+}
+
+function text(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+/** One round's acted steps, the last acted first. */
+function roundRemarks(
+  steps: readonly LoanApprovalStep[],
+  round: number,
+  closed: LoanApprovalRound | null,
+): ApprovalRemark[] {
+  return steps
+    .filter((s) => s.status === "approved" || s.status === "sent_back")
+    .sort((a, b) => b.index - a.index)
+    .map((s): ApprovalRemark => {
+      const sentBack = s.status === "sent_back";
+      return {
+        key: `${round}-${s.index}`,
+        round,
+        name: s.name,
+        outcome: sentBack ? "sent_back" : "approved",
+        actedBy: text(s.acted_by) ?? (sentBack ? text(closed?.sent_back_by) : null),
+        actedAt: text(s.acted_at) ?? (sentBack ? text(closed?.sent_back_at) : null),
+        remarks: text(s.remarks) ?? (sentBack ? text(closed?.sent_back_remarks) : null),
+      };
+    })
+    .filter((r) => r.actedAt !== null);
+}
+
+/**
+ * "Previous Approval Remarks": every round's sign-offs and send-backs, newest
+ * first (the round in progress, then each earlier round, the last step acted
+ * first). A step with no date on record is left out, as before; a send-back
+ * takes its round's date, actor and reason when the step has none.
+ */
+export function approvalRemarksHistory(
+  rounds: readonly LoanApprovalRound[],
+  currentSteps: readonly LoanApprovalStep[],
+): ApprovalRemark[] {
+  const previous = [...rounds].sort((a, b) => b.round - a.round);
+  const currentRound = previous.length > 0 ? previous[0].round + 1 : 1;
+  return [
+    ...roundRemarks(currentSteps, currentRound, null),
+    ...previous.flatMap((round) => roundRemarks(round.steps, round.round, round)),
+  ];
+}
+
+/** How the approval tracker draws a step. */
+export type ApprovalStepState = "current" | "done" | "sent_back" | "cancelled" | "waiting";
+
+export function approvalStepState(status: LoanApprovalStep["status"]): ApprovalStepState {
+  switch (status) {
+    case "pending":
+      return "current";
+    case "approved":
+      return "done";
+    case "sent_back":
+      return "sent_back";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "waiting";
+  }
+}
+
+/**
+ * "The loan is ready for release." only while the loan is approved and not yet
+ * released: once released (or restructured, or anything after), every step
+ * reads signed off but there is nothing left to release.
+ */
+export function readyForRelease(status: string, allStepsApproved: boolean): boolean {
+  return allStepsApproved && status === "approved";
 }
 
 /**

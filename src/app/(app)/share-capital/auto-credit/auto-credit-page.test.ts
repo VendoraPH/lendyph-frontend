@@ -22,3 +22,12 @@ test("a refused run shows the server's message", () => {
 test("the confirm dialog can't close while the run posts", () => {
   assert.match(page, /onOpenChange=\{\(open\) => \{\s*if \(!processing\) setConfirmOpen\(open\);\s*\}\}/);
 });
+
+test("the total to credit is the server's, never a sum of pledges in the browser", () => {
+  assert.doesNotMatch(page, /\.reduce\(/);
+  assert.doesNotMatch(page, /pledgeAmount,\s*0\)/);
+  assert.doesNotMatch(page, /totalPledge/);
+  // A missing total reads as a dash; ₱0.00 is the server's real zero.
+  assert.equal(page.match(/currencyOrDash\(totalToCredit\)/g)?.length, 2);
+  assert.ok(page.includes("serverTotalToCredit(raw)"));
+});

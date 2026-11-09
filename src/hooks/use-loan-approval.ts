@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loanApprovalService } from "@/services/loan-approval.service";
-import {
-  isApprovalChainHidden,
-  type LoanApprovalRound,
-  type LoanApprovalStep,
-} from "@/types";
+import type { LoanApprovalRound, LoanApprovalStep } from "@/types";
+import { readsApprovalChain } from "@/types/loan-approval";
 
 interface UseLoanApprovalResult {
   steps: LoanApprovalStep[];
@@ -28,8 +25,9 @@ interface UseLoanApprovalResult {
  * response. That is the whole point of moving off `localStorage`: the browser
  * gets to display the chain, not to decide it.
  *
- * Skips the fetch entirely once the loan is `rejected` or `void`; those loans
- * have no live chain and asking for one only produces a 404 to swallow.
+ * Skips the fetch for a `rejected` loan, which has no chain to show. A `void`
+ * loan's chain is still read, read only: its card stays hidden, but Workflow
+ * History lists the steps the void cancelled.
  */
 export function useLoanApproval(
   loanId: number | undefined,
@@ -43,7 +41,7 @@ export function useLoanApproval(
   // user has navigated to another loan) and overwriting the fresher answer.
   const requestRef = useRef(0);
 
-  const hidden = isApprovalChainHidden(status);
+  const hidden = !readsApprovalChain(status);
 
   const load = useCallback(
     async (showSpinner: boolean) => {
