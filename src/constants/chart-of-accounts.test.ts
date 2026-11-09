@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
   DEFAULT_ACCOUNT_MAPPING_CODES,
+  COOPERATIVE_CHART_ADDITIONS,
+  COOPERATIVE_MAPPING_OVERRIDES,
   seedNormalBalance,
+  templateChart,
 } from "./chart-of-accounts";
 import { accountTypeFromCode } from "@/lib/accounting/account";
 
@@ -200,4 +203,77 @@ test("insurance premium collected from payments has no receivable role: it goes 
     false
   );
   assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES.insurance_premium_payable, "2040");
+});
+
+// ── Round C: chart templates ──
+
+// Copied from lendyph-backend `ChartOfAccountsSeeder::COOPERATIVE_ADDITIONS`
+// (slice C1): code, name, parent, and whether it is a heading.
+const BACKEND_COOPERATIVE_ADDITIONS = [
+  ["2050", "Savings Deposits", "2000", false],
+  ["2060", "Time Deposits", "2000", false],
+  ["2070", "Interest on Share Capital Payable", "2000", false],
+  ["2080", "Patronage Refund Payable", "2000", false],
+  ["3070", "Statutory Funds", "3000", true],
+  ["3071", "Reserve Fund", "3070", false],
+  ["3072", "Education and Training Fund", "3070", false],
+  ["3073", "Community Development Fund", "3070", false],
+  ["3074", "Optional Fund", "3070", false],
+  ["3080", "Undivided Net Surplus", "3000", false],
+] as const;
+
+test("the cooperative additions are the backend's ten rows, code for code and name for name", () => {
+  assert.deepEqual(
+    COOPERATIVE_CHART_ADDITIONS.map((a) => [a.code, a.name, a.parent, a.is_group ?? false]),
+    BACKEND_COOPERATIVE_ADDITIONS.map((row) => [...row]),
+  );
+  for (const seed of COOPERATIVE_CHART_ADDITIONS) {
+    assert.equal(seed.type, accountTypeFromCode(seed.code), seed.code);
+    assert.equal(seed.is_contra ?? false, false, seed.code);
+    assert.equal(seed.cash_kind, undefined, seed.code);
+  }
+});
+
+test("the cooperative mapping differs only in net_surplus, which points at 3080", () => {
+  assert.deepEqual(COOPERATIVE_MAPPING_OVERRIDES, { net_surplus: "3080" });
+});
+
+test("the lending company template is today's chart, unchanged", () => {
+  assert.deepEqual(templateChart("lending_company"), DEFAULT_CHART_OF_ACCOUNTS);
+  assert.equal(DEFAULT_CHART_OF_ACCOUNTS.some((a) => a.code === "3080"), false);
+});
+
+test("the cooperative template is today's chart plus the ten rows, in code order", () => {
+  const chart = templateChart("cooperative");
+  const codes = chart.map((a) => a.code);
+  assert.equal(chart.length, DEFAULT_CHART_OF_ACCOUNTS.length + 10);
+  assert.deepEqual(codes, [...codes].sort());
+  assert.equal(new Set(codes).size, codes.length);
+  for (const seed of DEFAULT_CHART_OF_ACCOUNTS) assert.ok(codes.includes(seed.code), seed.code);
+  for (const seed of COOPERATIVE_CHART_ADDITIONS) assert.ok(codes.includes(seed.code), seed.code);
+  // 3010-3030 stay; an admin can deactivate them.
+  for (const code of ["3010", "3020", "3030"]) assert.ok(codes.includes(code), code);
+});
+
+test("the cooperative chart's parents exist, share the child's type and are headings", () => {
+  const chart = templateChart("cooperative");
+  const byCode = new Map(chart.map((a) => [a.code, a]));
+  for (const seed of chart) {
+    if (!seed.parent) continue;
+    const parent = byCode.get(seed.parent);
+    assert.ok(parent, `${seed.code} names a missing parent ${seed.parent}`);
+    assert.equal(parent!.type, seed.type, seed.code);
+    assert.equal(parent!.is_group, true, seed.parent);
+  }
+});
+
+test("every cooperative posting role maps to a postable account in its chart", () => {
+  const byCode = new Map(templateChart("cooperative").map((a) => [a.code, a]));
+  const mapping = { ...DEFAULT_ACCOUNT_MAPPING_CODES, ...COOPERATIVE_MAPPING_OVERRIDES };
+  for (const [role, code] of Object.entries(mapping)) {
+    const seed = byCode.get(code);
+    assert.ok(seed, `mapping "${role}" points at missing account ${code}`);
+    assert.notEqual(seed!.is_group, true, `mapping "${role}" points at heading ${code}`);
+  }
+  assert.equal(byCode.get(mapping.net_surplus)!.name, "Undivided Net Surplus");
 });

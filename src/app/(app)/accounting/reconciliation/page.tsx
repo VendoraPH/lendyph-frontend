@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { CheckCircle2, CircleDashed, HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -13,43 +16,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource, useChartOfAccounts } from "@/hooks";
+import { useAccountingResource, useChartOfAccounts, usePermission } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DrainResult } from "@/lib/paginate";
-import type { Reconciliation, ReconciliationMatch } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { AccountSelect } from "../_components/account-select";
+import { BranchAccessNotice } from "./_components/branch-access-notice";
+import { MatchBadge, ReconciledBadge } from "./_components/match-badge";
+import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
+import { ReasonButton } from "./_components/reason-button";
+import { accountLabel, reconciledLabel } from "./_lib/reconciliation-view";
+import type { ReconciliationDetail } from "./_lib/types";
 
-const MATCH_META: Record<
-  ReconciliationMatch,
-  { label: string; icon: typeof CheckCircle2; className: string }
-> = {
-  matched: {
-    label: "Matched",
-    icon: CheckCircle2,
-    className: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-  },
-  possible: {
-    label: "Possible match",
-    icon: HelpCircle,
-    className: "bg-amber-500/10 text-amber-700 border-amber-500/30",
-  },
-  unmatched: {
-    label: "Unmatched",
-    icon: CircleDashed,
-    className: "bg-slate-500/10 text-slate-700 border-slate-500/30",
-  },
-};
+const DESCRIPTION = "Prove each money account against its statement.";
+
+function detailHref(id: number): string {
+  return `/accounting/reconciliation/${id}`;
+}
 
 function ReconciliationContent() {
-  const { postable, loading: chartLoading } = useChartOfAccounts();
+  const router = useRouter();
+  const { postable, isTemplate, loading: chartLoading } = useChartOfAccounts();
   const [accountId, setAccountId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const moneyAccounts = useMemo(
     () => postable.filter((a) => Boolean(a.cash_kind)),
@@ -58,18 +53,37 @@ function ReconciliationContent() {
 
   // Drained. The account filter below narrows what is already in hand, so a
   // short page makes "No reconciliation for this account" a lie rather than an
-  // empty state.
+  // empty state. The list answers the same worksheet as the reconciliation's
+  // own page, ids and counts included.
   const fetcher = useCallback(
-    () => accountingService.reconciliationsListAll(),
+    () => accountingService.reconciliationsListAll() as Promise<DrainResult<ReconciliationDetail>>,
     [],
   );
-  const resource = useAccountingResource<DrainResult<Reconciliation>>(fetcher);
+  const resource = useAccountingResource<DrainResult<ReconciliationDetail>>(fetcher);
+
+  const createReason = isTemplate
+    ? "The chart of accounts isn't available, so no account can be picked."
+    : moneyAccounts.length === 0
+      ? "No money account is set up yet."
+      : null;
+
+  const created = (reconciliation: ReconciliationDetail) => {
+    setCreating(false);
+    toast.success(`Reconciliation started for ${reconciliation.period}`);
+    router.push(detailHref(reconciliation.id));
+  };
 
   return (
     <div className="space-y-6">
       <AccountingPageHeader
         title="Reconciliation"
-        description="Prove each money account against its statement."
+        description={DESCRIPTION}
+        actions={
+          <ReasonButton reason={chartLoading ? null : createReason} disabled={chartLoading} onClick={() => setCreating(true)}>
+            <Plus className="mr-1 size-4" />
+            New reconciliation
+          </ReasonButton>
+        }
       />
 
       {/*
@@ -137,15 +151,31 @@ function ReconciliationContent() {
             <div className="space-y-4">
               {notice}
               {shown.map((item) => (
-                <ReconciliationCard
-                  key={`${item.account_id}-${item.period}`}
-                  reconciliation={item}
-                />
+                <ReconciliationCard key={item.id} reconciliation={item} />
               ))}
             </div>
           );
         }}
       </DataState>
+
+      <NewReconciliationDialog
+        open={creating}
+        accounts={moneyAccounts}
+        onOpenChange={setCreating}
+        onCreated={created}
+      />
+    </div>
+  );
+}
+
+/** Reconciliation reads every branch's books, so the list is asked for only with access to all branches. */
+function ReconciliationGate() {
+  const canViewAll = usePermission().can("branches:view_all");
+  if (canViewAll) return <ReconciliationContent />;
+  return (
+    <div className="space-y-6">
+      <AccountingPageHeader title="Reconciliation" description={DESCRIPTION} />
+      <BranchAccessNotice />
     </div>
   );
 }
@@ -153,7 +183,7 @@ function ReconciliationContent() {
 export default function ReconciliationPage() {
   return (
     <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
-      <ReconciliationContent />
+      <ReconciliationGate />
     </RouteGuard>
   );
 }
@@ -161,25 +191,27 @@ export default function ReconciliationPage() {
 function ReconciliationCard({
   reconciliation,
 }: {
-  reconciliation: Reconciliation;
+  reconciliation: ReconciliationDetail;
 }) {
-  const clean = reconciliation.difference === 0;
+  const clean = reconciliation.is_reconciled;
+  const href = detailHref(reconciliation.id);
 
   return (
     <Card className={cn("border-2", clean ? "border-emerald-500/40" : "border-amber-500/50")}>
       <CardContent className="space-y-4 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-medium">{reconciliation.period}</p>
-          <Badge
-            variant="outline"
-            className={
-              clean
-                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                : "bg-amber-500/10 text-amber-700 border-amber-500/30"
-            }
-          >
-            {clean ? "Reconciled" : "Difference"}
-          </Badge>
+          <div className="space-y-0.5">
+            <Link href={href} className="font-medium underline-offset-2 hover:underline">
+              {reconciliation.period}
+            </Link>
+            <p className="text-sm text-muted-foreground">{accountLabel(reconciliation)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ReconciledBadge reconciled={clean} label={reconciledLabel(reconciliation)} />
+            <Link href={href} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Open
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -203,28 +235,21 @@ function ReconciliationCard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {reconciliation.lines.map((line, i) => {
-              const meta = MATCH_META[line.match];
-              const Icon = meta.icon;
-              return (
-                <TableRow key={`${line.journal_id ?? "ext"}-${i}`}>
-                  <TableCell className="text-sm">{formatDate(line.date)}</TableCell>
-                  <TableCell className="text-sm">{line.description}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {line.external_reference || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={meta.className}>
-                      <Icon className="mr-1 h-3 w-3" />
-                      {meta.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatCentavos(line.amount)}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {reconciliation.lines.map((line) => (
+              <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
+                <TableCell className="text-sm">{formatDate(line.date)}</TableCell>
+                <TableCell className="text-sm">{line.description}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {line.external_reference || "—"}
+                </TableCell>
+                <TableCell>
+                  <MatchBadge match={line.match} />
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm">
+                  {formatCentavos(line.amount)}
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </CardContent>
