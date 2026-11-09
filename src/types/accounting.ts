@@ -1,11 +1,10 @@
 /**
  * Double-entry accounting domain types.
  *
- * These mirror the API the backend still has to build — nothing under
- * `/accounting` exists yet — so they are written as the contract we want
- * rather than as a description of what is currently returned. See
- * `API_ENDPOINTS.ACCOUNTING` for the endpoint list these imply — all of it
- * proposed, none of it live yet.
+ * These mirror the backend's `/accounting` API. The Phase 2 round B shapes
+ * (statements, dashboard, Loan Accounting, journal preview, column books and
+ * the paged lists' `meta`) are built from the round's backend contracts; see
+ * `API_ENDPOINTS.ACCOUNTING` for the paths.
  *
  * MONEY IS IN CENTAVOS. Every amount in this file is an integer number of
  * centavos, never pesos, and never a float. A trial balance has to prove
@@ -14,6 +13,8 @@
  * centavo and there is no honest way to explain that to an auditor. Convert at
  * the edges with `toCentavos` / `fromCentavos` in `@/lib/accounting/money`.
  */
+
+import type { PaginatedResponse } from "./api";
 
 /** The five statement classifications every account rolls up into. */
 export type AccountType =
@@ -109,7 +110,8 @@ export type JournalSource =
   | "adjustment"
   | "reversal"
   | "opening_balance"
-  | "credit_loss";
+  | "credit_loss"
+  | "share_capital";
 
 /**
  * `draft` is editable and affects nothing. `posted` is live and immutable —
@@ -121,8 +123,9 @@ export type JournalStatus = "draft" | "posted" | "reversed";
 /**
  * What kind of document raised an entry.
  *
- * An API alias, never a class name: the server maps its four known classes to
- * `loan` / `repayment` / `expense` / `expense_payment` and snake-cases the
+ * An API alias, never a class name: the server maps its known classes to
+ * `loan` / `repayment` / `expense` / `expense_payment` / `loan_adjustment` /
+ * `share_capital_entry` / `gcash_transaction` and snake-cases the
  * basename of anything it has not curated. So this is deliberately OPEN — a
  * posting type nobody has mapped yet arrives as an unrecognised string rather
  * than not arriving at all, and code that switches on it needs a default.
@@ -132,6 +135,9 @@ export type JournalPostableType =
   | "repayment"
   | "expense"
   | "expense_payment"
+  | "loan_adjustment"
+  | "share_capital_entry"
+  | "gcash_transaction"
   | (string & {});
 
 export interface JournalEntry {
@@ -246,6 +252,13 @@ export interface AgingRow {
   /** Centavos. */
   amount: number;
   count: number;
+  /**
+   * The bucket's share of `total`, from the server: two decimals, half up
+   * ("12.50"), and "0.00" when the total is 0. Optional only while the
+   * browser-built aging in `src/lib/accounting/aging.ts` still exists; the
+   * endpoint always sends it.
+   */
+  share_percent?: string;
 }
 
 /** A full aged-receivables report. Also the shape the aging endpoint returns. */
@@ -256,6 +269,11 @@ export interface Aging {
   total: number;
   /** Centavos in everything except `current`. */
   past_due_total: number;
+  /**
+   * Loans across every bucket, from the server. Optional for the same reason
+   * as `AgingRow.share_percent`; the endpoint always sends it.
+   */
+  count_total?: number;
 }
 
 /** How a payment reached us. Selects which asset account gets debited. */
@@ -358,6 +376,19 @@ export interface AccountMapping {
    * chart already carries, so this adds a role without adding an account.
    */
   borrower_advances: number;
+  /** The charge on a GCash Cash In or Cash Out (4090). */
+  gcash_service_income: number;
+  /** Where a balance adjustment clears against loans receivable (1180). */
+  loan_adjustments: number;
+  /**
+   * Interest and penalty a restructure capitalised into the new loan's
+   * principal, not yet earned (1210). A contra asset, like the allowance.
+   */
+  unearned_restructure_income: number;
+  /** Where the year-end close moves the year's result (3030 on a company chart). */
+  net_surplus: number;
+  /** Money received that cannot be identified yet, held until it is (2390). */
+  suspense: number;
 }
 
 /** Accounting periods lock the books once an accountant signs them off. */
@@ -422,32 +453,36 @@ export interface Expense {
   due_date?: string | null;
   status: ExpenseStatus;
   journal_id?: number | null;
+  /** Centavos still owed, from the server (`amount - amount_paid`, never below 0). */
+  amount_due: number;
 }
 
 /**
- * ─── Reports the backend has to produce itself ───
+ * ─── Statements and books, built by the server ───
  *
- * The balance sheet and income statement are NOT here: both are pure
- * regroupings of the trial balance, so `@/lib/accounting/statements` builds
- * them client-side from the rows the trial-balance endpoint already returns.
- * Adding endpoints for them would create a second source of truth for figures
- * that must agree exactly.
- *
- * The three below cannot be derived that way. A cash flow statement needs to
- * know which movements were operating, investing or financing — a
- * classification that lives on the account, not in its balance. The statement
- * of changes in equity needs opening balances and the movements between them.
- * The BIR books need each journal's lines in registration order. All three
- * need the server.
+ * Every statement, book and summary below is a whole document the server
+ * builds and totals; the browser only displays it. Not paged.
  */
+
+/**
+ * What a statement line stands for. `account` is one account's figure; the
+ * others are lines the server derives with no account of their own.
+ */
+export type ReportLineKind = "account" | "loan_releases" | "restructure_collections";
 
 /** One line on a statement section. */
 export interface ReportLine {
-  account_id?: number;
+  /** Null on the derived lines (`kind` other than `account`). */
+  account_id?: number | null;
+  /**
+   * The server sends null on the derived lines too. Typed without null while
+   * `cash-flow-report.tsx` passes it straight to `ReportSection`'s `code`.
+   */
   account_code?: string;
   label: string;
   /** Centavos, signed in the direction the section reads. */
   amount: number;
+  kind: ReportLineKind;
 }
 
 export interface ReportSection {
@@ -466,10 +501,30 @@ export interface CashFlowStatement {
   net_change: number;
   opening_cash: number;
   closing_cash: number;
+  /** Amounts withheld at release. Outside every section total. */
+  non_cash: CashFlowNonCash;
+  /** True when the three sections add up to `net_change`. */
+  is_reconciled: boolean;
+  /** Centavos: `net_change` less the sections' total. Zero when reconciled. */
+  unexplained: number;
 }
+
+/** "Withheld at release (non-cash)": fees and deductions kept back from proceeds, by account. */
+export interface CashFlowNonCash {
+  label: string;
+  lines: ReportLine[];
+  /** Centavos. */
+  total: number;
+}
+
+/** `earnings` is the derived "Earnings not yet closed" row, with no account of its own. */
+export type EquityChangeRowKind = "account" | "earnings";
 
 export interface EquityChangeRow {
   label: string;
+  account_id: number | null;
+  account_code: string | null;
+  kind: EquityChangeRowKind;
   /** Centavos. */
   beginning: number;
   additions: number;
@@ -526,8 +581,17 @@ export interface AccountingDashboard {
   cash_on_hand: number;
   cash_in_bank: number;
   e_wallets: number;
-  /** Gross receivable less the allowance. */
+  /** Gross receivable less the allowance and the unearned restructure income. */
   loans_receivable_net: number;
+  loans_receivable_gross: number;
+  /** 1200, a contra asset. */
+  allowance_for_credit_losses: number;
+  /** 1210, a contra asset. */
+  unearned_restructure_income: number;
+  /** 1180 Loan Adjustments Clearing. Should be zero. */
+  adjustments_clearing: number;
+  /** True for any non-zero 1180 balance. */
+  adjustments_clearing_needs_review: boolean;
   total_assets: number;
   total_liabilities: number;
   total_equity: number;
@@ -539,6 +603,312 @@ export interface AccountingDashboard {
   unposted_journals: number;
   /** False means the books do not balance and nothing else here is safe. */
   is_balanced: boolean;
-  /** The period currently accepting entries, e.g. "2026-09". */
+  /** The name of the period covering `as_of` while it is open, else null. */
   open_period?: string | null;
+  /** The period covering `as_of`, open or closed; null when none does. */
+  current_period: AccountingPeriodSummary | null;
+  /** Income and expenses from `period.from` to `as_of` (`period.to`). Centavos. */
+  period: {
+    from: string;
+    to: string;
+    income: number;
+    expenses: number;
+    net_income: number;
+  };
+  /** Each money account's balance at `as_of`. */
+  cash_accounts: DashboardCashAccount[];
+  /**
+   * Past due by the grace rule, from the loan records, always as of today
+   * (loan records keep no history); `as_of` says which day. Centavos.
+   */
+  past_due: {
+    as_of: string;
+    amount: number;
+    count: number;
+  };
+  /** The 12 months ending with `as_of`'s month, oldest first. */
+  months: DashboardMonth[];
+  /** The 10 latest posted or reversed journals dated on or before `as_of`. */
+  recent_journals: RecentJournal[];
 }
+
+export type AccountingPeriodSummary = Pick<
+  AccountingPeriod,
+  "id" | "code" | "name" | "start_date" | "end_date" | "status"
+>;
+
+/** One month of the dashboard's trend. Centavos. */
+export interface DashboardMonth {
+  /** "YYYY-MM". */
+  month: string;
+  income: number;
+  expenses: number;
+  net_income: number;
+  /** The money accounts' balance at month end (at `as_of` for the last month). */
+  cash: number;
+}
+
+export interface RecentJournal {
+  id: number;
+  journal_no: string;
+  date: string;
+  source: JournalSource;
+  description: string;
+  branch_name: string | null;
+  /** Centavos: the journal's total debit. */
+  amount: number;
+}
+
+export interface DashboardCashAccount {
+  account_id: number;
+  account_code: string;
+  account_name: string;
+  cash_kind: CashAccountKind;
+  /** Centavos. */
+  balance: number;
+}
+
+/** A balance sheet line. A contra line is negative. */
+export type BalanceSheetLineKind = "account" | "prior_period_earnings" | "current_year_earnings";
+
+export interface BalanceSheetLine {
+  /** Null on the two derived earnings lines, which have no account. */
+  account_id: number | null;
+  account_code: string | null;
+  account_name: string;
+  /** Centavos. */
+  amount: number;
+  kind: BalanceSheetLineKind;
+}
+
+/** The balance sheet at `as_of`. Centavos. */
+export interface BalanceSheet {
+  as_of: string;
+  assets: BalanceSheetLine[];
+  liabilities: BalanceSheetLine[];
+  equity: BalanceSheetLine[];
+  total_assets: number;
+  total_liabilities: number;
+  total_equity: number;
+  total_liabilities_and_equity: number;
+  current_year_earnings: number;
+  prior_period_earnings: number;
+  earnings_basis: "period";
+  earnings_period: { from: string; to: string };
+  /** Centavos, from the server. Zero on healthy books. */
+  difference: number;
+  is_balanced: boolean;
+}
+
+/** One income or expense account's movement over the period. */
+export interface IncomeStatementLine {
+  account_id: number;
+  account_code: string;
+  account_name: string;
+  /** Centavos. */
+  amount: number;
+}
+
+/** The income statement from `period.from` to `period.to`. Centavos. */
+export interface IncomeStatement {
+  period: { from: string; to: string };
+  income: IncomeStatementLine[];
+  expenses: IncomeStatementLine[];
+  total_income: number;
+  total_expenses: number;
+  /** Negative on a loss. */
+  net_income: number;
+}
+
+/** One line sent to the journal preview. Centavos. Accounts are not checked. */
+export interface JournalPreviewLine {
+  account_id?: number | null;
+  debit: number;
+  credit: number;
+}
+
+/** The server's totals for the lines being typed. Centavos. */
+export interface JournalPreview {
+  total_debit: number;
+  total_credit: number;
+  /** `total_debit - total_credit`. */
+  difference: number;
+  /** The size of `difference`. */
+  out_by: number;
+  heavier_side: "debit" | "credit" | null;
+  is_balanced: boolean;
+  line_count: number;
+}
+
+/** A member on an accounting row: never contact or personal fields. */
+export interface AccountingMemberRef {
+  id: number;
+  name: string;
+  code: string | null;
+}
+
+/** One loan on the Loan Accounting list. Centavos. */
+export interface LoanAgingRow {
+  loan_id: number;
+  account_number: string;
+  member: AccountingMemberRef;
+  branch: { id: number; name: string } | null;
+  display_status: string;
+  oldest_late_due_date: string | null;
+  days_past_due: number;
+  bucket: AgingBucket;
+  is_past_due: boolean;
+  outstanding_principal: number;
+  total_outstanding: number;
+  past_due_amount: number;
+}
+
+/** One member on the Loan Accounting list (`group=member`): the member's worst loan. Centavos. */
+export interface MemberAgingRow {
+  member: AccountingMemberRef;
+  loan_count: number;
+  outstanding_principal: number;
+  total_outstanding: number;
+  past_due_amount: number;
+  days_past_due: number;
+  bucket: AgingBucket;
+}
+
+/** The Loan Accounting summary. Centavos. */
+export interface LoanAccountingSummary {
+  as_of: string;
+  aging: Aging;
+  /** The ledger at `as_of`. */
+  books: {
+    gross: number;
+    allowance: number;
+    unearned_income: number;
+    adjustments_clearing: number;
+    net: number;
+  };
+  /** The loan records, always as of today; `as_of` says which day. */
+  records: {
+    as_of: string;
+    loan_count: number;
+    outstanding_principal: number;
+    total_outstanding: number;
+    past_due_amount: number;
+    past_due_count: number;
+  };
+  /** Today's books principal against today's records. */
+  books_vs_records: {
+    as_of: string;
+    books_principal: number;
+    records_principal: number;
+    /** `books_principal - records_principal`. */
+    difference: number;
+    is_reconciled: boolean;
+  };
+}
+
+export type ColumnBookKind = "cash_receipts" | "cash_disbursements";
+
+/**
+ * One journal in a column book. Centavos. `money` is keyed by account id and
+ * `columns` by mapping role; a key with no amount is left out.
+ */
+export interface ColumnBookRow {
+  journal_id: number;
+  journal_no: string;
+  date: string;
+  reference: string | null;
+  /** The journal's description. */
+  particulars: string;
+  money: Partial<Record<string, number>>;
+  columns: Partial<Record<string, number>>;
+  sundry: Array<{
+    account_code: string;
+    account_name: string;
+    debit: number;
+    credit: number;
+  }>;
+}
+
+/**
+ * A cash book in columns: one money column per money account that moved, one
+ * column per mapped account role, then sundry. Printed whole, not paged.
+ */
+export interface ColumnBook {
+  kind: ColumnBookKind;
+  from: string;
+  to: string;
+  money_columns: Array<{ account_id: number; account_code: string; account_name: string }>;
+  /** `key` is the mapping role, `label` the mapped account's name. */
+  columns: Array<{ key: string; label: string }>;
+  rows: ColumnBookRow[];
+  totals: {
+    money: Partial<Record<string, number>>;
+    columns: Partial<Record<string, number>>;
+    sundry_debit: number;
+    sundry_credit: number;
+    total_debit: number;
+    total_credit: number;
+  };
+  is_balanced: boolean;
+}
+
+/**
+ * ─── Paged lists with the server's own figures ───
+ *
+ * Each page carries `meta.totals` over every matching row (not the page) and,
+ * where sent, `meta.stats` (counts ignoring the status or bucket filter).
+ */
+type PageWithMeta<T, Extra> = Omit<PaginatedResponse<T>, "meta"> & {
+  meta: PaginatedResponse<T>["meta"] & Extra;
+};
+
+/** The general ledger's figures over the whole range, every page. Centavos. */
+export interface LedgerMeta {
+  /** The account's balance before `from`, every source. */
+  opening_balance: number;
+  /** The account's balance at `to`, every source. */
+  closing_balance: number;
+  /** The matching rows over the whole range. */
+  total_debit: number;
+  total_credit: number;
+}
+
+export type GeneralLedgerPage = PageWithMeta<LedgerEntry, LedgerMeta>;
+
+export type JournalPage = PageWithMeta<
+  JournalEntry,
+  {
+    totals: { count: number; total_debit: number; total_credit: number };
+    stats: Record<JournalStatus, number>;
+  }
+>;
+
+export type ExpensePage = PageWithMeta<
+  Expense,
+  {
+    totals: { count: number; amount: number; amount_paid: number; amount_due: number };
+    stats: Record<ExpenseStatus, number>;
+  }
+>;
+
+export type CashAccountPage = PageWithMeta<
+  Account,
+  {
+    /** Over every money account in the caller's branch scope, not the page. */
+    totals: { balance: number; by_kind: Record<CashAccountKind, number> };
+  }
+>;
+
+export type LoanAgingPage<Row extends LoanAgingRow | MemberAgingRow = LoanAgingRow> = PageWithMeta<
+  Row,
+  {
+    totals: {
+      count: number;
+      outstanding_principal: number;
+      total_outstanding: number;
+      past_due_amount: number;
+    };
+    /** Rows per bucket, ignoring the `bucket` filter. */
+    stats: Record<AgingBucket, number>;
+  }
+>;
