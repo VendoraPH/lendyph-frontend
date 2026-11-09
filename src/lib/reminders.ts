@@ -367,6 +367,8 @@ export interface ManualSendWording {
   busy: string;
   toastTitle: string;
   toastBody: string;
+  /** The preview's notice when something blocks it. */
+  blocked: string;
 }
 
 /** The Send reminder dialog's words: live only when the mode is known live. */
@@ -378,6 +380,7 @@ export function manualSendWording(mode: SendMode): ManualSendWording {
       busy: "Sending…",
       toastTitle: "Reminder queued for sending",
       toastBody: "It shows in Message History once it has gone out.",
+      blocked: "This reminder can't be sent",
     };
   }
   if (mode === true) {
@@ -387,6 +390,7 @@ export function manualSendWording(mode: SendMode): ManualSendWording {
       busy: "Logging…",
       toastTitle: "Reminder queued in test mode",
       toastBody: "It is logged in Message History, not sent to the member.",
+      blocked: "This reminder can't be logged",
     };
   }
   return {
@@ -395,7 +399,14 @@ export function manualSendWording(mode: SendMode): ManualSendWording {
     busy: "Queuing…",
     toastTitle: "Reminder queued",
     toastBody: "Queued; see Message History for its result.",
+    blocked: "This reminder can't be queued",
   };
+}
+
+/** A message's provider; the log driver reaches nobody, so it isn't one. */
+export function providerLabel(provider: string | null): string | null {
+  if (provider === null) return null;
+  return provider === "log" ? "none (test mode, logged only)" : provider;
 }
 
 /** A message whose text was blanked 2 years after its loan closed. */

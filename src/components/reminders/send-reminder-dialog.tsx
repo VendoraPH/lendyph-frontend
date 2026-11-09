@@ -250,7 +250,7 @@ export function SendReminderDialog({
               {preview.blocked_reasons.length > 0 && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                   <p className="flex items-center gap-1.5 font-medium">
-                    <AlertTriangle className="h-4 w-4" /> This reminder can&apos;t be sent
+                    <AlertTriangle className="h-4 w-4" /> {wording.blocked}
                   </p>
                   <ul className="mt-1 list-disc pl-5">
                     {preview.blocked_reasons.map((r) => (

@@ -9,6 +9,7 @@ import {
   deliveryStatusOptions,
   describeRule,
   KPI_LABELS,
+  providerLabel,
   TEMPLATES_PAGE_INTRO,
   sendButtonLabel,
   HIDDEN_DETAILS,
@@ -715,4 +716,17 @@ test("the loan card's send button uses the dialog's wording: Send only when live
 test("the Templates page intro doesn't say a reminder sends", () => {
   assert.doesNotMatch(TEMPLATES_PAGE_INTRO, /\bsen[dt]/i);
   assert.match(TEMPLATES_PAGE_INTRO, /when a reminder is made/);
+});
+
+test("the preview's blocked notice: logged in test mode, queued when unknown, sent only when live", () => {
+  assert.equal(manualSendWording(true).blocked, "This reminder can't be logged");
+  assert.equal(manualSendWording(null).blocked, "This reminder can't be queued");
+  assert.equal(manualSendWording(false).blocked, "This reminder can't be sent");
+});
+
+// The log driver reaches nobody, so it isn't a provider.
+test("the log driver reads as no provider", () => {
+  assert.equal(providerLabel("log"), "none (test mode, logged only)");
+  assert.equal(providerLabel("semaphore"), "semaphore");
+  assert.equal(providerLabel(null), null);
 });

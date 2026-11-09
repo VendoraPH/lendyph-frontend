@@ -17,6 +17,7 @@ import {
   deliveryStatusWentOut,
   isMessageRedacted,
   messageSourceLabel,
+  providerLabel,
   recipientLabel,
   reminderReason,
   rowTestMode,
@@ -109,7 +110,7 @@ export function MessageDetailSheet({
                 <Row label={loggedOnly ? "Logged" : mode === false ? "Sent" : "Handled"}>{message.sent_at ? formatDateTime(message.sent_at) : null}</Row>
                 <Row label={mode === false ? "Delivered" : "Confirmed"}>{message.delivered_at ? formatDateTime(message.delivered_at) : null}</Row>
                 <Row label="Attempts">{message.attempts}</Row>
-                <Row label="Provider">{message.provider}</Row>
+                <Row label="Provider">{providerLabel(message.provider)}</Row>
                 <Row label="Provider reference">
                   {message.provider_reference && (
                     <span className="font-mono text-xs">{message.provider_reference}</span>
