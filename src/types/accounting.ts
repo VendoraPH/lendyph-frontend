@@ -469,11 +469,8 @@ export type ReportLineKind = "account" | "loan_releases" | "restructure_collecti
 export interface ReportLine {
   /** Null on the derived lines (`kind` other than `account`). */
   account_id?: number | null;
-  /**
-   * The server sends null on the derived lines too. Typed without null while
-   * `cash-flow-report.tsx` passes it straight to `ReportSection`'s `code`.
-   */
-  account_code?: string;
+  /** Null on the derived lines too. */
+  account_code?: string | null;
   label: string;
   /** Centavos, signed in the direction the section reads. */
   amount: number;
