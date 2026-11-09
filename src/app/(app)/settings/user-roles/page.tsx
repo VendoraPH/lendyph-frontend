@@ -260,7 +260,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   accounting: {
     label: "Accounting",
     description:
-      "The reporting side of the books, plus the three privileged verbs that lock or correct them.",
+      "The reporting side of the books, plus the privileged verbs that lock or correct them.",
     icon: BookOpenCheck,
     features: [
       "View the accounting dashboard, general ledger and trial balance",
@@ -268,6 +268,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Reconcile a cash or bank account against an external statement",
       "Close and reopen an accounting period",
       "Configure accounting settings and the automatic posting map",
+      "Post the allowance for credit losses",
     ],
   },
   chart_of_accounts: {
@@ -356,6 +357,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reverse: { label: "Reverse", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   reconcile: { label: "Reconcile", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
   close: { label: "Close Period", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
+  allowance: { label: "Post the allowance", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   transfer: { label: "Transfer", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
   send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },

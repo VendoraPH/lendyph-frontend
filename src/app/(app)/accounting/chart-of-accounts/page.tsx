@@ -101,11 +101,13 @@ function ChartOfAccountsContent() {
             <CardContent className="space-y-4 pt-6">
               {isTemplate && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                  <span className="font-medium">Default template.</span>{" "}
+                  <span className="font-medium">Lending company template.</span>{" "}
                   <span className="text-muted-foreground">
-                    This is the chart a new organisation is seeded with. It is
-                    not yet saved to your organisation, so it cannot be edited
-                    and no entry can be posted against it.
+                    This is the lending company chart; the cooperative chart
+                    adds savings and time deposits, statutory funds and
+                    undivided net surplus. It is not yet saved to your
+                    organisation, so it cannot be edited and no entry can be
+                    posted against it.
                   </span>
                 </div>
               )}
