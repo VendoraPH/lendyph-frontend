@@ -371,9 +371,9 @@ export interface LoanCreditAssessment {
   /** Null before any details are saved. */
   application_profile: CreditApplicationProfile | null;
   /**
-   * True when `other_income`, `household_expenses` and
-   * `outside_debt_payments` are hidden from the caller (they need
-   * borrowers:view and the member's branch) and so arrive as null.
+   * True when the application details are hidden from the caller (they need
+   * borrowers:view and the member's branch): every `application_profile`
+   * field but the notice fields then arrives as null.
    */
   application_figures_hidden: boolean;
   /** The loan's latest assessment, or null. */

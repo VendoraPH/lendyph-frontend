@@ -6,6 +6,10 @@ import {
   assessmentSaveErrors,
   noticeStatus,
   canSaveAssessment,
+  choicesFor,
+  HIDDEN_CHOICE,
+  MEMBER_DETAIL_FIELDS,
+  memberDetailHidden,
   memberDetailsHidden,
   showsCreditAssessment,
 } from "./assessment-card";
@@ -97,16 +101,57 @@ test("an untouched field is left out, so nothing the caller can't see is cleared
   assert.deepEqual(assessmentBody(loaded, loaded), {});
 });
 
-test("member-detail figures are never sent while they're hidden", () => {
+const HIDDEN_DETAILS = [
+  "other_income",
+  "business_income",
+  "household_expenses",
+  "outside_debt_payments",
+  "outside_lenders_count",
+  "employment_status",
+  "business_start_date",
+  "years_at_residence",
+  "verified_references_count",
+  "income_verification",
+] as const;
+
+test("while member details are hidden, every application detail but the notice is locked", () => {
+  for (const field of HIDDEN_DETAILS) {
+    assert.equal(memberDetailHidden(field, true), true, field);
+    assert.equal(memberDetailHidden(field, false), false, field);
+  }
+  assert.deepEqual([...MEMBER_DETAIL_FIELDS].sort(), [...HIDDEN_DETAILS].sort());
+});
+
+test("a hidden choice offers only the hidden text, so its locked Select reads it", () => {
+  const items = [{ value: "none", label: "Not given" }, { value: "employed", label: "Employed" }];
+  assert.deepEqual(choicesFor(items, true), [{ value: HIDDEN_CHOICE, label: "Hidden (needs access to member details)" }]);
+  assert.deepEqual(choicesFor(items, false), items);
+});
+
+test("member details are never sent while they're hidden, so a save never clears them", () => {
   const loaded = assessmentFormFrom(null);
-  const typed = { ...loaded, other_income: "100.00", household_expenses: "50.00", outside_debt_payments: "1.00", business_income: "7.00" };
-  assert.deepEqual(assessmentBody(typed, loaded, { memberDetailsHidden: true }), { business_income: "7.00" });
-  assert.deepEqual(Object.keys(assessmentBody(typed, loaded)).sort(), [
-    "business_income",
-    "household_expenses",
-    "other_income",
-    "outside_debt_payments",
-  ]);
+  const typed = {
+    ...loaded,
+    other_income: "100.00",
+    business_income: "7.00",
+    household_expenses: "50.00",
+    outside_debt_payments: "1.00",
+    outside_lenders_count: "2",
+    employment_status: "employed",
+    business_start_date: "2020-01-15",
+    years_at_residence: "3",
+    verified_references_count: "1",
+    income_verification: "verified" as const,
+    notice_acknowledged: true,
+  };
+  assert.deepEqual(assessmentBody(typed, loaded, { memberDetailsHidden: true }), { notice_acknowledged: true });
+  assert.deepEqual(Object.keys(assessmentBody(typed, loaded)).sort(), [...HIDDEN_DETAILS, "notice_acknowledged"].sort());
+});
+
+test("emptied hidden details are not sent as null either", () => {
+  const loaded = assessmentFormFrom(profile);
+  const emptied = { ...assessmentFormFrom(null), notice_acknowledged: loaded.notice_acknowledged };
+  assert.deepEqual(assessmentBody(emptied, loaded, { memberDetailsHidden: true }), {});
 });
 
 test("member details are hidden when the server says so, or without borrowers:view", () => {

@@ -74,17 +74,32 @@ export function assessmentFormFrom(profile: CreditApplicationProfile | null): As
   };
 }
 
+export type AssessmentField = AssessmentTextField | "income_verification";
+
 /**
- * The application figures the server hides from a caller without
- * `borrowers:view` or the member's branch: they arrive as null then.
+ * The application details the server hides from a caller without
+ * `borrowers:view` or the member's branch: every one but the notice fields,
+ * which arrive as null then.
  */
-export const MEMBER_DETAIL_FIELDS: readonly AssessmentTextField[] = [
-  "other_income",
-  "household_expenses",
-  "outside_debt_payments",
-];
+export const MEMBER_DETAIL_FIELDS: readonly AssessmentField[] = [...ASSESSMENT_TEXT_FIELDS, "income_verification"];
 
 export const MEMBER_DETAILS_HIDDEN_TEXT = "Hidden (needs access to member details)";
+
+/** Whether this field is locked and never sent: it's a member detail and they're hidden. */
+export function memberDetailHidden(field: AssessmentField, detailsHidden: boolean): boolean {
+  return detailsHidden && MEMBER_DETAIL_FIELDS.includes(field);
+}
+
+/** The value a hidden field's Select holds, so it reads the hidden text. */
+export const HIDDEN_CHOICE = "hidden";
+
+/** A hidden field's Select offers only the hidden text; otherwise its own choices. */
+export function choicesFor(
+  items: { value: string; label: string }[],
+  hidden: boolean,
+): { value: string; label: string }[] {
+  return hidden ? [{ value: HIDDEN_CHOICE, label: MEMBER_DETAILS_HIDDEN_TEXT }] : items;
+}
 
 /**
  * Whether the member-detail figures are hidden from this caller: the server's
@@ -102,7 +117,7 @@ export function memberDetailsHidden(
  * The PUT body: each field that differs from how it loaded, as typed, and an
  * emptied one as null. The server leaves out-of-body fields unchanged, so a
  * figure the caller can't see (sent to them as null) is never cleared by a
- * save. While member details are hidden their figures are never sent at all.
+ * save. While member details are hidden they are never sent at all.
  *
  * `notice_acknowledged` follows the same rule. The server clears a stored
  * acknowledgement on false, and the box loads unticked for a member who
@@ -116,12 +131,12 @@ export function assessmentBody(
 ): SaveLoanAssessmentData {
   const body: SaveLoanAssessmentData = {};
   for (const key of ASSESSMENT_TEXT_FIELDS) {
-    if (hidden && MEMBER_DETAIL_FIELDS.includes(key)) continue;
+    if (memberDetailHidden(key, hidden)) continue;
     const value = form[key].trim();
     if (value === loaded[key].trim()) continue;
     body[key] = value === "" ? null : value;
   }
-  if (form.income_verification !== loaded.income_verification) {
+  if (!memberDetailHidden("income_verification", hidden) && form.income_verification !== loaded.income_verification) {
     body.income_verification = form.income_verification === "" ? null : form.income_verification;
   }
   if (form.notice_acknowledged !== loaded.notice_acknowledged) {

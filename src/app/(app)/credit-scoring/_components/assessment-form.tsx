@@ -14,9 +14,11 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { INCOME_VERIFICATION_LABELS } from "@/lib/credit-scoring/labels";
 import {
-  MEMBER_DETAIL_FIELDS,
+  HIDDEN_CHOICE,
   MEMBER_DETAILS_HIDDEN_TEXT,
   SAVE_BLOCKED_REASON,
+  choicesFor,
+  memberDetailHidden,
   noticeStatus,
   type AssessmentForm,
   type AssessmentTextField,
@@ -49,23 +51,31 @@ export function AssessmentFormFields({
   assessment: LoanCreditAssessment;
   form: AssessmentForm;
   canSave: boolean;
-  /** The server sends the member-detail figures as null to this caller. */
+  /** The server sends the member's application details as null to this caller. */
   detailsHidden: boolean;
   saving: boolean;
   onChange: (next: AssessmentForm) => void;
   onSave: () => void;
 }) {
-  const employmentItems = [
-    { value: NONE, label: "Not given" },
-    ...assessment.employment_statuses.map((s) => ({ value: s.value, label: s.label })),
-  ];
-  const verificationItems = [
-    { value: NONE, label: "Not checked" },
-    ...(Object.keys(INCOME_VERIFICATION_LABELS) as IncomeVerification[]).map((v) => ({
-      value: v,
-      label: INCOME_VERIFICATION_LABELS[v],
-    })),
-  ];
+  const employmentHidden = memberDetailHidden("employment_status", detailsHidden);
+  const verificationHidden = memberDetailHidden("income_verification", detailsHidden);
+  const employmentItems = choicesFor(
+    [
+      { value: NONE, label: "Not given" },
+      ...assessment.employment_statuses.map((s) => ({ value: s.value, label: s.label })),
+    ],
+    employmentHidden,
+  );
+  const verificationItems = choicesFor(
+    [
+      { value: NONE, label: "Not checked" },
+      ...(Object.keys(INCOME_VERIFICATION_LABELS) as IncomeVerification[]).map((v) => ({
+        value: v,
+        label: INCOME_VERIFICATION_LABELS[v],
+      })),
+    ],
+    verificationHidden,
+  );
   const notice = noticeStatus(assessment.application_profile);
 
   return (
@@ -82,7 +92,7 @@ export function AssessmentFormFields({
       <div className="grid gap-4 sm:grid-cols-2">
         {TEXT_FIELDS.map((f) => {
           const id = `assessment-${f.key}`;
-          const hidden = detailsHidden && MEMBER_DETAIL_FIELDS.includes(f.key);
+          const hidden = memberDetailHidden(f.key, detailsHidden);
           return (
             <div key={f.key} className="space-y-1.5">
               <Label htmlFor={id}>{f.label}</Label>
@@ -103,10 +113,10 @@ export function AssessmentFormFields({
         <div className="space-y-1.5">
           <Label id="assessment-employment-label">Employment status</Label>
           <Select
-            value={form.employment_status || NONE}
+            value={employmentHidden ? HIDDEN_CHOICE : form.employment_status || NONE}
             onValueChange={(v) => onChange({ ...form, employment_status: v && v !== NONE ? v : "" })}
             items={employmentItems}
-            disabled={!canSave}
+            disabled={!canSave || employmentHidden}
           >
             <SelectTrigger className="w-full" aria-labelledby="assessment-employment-label">
               <SelectValue />
@@ -124,12 +134,12 @@ export function AssessmentFormFields({
         <div className="space-y-1.5">
           <Label id="assessment-income-label">Income verification</Label>
           <Select
-            value={form.income_verification || NONE}
+            value={verificationHidden ? HIDDEN_CHOICE : form.income_verification || NONE}
             onValueChange={(v) =>
               onChange({ ...form, income_verification: v && v !== NONE ? (v as IncomeVerification) : "" })
             }
             items={verificationItems}
-            disabled={!canSave}
+            disabled={!canSave || verificationHidden}
           >
             <SelectTrigger className="w-full" aria-labelledby="assessment-income-label">
               <SelectValue />
