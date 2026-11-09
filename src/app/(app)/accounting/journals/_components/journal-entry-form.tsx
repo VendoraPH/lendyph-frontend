@@ -10,7 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { useChartOfAccounts } from "@/hooks";
-import { emptyLine, previewLines, validateJournalDraft } from "@/lib/accounting/journal";
+import {
+  emptyLine,
+  previewLineNumbers,
+  previewLines,
+  validateJournalDraft,
+} from "@/lib/accounting/journal";
 import type { JournalEntryDraft, JournalLineDraft } from "@/types";
 import { JournalLineRows } from "../../_components/journal-line-rows";
 import { JournalBalancePanel } from "./journal-balance-panel";
@@ -36,10 +41,11 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
   const [submitted, setSubmitted] = useState(false);
 
   const lines = useMemo(() => previewLines(draft), [draft]);
-  const { preview, failed } = useJournalPreview(lines);
+  const rowNumbers = useMemo(() => previewLineNumbers(draft), [draft]);
+  const { preview, failed, retry } = useJournalPreview(lines, { rowNumbers });
   const validation = useMemo(
-    () => validateJournalDraft(draft, postable, preview),
-    [draft, postable, preview],
+    () => validateJournalDraft(draft, postable, preview, failed),
+    [draft, postable, preview, failed],
   );
 
   /**
@@ -156,7 +162,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
             Add line
           </Button>
 
-          <JournalBalancePanel preview={preview} failed={failed} />
+          <JournalBalancePanel preview={preview} failed={failed} onRetry={retry} />
 
           {showErrors && validation.errors.length > 0 && (
             <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3">

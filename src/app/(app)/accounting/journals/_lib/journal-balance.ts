@@ -3,6 +3,7 @@
  * (`POST /accounting/journals/preview`). Nothing here adds or subtracts: the
  * totals, `out_by` and `heavier_side` are the server's.
  */
+import { getErrorMessage } from "@/lib/api-error";
 import { previewIsBalanced } from "@/lib/accounting/journal";
 import { formatCentavos } from "@/lib/accounting/money";
 import type { JournalPreview } from "@/types";
@@ -50,4 +51,25 @@ export function balanceStatus(
     return { tone: "empty", title: "Add a second line", detail: "An entry needs a debit and a credit." };
   }
   return { tone: "out", title: "Not balanced", detail: outByText(preview) };
+}
+
+const PREVIEW_FAILED = "The totals couldn't be checked. Keep typing, or try again.";
+
+/**
+ * Words for a failed preview. A refusal on one line (`lines.N.debit`, an
+ * amount above the limit) names the line as it is numbered on screen:
+ * `rowNumbers[N]`, from `previewLineNumbers`, since blank rows aren't sent.
+ */
+export function previewErrorMessage(err: unknown, rowNumbers: number[]): string {
+  const errors = (err as { response?: { data?: { errors?: Record<string, unknown> } } })?.response
+    ?.data?.errors;
+  const lineKey = Object.keys(errors ?? {})
+    .map((key) => /^lines\.(\d+)\./.exec(key))
+    .find((match) => match !== null);
+  if (lineKey) {
+    const sent = Number(lineKey[1]);
+    return `Line ${rowNumbers[sent] ?? sent + 1}: amount is too large or not valid.`;
+  }
+  const message = getErrorMessage(err, PREVIEW_FAILED);
+  return message === PREVIEW_FAILED ? message : `The totals couldn't be checked. ${message}`;
 }

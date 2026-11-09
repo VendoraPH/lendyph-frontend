@@ -11,17 +11,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/lib/api-error";
+import { runJournalAction } from "../_lib/journal-refusal";
 
 interface PostJournalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Posts the entry. A rejection keeps the dialog open with the server's message. */
   onConfirm: () => Promise<void>;
+  /** A 409 or 422 refusal: the journal may have changed, so reload it. */
+  onRefused: () => void;
 }
 
 /** Posting is the point of no return: after it, the entry can only be reversed. */
-export function PostJournalDialog({ open, onOpenChange, onConfirm }: PostJournalDialogProps) {
+export function PostJournalDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  onRefused,
+}: PostJournalDialogProps) {
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +41,10 @@ export function PostJournalDialog({ open, onOpenChange, onConfirm }: PostJournal
   const confirm = () => {
     setPosting(true);
     setError(null);
-    onConfirm()
-      .catch((err: unknown) => setError(getErrorMessage(err, "Could not post this entry.")))
-      .finally(() => setPosting(false));
+    runJournalAction(onConfirm, onRefused, "Could not post this entry.").then((message) => {
+      setError(message);
+      setPosting(false);
+    });
   };
 
   return (

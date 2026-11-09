@@ -13,20 +13,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getErrorMessage } from "@/lib/api-error";
 import { todayISO } from "@/lib/format";
+import { runJournalAction } from "../_lib/journal-refusal";
 
 interface ReverseJournalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Writes the reversing entry. A rejection keeps the dialog open with the server's message. */
   onConfirm: (date: string, reason: string) => Promise<void>;
+  /** A 409 or 422 refusal: the journal may have changed, so reload it. */
+  onRefused: () => void;
 }
 
 /** The server's limit on a reversal reason (ReverseJournalRequest). */
 const REASON_MAX = 300;
 
-export function ReverseJournalDialog({ open, onOpenChange, onConfirm }: ReverseJournalDialogProps) {
+export function ReverseJournalDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  onRefused,
+}: ReverseJournalDialogProps) {
   const [date, setDate] = useState(todayISO);
   const [reason, setReason] = useState("");
   const [reversing, setReversing] = useState(false);
@@ -48,9 +55,13 @@ export function ReverseJournalDialog({ open, onOpenChange, onConfirm }: ReverseJ
     if (!ready) return;
     setReversing(true);
     setError(null);
-    onConfirm(date, reason.trim())
-      .catch((err: unknown) => setError(getErrorMessage(err, "Could not reverse this entry.")))
-      .finally(() => setReversing(false));
+    const trimmed = reason.trim();
+    runJournalAction(() => onConfirm(date, trimmed), onRefused, "Could not reverse this entry.").then(
+      (message) => {
+        setError(message);
+        setReversing(false);
+      },
+    );
   };
 
   return (

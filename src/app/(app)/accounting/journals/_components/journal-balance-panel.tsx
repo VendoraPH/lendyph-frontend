@@ -1,6 +1,7 @@
 "use client";
 
 import { Scale } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { formatCentavos } from "@/lib/accounting/money";
 import { cn } from "@/lib/utils";
 import type { JournalPreview } from "@/types";
@@ -17,14 +18,16 @@ const TONE_STYLES: Record<BalanceTone, { box: string; icon: string }> = {
 /**
  * The balance check under the lines: the server's totals for what is typed,
  * and whether they balance. A dash until the server has answered for these
- * lines.
+ * lines. A failed check names why and can be asked again.
  */
 export function JournalBalancePanel({
   preview,
   failed,
+  onRetry,
 }: {
   preview: JournalPreview | null;
   failed: string | null;
+  onRetry: () => void;
 }) {
   const status = balanceStatus(preview, failed);
   const styles = TONE_STYLES[status.tone];
@@ -44,6 +47,11 @@ export function JournalBalancePanel({
           <p className="font-medium">{status.title}</p>
           {status.detail && <p className="text-sm text-muted-foreground">{status.detail}</p>}
         </div>
+        {status.tone === "failed" && (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        )}
       </div>
       <dl className="flex gap-8 font-mono text-sm">
         <div className="text-right">

@@ -55,6 +55,7 @@ import {
   journalRegisterParams,
   journalStatusCounts,
   journalTitle,
+  registerAmount,
   registerTotalLabel,
 } from "./_lib/journal-register";
 
@@ -107,13 +108,10 @@ function JournalEntriesContent() {
           if (current) setAnswer({ key, page: body, error: null });
         })
         .catch((err: unknown) => {
-          if (current) {
-            setAnswer({
-              key,
-              page: null,
-              error: getErrorMessage(err, "The journal entries couldn't be loaded."),
-            });
-          }
+          if (!current) return;
+          const error = getErrorMessage(err, "The journal entries couldn't be loaded.");
+          // The rows already on screen stay, dimmed, with the error and a retry.
+          setAnswer((prev) => ({ key, page: prev?.page ?? null, error }));
         });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -126,8 +124,9 @@ function JournalEntriesContent() {
   // The previous rows stay up, dimmed, until the new page arrives; its figures
   // read as a dash so no total describes filters other than those on screen.
   const rows = answer?.page?.data ?? [];
-  const meta = settled ? answer.page?.meta : undefined;
   const failed = settled && answer.error !== null;
+  // A failed request keeps the earlier page's rows, never its figures.
+  const meta = settled && !failed ? answer.page?.meta : undefined;
 
   const changeFilter =
     <T,>(set: (value: T) => void) =>
@@ -208,6 +207,7 @@ function JournalEntriesContent() {
               value={search}
               onChange={(e) => changeFilter(setSearch)(e.target.value)}
               placeholder="Number, reference or description"
+              maxLength={100}
               className="w-[260px] pl-8"
             />
           </div>
@@ -220,7 +220,7 @@ function JournalEntriesContent() {
             {meta ? journalStatusCounts(meta.stats) : "Loading…"}
           </p>
 
-          <div className={settled ? undefined : "opacity-60"} aria-busy={!settled}>
+          <div className={settled && !failed ? undefined : "opacity-60"} aria-busy={!settled}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -265,8 +265,7 @@ function JournalEntriesContent() {
                       <JournalStatusBadge status={entry.status} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {/* Debits equal credits on a posted entry, so either side is "the amount". */}
-                      {formatCentavos(entry.total_debit)}
+                      {registerAmount(entry)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -289,8 +288,15 @@ function JournalEntriesContent() {
           </div>
 
           {settled && rows.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {failed ? answer.error : "No journal entry matches these filters."}
+            <div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
+              <p className={failed ? "text-destructive" : undefined}>
+                {failed ? answer.error : "No journal entry matches these filters."}
+              </p>
+              {failed && (
+                <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
+                  Try again
+                </Button>
+              )}
             </div>
           )}
 

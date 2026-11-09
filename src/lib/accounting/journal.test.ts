@@ -5,6 +5,7 @@ import {
   buildJournalPayload,
   previewLines,
   previewIsBalanced,
+  previewLineNumbers,
   emptyLine,
 } from "./journal";
 import type {
@@ -381,6 +382,31 @@ test("the balance rule reads the preview, never the typed amounts", () => {
     result.errors.find((e) => e.field === "balance")!.message,
     /₱1\.00/,
   );
+});
+
+test("previewLineNumbers gives each sent line its row number on screen", () => {
+  assert.deepEqual(
+    previewLineNumbers(
+      draft([line({ account_id: 2, debit: "1" }), line(), line({ account_id: 1, credit: "1" })]),
+    ),
+    [1, 3],
+  );
+});
+
+test("a failed preview is named on save, not reported as still being checked", () => {
+  const result = validateJournalDraft(
+    draft([
+      line({ account_id: 2, debit: "3500" }),
+      line({ account_id: 1, credit: "3500" }),
+    ]),
+    CHART,
+    null,
+    "Line 2: amount is too large or not valid.",
+  );
+  const message = result.errors.find((e) => e.field === "balance")!.message;
+  assert.match(message, /couldn't be checked/);
+  assert.match(message, /Line 2: amount is too large/);
+  assert.doesNotMatch(message, /still being checked/);
 });
 
 test("without a preview the balance is not yet known, so the draft can't be saved", () => {

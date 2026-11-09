@@ -5,6 +5,7 @@ import {
   journalRegisterParams,
   journalStatusCounts,
   journalTitle,
+  registerAmount,
   registerTotalLabel,
 } from "./journal-register";
 
@@ -75,4 +76,13 @@ test("the totals line says which entries it covers, never 'posted activity'", ()
   assert.equal(registerTotalLabel(1, "draft"), "Register total: 1 draft entry");
   assert.equal(registerTotalLabel(3, "posted"), "Register total: 3 posted entries");
   assert.equal(registerTotalLabel(2, "reversed"), "Register total: 2 reversed entries");
+});
+
+test("a row's amount is either side when they agree, else both sides", () => {
+  assert.equal(registerAmount({ total_debit: 150050, total_credit: 150050 }), "₱1,500.50");
+  assert.equal(
+    registerAmount({ total_debit: 150050, total_credit: 100000 }),
+    "Dr ₱1,500.50 · Cr ₱1,000.00",
+  );
+  assert.equal(registerAmount({ total_debit: 0, total_credit: 0 }), "₱0.00");
 });

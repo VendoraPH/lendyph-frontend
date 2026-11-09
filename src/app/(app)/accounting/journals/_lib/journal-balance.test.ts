@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JournalPreview } from "@/types";
-import { balanceStatus, outByText } from "./journal-balance";
+import { balanceStatus, outByText, previewErrorMessage } from "./journal-balance";
 
 function preview(over: Partial<JournalPreview> = {}): JournalPreview {
   return {
@@ -72,4 +72,26 @@ test("no answer yet reads as checking; a failed answer says so", () => {
 
 test("one line, however even, is not Balanced", () => {
   assert.notEqual(balanceStatus(preview({ line_count: 1 }), null).tone, "balanced");
+});
+
+test("a preview refusal on one line names the line on screen, in words", () => {
+  const err = {
+    response: {
+      status: 422,
+      data: {
+        message: "The lines.1.debit field must not be greater than 9007199254740992.",
+        errors: { "lines.1.debit": ["The lines.1.debit field must not be greater than 9007199254740992."] },
+      },
+    },
+  };
+  // Sent line 1 is the third row on screen (a blank row was skipped).
+  assert.equal(previewErrorMessage(err, [1, 3]), "Line 3: amount is too large or not valid.");
+  // Without the row numbers, the sent position.
+  assert.equal(previewErrorMessage(err, []), "Line 2: amount is too large or not valid.");
+});
+
+test("any other preview failure reads as the totals not being checked", () => {
+  const status = balanceStatus(null, previewErrorMessage(new Error("boom"), []));
+  assert.equal(status.tone, "failed");
+  assert.match(status.detail ?? "", /couldn't be checked/i);
 });

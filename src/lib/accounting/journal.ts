@@ -83,6 +83,14 @@ export function previewLines(draft: JournalEntryDraft): JournalPreviewLine[] {
 }
 
 /**
+ * The row number on screen (1-based) of each line `previewLines` sends, so a
+ * refusal on sent line N can name the row someone sees.
+ */
+export function previewLineNumbers(draft: JournalEntryDraft): number[] {
+  return draft.lines.flatMap((line, index) => (isBlankLine(line) ? [] : [index + 1]));
+}
+
+/**
  * Whether the server's preview describes a balanced entry: at least two lines,
  * a debit total above zero, and `is_balanced`. All three are server fields.
  * `is_balanced` alone is true for an empty or all-zero body (0 = 0), which
@@ -106,12 +114,14 @@ export function previewIsBalanced(preview: JournalPreview | null): boolean {
  *
  * The balance rule reads `preview`, the server's totals for these lines
  * (`previewLines(draft)`). `null` means the answer for the current lines
- * hasn't arrived, so the balance isn't known yet and the draft can't be saved.
+ * hasn't arrived, so the balance isn't known yet and the draft can't be saved;
+ * `previewError` names why, when the request for them failed.
  */
 export function validateJournalDraft(
   draft: JournalEntryDraft,
   chart: Account[],
-  preview: JournalPreview | null
+  preview: JournalPreview | null,
+  previewError: string | null = null
 ): JournalValidation {
   const errors: JournalError[] = [];
   const byId = new Map(chart.map((a) => [a.id, a]));
@@ -204,7 +214,11 @@ export function validateJournalDraft(
       errors.push({
         index: null,
         field: "balance",
-        message: "The totals are still being checked. Try again in a moment.",
+        message: previewError
+          ? previewError.startsWith("The totals couldn't be checked")
+            ? previewError
+            : `The totals couldn't be checked. ${previewError}`
+          : "The totals are still being checked. Try again in a moment.",
       });
     } else if (preview.total_debit === 0 && preview.total_credit === 0) {
       errors.push({

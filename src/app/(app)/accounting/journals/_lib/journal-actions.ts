@@ -4,7 +4,8 @@
  * take, is hidden. One that is offered but can't be taken right now carries
  * the reason, for a disabled button.
  */
-import type { JournalEntry, Permission } from "@/types";
+import { previewIsBalanced } from "@/lib/accounting/journal";
+import type { JournalEntry, JournalPreview, Permission } from "@/types";
 
 export type JournalAction = "edit" | "post" | "reverse";
 
@@ -17,21 +18,40 @@ export interface JournalActionState {
 const HIDDEN: JournalActionState = { shown: false, disabledReason: null };
 const READY: JournalActionState = { shown: true, disabledReason: null };
 
+/**
+ * A draft's stored lines by the server's preview. `unknown` only for a poster
+ * without journals:create, who can't ask for the preview: Post stays open and
+ * the server re-checks the balance when posting.
+ */
+export type DraftBalance = "balanced" | "unbalanced" | "pending" | "failed" | "unknown";
+
+export function draftBalance({
+  canPreview,
+  preview,
+  failed,
+}: {
+  canPreview: boolean;
+  preview: JournalPreview | null;
+  failed: string | null;
+}): DraftBalance {
+  if (!canPreview) return "unknown";
+  if (failed !== null) return "failed";
+  if (preview === null) return "pending";
+  return previewIsBalanced(preview) ? "balanced" : "unbalanced";
+}
+
+const POST_WAITS: Record<DraftBalance, string | null> = {
+  balanced: null,
+  unknown: null,
+  unbalanced: "Debits and credits don't balance yet. Edit the draft before posting.",
+  pending: "Checking the totals…",
+  failed: "The totals couldn't be checked",
+};
+
 export function journalActions(
   entry: Pick<JournalEntry, "status" | "reversed_by_journal_id">,
   can: (permission: Permission) => boolean,
-  {
-    editing,
-    balanced = null,
-  }: {
-    editing: boolean;
-    /**
-     * A draft's balance by the server's preview of its stored lines
-     * (`previewIsBalanced`); null when it couldn't be asked, and the server
-     * decides on posting.
-     */
-    balanced?: boolean | null;
-  },
+  { editing, balance }: { editing: boolean; balance: DraftBalance },
 ): Record<JournalAction, JournalActionState> {
   const isDraft = entry.status === "draft";
   const isPosted = entry.status === "posted";
@@ -44,9 +64,7 @@ export function journalActions(
             shown: true,
             disabledReason: editing
               ? "Save or cancel your changes before posting."
-              : balanced === false
-                ? "Debits and credits don't balance yet. Edit the draft before posting."
-                : null,
+              : POST_WAITS[balance],
           }
         : HIDDEN,
     reverse:

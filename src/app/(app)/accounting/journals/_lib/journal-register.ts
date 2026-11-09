@@ -4,6 +4,7 @@
  * `meta.stats` and `meta.totals`.
  */
 import { normaliseSearchQuery } from "@/hooks/use-search-page";
+import { formatCentavos } from "@/lib/accounting/money";
 import type { JournalPageQuery } from "@/services/accounting.service";
 import type { JournalEntry, JournalSource, JournalStatus } from "@/types";
 
@@ -72,4 +73,13 @@ export function registerTotalLabel(count: number, status: string): string {
     return `Register total: ${count} ${noun} of every status (drafts, posted, reversed entries and their reversals)`;
   }
   return `Register total: ${count} ${word} ${noun}`;
+}
+
+/**
+ * A row's Amount: either side when the server's totals agree (every posted
+ * entry), else both, so an unbalanced draft never reads as one figure.
+ */
+export function registerAmount(entry: Pick<JournalEntry, "total_debit" | "total_credit">): string {
+  if (entry.total_debit === entry.total_credit) return formatCentavos(entry.total_debit);
+  return `Dr ${formatCentavos(entry.total_debit)} · Cr ${formatCentavos(entry.total_credit)}`;
 }

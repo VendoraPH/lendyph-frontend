@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { usePermission } from "@/hooks";
 import { accountingService } from "@/services";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
-import { previewIsBalanced } from "@/lib/accounting/journal";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { JournalEntry, JournalEntryDraft, JournalPreviewLine } from "@/types";
 import { AccountingPageHeader } from "../../_components/page-header";
@@ -20,7 +19,7 @@ import { JournalEntryForm } from "../_components/journal-entry-form";
 import { PostJournalDialog } from "../_components/post-journal-dialog";
 import { ReverseJournalDialog } from "../_components/reverse-journal-dialog";
 import { useJournalPreview } from "../_components/use-journal-preview";
-import { journalActions } from "../_lib/journal-actions";
+import { draftBalance, journalActions } from "../_lib/journal-actions";
 import { draftFromEntry } from "../_lib/journal-edit";
 import { journalTitle } from "../_lib/journal-register";
 
@@ -98,8 +97,9 @@ function JournalContent({ id }: { id: number }) {
   const entry = answer?.entry ?? null;
 
   // A draft's stored lines, checked by the server's preview so Post waits
-  // until they balance. The preview needs journals:create; without it the
-  // server decides when posting.
+  // until they balance (and while the check is out or failed). The preview
+  // needs journals:create; a poster without it may post, and the server
+  // re-checks the balance.
   const isDraft = entry?.status === "draft";
   const canPreview = isDraft && can("journals:create");
   const storedLines = useMemo<JournalPreviewLine[]>(
@@ -111,10 +111,14 @@ function JournalContent({ id }: { id: number }) {
       })),
     [entry],
   );
-  const stored = useJournalPreview(storedLines, canPreview);
-  const balanced = canPreview && stored.preview ? previewIsBalanced(stored.preview) : null;
+  const stored = useJournalPreview(storedLines, { enabled: canPreview });
+  const balance = draftBalance({ canPreview, preview: stored.preview, failed: stored.failed });
 
-  const actions = entry ? journalActions(entry, can, { editing, balanced }) : null;
+  const actions = entry ? journalActions(entry, can, { editing, balance }) : null;
+
+  // After a refusal the server may hold other lines or another status, so the
+  // screen asks for the journal again rather than keep what it showed.
+  const reloadJournal = () => setReload((n) => n + 1);
 
   const showEntry = (saved: JournalEntry) =>
     setAnswer({ key, entry: saved, missing: false, error: null });
@@ -226,8 +230,18 @@ function JournalContent({ id }: { id: number }) {
         </div>
       )}
 
-      <PostJournalDialog open={posting} onOpenChange={setPosting} onConfirm={post} />
-      <ReverseJournalDialog open={reversing} onOpenChange={setReversing} onConfirm={reverse} />
+      <PostJournalDialog
+        open={posting}
+        onOpenChange={setPosting}
+        onConfirm={post}
+        onRefused={reloadJournal}
+      />
+      <ReverseJournalDialog
+        open={reversing}
+        onOpenChange={setReversing}
+        onConfirm={reverse}
+        onRefused={reloadJournal}
+      />
     </div>
   );
 }
