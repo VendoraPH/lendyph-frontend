@@ -39,6 +39,9 @@ export type NormalBalance = "debit" | "credit";
 /** Where the money physically sits. Drives the Cash & Bank screen. */
 export type CashAccountKind = "cash" | "bank" | "gcash" | "maya" | "wallet";
 
+/** The cash flow statement section an account's movements land in. */
+export type AccountCashFlowCategory = "operating" | "investing" | "financing" | "cash";
+
 export interface Account {
   id: number;
   /** "1010". Sorts lexically into statement order by construction. */
@@ -59,6 +62,8 @@ export interface Account {
   is_active: boolean;
   /** Set when the account is one of the money accounts in Cash & Bank. */
   cash_kind?: CashAccountKind | null;
+  /** Set by the server from the type and cash kind unless someone chose it. */
+  cash_flow_category?: AccountCashFlowCategory | null;
   description?: string | null;
   /**
    * Whether any posted journal line references this account. The UI uses it to
@@ -255,11 +260,9 @@ export interface AgingRow {
   count: number;
   /**
    * The bucket's share of `total`, from the server: two decimals, half up
-   * ("12.50"), and "0.00" when the total is 0. Optional only while the
-   * browser-built aging in `src/lib/accounting/aging.ts` still exists; the
-   * endpoint always sends it.
+   * ("12.50"), and "0.00" when the total is 0.
    */
-  share_percent?: string;
+  share_percent: string;
 }
 
 /** A full aged-receivables report. Also the shape the aging endpoint returns. */
@@ -270,11 +273,8 @@ export interface Aging {
   total: number;
   /** Centavos in everything except `current`. */
   past_due_total: number;
-  /**
-   * Loans across every bucket, from the server. Optional for the same reason
-   * as `AgingRow.share_percent`; the endpoint always sends it.
-   */
-  count_total?: number;
+  /** Loans across every bucket, from the server. */
+  count_total: number;
 }
 
 /** How a payment reached us. Selects which asset account gets debited. */
@@ -475,11 +475,8 @@ export type ReportLineKind = "account" | "loan_releases" | "restructure_collecti
 export interface ReportLine {
   /** Null on the derived lines (`kind` other than `account`). */
   account_id?: number | null;
-  /**
-   * The server sends null on the derived lines too. Typed without null while
-   * `cash-flow-report.tsx` passes it straight to `ReportSection`'s `code`.
-   */
-  account_code?: string;
+  /** Null on the derived lines too. */
+  account_code?: string | null;
   label: string;
   /** Centavos, signed in the direction the section reads. */
   amount: number;
@@ -751,7 +748,8 @@ export interface AccountingMemberRef {
 /** One loan on the Loan Accounting list. Centavos. */
 export interface LoanAgingRow {
   loan_id: number;
-  account_number: string;
+  /** Null on an imported loan, which has no account number. */
+  account_number: string | null;
   member: AccountingMemberRef;
   branch: { id: number; name: string } | null;
   display_status: string;
@@ -779,12 +777,17 @@ export interface MemberAgingRow {
 export interface LoanAccountingSummary {
   as_of: string;
   aging: Aging;
-  /** The ledger at `as_of`. */
-  books: {
+  /**
+   * The ledger at `as_of`. Absent until the server reads the books for this
+   * summary; the screen shows a dash for each figure meanwhile.
+   */
+  books?: {
     gross: number;
     allowance: number;
     unearned_income: number;
     adjustments_clearing: number;
+    /** The server's flag: true whenever Loan Adjustments Clearing holds a balance. */
+    adjustments_clearing_needs_review: boolean;
     net: number;
   };
   /** The loan records, always as of today; `as_of` says which day. */
@@ -796,8 +799,8 @@ export interface LoanAccountingSummary {
     past_due_amount: number;
     past_due_count: number;
   };
-  /** Today's books principal against today's records. */
-  books_vs_records: {
+  /** Today's books principal against today's records. Absent, like `books`, until it is sent. */
+  books_vs_records?: {
     as_of: string;
     books_principal: number;
     records_principal: number;
