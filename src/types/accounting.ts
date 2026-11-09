@@ -254,11 +254,9 @@ export interface AgingRow {
   count: number;
   /**
    * The bucket's share of `total`, from the server: two decimals, half up
-   * ("12.50"), and "0.00" when the total is 0. Optional only while the
-   * browser-built aging in `src/lib/accounting/aging.ts` still exists; the
-   * endpoint always sends it.
+   * ("12.50"), and "0.00" when the total is 0.
    */
-  share_percent?: string;
+  share_percent: string;
 }
 
 /** A full aged-receivables report. Also the shape the aging endpoint returns. */
@@ -269,11 +267,8 @@ export interface Aging {
   total: number;
   /** Centavos in everything except `current`. */
   past_due_total: number;
-  /**
-   * Loans across every bucket, from the server. Optional for the same reason
-   * as `AgingRow.share_percent`; the endpoint always sends it.
-   */
-  count_total?: number;
+  /** Loans across every bucket, from the server. */
+  count_total: number;
 }
 
 /** How a payment reached us. Selects which asset account gets debited. */
