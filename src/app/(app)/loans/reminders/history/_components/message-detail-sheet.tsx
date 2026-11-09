@@ -99,7 +99,7 @@ export function MessageDetailSheet({
                 <Row label="Template">{message.template_type ? TEMPLATE_TYPE_LABELS[message.template_type] : null}</Row>
                 <Row label="Scheduled">{message.scheduled_at ? formatDateTime(message.scheduled_at) : null}</Row>
                 <Row label={loggedOnly ? "Logged" : mode === false ? "Sent" : "Handled"}>{message.sent_at ? formatDateTime(message.sent_at) : null}</Row>
-                <Row label="Delivered">{message.delivered_at ? formatDateTime(message.delivered_at) : null}</Row>
+                <Row label={mode === false ? "Delivered" : "Confirmed"}>{message.delivered_at ? formatDateTime(message.delivered_at) : null}</Row>
                 <Row label="Attempts">{message.attempts}</Row>
                 <Row label="Provider">{message.provider}</Row>
                 <Row label="Provider reference">

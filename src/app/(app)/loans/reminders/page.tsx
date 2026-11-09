@@ -21,11 +21,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, useIsClient } from "@/hooks";
 import { formatCurrencyExact, formatDate, todayISO } from "@/lib/format";
 import {
-  KPI_LABELS,
   chartSeriesLabel,
   combineTestMode,
   queueStatusOptions,
+  kpiLabels,
   reminderTestMode,
+  smsMonthLabel,
   type SendMode,
 } from "@/lib/reminders";
 import { reminderService } from "@/services";
@@ -68,7 +69,7 @@ function Kpi({ label, value, icon: Icon, tone }: { label: string; value: number 
   );
 }
 
-function SmsCreditsCard({ sms }: { sms: ReminderDashboard["sms"] }) {
+function SmsCreditsCard({ sms, mode }: { sms: ReminderDashboard["sms"]; mode: SendMode }) {
   const low =
     sms.credits_remaining !== null &&
     sms.low_credit_threshold !== null &&
@@ -78,7 +79,7 @@ function SmsCreditsCard({ sms }: { sms: ReminderDashboard["sms"] }) {
       <CardContent className="space-y-3 pt-6">
         <p className="text-sm font-medium">SMS usage this month</p>
         <dl className="grid grid-cols-2 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Messages sent</dt>
+          <dt className="text-muted-foreground">{smsMonthLabel(sms, mode)}</dt>
           <dd className="text-right tabular-nums">{count(sms.sent_this_month)}</dd>
           <dt className="text-muted-foreground">Messages logged</dt>
           <dd className="text-right tabular-nums">{count(sms.logged_this_month)}</dd>
@@ -146,6 +147,8 @@ function DashboardBody({
   mode: SendMode;
   settingsMode: SendMode;
 }) {
+  // Without logged* counts, sent* can't be read as "sent" outside live mode.
+  const labels = kpiLabels(data.counts, mode);
   return (
     <div className="space-y-6">
       {/* The shell's banner reads the settings; when they couldn't say, the
@@ -155,13 +158,13 @@ function DashboardBody({
       )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {KPIS.map((k) => (
-          <Kpi key={k.key} label={KPI_LABELS[k.key]} value={data.counts[k.key]} icon={k.icon} tone={k.tone} />
+          <Kpi key={k.key} label={labels[k.key]} value={data.counts[k.key]} icon={k.icon} tone={k.tone} />
         ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <DeliveryChart daily={data.daily} mode={mode} />
-        <SmsCreditsCard sms={data.sms} />
+        <SmsCreditsCard sms={data.sms} mode={mode} />
       </div>
 
       <div className="space-y-2">

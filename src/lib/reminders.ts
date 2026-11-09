@@ -226,6 +226,44 @@ export const KPI_LABELS: Record<keyof ReminderDashboardCounts, string> = {
   overdue: "Overdue",
 };
 
+const PROCESSED_KPI_LABELS: Partial<Record<keyof ReminderDashboardCounts, string>> = {
+  sent: "Processed",
+  sms_sent: "SMS processed",
+  emails_sent: "Emails processed",
+};
+
+/**
+ * The dashboard's count labels for one answer. An answer without the
+ * `logged*` counts can't say its `sent*` counts leave out logged-only
+ * messages, so outside a known live mode those read "Processed".
+ */
+export function kpiLabels(
+  counts: Partial<ReminderDashboardCounts>,
+  mode: SendMode,
+): Record<keyof ReminderDashboardCounts, string> {
+  if (counts.logged !== undefined || mode === false) return KPI_LABELS;
+  return { ...KPI_LABELS, ...PROCESSED_KPI_LABELS };
+}
+
+/** The usage card's monthly line, by the same rule as `kpiLabels`. */
+export function smsMonthLabel(
+  sms: { sent_this_month?: number; logged_this_month?: number },
+  mode: SendMode,
+): string {
+  return sms.logged_this_month !== undefined || mode === false ? "Messages sent" : "Messages processed";
+}
+
+/**
+ * Whether to say "Couldn't read sending status": the settings call has
+ * settled (answered or failed) and still gives no `test_mode`.
+ */
+export function sendingStatusUnreadable(
+  settings: { loading: boolean; data: { test_mode?: boolean | null; enabled?: boolean | null } | null },
+  active = true,
+): boolean {
+  return active && !settings.loading && reminderTestMode(settings.data) === null;
+}
+
 export interface ManualSendWording {
   title: string;
   button: string;

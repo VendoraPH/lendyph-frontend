@@ -9,6 +9,9 @@ import {
   deliveryStatusOptions,
   describeRule,
   KPI_LABELS,
+  kpiLabels,
+  sendingStatusUnreadable,
+  smsMonthLabel,
   REMINDER_REASON_LABELS,
   chartSeriesLabel,
   combineTestMode,
@@ -515,4 +518,37 @@ test("a redacted message is recognised by redacted_at or a blanked body", () => 
   assert.equal(isMessageRedacted({ body: null }), true);
   assert.equal(isMessageRedacted({ body: "", redacted_at: "2028-11-09T04:15:00Z" }), true);
   assert.equal(isMessageRedacted({ body: "Hi Juan", redacted_at: null }), false);
+});
+
+// An answer without the logged* fields can't say its sent* counts leave out
+// logged-only messages, so outside a known live mode they read neutral.
+test("sent counts read Processed when the answer has no logged counts and the mode isn't live", () => {
+  const old = { sent: 3, sms_sent: 2, emails_sent: 1 };
+  for (const mode of [true, null] as SendMode[]) {
+    const labels = kpiLabels(old, mode);
+    assert.equal(labels.sent, "Processed", String(mode));
+    assert.equal(labels.sms_sent, "SMS processed", String(mode));
+    assert.equal(labels.emails_sent, "Emails processed", String(mode));
+    assert.equal(smsMonthLabel({ sent_this_month: 2 }, mode), "Messages processed", String(mode));
+  }
+  assert.deepEqual(kpiLabels(old, false), KPI_LABELS);
+  assert.equal(smsMonthLabel({ sent_this_month: 2 }, false), "Messages sent");
+});
+
+test("with logged counts in the answer, sent counts keep Sent in every mode", () => {
+  for (const mode of [true, false, null] as SendMode[]) {
+    assert.deepEqual(kpiLabels({ sent: 3, logged: 4 }, mode), KPI_LABELS, String(mode));
+    assert.equal(smsMonthLabel({ sent_this_month: 2, logged_this_month: 5 }, mode), "Messages sent", String(mode));
+  }
+});
+
+// "Couldn't read sending status" shows whenever the settings call has
+// settled and still says nothing about the mode.
+test("sending status is unreadable once settled without a test_mode, data or not", () => {
+  assert.equal(sendingStatusUnreadable({ loading: false, data: { enabled: true } }), true);
+  assert.equal(sendingStatusUnreadable({ loading: false, data: null }), true);
+  assert.equal(sendingStatusUnreadable({ loading: false, data: { test_mode: true } }), false);
+  assert.equal(sendingStatusUnreadable({ loading: false, data: { test_mode: false } }), false);
+  assert.equal(sendingStatusUnreadable({ loading: true, data: null }), false);
+  assert.equal(sendingStatusUnreadable({ loading: false, data: null }, false), false);
 });

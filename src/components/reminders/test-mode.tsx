@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext } from "react";
 import { CircleHelp, FlaskConical } from "lucide-react";
 import { useApiResource } from "@/hooks";
-import { TEST_MODE_BANNER, reminderTestMode, type SendMode } from "@/lib/reminders";
+import { TEST_MODE_BANNER, reminderTestMode, sendingStatusUnreadable, type SendMode } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
 
@@ -12,7 +12,7 @@ export interface ReminderTestModeState {
   testMode: SendMode;
   /** The cooperative's own switch; null until the settings are read. */
   enabled: boolean | null;
-  /** The settings call finished without an answer (failed, or not connected). */
+  /** The settings call has settled and still gives no `test_mode`. */
   unreadable: boolean;
   /** Read the settings again (after a save). */
   refetch: () => void;
@@ -29,7 +29,7 @@ export function useReminderTestMode(active = true): ReminderTestModeState {
   return {
     testMode: reminderTestMode(settings.data),
     enabled: settings.data ? settings.data.enabled : null,
-    unreadable: !settings.data && (settings.error !== null || settings.unavailable),
+    unreadable: sendingStatusUnreadable(settings, active),
     refetch: settings.refetch,
   };
 }
