@@ -175,7 +175,7 @@ describe("the preview shows the server's figures", () => {
     assert.equal(unassignedNotice(null), null);
     assert.equal(
       unassignedNotice(123_456),
-      "₱1,234.56 of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with a journal entry.",
+      "₱1,234.56 of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with one entry per branch.",
     );
   });
 
@@ -241,7 +241,7 @@ describe("the Post button", () => {
 
   test("a no-branch allowance balance blocks posting, in the server's words", () => {
     const sent =
-      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with a journal entry first, then post.";
+      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with one entry per branch first, then post.";
     const blocked = preview({ unassigned_balance: 70_000, can_post: false, blocking_reasons: [sent] });
     assert.deepEqual(postState(blocked, true), { enabled: false, reason: null, reasons: [sent] });
   });
@@ -318,7 +318,7 @@ describe("posting", () => {
 
   test("a 422 for a balance on entries with no branch is the allowance's", () => {
     const sent =
-      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with a journal entry first, then post.";
+      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with one entry per branch first, then post.";
     const err = { response: { status: 422, data: { message: sent, errors: { allowance: [sent] } } } };
     assert.deepEqual(postFailure(err), { kind: "error", field: "allowance", message: sent });
   });

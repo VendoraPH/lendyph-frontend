@@ -152,7 +152,7 @@ export function totalsView(preview: AllowancePreview): TotalsView {
 /** The 1200 balance on journals with no branch: named; the server won't post while it isn't 0. */
 export function unassignedNotice(balance: number | null | undefined): string | null {
   if (!isFigure(balance) || balance <= 0) return null;
-  return `${formatCentavos(balance)} of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with a journal entry.`;
+  return `${formatCentavos(balance)} of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with one entry per branch.`;
 }
 
 export function lastPostingText(last: AllowancePreview["last_posting"]): string {
