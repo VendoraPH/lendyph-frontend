@@ -3,16 +3,25 @@
  * length, rule descriptions, form validation and the settings payload.
  *
  * None of this decides whether a reminder is sent or what it says to a real
- * borrower — the server owns eligibility and renders every real message.
- * `renderTemplateSample` is only the template editor's live preview.
+ * member — the server owns eligibility and renders every real message.
+ * `renderTemplateSample` is only the template editor's sample preview: fixed
+ * sample values, never a figure worked out for a loan.
+ *
+ * Test mode: while the deployment sends nothing (log-only drivers, live
+ * sending off, or the cooperative's switch off) every screen says so, and a
+ * reminder that was only logged never reads as "Sent".
  */
 
 import type {
   DeliveryStatus,
   ReminderChannel,
+  ReminderDashboardCounts,
   ReminderMessage,
+  ReminderQueueItem,
   ReminderQueueStatus,
+  ReminderReasonCode,
   ReminderRuleInput,
+  ReminderSettings,
   ReminderSettingsUpdate,
   ReminderTemplateType,
   ReminderTrigger,
@@ -44,12 +53,14 @@ export const QUEUE_STATUS_META: Record<ReminderQueueStatus, StatusMeta> = {
   cancelled: {
     label: "Cancelled",
     className: GRAY,
-    description: "No longer needed — the installment was paid, or the loan closed or changed.",
+    description:
+      "No longer needed: the installment was paid, the loan closed or was restructured, the schedule changed, or another reminder covers the loan that day.",
   },
   skipped: {
     label: "Skipped",
     className: SLATE,
-    description: "Still needed but could not be sent — no valid contact, opted out, or paused.",
+    description:
+      "Still needed but could not be sent: paused, the member opted out, no valid contact, outside contact hours, not on the allow-list, or Collected by Auto-Pay.",
   },
 };
 
@@ -62,6 +73,156 @@ export const DELIVERY_STATUS_META: Record<DeliveryStatus, StatusMeta> = {
   rejected: { label: "Rejected", className: RED, description: "The provider refused the message." },
   bounced: { label: "Bounced", className: AMBER, description: "The email address bounced." },
 };
+
+// ---------------------------------------------------------------------------
+// Test mode
+// ---------------------------------------------------------------------------
+
+/** The line every reminders screen shows while the deployment sends nothing. */
+export const TEST_MODE_BANNER = "Test mode: reminders are logged, not sent";
+
+/**
+ * Whether the deployment sends nothing, read from the settings the server
+ * returns: its own `test_mode` (log-only drivers, live sending off, no
+ * provider set up) or the cooperative's `enabled` switch off.
+ *
+ * Only an explicit `test_mode: false` with the switch on is live; an answer
+ * that leaves `test_mode` out says nothing about live sending, so it is not
+ * read as live. `null` while the settings are not known (loading, or not
+ * readable), so no screen claims either way.
+ */
+export function reminderTestMode(
+  settings: Pick<ReminderSettings, "enabled" | "test_mode"> | null | undefined,
+): boolean | null {
+  if (!settings) return null;
+  return settings.enabled !== true || settings.test_mode !== false;
+}
+
+/**
+ * Whether one reminder or message was only logged: its own `test_mode` when
+ * the server sends it, else the deployment's test mode.
+ */
+export function isLoggedOnly(
+  row: { test_mode?: boolean | null },
+  deploymentTestMode: boolean | null | undefined,
+): boolean {
+  if (typeof row.test_mode === "boolean") return row.test_mode;
+  return deploymentTestMode === true;
+}
+
+const LOGGED_META: StatusMeta = {
+  label: "Logged",
+  className: SLATE,
+  description: "Test mode: logged only, not sent. Nothing reached the member.",
+};
+
+/** Statuses that would say a message went out. */
+const QUEUE_WENT_OUT: ReadonlySet<ReminderQueueStatus> = new Set(["sent", "delivered"]);
+const DELIVERY_WENT_OUT: ReadonlySet<DeliveryStatus> = new Set(["sent", "delivered", "opened"]);
+
+/** Whether a queue status says the reminder was handed over (sent or delivered). */
+export function queueStatusWentOut(status: ReminderQueueStatus): boolean {
+  return QUEUE_WENT_OUT.has(status);
+}
+
+/** Whether a delivery status says the message was handed over. */
+export function deliveryStatusWentOut(status: DeliveryStatus): boolean {
+  return DELIVERY_WENT_OUT.has(status);
+}
+
+/** A queue status as the screens read it; "Logged" for a logged-only send. */
+export function queueStatusMeta(status: ReminderQueueStatus, loggedOnly: boolean): StatusMeta | undefined {
+  if (!Object.hasOwn(QUEUE_STATUS_META, status)) return undefined;
+  return loggedOnly && QUEUE_WENT_OUT.has(status) ? LOGGED_META : QUEUE_STATUS_META[status];
+}
+
+/** A delivery status as the screens read it; "Logged" for a logged-only send. */
+export function deliveryStatusMeta(status: DeliveryStatus, loggedOnly: boolean): StatusMeta | undefined {
+  if (!Object.hasOwn(DELIVERY_STATUS_META, status)) return undefined;
+  return loggedOnly && DELIVERY_WENT_OUT.has(status) ? LOGGED_META : DELIVERY_STATUS_META[status];
+}
+
+/**
+ * The status filter's options. In test mode "sent" reads "Logged"; the rest
+ * keep their own labels, so no two options read the same.
+ */
+export function queueStatusOptions(testMode: boolean): Record<ReminderQueueStatus, StatusMeta> {
+  return testMode ? { ...QUEUE_STATUS_META, sent: LOGGED_META } : QUEUE_STATUS_META;
+}
+
+/** As `queueStatusOptions`, for message history's delivery statuses. */
+export function deliveryStatusOptions(testMode: boolean): Record<DeliveryStatus, StatusMeta> {
+  return testMode ? { ...DELIVERY_STATUS_META, sent: LOGGED_META } : DELIVERY_STATUS_META;
+}
+
+const KPI_LABELS: Record<keyof ReminderDashboardCounts, { live: string; test: string }> = {
+  today: { live: "Reminders today", test: "Reminders today" },
+  sent: { live: "Sent", test: "Logged" },
+  pending: { live: "Pending", test: "Pending" },
+  failed: { live: "Failed", test: "Failed" },
+  sms_sent: { live: "SMS sent", test: "SMS logged" },
+  emails_sent: { live: "Emails sent", test: "Emails logged" },
+  upcoming_due: { live: "Upcoming due", test: "Upcoming due" },
+  overdue: { live: "Overdue", test: "Overdue" },
+};
+
+/** A dashboard count's label; in test mode nothing is counted as sent. */
+export function kpiLabel(key: keyof ReminderDashboardCounts, testMode: boolean): string {
+  return testMode ? KPI_LABELS[key].test : KPI_LABELS[key].live;
+}
+
+// ---------------------------------------------------------------------------
+// Reasons
+// ---------------------------------------------------------------------------
+
+/**
+ * The engine's reason codes in words (backend #232). The server sends
+ * `reason` in words too, and that wins; these cover a row without one.
+ */
+export const REMINDER_REASON_LABELS: Record<ReminderReasonCode, string> = {
+  paid: "Payment received before send time",
+  schedule_changed: "Schedule changed: the due date moved or the period closed",
+  nothing_due: "Nothing is due on this loan",
+  loan_closed: "Loan is closed",
+  rule_not_applicable: "The rule no longer covers this loan",
+  superseded: "Another reminder covers this loan today",
+  rule_inactive: "Reminder rule is switched off",
+  reminders_off: "Automated reminders are switched off",
+  channel_off: "This channel is switched off",
+  auto_pay: "Collected by Auto-Pay",
+  paused: "Reminders are paused",
+  opted_out: "Member turned off these reminders",
+  no_contact: "Member has no contact on file for this channel",
+  invalid_contact: "Contact is not a valid mobile number or email address",
+  contact_flagged: "Contact was marked invalid after a failed send",
+  not_allowed: "Recipient is not on the allow-list",
+  fire_date_passed: "Its day has passed",
+  outside_contact_hours: "Outside contact hours",
+  not_set_up: "Sending is not set up",
+  retry_window_closed: "Could not be retried within contact hours",
+  interrupted: "Sending was interrupted; not resent so the member is not sent it twice",
+  error: "Could not be prepared for sending",
+  driver_error: "The driver failed",
+};
+
+/** "some_new_code" → "Some new code". */
+function codeInWords(code: string): string {
+  const words = code.split("_").filter(Boolean).join(" ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Why a reminder was cancelled, skipped or failed, in words; null when none. */
+export function reminderReason(
+  item: Pick<ReminderQueueItem, "reason"> & { reason_code?: string | null },
+): string | null {
+  const text = item.reason?.trim();
+  if (text) return text;
+  const code = item.reason_code?.trim();
+  if (!code) return null;
+  return Object.hasOwn(REMINDER_REASON_LABELS, code)
+    ? REMINDER_REASON_LABELS[code as ReminderReasonCode]
+    : codeInWords(code);
+}
 
 export const TEMPLATE_TYPE_LABELS: Record<ReminderTemplateType, string> = {
   upcoming: "Upcoming due",
@@ -90,30 +251,65 @@ export function channelsLabel(channels: ReminderChannel[]): string {
   return channels.map((c) => CHANNEL_LABELS[c]).join(" + ");
 }
 
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  /** Fixed sample text for SMS (and for email unless `emailSample` is set). */
+  sample: string;
+  /** Email's own sample, where the server formats email differently. */
+  emailSample?: string;
+  /** For an alias: the variable it renders the same as. */
+  aliasOf?: string;
+}
+
+/** The server's amount format per channel, shown on fixed sample values only. */
+const SAMPLE_AMOUNT = { sms: "PHP 2,500.00", email: "₱2,500.00" } as const;
+
 /**
  * Variables a template may use, with the sample value the editor previews.
  *
- * Samples follow the server's rendering ("PHP 2,541.67", "Oct 5, 2026"), not
- * the screen's: the SMS part counter runs on the rendered sample, and a "₱"
- * would switch it to Unicode and roughly double the parts it reports.
+ * Samples follow the server's rendering, not the screen's: "PHP 2,500.00" on
+ * SMS and "₱2,500.00" on email, dates like "Sep 15, 2026". The SMS part
+ * counter runs on the rendered SMS sample, and a "₱" would switch it to
+ * Unicode and roughly double the parts it reports.
+ *
+ * `amount_due` and `remaining_balance` render the same server figure (what is
+ * due by the period's due date), so they share one sample. The last four are
+ * the task's own names, which the server accepts as aliases.
  */
-export const TEMPLATE_VARIABLES = [
+export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
   { key: "borrower_first_name", label: "First name", sample: "Juan" },
   { key: "borrower_full_name", label: "Full name", sample: "Juan Dela Cruz" },
   { key: "loan_number", label: "Loan number", sample: "LN-2026-00123" },
   { key: "installment_number", label: "Installment no.", sample: "4" },
-  { key: "due_date", label: "Due date", sample: "Oct 15, 2026" },
-  { key: "amount_due", label: "Amount due", sample: "PHP 2,500.00" },
-  { key: "remaining_balance", label: "Remaining due", sample: "PHP 1,200.00" },
+  { key: "due_date", label: "Due date", sample: "Sep 15, 2026" },
+  { key: "amount_due", label: "Amount due", sample: SAMPLE_AMOUNT.sms, emailSample: SAMPLE_AMOUNT.email },
+  { key: "remaining_balance", label: "Remaining due", sample: SAMPLE_AMOUNT.sms, emailSample: SAMPLE_AMOUNT.email },
   { key: "days_overdue", label: "Days overdue", sample: "3" },
   { key: "lender_name", label: "Lender name", sample: "Sample Cooperative" },
   { key: "branch_name", label: "Branch", sample: "Main Branch" },
   { key: "branch_phone", label: "Branch phone", sample: "(082) 123-4567" },
   { key: "payment_method", label: "Payment instructions", sample: "Pay at any branch or via GCash." },
-] as const;
+  {
+    key: "remaining_amount",
+    label: "Remaining amount",
+    sample: SAMPLE_AMOUNT.sms,
+    emailSample: SAMPLE_AMOUNT.email,
+    aliasOf: "remaining_balance",
+  },
+  { key: "company_name", label: "Company name", sample: "Sample Cooperative", aliasOf: "lender_name" },
+  { key: "company_phone", label: "Company phone", sample: "(082) 123-4567", aliasOf: "branch_phone" },
+  { key: "payment_reference", label: "Payment reference", sample: "LN-2026-00123", aliasOf: "loan_number" },
+];
+
+/** The label of the variable an alias stands for. */
+export function aliasTargetLabel(variable: TemplateVariable): string | null {
+  if (!variable.aliasOf) return null;
+  return TEMPLATE_VARIABLES.find((v) => v.key === variable.aliasOf)?.label ?? null;
+}
 
 const VARIABLE_PATTERN = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
-const KNOWN_VARIABLES = new Map<string, string>(TEMPLATE_VARIABLES.map((v) => [v.key, v.sample]));
+const KNOWN_VARIABLES = new Map<string, TemplateVariable>(TEMPLATE_VARIABLES.map((v) => [v.key, v]));
 
 /** `{{name}}` tokens in `text` that are not template variables. */
 export function unknownVariables(text: string): string[] {
@@ -124,11 +320,17 @@ export function unknownVariables(text: string): string[] {
   return [...unknown];
 }
 
-/** Replace known variables with sample values; unknown tokens stay visible. */
-export function renderTemplateSample(text: string): string {
-  return text.replace(VARIABLE_PATTERN, (token, name: string) =>
-    KNOWN_VARIABLES.get(name.toLowerCase()) ?? token,
-  );
+/**
+ * Replace known variables with the channel's fixed sample values; unknown
+ * tokens stay visible. A sample, never a real loan's figures: the server's
+ * preview shows those.
+ */
+export function renderTemplateSample(text: string, channel: ReminderChannel = "sms"): string {
+  return text.replace(VARIABLE_PATTERN, (token, name: string) => {
+    const variable = KNOWN_VARIABLES.get(name.toLowerCase());
+    if (!variable) return token;
+    return channel === "email" ? (variable.emailSample ?? variable.sample) : variable.sample;
+  });
 }
 
 // The GSM 03.38 basic set plus its extension table (which costs two units).
@@ -277,7 +479,7 @@ export const DEFAULT_RULES: Pick<
   "name" | "trigger" | "days" | "send_time" | "channels" | "template_type"
 >[] = [
   { name: "Upcoming due", trigger: "before_due", days: 3, send_time: "09:00", channels: ["sms", "email"], template_type: "upcoming" },
-  { name: "Due today", trigger: "on_due", days: 0, send_time: "08:00", channels: ["sms"], template_type: "due_today" },
+  { name: "Due today", trigger: "on_due", days: 0, send_time: "08:00", channels: ["sms", "email"], template_type: "due_today" },
   { name: "3 days overdue", trigger: "after_due", days: 3, send_time: "09:00", channels: ["sms", "email"], template_type: "past_due" },
   { name: "7 days overdue", trigger: "after_due", days: 7, send_time: "09:00", channels: ["sms", "email"], template_type: "past_due" },
   { name: "15 days overdue", trigger: "after_due", days: 15, send_time: "09:00", channels: ["sms", "email"], template_type: "long_past_due" },
@@ -305,12 +507,20 @@ export function toSettingsPayload(form: ReminderSettingsUpdate): ReminderSetting
 
 /**
  * The line beside a message's status badge: who sent it, or "Failed" when it
- * never went out, so a failed message is not described as sent.
+ * never went out, so a failed message is not described as sent. A message
+ * that was only logged (test mode) says so, and never "Sent".
  */
 export function messageSourceLabel(
-  message: Pick<ReminderMessage, "status" | "source" | "created_by_name">,
+  message: Pick<ReminderMessage, "status" | "source" | "created_by_name" | "test_mode">,
+  deploymentTestMode: boolean | null = null,
 ): string {
   if (message.status === "failed") return "Failed";
+  if (isLoggedOnly(message, deploymentTestMode)) {
+    if (message.source === "manual") {
+      return `Logged${message.created_by_name ? ` by ${message.created_by_name}` : " manually"}, not sent (test mode)`;
+    }
+    return "Logged automatically, not sent (test mode)";
+  }
   if (message.source === "manual") {
     return `Sent manually${message.created_by_name ? ` by ${message.created_by_name}` : ""}`;
   }

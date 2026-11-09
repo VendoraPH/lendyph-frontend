@@ -15,24 +15,26 @@ import {
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DataState } from "@/components/common/data-state";
+import { useReminderTestModeContext } from "@/components/reminders/test-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, useIsClient } from "@/hooks";
 import { formatCurrencyExact, formatDate, todayISO } from "@/lib/format";
-import { QUEUE_STATUS_META } from "@/lib/reminders";
+import { kpiLabel, queueStatusOptions } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { ReminderDashboard, ReminderListFilters } from "@/types/reminder";
 import { QueueTable } from "./_components/queue-table";
 import { ReminderFilters, StatusSelect } from "./_components/reminder-filters";
 
-const KPIS: { key: keyof ReminderDashboard["counts"]; label: string; icon: LucideIcon; tone: string }[] = [
-  { key: "today", label: "Reminders today", icon: CalendarClock, tone: "text-blue-600" },
-  { key: "sent", label: "Sent", icon: CheckCircle2, tone: "text-green-600" },
-  { key: "pending", label: "Pending", icon: Clock, tone: "text-amber-600" },
-  { key: "failed", label: "Failed", icon: XCircle, tone: "text-red-600" },
-  { key: "sms_sent", label: "SMS sent", icon: MessageSquare, tone: "text-indigo-600" },
-  { key: "emails_sent", label: "Emails sent", icon: Mail, tone: "text-indigo-600" },
-  { key: "upcoming_due", label: "Upcoming due", icon: Send, tone: "text-blue-600" },
-  { key: "overdue", label: "Overdue", icon: AlertTriangle, tone: "text-red-600" },
+/** Labels come from `kpiLabel`, so test mode never counts a message as sent. */
+const KPIS: { key: keyof ReminderDashboard["counts"]; icon: LucideIcon; tone: string }[] = [
+  { key: "today", icon: CalendarClock, tone: "text-blue-600" },
+  { key: "sent", icon: CheckCircle2, tone: "text-green-600" },
+  { key: "pending", icon: Clock, tone: "text-amber-600" },
+  { key: "failed", icon: XCircle, tone: "text-red-600" },
+  { key: "sms_sent", icon: MessageSquare, tone: "text-indigo-600" },
+  { key: "emails_sent", icon: Mail, tone: "text-indigo-600" },
+  { key: "upcoming_due", icon: Send, tone: "text-blue-600" },
+  { key: "overdue", icon: AlertTriangle, tone: "text-red-600" },
 ];
 
 function Kpi({ label, value, icon: Icon, tone }: { label: string; value: number; icon: LucideIcon; tone: string }) {
@@ -47,7 +49,7 @@ function Kpi({ label, value, icon: Icon, tone }: { label: string; value: number;
   );
 }
 
-function SmsCreditsCard({ sms }: { sms: ReminderDashboard["sms"] }) {
+function SmsCreditsCard({ sms, testMode }: { sms: ReminderDashboard["sms"]; testMode: boolean }) {
   const low =
     sms.credits_remaining !== null &&
     sms.low_credit_threshold !== null &&
@@ -57,7 +59,7 @@ function SmsCreditsCard({ sms }: { sms: ReminderDashboard["sms"] }) {
       <CardContent className="space-y-3 pt-6">
         <p className="text-sm font-medium">SMS usage this month</p>
         <dl className="grid grid-cols-2 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Messages sent</dt>
+          <dt className="text-muted-foreground">{testMode ? "Messages logged" : "Messages sent"}</dt>
           <dd className="text-right tabular-nums">{sms.sent_this_month.toLocaleString("en-PH")}</dd>
           <dt className="text-muted-foreground">Estimated cost</dt>
           <dd className="text-right tabular-nums">{formatCurrencyExact(sms.estimated_cost_this_month)}</dd>
@@ -77,7 +79,7 @@ function SmsCreditsCard({ sms }: { sms: ReminderDashboard["sms"] }) {
   );
 }
 
-function DeliveryChart({ daily }: { daily: ReminderDashboard["daily"] }) {
+function DeliveryChart({ daily, testMode }: { daily: ReminderDashboard["daily"]; testMode: boolean }) {
   const isClient = useIsClient();
   const rows = daily.map((d) => ({ ...d, label: formatDate(d.date) }));
   return (
@@ -85,7 +87,9 @@ function DeliveryChart({ daily }: { daily: ReminderDashboard["daily"] }) {
       <CardContent className="pt-6">
         <p className="mb-2 text-sm font-medium">Delivery, last 7 days</p>
         {daily.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No reminders sent in the last 7 days.</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {testMode ? "No reminders logged in the last 7 days." : "No reminders sent in the last 7 days."}
+          </p>
         ) : (
           <div className="h-56">
             {isClient && (
@@ -96,7 +100,7 @@ function DeliveryChart({ daily }: { daily: ReminderDashboard["daily"] }) {
                   <YAxis allowDecimals={false} fontSize={11} tickLine={false} width={32} />
                   <Tooltip />
                   <Bar dataKey="delivered" name="Delivered" stackId="a" fill="#10b981" />
-                  <Bar dataKey="sent" name="Sent" stackId="a" fill="#60a5fa" />
+                  <Bar dataKey="sent" name={testMode ? "Logged" : "Sent"} stackId="a" fill="#60a5fa" />
                   <Bar dataKey="failed" name="Failed" stackId="a" fill="#ef4444" />
                 </BarChart>
               </ResponsiveContainer>
@@ -108,18 +112,19 @@ function DeliveryChart({ daily }: { daily: ReminderDashboard["daily"] }) {
   );
 }
 
-function DashboardBody({ data }: { data: ReminderDashboard }) {
+function DashboardBody({ data, testMode }: { data: ReminderDashboard; testMode: boolean | null }) {
+  const inTestMode = testMode === true;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {KPIS.map((k) => (
-          <Kpi key={k.key} label={k.label} value={data.counts[k.key] ?? 0} icon={k.icon} tone={k.tone} />
+          <Kpi key={k.key} label={kpiLabel(k.key, inTestMode)} value={data.counts[k.key] ?? 0} icon={k.icon} tone={k.tone} />
         ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <DeliveryChart daily={data.daily} />
-        <SmsCreditsCard sms={data.sms} />
+        <DeliveryChart daily={data.daily} testMode={inTestMode} />
+        <SmsCreditsCard sms={data.sms} testMode={inTestMode} />
       </div>
 
       <div className="space-y-2">
@@ -134,7 +139,7 @@ function DashboardBody({ data }: { data: ReminderDashboard }) {
             No reminders for this selection.
           </p>
         ) : (
-          <QueueTable items={data.items} />
+          <QueueTable items={data.items} testMode={testMode} />
         )}
       </div>
     </div>
@@ -149,13 +154,14 @@ export default function RemindersDashboardPage() {
     return reminderService.getDashboard({ date, branch_id, channel, status, loan_product_id, search });
   }, [filters]);
   const resource = useApiResource(fetcher);
+  const { testMode } = useReminderTestModeContext();
 
   return (
     <div className="space-y-4">
       <ReminderFilters value={filters} onChange={setFilters} dates="day">
         <StatusSelect
           value={filters.status}
-          options={QUEUE_STATUS_META}
+          options={queueStatusOptions(testMode === true)}
           onChange={(status) => setFilters((f) => ({ ...f, status }))}
         />
       </ReminderFilters>
@@ -164,7 +170,7 @@ export default function RemindersDashboardPage() {
         summary="The reminders dashboard will show today's reminders, delivery results and SMS usage once the reminder service is connected."
         endpoints={["GET /reminders/dashboard", "GET /reminders/pauses"]}
       >
-        {(data) => <DashboardBody data={data} />}
+        {(data) => <DashboardBody data={data} testMode={testMode} />}
       </DataState>
     </div>
   );

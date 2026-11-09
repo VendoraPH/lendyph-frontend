@@ -45,12 +45,22 @@ const TIMEZONES = ["Asia/Manila"];
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** The form's copy of the settings, with the write-only credentials blank. */
+/**
+ * The form's copy of the settings, with the write-only credentials blank.
+ * Field by field, so the server's read-only `test_mode` is never sent back.
+ */
 function toForm(s: ReminderSettings): ReminderSettingsUpdate {
   const sms = s.sms_provider;
   const email = s.email_provider;
   return {
-    ...s,
+    enabled: s.enabled,
+    timezone: s.timezone,
+    default_send_time: s.default_send_time,
+    channels: s.channels,
+    contact_hours: s.contact_hours,
+    retry: s.retry,
+    payment_instructions: s.payment_instructions,
+    branches: s.branches,
     sms_provider: {
       provider: sms.provider,
       sender_id: sms.sender_id,
@@ -157,10 +167,16 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
   return (
     <div className="space-y-4">
       <Section title="General">
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={form.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
-          Send automated reminders
-        </label>
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch checked={form.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
+            Send automated reminders
+          </label>
+          <p className="text-xs text-muted-foreground">
+            The cooperative&apos;s own switch, off to start. While test mode is on, reminders are logged and nothing
+            is sent to members, whatever this switch says.
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="set-tz" label="Timezone">
             <NativeSelect id="set-tz" className="w-full" value={form.timezone} onChange={(e) => patch({ timezone: e.target.value })}>

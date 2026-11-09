@@ -1,14 +1,14 @@
 /**
  * Automated due-date reminders.
  *
- * These types ARE the backend contract: no reminder endpoint exists yet (see
- * `API_ENDPOINTS.REMINDERS`), and the handoff in the commit that added this
- * file describes each one against these shapes.
+ * These types ARE the backend contract (`API_ENDPOINTS.REMINDERS`, served by
+ * slice R2). The engine behind them is backend #232; its statuses, reason
+ * codes and per-message `test_mode` are typed here.
  *
  * "Loan engine calculates. Reminder engine communicates." Every amount and
  * due date here is the server's figure for the live schedule, after partial
  * payments, restructures and grace periods. The frontend shows them; it never
- * works out what a borrower owes or whether a reminder should go out.
+ * works out what a member owes or whether a reminder should go out.
  */
 
 export type ReminderChannel = "sms" | "email";
@@ -21,9 +21,13 @@ export type ReminderTrigger = "before_due" | "on_due" | "after_due";
  *
  * `cancelled` and `skipped` are NOT the same thing, and the UI keeps them
  * apart. Cancelled: the reminder became unnecessary (the installment was paid,
- * the loan closed or was restructured). Skipped: it was still needed but could
- * not be sent (no mobile number, borrower opted out, paused, outside contact
- * hours with no later slot that day).
+ * the loan closed or was restructured, the schedule changed, or a later
+ * reminder the same day covers it). Skipped: it was still needed but could not
+ * be sent (paused, member opted out, no valid contact, outside contact hours,
+ * not on the allow-list, Collected by Auto-Pay).
+ *
+ * In test mode `sent` means "handed to the log driver": nothing reached the
+ * member, and the screens read it as "Logged".
  */
 export type ReminderQueueStatus =
   | "scheduled"
@@ -56,6 +60,40 @@ export type ReminderTemplateType =
 export type ReminderSource = "system" | "manual";
 
 export type BorrowerType = "all" | "member" | "non_member";
+
+/**
+ * Why a reminder was cancelled, skipped or failed: the engine's
+ * `reason_code` (backend #232). The server also sends `reason` in words; the
+ * code is the fallback, read by `REMINDER_REASON_LABELS` in `@/lib/reminders`.
+ * Any other string is a code added on the server later.
+ */
+export type ReminderReasonCode =
+  // cancelled: no longer needed
+  | "paid"
+  | "schedule_changed"
+  | "nothing_due"
+  | "loan_closed"
+  | "rule_not_applicable"
+  | "superseded"
+  // skipped: still needed, not sendable
+  | "rule_inactive"
+  | "reminders_off"
+  | "channel_off"
+  | "auto_pay"
+  | "paused"
+  | "opted_out"
+  | "no_contact"
+  | "invalid_contact"
+  | "contact_flagged"
+  | "not_allowed"
+  | "fire_date_passed"
+  | "outside_contact_hours"
+  // failed
+  | "not_set_up"
+  | "retry_window_closed"
+  | "interrupted"
+  | "error"
+  | "driver_error";
 
 /** Who or what a pause applies to. */
 export type ReminderPauseScope = "global" | "borrower" | "loan";
@@ -136,10 +174,18 @@ export interface ReminderQueueItem {
   recipient: string;
   scheduled_at: string;
   status: ReminderQueueStatus;
-  /** Why it was cancelled or skipped, or why the last attempt failed. */
+  /** Why it was cancelled or skipped, or why the last attempt failed, in words. */
   reason: string | null;
+  /** The engine's code for `reason` (R2 to send it). */
+  reason_code?: ReminderReasonCode | (string & {}) | null;
   attempts: number;
   source: ReminderSource;
+  /**
+   * True when its message was only logged (log-only driver, or live sending
+   * off): nothing reached the member. R2 to send it from the message's own
+   * `test_mode`; absent, the deployment's test mode applies.
+   */
+  test_mode?: boolean | null;
 }
 
 export interface ReminderMessage {
@@ -169,6 +215,12 @@ export interface ReminderMessage {
   /** SMS segments billed, when the provider reports it. */
   segments?: number | null;
   cost?: number | null;
+  /**
+   * True when the message was only logged (log-only driver, or live sending
+   * off): nothing reached the member. Stored per message by the engine
+   * (`reminder_messages.test_mode`); R2 to send it.
+   */
+  test_mode?: boolean | null;
 }
 
 export type ReminderTimelineEventKind =
@@ -193,6 +245,8 @@ export interface ReminderTimelineEvent {
   detail: string | null;
   channel: ReminderChannel | null;
   installment_number: number | null;
+  /** A `sent`/`manual_sent` event whose message was only logged (R2 to send it). */
+  test_mode?: boolean | null;
 }
 
 export interface ReminderPause {
@@ -318,7 +372,17 @@ export interface BranchReminderConfig {
  * `api_key`/`api_secret` on PUT; omitting them keeps what is stored.
  */
 export interface ReminderSettings {
+  /** The cooperative's own switch. It starts off. */
   enabled: boolean;
+  /**
+   * The server's answer to "does this deployment send nothing?": true while
+   * the drivers are log-only, live sending is off, or no provider is set up.
+   * Every reminder screen shows the test-mode banner while it is true (or
+   * while `enabled` is off). Only `false` with `enabled` on counts as live, so
+   * a server that leaves it out reads as test mode. Not in the original
+   * contract: R2 to send it, read-only (a PUT ignores it).
+   */
+  test_mode?: boolean;
   timezone: string;
   default_send_time: string;
   channels: { sms: boolean; email: boolean };
@@ -342,7 +406,7 @@ export interface ReminderSettings {
 }
 
 export interface ReminderSettingsUpdate
-  extends Omit<ReminderSettings, "sms_provider" | "email_provider"> {
+  extends Omit<ReminderSettings, "sms_provider" | "email_provider" | "test_mode"> {
   sms_provider: Omit<ReminderSettings["sms_provider"], "has_credentials"> & {
     api_key?: string;
     api_secret?: string;

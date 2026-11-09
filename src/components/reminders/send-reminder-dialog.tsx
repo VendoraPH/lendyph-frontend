@@ -18,6 +18,7 @@ import { useDialogOpening } from "@/hooks";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { getErrorMessage } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { TestModeBanner } from "./test-mode";
 import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
@@ -36,6 +37,8 @@ interface SendReminderDialogProps {
    */
   defaultTemplate?: ReminderTemplateType | null;
   onSent?: () => void;
+  /** The deployment's test mode, from the settings; null when not known. */
+  testMode?: boolean | null;
 }
 
 const CHANNEL_OPTIONS: { value: ManualSendChannel; label: string }[] = [
@@ -69,7 +72,9 @@ export function SendReminderDialog({
   loanId,
   defaultTemplate = null,
   onSent,
+  testMode = null,
 }: SendReminderDialogProps) {
+  const inTestMode = testMode === true;
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
   const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate));
   const [result, setResult] = useState<PreviewResult | null>(null);
@@ -114,7 +119,11 @@ export function SendReminderDialog({
       .sendManual({ loan_id: loanId, channel, template_type: template })
       .then(() => {
         setSending(false);
-        notifySuccess("Reminder queued for sending", "It shows in Message History once it has gone out.");
+        if (inTestMode) {
+          notifySuccess("Reminder queued in test mode", "It is logged in Message History, not sent to the member.");
+        } else {
+          notifySuccess("Reminder queued for sending", "It shows in Message History once it has gone out.");
+        }
         onOpenChange(false);
         onSent?.();
       })
@@ -133,6 +142,8 @@ export function SendReminderDialog({
             Queues one reminder to send now, outside the automatic schedule. It is logged in Message History.
           </DialogDescription>
         </DialogHeader>
+
+        <TestModeBanner testMode={testMode} enabled={null} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -238,7 +249,7 @@ export function SendReminderDialog({
             Cancel
           </Button>
           <Button onClick={send} disabled={sending || blocked}>
-            {sending ? "Sending…" : "Send reminder"}
+            {inTestMode ? (sending ? "Logging…" : "Log reminder (test mode)") : sending ? "Sending…" : "Send reminder"}
           </Button>
         </DialogFooter>
       </DialogContent>

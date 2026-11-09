@@ -18,9 +18,12 @@ import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PauseDialog } from "@/components/reminders/pause-dialog";
+import { TestModeBadge } from "@/components/reminders/reminder-status-badge";
 import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog";
+import { TestModeBanner, useReminderTestMode } from "@/components/reminders/test-mode";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
+import { isLoggedOnly } from "@/lib/reminders";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
@@ -39,7 +42,10 @@ const EVENT_STYLE: Record<ReminderTimelineEventKind, { icon: LucideIcon; tone: s
   manual_sent: { icon: Send, tone: "text-indigo-600" },
 };
 
-function Summary({ data }: { data: LoanReminderSummary }) {
+/** Events that say a message was handed over; in test mode it was only logged. */
+const WENT_OUT: ReadonlySet<ReminderTimelineEventKind> = new Set(["sent", "delivered", "manual_sent"]);
+
+function Summary({ data, testMode }: { data: LoanReminderSummary; testMode: boolean | null }) {
   const pause = data.pause ?? data.inherited_pause;
   return (
     <div className="space-y-4">
@@ -79,12 +85,16 @@ function Summary({ data }: { data: LoanReminderSummary }) {
         <ol className="relative space-y-3 border-l pl-5">
           {data.events.map((e) => {
             const { icon: Icon, tone } = EVENT_STYLE[e.kind] ?? EVENT_STYLE.scheduled;
+            const loggedOnly = WENT_OUT.has(e.kind) && isLoggedOnly(e, testMode);
             return (
               <li key={e.id} className="relative">
                 <span className="absolute top-0.5 -left-[1.95rem] rounded-full bg-background p-0.5">
                   <Icon className={cn("h-4 w-4", tone)} />
                 </span>
-                <p className="text-sm font-medium">{e.title}</p>
+                <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                  {e.title}
+                  {loggedOnly && <TestModeBadge />}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {formatDateTime(e.at)}
                   {e.installment_number ? ` · installment #${e.installment_number}` : ""}
@@ -105,6 +115,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
   const [opened, setOpened] = useState(false);
   const fetcher = useCallback(() => reminderService.getLoanReminders(loanId), [loanId]);
   const summary = useApiResource(fetcher, opened);
+  const testMode = useReminderTestMode(opened);
   const [sendOpen, setSendOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -154,12 +165,13 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
     >
       <DataState
         resource={summary}
-        summary="This loan's reminder timeline — scheduled, sent, delivered, and cancelled once paid — will appear here once the reminder service is connected."
+        summary="This loan's reminder timeline — scheduled, sent or logged, and cancelled once paid — will appear here once the reminder service is connected."
         endpoints={[`GET /loans/${loanId}/reminders`]}
       >
         {(data) => (
           <div className="space-y-3">
-            <Summary data={data} />
+            <TestModeBanner testMode={testMode.testMode} enabled={testMode.enabled} />
+            <Summary data={data} testMode={testMode.testMode} />
             <Link
               href="/loans/reminders/history"
               className="inline-block text-xs text-brand-orange hover:underline"
@@ -175,6 +187,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
         onOpenChange={setSendOpen}
         loanId={loanId}
         defaultTemplate={summary.data?.suggested_template_type ?? null}
+        testMode={testMode.testMode}
         onSent={summary.refetch}
       />
       <PauseDialog

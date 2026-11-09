@@ -3,8 +3,9 @@
 import { useCallback, useState } from "react";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
+import { useReminderTestModeContext } from "@/components/reminders/test-mode";
 import { useApiResource } from "@/hooks";
-import { QUEUE_STATUS_META } from "@/lib/reminders";
+import { QUEUE_STATUS_META, queueStatusOptions } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
 import type { ReminderListFilters, ReminderQueueStatus } from "@/types/reminder";
@@ -26,16 +27,19 @@ const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 function StatusFilter({
   value,
   stats,
+  testMode,
   onChange,
 }: {
   value: ReminderQueueStatus | undefined;
   stats: Record<string, number> | undefined;
+  testMode: boolean;
   onChange: (status: ReminderQueueStatus | undefined) => void;
 }) {
+  const options = queueStatusOptions(testMode);
   const total = stats ? Object.values(stats).reduce((a, b) => a + b, 0) : null;
   const tabs: { key: ReminderQueueStatus | undefined; label: string; count: number | null }[] = [
     { key: undefined, label: "All", count: total },
-    ...STATUSES.map((s) => ({ key: s, label: QUEUE_STATUS_META[s].label, count: stats ? (stats[s] ?? 0) : null })),
+    ...STATUSES.map((s) => ({ key: s, label: options[s].label, count: stats ? (stats[s] ?? 0) : null })),
   ];
   return (
     <div className="-mx-1 overflow-x-auto">
@@ -46,7 +50,7 @@ function StatusFilter({
             type="button"
             aria-pressed={value === t.key}
             onClick={() => onChange(t.key)}
-            title={t.key ? QUEUE_STATUS_META[t.key].description : undefined}
+            title={t.key ? options[t.key].description : undefined}
             className={cn(
               "rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
               value === t.key ? "border-brand-orange bg-brand-orange/10 font-medium text-brand-orange" : "hover:bg-muted",
@@ -65,6 +69,7 @@ export default function ReminderQueuePage() {
   const [filters, setFilters] = useState<ReminderListFilters>({ page: 1, per_page: 20 });
   const fetcher = useCallback(() => reminderService.listQueue(filters), [filters]);
   const queue = useApiResource(fetcher);
+  const { testMode } = useReminderTestModeContext();
 
   return (
     <div className="space-y-4">
@@ -72,6 +77,7 @@ export default function ReminderQueuePage() {
       <StatusFilter
         value={filters.status}
         stats={queue.data?.meta.stats}
+        testMode={testMode === true}
         onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}
       />
       <DataState
@@ -83,7 +89,7 @@ export default function ReminderQueuePage() {
       >
         {(res) => (
           <div className="space-y-3">
-            <QueueTable items={res.data} />
+            <QueueTable items={res.data} testMode={testMode} />
             <TablePagination
               page={res.meta.current_page}
               perPage={res.meta.per_page}

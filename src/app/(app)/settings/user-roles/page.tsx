@@ -66,6 +66,7 @@ import {
   ReceiptText,
   Wallet,
   Gauge,
+  BellRing,
   Package,
   Building2,
   type LucideIcon,
@@ -318,6 +319,17 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View the dashboard, member scores, assessments, risk monitoring and score history",
       "Record a credit decision (approve, decline, refer, hold) against a score",
       "Configure the scorecard and credit scoring settings",
+    ],
+  },
+  reminders: {
+    label: "Reminders",
+    description: "Automated SMS and email payment reminders to members. In test mode they are logged, not sent.",
+    icon: BellRing,
+    features: [
+      "View the reminders dashboard, queue, message history and a loan's reminders",
+      "Send one reminder to a member by hand",
+      "Pause and resume reminders for everyone, one member or one loan",
+      "Configure rules, templates and the SMS and email set-up",
     ],
   },
 };

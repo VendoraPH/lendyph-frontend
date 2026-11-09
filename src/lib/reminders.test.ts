@@ -4,7 +4,18 @@ import {
   DEFAULT_RULES,
   QUEUE_STATUS_META,
   TEMPLATE_VARIABLES,
+  TEST_MODE_BANNER,
+  deliveryStatusMeta,
+  deliveryStatusOptions,
   describeRule,
+  isLoggedOnly,
+  kpiLabel,
+  queueStatusMeta,
+  queueStatusOptions,
+  queueStatusWentOut,
+  deliveryStatusWentOut,
+  reminderReason,
+  reminderTestMode,
   formatSendTime,
   messageSourceLabel,
   renderTemplateSample,
@@ -14,7 +25,7 @@ import {
   validateContactWindow,
   validateRule,
 } from "./reminders";
-import type { ReminderRuleInput, ReminderSettingsUpdate } from "@/types/reminder";
+import type { DeliveryStatus, ReminderQueueStatus, ReminderRuleInput, ReminderSettingsUpdate } from "@/types/reminder";
 
 const HOURS = { start: "08:00", end: "18:00" };
 
@@ -226,4 +237,186 @@ test("messageSourceLabel names who sent a message that did go out", () => {
     "Sent manually by Ana Admin",
   );
   assert.equal(messageSourceLabel({ status: "sent", source: "manual", created_by_name: null }), "Sent manually");
+});
+
+// ── Phase 2: aligned with the reminders engine (backend #232) ──
+
+test("the default rules are the five the server seeds, every one on SMS and email", () => {
+  assert.deepEqual(
+    DEFAULT_RULES.map((r) => [r.name, r.trigger, r.days, r.send_time, r.channels, r.template_type]),
+    [
+      ["Upcoming due", "before_due", 3, "09:00", ["sms", "email"], "upcoming"],
+      ["Due today", "on_due", 0, "08:00", ["sms", "email"], "due_today"],
+      ["3 days overdue", "after_due", 3, "09:00", ["sms", "email"], "past_due"],
+      ["7 days overdue", "after_due", 7, "09:00", ["sms", "email"], "past_due"],
+      ["15 days overdue", "after_due", 15, "09:00", ["sms", "email"], "long_past_due"],
+    ],
+  );
+});
+
+test("the variable list offers the task's names as aliases of the server's variables", () => {
+  const aliases = Object.fromEntries(
+    TEMPLATE_VARIABLES.filter((v) => "aliasOf" in v && v.aliasOf).map((v) => [v.key, (v as { aliasOf: string }).aliasOf]),
+  );
+  assert.deepEqual(aliases, {
+    remaining_amount: "remaining_balance",
+    company_name: "lender_name",
+    company_phone: "branch_phone",
+    payment_reference: "loan_number",
+  });
+  const keys = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
+  for (const target of Object.values(aliases)) assert.ok(keys.has(target), target);
+});
+
+test("aliases are known variables and render the same sample as their target", () => {
+  assert.deepEqual(
+    unknownVariables("{{remaining_amount}} {{company_name}} {{company_phone}} {{payment_reference}}"),
+    [],
+  );
+  assert.equal(renderTemplateSample("{{company_name}}"), renderTemplateSample("{{lender_name}}"));
+  assert.equal(renderTemplateSample("{{payment_reference}}"), renderTemplateSample("{{loan_number}}"));
+  assert.equal(renderTemplateSample("{{company_phone}}"), renderTemplateSample("{{branch_phone}}"));
+  assert.equal(renderTemplateSample("{{remaining_amount}}", "email"), renderTemplateSample("{{remaining_balance}}", "email"));
+});
+
+// The server renders "PHP 2,500.00" on SMS (a "₱" forces Unicode) and
+// "₱2,500.00" on email, with dates like "Sep 15, 2026".
+test("samples read PHP on SMS and ₱ on email, with server-style dates", () => {
+  assert.equal(renderTemplateSample("{{amount_due}}"), "PHP 2,500.00");
+  assert.equal(renderTemplateSample("{{amount_due}}", "sms"), "PHP 2,500.00");
+  assert.equal(renderTemplateSample("{{amount_due}}", "email"), "₱2,500.00");
+  assert.equal(renderTemplateSample("{{due_date}}", "email"), "Sep 15, 2026");
+  assert.equal(renderTemplateSample("{{due_date}}", "sms"), "Sep 15, 2026");
+});
+
+// amount_due and remaining_balance render the same server figure; two
+// different samples would suggest the screen works out a second amount.
+test("amount due and remaining due show the same sample, never a second figure", () => {
+  for (const channel of ["sms", "email"] as const) {
+    assert.equal(
+      renderTemplateSample("{{remaining_balance}}", channel),
+      renderTemplateSample("{{amount_due}}", channel),
+      channel,
+    );
+  }
+});
+
+test("the banner reads exactly as agreed", () => {
+  assert.equal(TEST_MODE_BANNER, "Test mode: reminders are logged, not sent");
+});
+
+test("test mode: on while the server says so or the cooperative's switch is off", () => {
+  assert.equal(reminderTestMode({ enabled: true, test_mode: true }), true);
+  assert.equal(reminderTestMode({ enabled: false, test_mode: false }), true);
+  assert.equal(reminderTestMode({ enabled: false, test_mode: true }), true);
+  assert.equal(reminderTestMode({ enabled: true, test_mode: false }), false);
+});
+
+// Only the server's explicit "live" turns the banner off; an answer that
+// says nothing about live sending is not read as live.
+test("test mode: a settings answer without test_mode is test mode; no settings is unknown", () => {
+  assert.equal(reminderTestMode({ enabled: true } as { enabled: boolean; test_mode: boolean }), true);
+  assert.equal(reminderTestMode(null), null);
+  assert.equal(reminderTestMode(undefined), null);
+});
+
+test("a row is logged-only by its own test_mode, else by the deployment's", () => {
+  assert.equal(isLoggedOnly({ test_mode: true }, false), true);
+  assert.equal(isLoggedOnly({ test_mode: false }, true), false);
+  assert.equal(isLoggedOnly({}, true), true);
+  assert.equal(isLoggedOnly({ test_mode: null }, true), true);
+  assert.equal(isLoggedOnly({}, false), false);
+  assert.equal(isLoggedOnly({}, null), false);
+});
+
+test("in test mode a sent reminder reads Logged, never Sent or Delivered", () => {
+  for (const status of ["sent", "delivered"] as ReminderQueueStatus[]) {
+    const meta = queueStatusMeta(status, true)!;
+    assert.equal(meta.label, "Logged", status);
+    assert.match(meta.description, /not sent/i);
+  }
+  for (const status of ["sent", "delivered", "opened"] as DeliveryStatus[]) {
+    assert.equal(deliveryStatusMeta(status, true)!.label, "Logged", status);
+  }
+  assert.equal(queueStatusMeta("sent", false)!.label, "Sent");
+  assert.equal(deliveryStatusMeta("delivered", false)!.label, "Delivered");
+  assert.equal(queueStatusMeta("skipped", true)!.label, "Skipped");
+  assert.equal(queueStatusMeta("cancelled", true)!.label, "Cancelled");
+  assert.equal(deliveryStatusMeta("failed", true)!.label, "Failed");
+  assert.equal(queueStatusMeta("nonsense" as ReminderQueueStatus, false), undefined);
+});
+
+test("skipped names the engine's reasons, cancelled names no longer needed", () => {
+  assert.match(QUEUE_STATUS_META.skipped.description, /Auto-Pay/);
+  assert.match(QUEUE_STATUS_META.skipped.description, /allow-list/);
+  assert.match(QUEUE_STATUS_META.cancelled.description, /paid/);
+});
+
+test("a reason reads as the server wrote it, else by its code in words", () => {
+  assert.equal(
+    reminderReason({ reason: "Member has no mobile number", reason_code: "no_contact" }),
+    "Member has no mobile number",
+  );
+  assert.equal(reminderReason({ reason: null, reason_code: "auto_pay" }), "Collected by Auto-Pay");
+  assert.equal(reminderReason({ reason: "  ", reason_code: "not_set_up" }), "Sending is not set up");
+  assert.equal(reminderReason({ reason: null, reason_code: "invalid_contact" }), "Contact is not a valid mobile number or email address");
+  assert.equal(reminderReason({ reason: null, reason_code: "contact_flagged" }), "Contact was marked invalid after a failed send");
+  assert.equal(reminderReason({ reason: null, reason_code: "superseded" }), "Another reminder covers this loan today");
+  assert.equal(reminderReason({ reason: null, reason_code: "some_new_code" }), "Some new code");
+  assert.equal(reminderReason({ reason: null, reason_code: null }), null);
+  assert.equal(reminderReason({ reason: null }), null);
+});
+
+test("dashboard counts of sent messages say Logged in test mode", () => {
+  assert.equal(kpiLabel("sent", true), "Logged");
+  assert.equal(kpiLabel("sms_sent", true), "SMS logged");
+  assert.equal(kpiLabel("emails_sent", true), "Emails logged");
+  assert.equal(kpiLabel("sent", false), "Sent");
+  assert.equal(kpiLabel("sms_sent", false), "SMS sent");
+  assert.equal(kpiLabel("today", true), "Reminders today");
+  assert.equal(kpiLabel("failed", true), "Failed");
+});
+
+test("messageSourceLabel never says Sent for a logged-only message", () => {
+  assert.equal(
+    messageSourceLabel({ status: "sent", source: "system", created_by_name: null, test_mode: true }),
+    "Logged automatically, not sent (test mode)",
+  );
+  assert.equal(
+    messageSourceLabel({ status: "sent", source: "manual", created_by_name: "Ana Admin", test_mode: true }),
+    "Logged by Ana Admin, not sent (test mode)",
+  );
+  assert.equal(
+    messageSourceLabel({ status: "failed", source: "manual", created_by_name: "Ana Admin", test_mode: true }),
+    "Failed",
+  );
+});
+
+// Status filters: in test mode the "sent" filter reads Logged; every other
+// option keeps its own label, so no two options read the same.
+test("status filters say Logged for sent in test mode, and keep every option distinct", () => {
+  const queue = queueStatusOptions(true);
+  assert.equal(queue.sent.label, "Logged");
+  assert.equal(queue.cancelled.label, "Cancelled");
+  assert.deepEqual(Object.keys(queue), Object.keys(QUEUE_STATUS_META));
+  assert.equal(new Set(Object.values(queue).map((o) => o.label)).size, Object.keys(queue).length);
+  assert.equal(queueStatusOptions(false).sent.label, "Sent");
+
+  const delivery = deliveryStatusOptions(true);
+  assert.equal(delivery.sent.label, "Logged");
+  assert.equal(new Set(Object.values(delivery).map((o) => o.label)).size, Object.keys(delivery).length);
+  assert.equal(deliveryStatusOptions(false).sent.label, "Sent");
+});
+
+// The Test mode badge goes on a message that was logged, not on one still
+// scheduled, skipped or cancelled.
+test("only a handed-over status carries the Test mode badge", () => {
+  assert.deepEqual(
+    (Object.keys(QUEUE_STATUS_META) as ReminderQueueStatus[]).filter(queueStatusWentOut),
+    ["sent", "delivered"],
+  );
+  assert.equal(deliveryStatusWentOut("sent"), true);
+  assert.equal(deliveryStatusWentOut("opened"), true);
+  assert.equal(deliveryStatusWentOut("pending"), false);
+  assert.equal(deliveryStatusWentOut("failed"), false);
 });
