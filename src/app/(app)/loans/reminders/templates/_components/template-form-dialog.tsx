@@ -22,9 +22,11 @@ import {
   TEMPLATE_TYPES,
   TEMPLATE_TYPE_LABELS,
   TEMPLATE_VARIABLES,
+  aliasTargetLabel,
   renderTemplateSample,
   smsLength,
   unknownVariables,
+  type TemplateVariable,
 } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
@@ -80,6 +82,32 @@ function toInput(t: ReminderTemplate): ReminderTemplateInput {
   };
 }
 
+function VariableButton({
+  variable,
+  channel,
+  onInsert,
+}: {
+  variable: TemplateVariable;
+  channel: ReminderChannel;
+  onInsert: (key: string) => void;
+}) {
+  const sample = renderTemplateSample(`{{${variable.key}}}`, channel);
+  const target = aliasTargetLabel(variable);
+  return (
+    <button
+      type="button"
+      onClick={() => onInsert(variable.key)}
+      className="rounded-md border bg-muted/50 px-2 py-1 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40"
+      title={`{{${variable.key}}}${target ? `, same as ${target}` : ""}, e.g. ${sample}`}
+    >
+      {variable.label}
+      <span className="sr-only">
+        {`: inserts {{${variable.key}}}${target ? `, same as ${target}` : ""}, sample ${sample}`}
+      </span>
+    </button>
+  );
+}
+
 export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: TemplateFormDialogProps) {
   const [form, setForm] = useState<ReminderTemplateInput>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -109,7 +137,9 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
   };
 
   const isSms = form.channel === "sms";
-  const sample = renderTemplateSample(form.body);
+  // Fixed sample values in the channel's own format (PHP on SMS, ₱ on email),
+  // never a real loan's figures; "Preview with the server" shows those.
+  const sample = renderTemplateSample(form.body, form.channel);
   const length = smsLength(sample);
   // An SMS has no subject; one left over from the email channel is never sent.
   const unknown = unknownVariables(isSms ? form.body : `${form.subject ?? ""} ${form.body}`);
@@ -265,31 +295,34 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Insert a variable</p>
-              <div className="flex flex-wrap gap-1.5">
-                {TEMPLATE_VARIABLES.map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => insertVariable(v.key)}
-                    className="rounded-md border bg-muted/50 px-2 py-1 text-xs hover:bg-muted"
-                    title={`{{${v.key}}} — e.g. ${v.sample}`}
-                  >
-                    {v.label}
-                  </button>
-                ))}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium" id="tpl-vars">Insert a variable</p>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="tpl-vars">
+                  {TEMPLATE_VARIABLES.filter((v) => !v.aliasOf).map((v) => (
+                    <VariableButton key={v.key} variable={v} channel={form.channel} onInsert={insertVariable} />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium" id="tpl-aliases">Other names that work</p>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="tpl-aliases">
+                  {TEMPLATE_VARIABLES.filter((v) => v.aliasOf).map((v) => (
+                    <VariableButton key={v.key} variable={v} channel={form.channel} onInsert={insertVariable} />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
           <aside className="space-y-3">
             <div className="rounded-xl border bg-muted/30 p-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Sample preview
               </p>
+              <p className="mb-2 text-xs text-muted-foreground">Sample values, not a real loan.</p>
               {!isSms && form.subject && (
-                <p className="mb-1 text-sm font-medium">{renderTemplateSample(form.subject)}</p>
+                <p className="mb-1 text-sm font-medium">{renderTemplateSample(form.subject, form.channel)}</p>
               )}
               <p className="whitespace-pre-wrap text-sm">{sample || "Your message appears here."}</p>
             </div>
@@ -303,6 +336,11 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
                 </p>
                 {preview.subject && <p className="mb-1 text-sm font-medium">{preview.subject}</p>}
                 <p className="whitespace-pre-wrap text-sm">{preview.body}</p>
+                {typeof preview.sms_parts === "number" && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {preview.sms_parts} SMS part{preview.sms_parts === 1 ? "" : "s"}, as the server counts it
+                  </p>
+                )}
                 {preview.unknown_variables.length > 0 && (
                   <p className="mt-2 text-xs text-destructive">
                     Not recognised: {preview.unknown_variables.join(", ")}

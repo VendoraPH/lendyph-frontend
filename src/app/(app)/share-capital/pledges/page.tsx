@@ -52,6 +52,11 @@ import { formatCurrency, todayISO } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { notifyError } from "@/lib/notify";
 import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
+import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-request";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
+import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
+import { paymentReferenceError } from "@/lib/payment-reference";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { createLatestGate, drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
 interface LocalPledge {
@@ -170,14 +175,30 @@ function PledgeEntryContent() {
   const [manualEntryId, setManualEntryId] = useState<number | null>(null);
   const [manualAmount, setManualAmount] = useState("");
   const [manualTransaction, setManualTransaction] = useState<"credit" | "debit">("credit");
+  // How the entry's money came in or went out; the reference is required unless cash.
+  const [manualMethod, setManualMethod] = useState<RecordPaymentMethod>("cash");
+  const [manualReference, setManualReference] = useState("");
+  // Each entry posts a journal: Submit and Enter wait while one posts.
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   // Per-member bulk entry dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkEntries, setBulkEntries] = useState<Record<number, { amount: string; transaction: "credit" | "debit" }>>({});
+  // One method and reference for the whole batch. Every opening starts at Cash
+  // with no reference.
+  const [bulkMethod, setBulkMethod] = useState<RecordPaymentMethod>("cash");
+  const [bulkReference, setBulkReference] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  if (useDialogOpening(bulkDialogOpen, true)) {
+    setBulkMethod("cash");
+    setBulkReference("");
+  }
 
   // ── Derived data ──
 
   const activeCount = pledges.filter((p) => p.autoCredit).length;
+  const manualReferenceProblem = paymentReferenceError(manualMethod, manualReference, "share_capital");
+  const bulkReferenceProblem = paymentReferenceError(bulkMethod, bulkReference, "share_capital");
 
   const processed = useMemo(() => {
     let result = [...pledges];
@@ -323,9 +344,12 @@ function PledgeEntryContent() {
     setManualEntryId(id);
     setManualAmount("");
     setManualTransaction("credit");
+    setManualMethod("cash");
+    setManualReference("");
   }
 
   async function handleManualEntry(id: number) {
+    if (manualSubmitting) return;
     const parsed = parsePledgeAmount(manualAmount);
     if (!parsed.ok) {
       toast.error(parsed.message);
@@ -334,22 +358,33 @@ function PledgeEntryContent() {
     const amount = parsed.amount;
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
+    const request = manualEntryRequest({
+      borrowerId: pledge.borrowerId,
+      type: manualTransaction,
+      amount,
+      date: todayISO(),
+      method: manualMethod,
+      reference: manualReference,
+    });
+    if (!request.ok) {
+      toast.error(request.message);
+      return;
+    }
+    setManualSubmitting(true);
     try {
-      await shareCapitalService.ledgerCreate({
-        borrower_id: pledge.borrowerId,
-        date: todayISO(),
-        description: `Manual ${manualTransaction} entry`,
-        type: manualTransaction,
-        amount,
-      });
+      await shareCapitalService.ledgerCreate(request.data);
       toast.success(
         `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}`
       );
       setManualEntryId(null);
       setManualAmount("");
       setManualTransaction("credit");
+      setManualMethod("cash");
+      setManualReference("");
     } catch (err) {
       notifyError(err, "We couldn't create the manual entry. Please try again.");
+    } finally {
+      setManualSubmitting(false);
     }
   }
 
@@ -406,7 +441,8 @@ function PledgeEntryContent() {
     }));
   }
 
-  async function handleBulkSubmit() {
+  /** Posts the batch; true once it has posted, so the dialog may close. */
+  async function handleBulkSubmit(): Promise<boolean> {
     const entries = Object.entries(bulkEntries).filter(
       ([id]) => selectedIds.has(Number(id))
     );
@@ -421,29 +457,29 @@ function PledgeEntryContent() {
     );
     if (!parsed.ok) {
       toast.error(parsed.message);
-      return;
+      return false;
     }
     const valid = entries.flatMap(([id, entry]) => {
       const amount = parsed.amounts.get(Number(id));
       return amount === undefined ? [] : [{ pledgeId: Number(id), amount, type: entry.transaction }];
     });
-    // `ShareCapitalBulkEntryRequest` requires a date on every entry; without
-    // one the whole batch was refused with a 422.
-    const date = todayISO();
+    const request = bulkEntriesRequest(valid, todayISO(), bulkMethod, bulkReference);
+    if (!request.ok) {
+      toast.error(request.message);
+      return false;
+    }
+    setBulkSubmitting(true);
     try {
-      await shareCapitalService.pledgeBulkEntries({
-        entries: valid.map((entry) => ({
-          pledge_id: entry.pledgeId,
-          amount: entry.amount,
-          type: entry.type,
-          date,
-        })),
-      });
+      await shareCapitalService.pledgeBulkEntries(request.data);
       toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
       setSelectedIds(new Set());
       setBulkEntries({});
+      return true;
     } catch (err) {
       notifyError(err, "We couldn't create the bulk entries. Please try again.");
+      return false;
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
@@ -770,9 +806,9 @@ function PledgeEntryContent() {
                             <p className="text-sm font-medium">
                               Manual Pledge Entry — {pledge.borrower}
                             </p>
-                            <div className="flex items-end gap-4">
+                            <div className="flex flex-wrap items-end gap-4">
                               <div className="space-y-1.5">
-                                <p className="text-xs text-muted-foreground">Amount (PHP)</p>
+                                <p className="text-xs text-muted-foreground">Amount (₱)</p>
                                 <Input
                                   type="number"
                                   min="0.01"
@@ -815,11 +851,24 @@ function PledgeEntryContent() {
                                   </button>
                                 </div>
                               </div>
+                              <MethodReferenceFields
+                                idPrefix={`pledge-${pledge.id}`}
+                                options={PAYMENT_METHOD_OPTIONS}
+                                method={manualMethod}
+                                reference={manualReference}
+                                onChange={(next) => {
+                                  setManualMethod(next.method);
+                                  setManualReference(next.reference);
+                                }}
+                                referenceRequired={manualMethod !== "cash"}
+                                problem={manualReferenceProblem}
+                                className="grid w-full max-w-md gap-3 sm:grid-cols-2"
+                              />
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
                                   className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                                  disabled={!manualAmount}
+                                  disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
                                   onClick={() => handleManualEntry(pledge.id)}
                                 >
                                   Submit
@@ -906,12 +955,17 @@ function PledgeEntryContent() {
         </CardContent>
       </Card>
       {/* Bulk Entry Dialog */}
-      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+      <Dialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!bulkSubmitting) setBulkDialogOpen(open);
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Manual Pledge Entry</DialogTitle>
             <DialogDescription>
-              Set amount and transaction type for each selected member.
+              Set amount and transaction type for each selected member, and how the money came in or went out.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 max-h-80 overflow-y-auto py-2">
@@ -961,14 +1015,33 @@ function PledgeEntryContent() {
                 );
               })}
           </div>
+          <MethodReferenceFields
+            idPrefix="bulk-entry"
+            options={PAYMENT_METHOD_OPTIONS}
+            method={bulkMethod}
+            reference={bulkReference}
+            onChange={(next) => {
+              setBulkMethod(next.method);
+              setBulkReference(next.reference);
+            }}
+            referenceRequired={bulkMethod !== "cash"}
+            problem={bulkReferenceProblem}
+            disabled={bulkSubmitting}
+          />
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)} disabled={bulkSubmitting}>
               Cancel
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={() => { handleBulkSubmit(); setBulkDialogOpen(false); }}
+              disabled={bulkSubmitting || bulkReferenceProblem !== null}
+              onClick={async () => {
+                // Closes only once the batch has posted: a missing field or a
+                // refusal keeps every row typed so far.
+                if (await handleBulkSubmit()) setBulkDialogOpen(false);
+              }}
             >
+              {bulkSubmitting && <Spinner className="mr-2 size-4" />}
               Submit All
             </Button>
           </div>
