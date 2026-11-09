@@ -6,6 +6,7 @@ import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, Amorti
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
+import type { RecordPaymentMethod } from "@/constants/payment-methods";
 
 /**
  * `POST /loans` and `PUT /loans/{id}`. `deductions` go up as rates and pesos
@@ -41,6 +42,22 @@ export type ReleaseLoanPayload = {
    * configuration has changed since.
    */
   fee_fingerprint?: string;
+  /** How the proceeds are paid out; the server takes cash when it is left out. */
+  method?: RecordPaymentMethod;
+  /** Required unless the method is cash, at most 100 characters. */
+  reference_number?: string;
+};
+
+/**
+ * `POST /loans/{id}/extend`. On "pay" the collection takes `method` (cash when
+ * left out) and `reference_number` (required unless cash); "defer" collects
+ * nothing and sends neither.
+ */
+export type ExtendLoanPayload = {
+  remarks?: string;
+  interest_option: ExtensionInterestOption;
+  method?: RecordPaymentMethod;
+  reference_number?: string;
 };
 
 /**
@@ -281,7 +298,7 @@ export const loanService = {
    * ("defer"). The API performs the collection itself, in the same
    * transaction as the extension.
    */
-  extend: (id: number, data: { remarks?: string; interest_option: ExtensionInterestOption }) =>
+  extend: (id: number, data: ExtendLoanPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
 
   /**

@@ -3,9 +3,19 @@
 // what the statement prints. Dependency-free, so it runs under `tsx --test`.
 
 import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
+import {
+  paymentMethodFields,
+  paymentReferenceError,
+  referenceAfterMethodChange,
+  type PaymentMethodFields,
+} from "@/lib/payment-reference";
+import type { ExtensionInterestOption } from "@/types/loan";
 import type { CreateRepaymentData } from "@/types/repayment";
 
 export { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod };
+// The reference rules are shared with every screen that moves money
+// (`@/lib/payment-reference`); Record Payment keeps reading them from here.
+export { paymentMethodFields, paymentReferenceError, referenceAfterMethodChange, type PaymentMethodFields };
 
 export const DEFAULT_PAYMENT_METHOD: RecordPaymentMethod = "cash";
 
@@ -19,34 +29,24 @@ export function readPaymentMethod(value: unknown, current: RecordPaymentMethod):
 }
 
 /**
- * The reference once the method changes: cleared, since it was typed for the old
- * method and must not stay on a payment made another way. Picking the same
- * method again keeps it.
+ * The method fields an extension sends. Only "pay" collects money, so only it
+ * says how; "defer" sends neither.
  */
-export function referenceAfterMethodChange(
-  current: RecordPaymentMethod,
-  next: RecordPaymentMethod,
+export function extensionMethodFields(
+  option: ExtensionInterestOption,
+  method: RecordPaymentMethod,
   reference: string,
-): string {
-  return next === current ? reference : "";
+): Partial<PaymentMethodFields> {
+  return option === "pay" ? paymentMethodFields(method, reference) : {};
 }
 
-/** Why the reference number can't be left as it is: the API's rule, said before posting. */
-export function paymentReferenceError(method: RecordPaymentMethod, reference: string): string | null {
-  return method !== "cash" && reference.trim() === ""
-    ? `Enter the reference number for this ${paymentMethodLabel(method)} payment.`
-    : null;
-}
-
-export interface PaymentMethodFields {
-  method: RecordPaymentMethod;
-  reference_number?: string;
-}
-
-/** The method fields a payment sends; nothing for a reference left blank. */
-export function paymentMethodFields(method: RecordPaymentMethod, reference: string): PaymentMethodFields {
-  const typed = reference.trim();
-  return typed === "" ? { method } : { method, reference_number: typed };
+/** Why the extension's reference can't be left as it is; nothing on "defer". */
+export function extensionReferenceError(
+  option: ExtensionInterestOption,
+  method: RecordPaymentMethod,
+  reference: string,
+): string | null {
+  return option === "pay" ? paymentReferenceError(method, reference, "extension") : null;
 }
 
 /** What Record Payment posts. */
