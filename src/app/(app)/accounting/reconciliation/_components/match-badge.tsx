@@ -1,7 +1,8 @@
-import { CheckCircle2, CircleDashed, HelpCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, CircleSlash, HelpCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ReconciliationMatch } from "@/types";
-import { matchLabel } from "../_lib/reconciliation-view";
+import { matchLabel, rowMatchLabel } from "../_lib/reconciliation-view";
+import type { ReconciliationRow } from "../_lib/types";
 
 const MATCH_STYLE: Record<ReconciliationMatch, { icon: typeof CheckCircle2; className: string }> = {
   matched: {
@@ -24,6 +25,17 @@ export function MatchBadge({ match }: { match: ReconciliationMatch }) {
     <Badge variant="outline" className={className}>
       <Icon className="mr-1 h-3 w-3" />
       {matchLabel(match)}
+    </Badge>
+  );
+}
+
+/** A row's status: its match, or "Outstanding, nets to zero" when the server marks it netted. */
+export function RowMatchBadge({ row }: { row: ReconciliationRow }) {
+  if (!row.netted) return <MatchBadge match={row.match} />;
+  return (
+    <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-500/30">
+      <CircleSlash className="mr-1 h-3 w-3" />
+      {rowMatchLabel(row)}
     </Badge>
   );
 }

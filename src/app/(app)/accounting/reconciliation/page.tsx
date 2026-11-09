@@ -27,7 +27,7 @@ import { FilterBar } from "../_components/accounting-filters";
 import { AccountSelect } from "../_components/account-select";
 import { BranchAccessNotice } from "./_components/branch-access-notice";
 import { FigureWithNote } from "./_components/figure-with-note";
-import { MatchBadge, ReconciledBadge } from "./_components/match-badge";
+import { ReconciledBadge, RowMatchBadge } from "./_components/match-badge";
 import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
 import { ReasonButton } from "./_components/reason-button";
 import { accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
@@ -247,7 +247,7 @@ function ReconciliationCard({
                     {line.external_reference || "—"}
                   </TableCell>
                   <TableCell>
-                    <MatchBadge match={line.match} />
+                    <RowMatchBadge row={line} />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     <FigureWithNote figure={figures.amount} note={figures.amountNote} />

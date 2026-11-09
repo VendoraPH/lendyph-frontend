@@ -21,6 +21,7 @@ import {
   reconciledLabel,
   requestFailure,
   rowFigures,
+  rowMatchLabel,
   suspenseConfirmation,
   transferDirection,
 } from "./reconciliation-view";
@@ -147,6 +148,15 @@ describe("rows read in words", () => {
     assert.equal(ledgerLineText(netted), "Outstanding, nets to zero");
     assert.equal(candidateDateText(netted), "Outstanding from Sep 28, 2026, nets to zero");
     assert.equal(ledgerLineText({ ...netted, netted: false }), "Outstanding from Sep 28, 2026");
+  });
+
+  test("a row's status reads the server's netted flag, not its match alone", () => {
+    const books = { ...base, match: "unmatched" as const, source: "ledger" as const, statement_line_id: null };
+    assert.equal(rowMatchLabel({ ...books, outside_period: true, netted: true }), "Outstanding, nets to zero");
+    assert.equal(rowMatchLabel({ ...books, outside_period: true, netted: false }), "Unmatched");
+    assert.equal(rowMatchLabel(books), "Unmatched");
+    assert.equal(rowMatchLabel(base), "Matched");
+    assert.equal(rowMatchLabel({ ...base, match: "possible" }), "Possible match");
   });
 
   test("a picker row names what it is: the entry's own description, or the statement line it is suggested for", () => {

@@ -24,6 +24,15 @@ export function matchLabel(match: ReconciliationMatch): string {
   return MATCH_LABELS[match];
 }
 
+/**
+ * A row's status in words. An outstanding entry whose reversal pair nets to
+ * zero (the server's `netted`) is left out of the outstanding count, so it
+ * reads as such rather than "Unmatched".
+ */
+export function rowMatchLabel(row: ReconciliationRow): string {
+  return row.netted ? NETTED : matchLabel(row.match);
+}
+
 export function reconciledLabel(reconciliation: ReconciliationDetail): string {
   return reconciliation.is_reconciled ? "Reconciled" : "Not reconciled";
 }
