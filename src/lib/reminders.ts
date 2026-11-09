@@ -21,7 +21,6 @@ import type {
   ReminderQueueStatus,
   ReminderReasonCode,
   ReminderRuleInput,
-  ReminderSettings,
   ReminderSettingsUpdate,
   ReminderTemplateType,
   ReminderTrigger,
@@ -60,7 +59,7 @@ export const QUEUE_STATUS_META: Record<ReminderQueueStatus, StatusMeta> = {
     label: "Skipped",
     className: SLATE,
     description:
-      "Still needed but could not be sent: paused, the member opted out, no valid contact, outside contact hours, not on the allow-list, or Collected by Auto-Pay.",
+      "Still needed but could not be sent: paused, the member opted out, no valid contact, outside contact hours, not on the allow-list, no active template, or Collected by Auto-Pay.",
   },
 };
 
@@ -82,38 +81,67 @@ export const DELIVERY_STATUS_META: Record<DeliveryStatus, StatusMeta> = {
 export const TEST_MODE_BANNER = "Test mode: reminders are logged, not sent";
 
 /**
- * Whether the deployment sends nothing, read from the settings the server
- * returns: its own `test_mode` (log-only drivers, live sending off, no
- * provider set up) or the cooperative's `enabled` switch off.
- *
- * Only an explicit `test_mode: false` with the switch on is live; an answer
- * that leaves `test_mode` out says nothing about live sending, so it is not
- * read as live. `null` while the settings are not known (loading, or not
- * readable), so no screen claims either way.
+ * Whether messages are only logged: `true` test mode, `false` live, `null`
+ * not known. The screens use the live words ("Sent", "Delivered") only on a
+ * known `false`, test-mode words on `true`, and neutral words on `null`.
+ */
+export type SendMode = boolean | null;
+
+/**
+ * The deployment's mode, read from the server's own `test_mode` (log-only
+ * drivers, live sending off, no provider set up), on the settings or the
+ * dashboard. Never guessed: a missing `test_mode`, or no answer, is `null`.
  */
 export function reminderTestMode(
-  settings: Pick<ReminderSettings, "enabled" | "test_mode"> | null | undefined,
-): boolean | null {
-  if (!settings) return null;
-  return settings.enabled !== true || settings.test_mode !== false;
+  source: { test_mode?: boolean | null; enabled?: boolean | null } | null | undefined,
+): SendMode {
+  if (!source || typeof source.test_mode !== "boolean") return null;
+  return source.test_mode;
 }
 
 /**
- * Whether one reminder or message was only logged: its own `test_mode` when
- * the server sends it, else the deployment's test mode.
+ * Two sources of the deployment's mode (settings, dashboard). Any "test"
+ * wins; "live" counts only when neither source says test.
  */
-export function isLoggedOnly(
+export function combineTestMode(a: SendMode, b: SendMode): SendMode {
+  if (a === true || b === true) return true;
+  if (a === false || b === false) return false;
+  return null;
+}
+
+/** One row's mode: its own `test_mode` when sent, else the deployment's. */
+export function rowTestMode(
   row: { test_mode?: boolean | null },
-  deploymentTestMode: boolean | null | undefined,
-): boolean {
+  deployment: SendMode | undefined,
+): SendMode {
   if (typeof row.test_mode === "boolean") return row.test_mode;
-  return deploymentTestMode === true;
+  return deployment ?? null;
 }
 
 const LOGGED_META: StatusMeta = {
   label: "Logged",
   className: SLATE,
   description: "Test mode: logged only, not sent. Nothing reached the member.",
+};
+
+/** A handed-over row whose mode isn't known: neither "Sent" nor "Logged". */
+const PROCESSED_META: StatusMeta = {
+  label: "Processed",
+  className: SLATE,
+  description: "Handled by the reminder service. Whether this deployment reaches members could not be read.",
+};
+
+/** The "delivered" filter option outside live mode, kept apart from "sent". */
+const CONFIRMED_OPTION: StatusMeta = {
+  label: "Confirmed",
+  className: EMERALD,
+  description: "Confirmed by the receiving service.",
+};
+
+/** Test-mode and neutral lines for statuses whose live line names sending. */
+const QUEUE_DESCRIPTIONS: Partial<Record<ReminderQueueStatus, { test: string; unknown: string }>> = {
+  queued: { test: "Ready to be logged.", unknown: "Ready for the reminder service." },
+  processing: { test: "Being logged now.", unknown: "Being handled now." },
 };
 
 /** Statuses that would say a message went out. */
@@ -130,45 +158,114 @@ export function deliveryStatusWentOut(status: DeliveryStatus): boolean {
   return DELIVERY_WENT_OUT.has(status);
 }
 
-/** A queue status as the screens read it; "Logged" for a logged-only send. */
-export function queueStatusMeta(status: ReminderQueueStatus, loggedOnly: boolean): StatusMeta | undefined {
-  if (!Object.hasOwn(QUEUE_STATUS_META, status)) return undefined;
-  return loggedOnly && QUEUE_WENT_OUT.has(status) ? LOGGED_META : QUEUE_STATUS_META[status];
+function wentOutMeta(mode: SendMode): StatusMeta | null {
+  if (mode === true) return LOGGED_META;
+  if (mode === null) return PROCESSED_META;
+  return null;
 }
 
-/** A delivery status as the screens read it; "Logged" for a logged-only send. */
-export function deliveryStatusMeta(status: DeliveryStatus, loggedOnly: boolean): StatusMeta | undefined {
+/** A queue status as the screens read it in `mode` (the row's own, see `rowTestMode`). */
+export function queueStatusMeta(status: ReminderQueueStatus, mode: SendMode): StatusMeta | undefined {
+  if (!Object.hasOwn(QUEUE_STATUS_META, status)) return undefined;
+  const live = QUEUE_STATUS_META[status];
+  if (mode === false) return live;
+  if (QUEUE_WENT_OUT.has(status)) return wentOutMeta(mode)!;
+  const lines = QUEUE_DESCRIPTIONS[status];
+  if (!lines) return live;
+  return { ...live, description: mode === true ? lines.test : lines.unknown };
+}
+
+/** A delivery status as the screens read it in `mode`. */
+export function deliveryStatusMeta(status: DeliveryStatus, mode: SendMode): StatusMeta | undefined {
   if (!Object.hasOwn(DELIVERY_STATUS_META, status)) return undefined;
-  return loggedOnly && DELIVERY_WENT_OUT.has(status) ? LOGGED_META : DELIVERY_STATUS_META[status];
+  if (mode !== false && DELIVERY_WENT_OUT.has(status)) return wentOutMeta(mode)!;
+  return DELIVERY_STATUS_META[status];
 }
 
 /**
- * The status filter's options. In test mode "sent" reads "Logged"; the rest
- * keep their own labels, so no two options read the same.
+ * The queue's status filter options. Outside live mode "sent" reads Logged
+ * (test) or Processed (unknown) and "delivered" reads Confirmed, so no option
+ * claims sending and no two read the same.
  */
-export function queueStatusOptions(testMode: boolean): Record<ReminderQueueStatus, StatusMeta> {
-  return testMode ? { ...QUEUE_STATUS_META, sent: LOGGED_META } : QUEUE_STATUS_META;
+export function queueStatusOptions(mode: SendMode): Record<ReminderQueueStatus, StatusMeta> {
+  if (mode === false) return QUEUE_STATUS_META;
+  const options = { ...QUEUE_STATUS_META, sent: wentOutMeta(mode)!, delivered: CONFIRMED_OPTION };
+  for (const status of ["queued", "processing"] as const) options[status] = queueStatusMeta(status, mode)!;
+  return options;
 }
 
 /** As `queueStatusOptions`, for message history's delivery statuses. */
-export function deliveryStatusOptions(testMode: boolean): Record<DeliveryStatus, StatusMeta> {
-  return testMode ? { ...DELIVERY_STATUS_META, sent: LOGGED_META } : DELIVERY_STATUS_META;
+export function deliveryStatusOptions(mode: SendMode): Record<DeliveryStatus, StatusMeta> {
+  if (mode === false) return DELIVERY_STATUS_META;
+  return { ...DELIVERY_STATUS_META, sent: wentOutMeta(mode)!, delivered: CONFIRMED_OPTION };
 }
 
-const KPI_LABELS: Record<keyof ReminderDashboardCounts, { live: string; test: string }> = {
-  today: { live: "Reminders today", test: "Reminders today" },
-  sent: { live: "Sent", test: "Logged" },
-  pending: { live: "Pending", test: "Pending" },
-  failed: { live: "Failed", test: "Failed" },
-  sms_sent: { live: "SMS sent", test: "SMS logged" },
-  emails_sent: { live: "Emails sent", test: "Emails logged" },
-  upcoming_due: { live: "Upcoming due", test: "Upcoming due" },
-  overdue: { live: "Overdue", test: "Overdue" },
+/** The dashboard chart's bar names; "Sent" and "Delivered" only when live. */
+export function chartSeriesLabel(series: "sent" | "delivered" | "failed", mode: SendMode): string {
+  if (series === "failed") return "Failed";
+  if (mode === false) return series === "sent" ? "Sent" : "Delivered";
+  if (series === "delivered") return CONFIRMED_OPTION.label;
+  return wentOutMeta(mode)!.label;
+}
+
+/**
+ * Dashboard count labels. The `logged*` counts are logged-only messages and
+ * the `sent*` counts leave them out (R2), so each keeps its own word.
+ */
+export const KPI_LABELS: Record<keyof ReminderDashboardCounts, string> = {
+  today: "Reminders today",
+  sent: "Sent",
+  logged: "Logged",
+  pending: "Pending",
+  failed: "Failed",
+  sms_sent: "SMS sent",
+  sms_logged: "SMS logged",
+  emails_sent: "Emails sent",
+  emails_logged: "Emails logged",
+  upcoming_due: "Upcoming due",
+  overdue: "Overdue",
 };
 
-/** A dashboard count's label; in test mode nothing is counted as sent. */
-export function kpiLabel(key: keyof ReminderDashboardCounts, testMode: boolean): string {
-  return testMode ? KPI_LABELS[key].test : KPI_LABELS[key].live;
+export interface ManualSendWording {
+  title: string;
+  button: string;
+  busy: string;
+  toastTitle: string;
+  toastBody: string;
+}
+
+/** The Send reminder dialog's words: live only when the mode is known live. */
+export function manualSendWording(mode: SendMode): ManualSendWording {
+  if (mode === false) {
+    return {
+      title: "Send reminder",
+      button: "Send reminder",
+      busy: "Sending…",
+      toastTitle: "Reminder queued for sending",
+      toastBody: "It shows in Message History once it has gone out.",
+    };
+  }
+  if (mode === true) {
+    return {
+      title: "Log a reminder (test mode)",
+      button: "Log reminder (test mode)",
+      busy: "Logging…",
+      toastTitle: "Reminder queued in test mode",
+      toastBody: "It is logged in Message History, not sent to the member.",
+    };
+  }
+  return {
+    title: "Queue a reminder",
+    button: "Queue reminder",
+    busy: "Queuing…",
+    toastTitle: "Reminder queued",
+    toastBody: "Queued; see Message History for its result.",
+  };
+}
+
+/** A message whose text was blanked 2 years after its loan closed. */
+export function isMessageRedacted(message: Pick<ReminderMessage, "body"> & { redacted_at?: string | null }): boolean {
+  return Boolean(message.redacted_at) || message.body === null;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +295,7 @@ export const REMINDER_REASON_LABELS: Record<ReminderReasonCode, string> = {
   not_allowed: "Recipient is not on the allow-list",
   fire_date_passed: "Its day has passed",
   outside_contact_hours: "Outside contact hours",
+  template_unavailable: "No active template for this reminder and channel",
   not_set_up: "Sending is not set up",
   retry_window_closed: "Could not be retried within contact hours",
   interrupted: "Sending was interrupted; not resent so the member is not sent it twice",
@@ -508,14 +606,20 @@ export function toSettingsPayload(form: ReminderSettingsUpdate): ReminderSetting
 /**
  * The line beside a message's status badge: who sent it, or "Failed" when it
  * never went out, so a failed message is not described as sent. A message
- * that was only logged (test mode) says so, and never "Sent".
+ * that was only logged (test mode) says so, and never "Sent"; when its mode
+ * can't be read the line only says who started it.
  */
 export function messageSourceLabel(
   message: Pick<ReminderMessage, "status" | "source" | "created_by_name" | "test_mode">,
-  deploymentTestMode: boolean | null = null,
+  deploymentTestMode: SendMode = null,
 ): string {
   if (message.status === "failed") return "Failed";
-  if (isLoggedOnly(message, deploymentTestMode)) {
+  const mode = rowTestMode(message, deploymentTestMode);
+  if (mode === null) {
+    if (message.source === "manual") return `Manual${message.created_by_name ? `, by ${message.created_by_name}` : ""}`;
+    return "Automatic";
+  }
+  if (mode) {
     if (message.source === "manual") {
       return `Logged${message.created_by_name ? ` by ${message.created_by_name}` : " manually"}, not sent (test mode)`;
     }

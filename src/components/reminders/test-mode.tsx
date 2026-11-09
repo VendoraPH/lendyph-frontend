@@ -1,25 +1,27 @@
 "use client";
 
 import { createContext, useCallback, useContext } from "react";
-import { FlaskConical } from "lucide-react";
+import { CircleHelp, FlaskConical } from "lucide-react";
 import { useApiResource } from "@/hooks";
-import { TEST_MODE_BANNER, reminderTestMode } from "@/lib/reminders";
+import { TEST_MODE_BANNER, reminderTestMode, type SendMode } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
 
 export interface ReminderTestModeState {
-  /** True while the deployment sends nothing; null until the settings are read. */
-  testMode: boolean | null;
+  /** The settings' `test_mode`: true test, false live, null not known. */
+  testMode: SendMode;
   /** The cooperative's own switch; null until the settings are read. */
   enabled: boolean | null;
+  /** The settings call finished without an answer (failed, or not connected). */
+  unreadable: boolean;
   /** Read the settings again (after a save). */
   refetch: () => void;
 }
 
 /**
  * Reads test mode from `GET /reminders/settings`, never from a guess. While
- * the settings can't be read, `testMode` stays null and no screen claims
- * either way.
+ * the settings can't be read, `testMode` stays null and the screens use
+ * neutral words, neither "Sent" nor "Logged".
  */
 export function useReminderTestMode(active = true): ReminderTestModeState {
   const fetchSettings = useCallback(() => reminderService.getSettings(), []);
@@ -27,6 +29,7 @@ export function useReminderTestMode(active = true): ReminderTestModeState {
   return {
     testMode: reminderTestMode(settings.data),
     enabled: settings.data ? settings.data.enabled : null,
+    unreadable: !settings.data && (settings.error !== null || settings.unavailable),
     refetch: settings.refetch,
   };
 }
@@ -34,6 +37,7 @@ export function useReminderTestMode(active = true): ReminderTestModeState {
 const ReminderTestModeContext = createContext<ReminderTestModeState>({
   testMode: null,
   enabled: null,
+  unreadable: false,
   refetch: () => {},
 });
 
@@ -45,18 +49,29 @@ export function useReminderTestModeContext(): ReminderTestModeState {
 }
 
 /**
- * The banner every reminders screen shows while nothing is sent. Renders
- * nothing unless the settings say test mode.
+ * The banner every reminders screen shows while nothing is sent: only on the
+ * server's `test_mode: true`. When the sending status couldn't be read it
+ * says so in one small line instead.
  */
 export function TestModeBanner({
   testMode,
   enabled,
+  unreadable = false,
   className,
 }: {
-  testMode: boolean | null;
+  testMode: SendMode;
   enabled: boolean | null;
+  unreadable?: boolean;
   className?: string;
 }) {
+  if (testMode === null && unreadable) {
+    return (
+      <p role="status" className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", className)}>
+        <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+        Couldn&apos;t read sending status
+      </p>
+    );
+  }
   if (testMode !== true) return null;
   return (
     <div

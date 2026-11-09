@@ -5,7 +5,7 @@ import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import { useReminderTestModeContext } from "@/components/reminders/test-mode";
 import { useApiResource } from "@/hooks";
-import { QUEUE_STATUS_META, queueStatusOptions } from "@/lib/reminders";
+import { QUEUE_STATUS_META, queueStatusOptions, type SendMode } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
 import type { ReminderListFilters, ReminderQueueStatus } from "@/types/reminder";
@@ -32,7 +32,7 @@ function StatusFilter({
 }: {
   value: ReminderQueueStatus | undefined;
   stats: Record<string, number> | undefined;
-  testMode: boolean;
+  testMode: SendMode;
   onChange: (status: ReminderQueueStatus | undefined) => void;
 }) {
   const options = queueStatusOptions(testMode);
@@ -77,7 +77,7 @@ export default function ReminderQueuePage() {
       <StatusFilter
         value={filters.status}
         stats={queue.data?.meta.stats}
-        testMode={testMode === true}
+        testMode={testMode}
         onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}
       />
       <DataState

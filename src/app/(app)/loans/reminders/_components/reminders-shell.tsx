@@ -74,7 +74,7 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        <TestModeBanner testMode={testMode.testMode} enabled={testMode.enabled} />
+        <TestModeBanner testMode={testMode.testMode} enabled={testMode.enabled} unreadable={testMode.unreadable} />
 
         {globalPause && (
           <div className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">

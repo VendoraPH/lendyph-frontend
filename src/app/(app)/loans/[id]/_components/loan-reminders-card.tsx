@@ -23,7 +23,7 @@ import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog"
 import { TestModeBanner, useReminderTestMode } from "@/components/reminders/test-mode";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
-import { isLoggedOnly } from "@/lib/reminders";
+import { rowTestMode, type SendMode } from "@/lib/reminders";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
@@ -45,7 +45,7 @@ const EVENT_STYLE: Record<ReminderTimelineEventKind, { icon: LucideIcon; tone: s
 /** Events that say a message was handed over; in test mode it was only logged. */
 const WENT_OUT: ReadonlySet<ReminderTimelineEventKind> = new Set(["sent", "delivered", "manual_sent"]);
 
-function Summary({ data, testMode }: { data: LoanReminderSummary; testMode: boolean | null }) {
+function Summary({ data, testMode }: { data: LoanReminderSummary; testMode: SendMode }) {
   const pause = data.pause ?? data.inherited_pause;
   return (
     <div className="space-y-4">
@@ -85,7 +85,7 @@ function Summary({ data, testMode }: { data: LoanReminderSummary; testMode: bool
         <ol className="relative space-y-3 border-l pl-5">
           {data.events.map((e) => {
             const { icon: Icon, tone } = EVENT_STYLE[e.kind] ?? EVENT_STYLE.scheduled;
-            const loggedOnly = WENT_OUT.has(e.kind) && isLoggedOnly(e, testMode);
+            const loggedOnly = WENT_OUT.has(e.kind) && rowTestMode(e, testMode) === true;
             return (
               <li key={e.id} className="relative">
                 <span className="absolute top-0.5 -left-[1.95rem] rounded-full bg-background p-0.5">
@@ -170,7 +170,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
       >
         {(data) => (
           <div className="space-y-3">
-            <TestModeBanner testMode={testMode.testMode} enabled={testMode.enabled} />
+            <TestModeBanner testMode={testMode.testMode} enabled={testMode.enabled} unreadable={testMode.unreadable} />
             <Summary data={data} testMode={testMode.testMode} />
             <Link
               href="/loans/reminders/history"

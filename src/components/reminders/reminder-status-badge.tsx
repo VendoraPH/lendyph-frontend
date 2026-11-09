@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { deliveryStatusMeta, queueStatusMeta, type StatusMeta } from "@/lib/reminders";
+import { deliveryStatusMeta, queueStatusMeta, type SendMode, type StatusMeta } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import type { DeliveryStatus, ReminderQueueStatus } from "@/types/reminder";
 
@@ -12,13 +12,16 @@ function StatusBadge({ meta }: { meta: StatusMeta | undefined }) {
   );
 }
 
-/** `loggedOnly`: the send was only logged (test mode), so it reads "Logged". */
-export function QueueStatusBadge({ status, loggedOnly = false }: { status: ReminderQueueStatus; loggedOnly?: boolean }) {
-  return <StatusBadge meta={queueStatusMeta(status, loggedOnly)} />;
+/**
+ * `mode` is the row's own (see `rowTestMode`): a send reads "Logged" in test
+ * mode, "Sent" only when known live, and a neutral "Processed" when unknown.
+ */
+export function QueueStatusBadge({ status, mode }: { status: ReminderQueueStatus; mode: SendMode }) {
+  return <StatusBadge meta={queueStatusMeta(status, mode)} />;
 }
 
-export function DeliveryStatusBadge({ status, loggedOnly = false }: { status: DeliveryStatus; loggedOnly?: boolean }) {
-  return <StatusBadge meta={deliveryStatusMeta(status, loggedOnly)} />;
+export function DeliveryStatusBadge({ status, mode }: { status: DeliveryStatus; mode: SendMode }) {
+  return <StatusBadge meta={deliveryStatusMeta(status, mode)} />;
 }
 
 /** On each message that was only logged: nothing reached the member. */

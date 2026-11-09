@@ -88,6 +88,7 @@ export type ReminderReasonCode =
   | "not_allowed"
   | "fire_date_passed"
   | "outside_contact_hours"
+  | "template_unavailable"
   // failed
   | "not_set_up"
   | "retry_window_closed"
@@ -199,9 +200,13 @@ export interface ReminderMessage {
   channel: ReminderChannel;
   recipient: string;
   template_type: ReminderTemplateType | null;
-  /** Exactly what was sent, frozen at send time. */
+  /**
+   * Exactly what was handed over, frozen at send time. Both are blanked
+   * (null) 2 years after the loan closes; `redacted_at` says when.
+   */
   subject: string | null;
-  body: string;
+  body: string | null;
+  redacted_at?: string | null;
   status: DeliveryStatus;
   scheduled_at: string | null;
   sent_at: string | null;
@@ -297,13 +302,20 @@ export interface LoanReminderSummary {
   events: ReminderTimelineEvent[];
 }
 
+/**
+ * `sent*` counts leave out logged-only messages; `logged*` counts are just
+ * those (R2). An older answer without the `logged*` fields shows a dash.
+ */
 export interface ReminderDashboardCounts {
   today: number;
   sent: number;
+  logged?: number;
   pending: number;
   failed: number;
   sms_sent: number;
+  sms_logged?: number;
   emails_sent: number;
+  emails_logged?: number;
   upcoming_due: number;
   overdue: number;
 }
@@ -321,7 +333,10 @@ export interface ReminderDashboard {
     /** `null` when the provider does not expose a balance. */
     credits_remaining: number | null;
     low_credit_threshold: number | null;
+    /** Leaves out logged-only messages. */
     sent_this_month: number;
+    /** Logged-only messages this month (R2). */
+    logged_this_month?: number;
     estimated_cost_this_month: number;
   };
   /** Last 7 days, oldest first; may be empty. */
@@ -329,6 +344,12 @@ export interface ReminderDashboard {
   /** Today's and upcoming reminders, same rows as the queue. */
   items: ReminderQueueItem[];
   global_pause: ReminderPause | null;
+  /**
+   * The deployment's mode and the cooperative's switch, as on the settings:
+   * a second source for test mode, for users who can't read the settings.
+   */
+  test_mode?: boolean;
+  enabled?: boolean;
 }
 
 export interface ReminderDashboardFilters {

@@ -19,7 +19,7 @@ import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { getErrorMessage } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { TestModeBanner } from "./test-mode";
-import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
+import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS, manualSendWording, type SendMode } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
   ManualReminderPreview,
@@ -38,7 +38,7 @@ interface SendReminderDialogProps {
   defaultTemplate?: ReminderTemplateType | null;
   onSent?: () => void;
   /** The deployment's test mode, from the settings; null when not known. */
-  testMode?: boolean | null;
+  testMode?: SendMode;
 }
 
 const CHANNEL_OPTIONS: { value: ManualSendChannel; label: string }[] = [
@@ -74,7 +74,8 @@ export function SendReminderDialog({
   onSent,
   testMode = null,
 }: SendReminderDialogProps) {
-  const inTestMode = testMode === true;
+  // Live words only on a known live mode; neutral ones when it's unknown.
+  const wording = manualSendWording(testMode);
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
   const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate));
   const [result, setResult] = useState<PreviewResult | null>(null);
@@ -119,11 +120,7 @@ export function SendReminderDialog({
       .sendManual({ loan_id: loanId, channel, template_type: template })
       .then(() => {
         setSending(false);
-        if (inTestMode) {
-          notifySuccess("Reminder queued in test mode", "It is logged in Message History, not sent to the member.");
-        } else {
-          notifySuccess("Reminder queued for sending", "It shows in Message History once it has gone out.");
-        }
+        notifySuccess(wording.toastTitle, wording.toastBody);
         onOpenChange(false);
         onSent?.();
       })
@@ -137,9 +134,9 @@ export function SendReminderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Send reminder</DialogTitle>
+          <DialogTitle>{wording.title}</DialogTitle>
           <DialogDescription>
-            Queues one reminder to send now, outside the automatic schedule. It is logged in Message History.
+            Queues one reminder now, outside the automatic schedule. It shows in Message History.
           </DialogDescription>
         </DialogHeader>
 
@@ -249,7 +246,7 @@ export function SendReminderDialog({
             Cancel
           </Button>
           <Button onClick={send} disabled={sending || blocked}>
-            {inTestMode ? (sending ? "Logging…" : "Log reminder (test mode)") : sending ? "Sending…" : "Send reminder"}
+            {sending ? wording.busy : wording.button}
           </Button>
         </DialogFooter>
       </DialogContent>

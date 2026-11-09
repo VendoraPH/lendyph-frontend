@@ -20,7 +20,7 @@ import {
   TEMPLATE_TYPE_LABELS,
   deliveryStatusOptions,
   deliveryStatusWentOut,
-  isLoggedOnly,
+  rowTestMode,
 } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { ReminderHistoryFilters, ReminderMessage } from "@/types/reminder";
@@ -35,14 +35,14 @@ export default function ReminderHistoryPage() {
   const history = useApiResource(fetcher);
   const [selected, setSelected] = useState<ReminderMessage | null>(null);
   const { testMode } = useReminderTestModeContext();
-  const loggedOnly = (m: ReminderMessage) => deliveryStatusWentOut(m.status) && isLoggedOnly(m, testMode);
+  const loggedOnly = (m: ReminderMessage) => deliveryStatusWentOut(m.status) && rowTestMode(m, testMode) === true;
 
   return (
     <div className="space-y-4">
       <ReminderFilters value={filters} onChange={setFilters} dates="range">
         <StatusSelect
           value={filters.status}
-          options={deliveryStatusOptions(testMode === true)}
+          options={deliveryStatusOptions(testMode)}
           onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}
         />
       </ReminderFilters>
@@ -112,7 +112,7 @@ export default function ReminderHistoryPage() {
                       </TableCell>
                       <TableCell>
                         <span className="flex flex-wrap items-center gap-1">
-                          <DeliveryStatusBadge status={m.status} loggedOnly={loggedOnly(m)} />
+                          <DeliveryStatusBadge status={m.status} mode={rowTestMode(m, testMode)} />
                           {loggedOnly(m) && <TestModeBadge />}
                         </span>
                       </TableCell>

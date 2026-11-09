@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
-import { isLoggedOnly, queueStatusWentOut, reminderReason } from "@/lib/reminders";
+import { queueStatusWentOut, reminderReason, rowTestMode, type SendMode } from "@/lib/reminders";
 import type { ReminderQueueItem } from "@/types/reminder";
 
 /**
@@ -19,9 +19,10 @@ import type { ReminderQueueItem } from "@/types/reminder";
  * look alike and mean opposite things (paid vs. couldn't reach).
  *
  * A reminder that was only logged (its own `test_mode`, else the deployment's
- * `testMode`) reads "Logged" with a Test mode badge, never "Sent".
+ * `testMode`) reads "Logged" with a Test mode badge, never "Sent"; one whose
+ * mode can't be read reads "Processed".
  */
-export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; testMode: boolean | null }) {
+export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; testMode: SendMode }) {
   return (
     <div className="overflow-x-auto rounded-xl border">
       <Table>
@@ -39,7 +40,8 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
         </TableHeader>
         <TableBody>
           {items.map((item) => {
-            const loggedOnly = queueStatusWentOut(item.status) && isLoggedOnly(item, testMode);
+            const mode = rowTestMode(item, testMode);
+            const loggedOnly = mode === true && queueStatusWentOut(item.status);
             const reason = reminderReason(item);
             return (
               <TableRow key={item.id}>
@@ -74,7 +76,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                 <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>
                 <TableCell>
                   <span className="flex flex-wrap items-center gap-1">
-                    <QueueStatusBadge status={item.status} loggedOnly={loggedOnly} />
+                    <QueueStatusBadge status={item.status} mode={mode} />
                     {loggedOnly && <TestModeBadge />}
                   </span>
                   {reason && (
