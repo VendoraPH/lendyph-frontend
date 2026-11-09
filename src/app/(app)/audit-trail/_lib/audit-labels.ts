@@ -140,6 +140,12 @@ const FIELD_LABELS: Record<string, string> = {
   source_loan_id: "source loan",
   restructured_into_loan_id: "restructured into loan",
   inherited_collateral_ids: "inherited collaterals",
+  // Journal links: the server words their values as the journal's number.
+  reversed_by_journal_id: "reversed by",
+  matched_journal_line_id: "matched to",
+  reverses_journal_id: "reverses",
+  journal_id: "journal",
+  accounting_journal_id: "journal",
 };
 
 /**

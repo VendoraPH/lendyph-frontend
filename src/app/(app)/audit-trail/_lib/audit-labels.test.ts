@@ -352,3 +352,13 @@ test("the Action filter offers Approvals cancelled", () => {
   assert.equal(option?.label, "Approvals cancelled");
   assert.equal(auditActionLabel("loan_chain_cancelled"), "Approvals cancelled");
 });
+
+// Journal links on accounting rows (f2e-be words their values as "JE-000014"),
+// so the field names read in words too, never "reversed by journal id".
+test("journal id fields read in words", () => {
+  assert.equal(auditFieldLabel("reversed_by_journal_id"), "reversed by");
+  assert.equal(auditFieldLabel("matched_journal_line_id"), "matched to");
+  assert.equal(auditFieldLabel("reverses_journal_id"), "reverses");
+  assert.equal(auditFieldLabel("journal_id"), "journal");
+  assert.equal(auditFieldLabel("accounting_journal_id"), "journal");
+});
