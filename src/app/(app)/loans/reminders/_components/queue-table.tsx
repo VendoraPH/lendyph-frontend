@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
 import { queueStatusWentOut, recipientLabel, reminderReason, rowTestMode, type SendMode } from "@/lib/reminders";
 import type { ReminderQueueItem } from "@/types/reminder";
@@ -23,6 +24,8 @@ import type { ReminderQueueItem } from "@/types/reminder";
  * mode can't be read reads "Processed".
  */
 export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; testMode: SendMode }) {
+  // A null recipient is hidden or missing; only `borrowers:view` tells which.
+  const canSeeContacts = usePermission().can("borrowers:view");
   return (
     <div className="overflow-x-auto rounded-xl border">
       <Table>
@@ -70,7 +73,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                     ) : (
                       <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
-                    {recipientLabel(item.recipient)}
+                    {recipientLabel(item.recipient, canSeeContacts)}
                   </span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>

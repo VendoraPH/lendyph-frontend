@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
-import { useDialogOpening } from "@/hooks";
+import { useDialogOpening, usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { getErrorMessage } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
@@ -88,6 +88,8 @@ export function SendReminderDialog({
   allowedTemplates,
 }: SendReminderDialogProps) {
   const summaryOffered = offeredTemplates(allowedTemplates);
+  // A null recipient is hidden or missing; only `borrowers:view` tells which.
+  const canSeeContacts = usePermission().can("borrowers:view");
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
   const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate, summaryOffered));
   const [result, setResult] = useState<PreviewResult | null>(null);
@@ -262,7 +264,7 @@ export function SendReminderDialog({
                 <div key={m.channel} className="rounded-lg border p-3">
                   <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {m.channel === "sms" ? <MessageSquare className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    {m.channel === "sms" ? "SMS" : "Email"} · {recipientLabel(m.recipient)}
+                    {m.channel === "sms" ? "SMS" : "Email"} · {recipientLabel(m.recipient, canSeeContacts)}
                   </p>
                   {m.subject && <p className="mb-1 text-sm font-medium">{m.subject}</p>}
                   <p className="whitespace-pre-wrap text-sm">{m.body}</p>

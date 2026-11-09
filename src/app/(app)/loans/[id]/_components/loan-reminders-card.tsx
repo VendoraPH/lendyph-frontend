@@ -23,7 +23,7 @@ import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog"
 import { TestModeBanner, useReminderTestMode } from "@/components/reminders/test-mode";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
-import { pauseReasonSuffix, rowTestMode, type SendMode } from "@/lib/reminders";
+import { pauseReasonSuffix, rowTestMode, sendButtonLabel, type SendMode } from "@/lib/reminders";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { reminderService } from "@/services";
@@ -158,7 +158,7 @@ function LoanRemindersContent({ loanId }: { loanId: number }) {
               </PermissionButton>
             )}
             <PermissionButton permission="reminders:send" size="sm" onClick={() => setSendOpen(true)}>
-              <Send className="mr-1 h-3.5 w-3.5" /> Send reminder
+              <Send className="mr-1 h-3.5 w-3.5" /> {sendButtonLabel(testMode.testMode)}
             </PermissionButton>
           </div>
         )

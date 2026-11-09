@@ -9,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { usePermission } from "@/hooks";
 import { formatCurrencyExact, formatDateTime } from "@/lib/format";
 import {
   CHANNEL_LABELS,
@@ -16,6 +17,7 @@ import {
   deliveryStatusWentOut,
   isMessageRedacted,
   messageSourceLabel,
+  recipientLabel,
   reminderReason,
   rowTestMode,
   type SendMode,
@@ -44,6 +46,7 @@ export function MessageDetailSheet({
   testMode: SendMode;
   onOpenChange: (open: boolean) => void;
 }) {
+  const canSeeContacts = usePermission().can("borrowers:view");
   const mode = message ? rowTestMode(message, testMode) : null;
   const wentOut = message !== null && deliveryStatusWentOut(message.status);
   const loggedOnly = wentOut && mode === true;
@@ -86,7 +89,9 @@ export function MessageDetailSheet({
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {(loggedOnly ? "Logged, not sent" : mode === false && wentOut ? "Message sent" : "Message") +
-                    (message.recipient ? ` · ${message.recipient}` : "")}
+                    (message.recipient || !canSeeContacts
+                      ? ` · ${recipientLabel(message.recipient, canSeeContacts)}`
+                      : "")}
                 </p>
                 {redacted ? (
                   <p className="text-sm italic text-muted-foreground">Message text removed after 2 years</p>

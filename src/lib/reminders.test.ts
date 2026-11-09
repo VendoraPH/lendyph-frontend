@@ -9,6 +9,8 @@ import {
   deliveryStatusOptions,
   describeRule,
   KPI_LABELS,
+  TEMPLATES_PAGE_INTRO,
+  sendButtonLabel,
   HIDDEN_DETAILS,
   RULE_TEMPLATES_FOR_TRIGGER,
   fitRuleTemplate,
@@ -555,11 +557,22 @@ test("sent counts read Processed when the answer has no logged counts and the mo
   assert.equal(smsMonthLabel({ sent_this_month: 2 }, false), "Messages sent");
 });
 
-test("with logged counts in the answer, sent counts keep Sent in every mode", () => {
-  for (const mode of [true, false, null] as SendMode[]) {
+test("with logged counts in the answer, sent counts keep Sent when live or unknown", () => {
+  for (const mode of [false, null] as SendMode[]) {
     assert.deepEqual(kpiLabels({ sent: 3, logged: 4 }, mode), KPI_LABELS, String(mode));
     assert.equal(smsMonthLabel({ sent_this_month: 2, logged_this_month: 5 }, mode), "Messages sent", String(mode));
   }
+});
+
+// Browser check 13: in test mode a plain "Sent" tile reads as if something
+// went out. The tiles stay, saying what they count.
+test("in test mode the sent tiles say Sent by a real provider", () => {
+  const labels = kpiLabels({ sent: 0, logged: 4 }, true);
+  assert.equal(labels.sent, "Sent by a real provider");
+  assert.equal(labels.sms_sent, "SMS sent by a real provider");
+  assert.equal(labels.emails_sent, "Emails sent by a real provider");
+  assert.equal(labels.logged, "Logged");
+  assert.equal(smsMonthLabel({ sent_this_month: 0, logged_this_month: 5 }, true), "Messages sent by a real provider");
 });
 
 // "Couldn't read sending status" shows whenever the settings call has
@@ -681,4 +694,25 @@ test("validateRule refuses a template that doesn't fit the trigger", () => {
     ["Template (Past due or Long past due for this trigger)"],
   );
   assert.deepEqual(validateRule(rule({ trigger: "after_due", days: 15, template_type: "long_past_due" }), HOURS), []);
+});
+
+// Browser check 13: the API sends recipient null both when the contact is
+// hidden and when it's missing; only a user with borrowers:view knows which.
+test("a null recipient reads Hidden for a user without member access, a dash otherwise", () => {
+  assert.equal(recipientLabel(null, false), "Hidden (needs access to member details)");
+  assert.equal(recipientLabel(undefined, false), "Hidden (needs access to member details)");
+  assert.equal(recipientLabel(null, true), "—");
+  assert.equal(recipientLabel("63917*****01", false), "63917*****01");
+});
+
+test("the loan card's send button uses the dialog's wording: Send only when live", () => {
+  assert.equal(sendButtonLabel(true), "Log reminder (test mode)");
+  assert.equal(sendButtonLabel(null), "Queue reminder");
+  assert.equal(sendButtonLabel(false), "Send reminder");
+  for (const mode of [true, null] as SendMode[]) assert.doesNotMatch(sendButtonLabel(mode), /\bsend/i);
+});
+
+test("the Templates page intro doesn't say a reminder sends", () => {
+  assert.doesNotMatch(TEMPLATES_PAGE_INTRO, /\bsen[dt]/i);
+  assert.match(TEMPLATES_PAGE_INTRO, /when a reminder is made/);
 });

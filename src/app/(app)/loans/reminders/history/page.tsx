@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatDateTime } from "@/lib/format";
 import {
   TEMPLATE_TYPE_LABELS,
@@ -36,6 +36,8 @@ export default function ReminderHistoryPage() {
   const history = useApiResource(fetcher);
   const [selected, setSelected] = useState<ReminderMessage | null>(null);
   const { testMode } = useReminderTestModeContext();
+  // A null recipient is hidden or missing; only `borrowers:view` tells which.
+  const canSeeContacts = usePermission().can("borrowers:view");
   const loggedOnly = (m: ReminderMessage) => deliveryStatusWentOut(m.status) && rowTestMode(m, testMode) === true;
 
   return (
@@ -102,7 +104,7 @@ export default function ReminderHistoryPage() {
                           ) : (
                             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
-                          {recipientLabel(m.recipient)}
+                          {recipientLabel(m.recipient, canSeeContacts)}
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">

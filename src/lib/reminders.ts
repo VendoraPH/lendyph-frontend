@@ -247,12 +247,20 @@ const PROCESSED_KPI_LABELS: Partial<Record<keyof ReminderDashboardCounts, string
  * `logged*` counts can't say its `sent*` counts leave out logged-only
  * messages, so outside a known live mode those read "Processed".
  */
+/** In test mode a plain "Sent" reads as if something went out; these say what they count. */
+const REAL_PROVIDER_KPI_LABELS: Partial<Record<keyof ReminderDashboardCounts, string>> = {
+  sent: "Sent by a real provider",
+  sms_sent: "SMS sent by a real provider",
+  emails_sent: "Emails sent by a real provider",
+};
+
 export function kpiLabels(
   counts: Partial<ReminderDashboardCounts>,
   mode: SendMode,
 ): Record<keyof ReminderDashboardCounts, string> {
-  if (counts.logged !== undefined || mode === false) return KPI_LABELS;
-  return { ...KPI_LABELS, ...PROCESSED_KPI_LABELS };
+  if (mode === false) return KPI_LABELS;
+  if (counts.logged === undefined) return { ...KPI_LABELS, ...PROCESSED_KPI_LABELS };
+  return mode === true ? { ...KPI_LABELS, ...REAL_PROVIDER_KPI_LABELS } : KPI_LABELS;
 }
 
 /** The usage card's monthly line, by the same rule as `kpiLabels`. */
@@ -260,7 +268,9 @@ export function smsMonthLabel(
   sms: { sent_this_month?: number; logged_this_month?: number },
   mode: SendMode,
 ): string {
-  return sms.logged_this_month !== undefined || mode === false ? "Messages sent" : "Messages processed";
+  if (mode === false) return "Messages sent";
+  if (sms.logged_this_month === undefined) return "Messages processed";
+  return mode === true ? "Messages sent by a real provider" : "Messages sent";
 }
 
 /**
@@ -320,12 +330,20 @@ export function offeredTemplates(allowed: readonly ReminderTemplateType[] | null
  */
 export function contactValueLabel(value: string | null, canSeeContacts: boolean): string {
   if (value) return value;
-  return canSeeContacts ? "None on file" : "Hidden (needs access to member details)";
+  return canSeeContacts ? "None on file" : HIDDEN_CONTACT;
 }
 
-/** A masked recipient, or a dash when the server leaves it out or there is none. */
-export function recipientLabel(recipient: string | null | undefined): string {
-  return recipient?.trim() ? recipient : "—";
+/** Where a contact would show, for a user who can't see member details. */
+export const HIDDEN_CONTACT = "Hidden (needs access to member details)";
+
+/**
+ * A masked recipient. The API sends null both when the contact is hidden
+ * (no `borrowers:view`, or not the member's branch) and when there is none,
+ * so without `borrowers:view` a null reads "Hidden"; with it, a dash.
+ */
+export function recipientLabel(recipient: string | null | undefined, canSeeContacts = true): string {
+  if (recipient?.trim()) return recipient;
+  return canSeeContacts ? "—" : HIDDEN_CONTACT;
 }
 
 /** " — <reason>" after a pause line, or nothing when the server leaves it out. */
@@ -333,6 +351,15 @@ export function pauseReasonSuffix(pause: { reason: string | null }): string {
   const reason = pause.reason?.trim();
   return reason ? ` — ${reason}` : "";
 }
+
+/** The loan card's button that opens the Send dialog: the dialog's own wording. */
+export function sendButtonLabel(mode: SendMode): string {
+  return manualSendWording(mode).button;
+}
+
+/** The Templates tab's one-line intro; it never says a reminder sends. */
+export const TEMPLATES_PAGE_INTRO =
+  "One template per reminder type and channel. Amounts and dates are filled in from the loan when a reminder is made.";
 
 export interface ManualSendWording {
   title: string;

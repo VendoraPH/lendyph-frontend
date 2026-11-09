@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatDate } from "@/lib/format";
-import { COMPANY_WIDE_REASON, TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
+import { COMPANY_WIDE_REASON, TEMPLATES_PAGE_INTRO, TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { Permission } from "@/types";
 import type { ReminderTemplate } from "@/types/reminder";
@@ -67,7 +67,7 @@ export default function ReminderTemplatesPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          One template per reminder type and channel. Amounts and dates are filled in from the loan when it sends.
+          {TEMPLATES_PAGE_INTRO}
         </p>
         <PermissionButton
           permission={write.permission}
