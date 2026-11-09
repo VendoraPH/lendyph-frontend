@@ -73,6 +73,7 @@ import {
   INTEREST_RATE_FREQUENCY_OPTIONS,
 } from "@/constants";
 import type { LoanProduct } from "@/types/loan";
+import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { formatCurrency } from "@/lib/format";
 import {
   EMPTY_FORM,
@@ -147,12 +148,6 @@ function getTermDisplay(product: LoanProduct): string {
   if (min && max && min !== max) return `${min} – ${max} ${unit}`;
   return `${min || max} ${unit}`;
 }
-
-const INTEREST_METHOD_LABELS: Record<string, string> = {
-  straight: "Straight",
-  fixed: "Fixed",
-  diminishing: "Diminishing",
-};
 
 // ── Product Form Dialog ──
 
@@ -1077,7 +1072,7 @@ function LoanProductsContent() {
                   <p className="font-medium">
                     {getInterestRateDisplay(product)}{" "}
                     <span className="text-muted-foreground font-normal">
-                      {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
+                      {interestMethodLabel(getProductField(product, "interest_method"))}
                     </span>
                   </p>
                 </div>
@@ -1163,7 +1158,7 @@ function LoanProductsContent() {
                           {getInterestRateDisplay(product)}
                         </span>
                         <span className="text-muted-foreground ml-1">
-                          {INTEREST_METHOD_LABELS[getProductField(product, "interest_method")]}
+                          {interestMethodLabel(getProductField(product, "interest_method"))}
                         </span>
                       </div>
                     </TableCell>

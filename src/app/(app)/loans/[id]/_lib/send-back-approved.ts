@@ -8,7 +8,7 @@ import type { Loan } from "@/types/loan";
 export const SEND_BACK_REASON_MAX = 1000;
 
 /** The server's `can_send_back_approved`, and nothing else: the screen never decides it. */
-export function canSendBackApproved(loan: Partial<Pick<Loan, "can_send_back_approved" | "status" | "is_restructure">>): boolean {
+export function canSendBackApproved(loan: Pick<Loan, "can_send_back_approved">): boolean {
   return loan.can_send_back_approved === true;
 }
 

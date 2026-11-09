@@ -138,3 +138,20 @@ test("a bad column counts as 0 without discarding the other side of the entry", 
 test("every screen refusing to decide says the same words", () => {
   assert.equal(SHARE_CAPITAL_UNAVAILABLE_LABEL, "Balance unavailable");
 });
+
+test("a balance held back for want of access gives that reason, not a failed load", () => {
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable", cause: "no_permission" }),
+    "Your role doesn't include Share Capital: View, so this member's share capital balance isn't shown.",
+  );
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable", cause: "no_branch_access" }),
+    "This member's branch isn't one of your branches, so their share capital balance isn't shown.",
+  );
+  // A failed load keeps its own words.
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable" }),
+    "The share capital ledger could not be loaded, so the balance is unknown — which is not the same as zero.",
+  );
+  assert.equal(shareCapitalUnavailableReason({ status: "ok", balance: 0 }), null);
+});

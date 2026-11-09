@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Loan } from "@/types/loan";
-import { workflowEvents, type WorkflowLoan } from "./workflow-history";
+import { sortWorkflowEvents, workflowEvents, type WorkflowLoan } from "./workflow-history";
 
 const LOAN: WorkflowLoan = {
   status: "for_review",
@@ -81,4 +81,16 @@ test("a full Loan is accepted as it is, and names keep their fallbacks", () => {
   const event = workflowEvents(loan).find((e) => e.key === "approved");
   assert.equal(event?.label, "Approved by Ana");
   assert.equal(event?.detail, "ok");
+});
+
+test("an unreadable date sorts as if at creation, and never scrambles the rest", () => {
+  const events = sortWorkflowEvents(
+    [
+      { key: "approved", label: "b", date: "2026-11-02T00:00:00Z" },
+      { key: "submitted", label: "a", date: "not a date" },
+      { key: "released", label: "c", date: "2026-11-03T00:00:00Z" },
+    ],
+    "2026-11-01T00:00:00Z",
+  );
+  assert.deepEqual(events.map((e) => e.label), ["a", "b", "c"]);
 });

@@ -23,6 +23,17 @@ before(async () => {
     requests.push(url.pathname.replace(/^\/api/, ""));
     queries.push(Object.fromEntries(url.searchParams));
     res.setHeader("Content-Type", "application/json");
+    // Member 9's ledger is refused (no share_capital:view on the server).
+    if (url.searchParams.get("borrower_id") === "9") {
+      res.statusCode = 403;
+      res.end(JSON.stringify({ message: "This action is unauthorized." }));
+      return;
+    }
+    // Member 8 is in another branch: no rows and no summary.
+    if (url.searchParams.get("borrower_id") === "8") {
+      res.end(JSON.stringify({ data: [], meta: { current_page: 1, last_page: 1, per_page: 1, total: 0 } }));
+      return;
+    }
     res.end(
       JSON.stringify({
         // One row of a long ledger: adding up what is in hand would give 5000.
@@ -59,7 +70,7 @@ beforeEach(() => {
 });
 
 test("without share_capital:view it asks for nothing and reports unavailable", async () => {
-  assert.deepEqual(await getShareCapitalBalance(7, false), { status: "unavailable" });
+  assert.deepEqual(await getShareCapitalBalance(7, false), { status: "unavailable", cause: "no_permission" });
   assert.deepEqual(requests, []);
 });
 
@@ -75,4 +86,12 @@ test("with it, the balance is the server's ending balance from one request", asy
 test("callers that pass nothing keep reading the ledger", async () => {
   assert.equal((await getShareCapitalBalance(7)).status, "ok");
   assert.equal(requests.length, 1);
+});
+
+test("a refused ledger read is a missing permission", async () => {
+  assert.deepEqual(await getShareCapitalBalance(9, true), { status: "unavailable", cause: "no_permission" });
+});
+
+test("a member outside the caller's branches comes back with no summary: no branch access", async () => {
+  assert.deepEqual(await getShareCapitalBalance(8, true), { status: "unavailable", cause: "no_branch_access" });
 });

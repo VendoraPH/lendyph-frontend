@@ -90,11 +90,13 @@ import {
 import { securityStatusLabel } from "@/types/collateral";
 import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
   readRestructurableBalance,
   readRestructurePreview,
+  restructurableBalanceHint,
   restructurableBalanceShown,
   restructureShortfallState,
   restructureSubmitCheck,
@@ -1048,9 +1050,7 @@ function RestructureLoanInner() {
                             : "text-muted-foreground",
                         )}
                       >
-                        {shortfallState.showsShortfall
-                          ? `${currencyOrDash(restructure.shortfall)} below the restructurable balance of ${currencyOrDash(hintBalance)} — remarks required.`
-                          : `Restructurable balance: ${currencyOrDash(hintBalance)} (any insurance premium owed carries over to the new loan separately)`}
+                        {restructurableBalanceHint(shortfallState.showsShortfall, restructure.shortfall, hintBalance)}
                       </p>
                     )}
                   </div>
@@ -1357,10 +1357,11 @@ function RestructureLoanInner() {
               </CardContent>
             </Card>
 
-            {/* Deductions & Net Proceeds */}
+            {/* Deductions: a restructure pays nothing out, so the card shows
+                what is collected from the member and what is paid out. */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Deductions & Net Proceeds</CardTitle>
+                <CardTitle className="text-base">Deductions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1489,10 +1490,15 @@ function RestructureLoanInner() {
                     </span>
                   </div>
                   <Separator />
-                  <div className="flex justify-between font-semibold">
-                    <span>Net Proceeds</span>
-                    <span>{currencyOrDash(previewDeductions?.net_proceeds)}</span>
-                  </div>
+                  {proceedsFigures(true, {
+                    totalDeductions: previewDeductions?.total_deductions ?? null,
+                    netProceeds: null,
+                  }).map((figure) => (
+                    <div key={figure.label} className="flex justify-between font-semibold">
+                      <span>{figure.label}</span>
+                      <span>{currencyOrDash(figure.amount)}</span>
+                    </div>
+                  ))}
                 </div>
                 {previewDeductions?.error && (
                   <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">

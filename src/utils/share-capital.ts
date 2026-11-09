@@ -1,4 +1,5 @@
 import { shareCapitalService } from "@/services";
+import { httpStatusOf } from "@/lib/api-error";
 import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
 
 /**
@@ -26,7 +27,17 @@ export type ShareCapitalBalance =
       /** The server's balance over the member's WHOLE ledger. */
       balance: number;
     }
-  | { status: "unavailable" };
+  | {
+      status: "unavailable";
+      /**
+       * Why, when the caller can't be shown it: no `share_capital:view`
+       * (`no_permission`), or the member is outside the caller's branches
+       * (`no_branch_access`). Absent for a failed or unreadable load.
+       */
+      cause?: ShareCapitalUnavailableCause;
+    };
+
+export type ShareCapitalUnavailableCause = "no_permission" | "no_branch_access";
 
 /**
  * The one label for "we cannot tell you this member's balance".
@@ -50,6 +61,13 @@ export function shareCapitalUnavailableReason(
     case "ok":
       return null;
     case "unavailable":
+      // Access, not a fault: say which access is missing.
+      if (result.cause === "no_permission") {
+        return "Your role doesn't include Share Capital: View, so this member's share capital balance isn't shown.";
+      }
+      if (result.cause === "no_branch_access") {
+        return "This member's branch isn't one of your branches, so their share capital balance isn't shown.";
+      }
       // Deliberately member-NEUTRAL ("the balance", not "this member's"): the
       // same sentence sits under a banner heading on one screen and beside a
       // form control on another, and each of those names the member itself.
@@ -108,19 +126,22 @@ export function toShareCapitalBalance(
  * decide" is the only correct behaviour when the balance is unknown.
  *
  * `canRead` is the caller's `share_capital:view`. The ledger answers 403
- * without it, so the request is not made and the result is `unavailable`,
- * exactly what a refused one produces.
+ * without it, so the request is not made and the result is `unavailable`
+ * with the `no_permission` cause, exactly what a refused one produces. A
+ * member outside the caller's branches gets no `meta.summary` (the server
+ * leaves it out rather than sum another branch's ledger): `no_branch_access`.
  */
 export async function getShareCapitalBalance(
   borrowerId: number,
   canRead = true
 ): Promise<ShareCapitalBalance> {
-  if (!canRead) return { status: "unavailable" };
+  if (!canRead) return { status: "unavailable", cause: "no_permission" };
   try {
     const res = await shareCapitalService.ledgerList({ borrower_id: borrowerId, per_page: 1 });
     const meta = (res as { meta?: { summary?: ShareCapitalMemberPeriod } } | undefined)?.meta;
+    if (meta && meta.summary === undefined) return { status: "unavailable", cause: "no_branch_access" };
     return toShareCapitalBalance(meta?.summary);
-  } catch {
-    return { status: "unavailable" };
+  } catch (err) {
+    return httpStatusOf(err) === 403 ? { status: "unavailable", cause: "no_permission" } : { status: "unavailable" };
   }
 }

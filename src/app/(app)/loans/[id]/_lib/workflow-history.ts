@@ -24,8 +24,13 @@ export type WorkflowEventKey = "created" | "submitted" | "approved" | "rejected"
 export interface WorkflowEvent {
   key: WorkflowEventKey;
   label: string;
-  /** Null only for a submission the server has no date for. */
+  /** Null only for a step the server has no date for. */
   date: string | null;
+  /**
+   * Where an undated event sorts: the date of the chain event before it, so
+   * it keeps its place in the chain. Never shown.
+   */
+  sortDate?: string | null;
   detail?: string;
 }
 
@@ -84,8 +89,16 @@ export function workflowEvents(loan: WorkflowLoan): WorkflowEvent[] {
   return sortWorkflowEvents(events, loan.created_at);
 }
 
-/** Oldest first; an event with no date sorts as if it happened at creation. Ties keep their order. */
+/**
+ * Oldest first. An event with no date sorts at its `sortDate`, else as if it
+ * happened at creation, as does a date that can't be read. Ties keep their
+ * order.
+ */
 export function sortWorkflowEvents(events: WorkflowEvent[], createdAt: string): WorkflowEvent[] {
-  const time = (event: WorkflowEvent) => new Date(event.date ?? createdAt).getTime();
+  const created = new Date(createdAt).getTime();
+  const time = (event: WorkflowEvent) => {
+    const at = new Date(event.date ?? event.sortDate ?? createdAt).getTime();
+    return Number.isNaN(at) ? (Number.isNaN(created) ? 0 : created) : at;
+  };
   return [...events].sort((a, b) => time(a) - time(b));
 }

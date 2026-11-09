@@ -24,6 +24,7 @@ import {
   REMARKS_SAVED_HINT,
   remarksRefusal,
   restructureEditFields,
+  restructureEditPreviewRequest,
   scbRuleError,
 } from "./restructure-edit";
 
@@ -109,4 +110,23 @@ test("the loan form wires the principal, build-up and remarks rules", () => {
   assert.ok(page.includes("scbRuleError(scbAmount, selectedProduct, isRestructureEdit)"));
   assert.ok(page.includes("remarksRefusal(err)"));
   assert.ok(page.includes('htmlFor="restructure-remarks"'));
+});
+
+test("the edit form asks the restructure preview for the source loan's balance, by its own principal", () => {
+  assert.deepEqual(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "18000.50", canRestructure: true }), {
+    source_loan_id: 12,
+    principal_amount: 18000.5,
+  });
+  // Only the restructure preview carries the balance; it needs loans:restructure.
+  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "18000", canRestructure: false }), null);
+  // Not a restructure, or no principal to measure yet.
+  assert.equal(restructureEditPreviewRequest({ sourceLoanId: null, principalAmount: "18000", canRestructure: true }), null);
+  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "", canRestructure: true }), null);
+  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "0", canRestructure: true }), null);
+});
+
+test("the edit form shows the source loan's restructurable balance under the principal", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
+  assert.ok(page.includes("restructureEditPreviewRequest({"));
+  assert.ok(page.includes('id="restructure-balance-hint"'));
 });

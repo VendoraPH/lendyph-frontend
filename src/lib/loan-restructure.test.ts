@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildLoanDeductions,
   readRestructurableBalance,
   readRestructurePreview,
+  restructurableBalanceHint,
   restructurableBalanceShown,
   restructureShortfallState,
   restructureSubmitCheck,
@@ -330,4 +333,25 @@ test("the hint shows the preview's restructurable balance, the summary's only as
   assert.equal(restructurableBalanceShown(SHORT, 70000), 70800);
   assert.equal(restructurableBalanceShown(UNKNOWN, 70000), 70000);
   assert.equal(restructurableBalanceShown(UNKNOWN, null), null);
+});
+
+test("the balance hint quotes the server's balance, and its shortfall once remarks are required", () => {
+  assert.equal(
+    restructurableBalanceHint(false, null, 70800),
+    "Restructurable balance: ₱70,800.00 (any insurance premium owed carries over to the new loan separately)",
+  );
+  assert.equal(
+    restructurableBalanceHint(true, 20800, 70800),
+    "₱20,800.00 below the restructurable balance of ₱70,800.00 — remarks required.",
+  );
+  // No balance from the server: no hint, never a figure worked out here.
+  assert.equal(restructurableBalanceHint(false, null, null), null);
+  assert.equal(restructurableBalanceHint(true, 20800, null), null);
+});
+
+test("the restructure page and the restructure edit form share the hint", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  for (const page of [read("src/app/(app)/loans/restructure/page.tsx"), read("src/app/(app)/loans/new/page.tsx")]) {
+    assert.ok(page.includes("restructurableBalanceHint("));
+  }
 });

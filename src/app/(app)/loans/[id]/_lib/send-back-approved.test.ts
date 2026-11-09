@@ -30,6 +30,7 @@ test("only the server's flag shows the action", () => {
   assert.equal(canSendBackApproved({ can_send_back_approved: false }), false);
   assert.equal(canSendBackApproved({}), false);
   // An approved restructure without the flag (an older API, or no loans:release) still hides it.
+  // @ts-expect-error: only the server's flag is read, so the loan's status and kind aren't accepted
   assert.equal(canSendBackApproved({ status: "approved", is_restructure: true }), false);
 });
 

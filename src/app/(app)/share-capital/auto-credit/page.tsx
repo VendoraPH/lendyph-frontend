@@ -23,10 +23,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { shareCapitalService } from "@/services";
-import type { AutoCreditMember } from "@/types";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { autoCreditGroups, type AutoCreditGroups } from "./_lib/auto-credit-groups";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import {
@@ -36,25 +36,10 @@ import {
   type AutoCreditMethod,
 } from "@/lib/payment-reference";
 
-interface LocalMember {
-  id: number;
-  borrower: string;
-  pledgeAmount: number;
-  autoCredit: boolean;
-}
-
-function toLocalMember(m: AutoCreditMember): LocalMember {
-  const raw = m as AutoCreditMember & Record<string, unknown>;
-  return {
-    id: m.id,
-    borrower: m.borrower?.full_name ?? m.borrower?.name ?? m.borrower_name ?? `Member #${m.borrower_id}`,
-    pledgeAmount: m.pledge_amount ?? (raw.amount as number) ?? 0,
-    autoCredit: m.auto_credit ?? (raw.autoCredit as boolean) ?? false,
-  };
-}
+const NO_GROUPS: AutoCreditGroups = autoCreditGroups({});
 
 function AutoCreditContent() {
-  const [members, setMembers] = useState<LocalMember[]>([]);
+  const [groups, setGroups] = useState<AutoCreditGroups>(NO_GROUPS);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -74,26 +59,14 @@ function AutoCreditContent() {
   const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
-      const raw = await shareCapitalService.autoCreditStatus();
-      const status = raw as unknown as Record<string, unknown>;
-
-      const activeArr = (status.active_members ?? []) as AutoCreditMember[];
-      const disabledArr = (status.disabled_members ?? []) as AutoCreditMember[];
-      const noPledgeArr = (status.no_pledge_members ?? []) as AutoCreditMember[];
-
-      // API categorizes members by array — not by a boolean field.
-      // Tag each member with autoCredit based on which array they came from.
-      const all = [
-        ...activeArr.map((m) => ({ ...toLocalMember(m), autoCredit: true })),
-        ...disabledArr.map((m) => ({ ...toLocalMember(m), autoCredit: false })),
-        ...noPledgeArr.map((m) => ({ ...toLocalMember(m), autoCredit: false })),
-      ];
-
-      setMembers(all);
-      setTotalToCredit((status.total_to_credit as number) ?? 0);
+      const raw = (await shareCapitalService.autoCreditStatus()) as unknown as Record<string, unknown>;
+      // The server's own groups and counts: a pledge with no amount is not
+      // one whose auto-credit is off.
+      setGroups(autoCreditGroups(raw));
+      setTotalToCredit((raw.total_to_credit as number) ?? 0);
 
       // last_run can be an object or a string
-      const lastRunRaw = status.last_run ?? status.last_run_at;
+      const lastRunRaw = raw.last_run ?? raw.last_run_at;
       if (lastRunRaw) {
         const runDate = typeof lastRunRaw === "object" && lastRunRaw !== null
           ? (lastRunRaw as Record<string, unknown>).processed_at as string
@@ -111,9 +84,7 @@ function AutoCreditContent() {
     fetchStatus();
   }, [fetchStatus]);
 
-  const activeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount > 0);
-  const disabledMembers = members.filter((m) => !m.autoCredit);
-  const noPledgeMembers = members.filter((m) => m.autoCredit && m.pledgeAmount === 0);
+  const { active: activeMembers, disabled: disabledMembers, noPledge: noPledgeMembers } = groups;
   const totalPledge = totalToCredit > 0 ? totalToCredit : activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
 
   function handleInitiate() {
@@ -189,7 +160,7 @@ function AutoCreditContent() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Active Members</span>
               <span className="text-2xl font-bold">
-                {loading ? <Spinner className="size-5 text-muted-foreground" /> : activeMembers.length}
+                {loading ? <Spinner className="size-5 text-muted-foreground" /> : groups.activeCount}
               </span>
             </div>
           </CardContent>
@@ -217,9 +188,9 @@ function AutoCreditContent() {
       </div>
 
       {/* Warnings: Disabled & No Pledge */}
-      {(disabledMembers.length > 0 || noPledgeMembers.length > 0) && (
+      {(groups.disabledCount > 0 || groups.noPledgeCount > 0) && (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-          {disabledMembers.length > 0 && (
+          {groups.disabledCount > 0 && (
             <Card className="border-amber-500/30">
               <CardContent className="py-4">
                 <div className="flex items-start gap-3">
@@ -227,7 +198,7 @@ function AutoCreditContent() {
                   <div className="flex-1">
                     <p className="text-sm font-medium">Auto-Credit Disabled</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {disabledMembers.length} member{disabledMembers.length > 1 ? "s" : ""} will not be credited
+                      {groups.disabledCount} member{groups.disabledCount === 1 ? "" : "s"} will not be credited
                     </p>
                     <button
                       className="text-xs text-brand-orange hover:underline mt-1"
@@ -240,7 +211,7 @@ function AutoCreditContent() {
               </CardContent>
             </Card>
           )}
-          {noPledgeMembers.length > 0 && (
+          {groups.noPledgeCount > 0 && (
             <Card className="border-red-500/30">
               <CardContent className="py-4">
                 <div className="flex items-start gap-3">
@@ -248,7 +219,7 @@ function AutoCreditContent() {
                   <div className="flex-1">
                     <p className="text-sm font-medium">No Pledge Amount</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {noPledgeMembers.length} member{noPledgeMembers.length > 1 ? "s" : ""} with no pledge amount set
+                      {groups.noPledgeCount} member{groups.noPledgeCount === 1 ? "" : "s"} with no pledge amount set
                     </p>
                     <button
                       className="text-xs text-brand-orange hover:underline mt-1"

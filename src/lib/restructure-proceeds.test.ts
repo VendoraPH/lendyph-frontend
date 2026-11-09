@@ -70,3 +70,10 @@ test("the loan page's card and the loan form both use it", () => {
   assert.ok(page.includes("proceedsFigures(!!loan.is_restructure"));
   assert.ok(form.includes("proceedsFigures(isRestructureEdit"));
 });
+
+test("the restructure page shows what is collected and paid out, never Net Proceeds", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/restructure/page.tsx"), "utf8");
+  assert.ok(page.includes("proceedsFigures(true, {"));
+  assert.ok(!page.includes("Net Proceeds"));
+  assert.ok(!page.includes("net_proceeds"));
+});
