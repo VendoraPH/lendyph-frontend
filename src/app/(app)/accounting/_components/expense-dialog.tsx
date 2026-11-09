@@ -14,10 +14,16 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useChartOfAccounts } from "@/hooks";
-import { toCentavos } from "@/lib/accounting/money";
-import { todayISO } from "@/lib/format";
+import { useChartOfAccounts, useDialogOpening } from "@/hooks";
+import { formatCentavos, toCentavos } from "@/lib/accounting/money";
+import { formatDate, todayISO } from "@/lib/format";
 import type { Expense } from "@/types";
+import {
+  buildExpenseEditPayload,
+  expenseEditForm,
+  type ExpenseEditForm,
+  type ExpenseEditPayload,
+} from "../expenses/_lib/expense-forms";
 import { AccountSelect } from "./account-select";
 
 interface ExpenseDialogProps {
@@ -210,6 +216,128 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
           <Button onClick={submit} disabled={!valid || isTemplate || submitting}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Recording…" : "Record expense"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface EditExpenseDialogProps {
+  /** The expense being edited; the dialog is open while this is set. */
+  expense: Expense | null;
+  onOpenChange: (open: boolean) => void;
+  /** Must return the request's promise, and reject on failure so the form stays. */
+  onSubmit: (expense: Expense, data: ExpenseEditPayload) => Promise<void>;
+}
+
+const EMPTY_EDIT: ExpenseEditForm = { payee: "", reference: "", description: "", dueDate: "" };
+
+/**
+ * Edit an expense's descriptive fields: payee, reference, notes and due date.
+ *
+ * The amount, the accounts, the date and the branch are part of the journal
+ * entry already recorded, so they are shown but can't be changed here.
+ */
+export function EditExpenseDialog({ expense, onOpenChange, onSubmit }: EditExpenseDialogProps) {
+  const open = expense !== null;
+  const [form, setForm] = useState<ExpenseEditForm>(EMPTY_EDIT);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (useDialogOpening(open, expense) && expense) setForm(expenseEditForm(expense));
+
+  const set = (field: keyof ExpenseEditForm) => (value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+  const payload = buildExpenseEditPayload(form);
+
+  const submit = async () => {
+    if (!expense || !payload || submitting) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(expense, payload);
+    } catch {
+      // The caller has already shown the server's message; the form stays.
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit expense</DialogTitle>
+          <DialogDescription>
+            Only the payee, reference, notes and due date can be changed.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {expense && (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
+              <dt className="text-muted-foreground">Date</dt>
+              <dd>{formatDate(expense.date)}</dd>
+              <dt className="text-muted-foreground">Amount</dt>
+              <dd className="font-mono">{formatCentavos(expense.amount)}</dd>
+              <dt className="text-muted-foreground">Expense category</dt>
+              <dd>{expense.expense_account_name ?? "—"}</dd>
+              <dd className="col-span-2 text-xs text-muted-foreground">
+                The amount, accounts, date and branch are part of the journal
+                entry already recorded, so they can&rsquo;t be edited.
+              </dd>
+            </dl>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-expense-payee">Paid to</Label>
+            <Input
+              id="edit-expense-payee"
+              value={form.payee}
+              onChange={(e) => set("payee")(e.target.value)}
+              maxLength={160}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-expense-reference">Reference</Label>
+            <Input
+              id="edit-expense-reference"
+              value={form.reference}
+              onChange={(e) => set("reference")(e.target.value)}
+              maxLength={64}
+              placeholder="OR number, invoice number…"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-expense-due">Due date</Label>
+            <Input
+              id="edit-expense-due"
+              type="date"
+              value={form.dueDate}
+              onChange={(e) => set("dueDate")(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-expense-notes">Notes</Label>
+            <Textarea
+              id="edit-expense-notes"
+              value={form.description}
+              onChange={(e) => set("description")(e.target.value)}
+              maxLength={500}
+              rows={2}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!payload || submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
+            {submitting ? "Saving…" : "Save changes"}
           </Button>
         </div>
       </DialogContent>

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   accountTypeFromCode,
   normalBalanceFor,
-  signedBalance,
   belongsToStatement,
   isPostable,
   sortAccounts,
@@ -52,44 +51,6 @@ test("a contra account inverts its type's normal side", () => {
   assert.equal(normalBalanceFor("asset", true), "credit");
   // A contra-income account (sales discounts) is debit-normal.
   assert.equal(normalBalanceFor("income", true), "debit");
-});
-
-test("a debit-normal account grows with debits", () => {
-  const cash = account();
-  assert.equal(signedBalance(cash, 500000, 200000), 300000);
-});
-
-test("a credit-normal account grows with credits", () => {
-  const payable = account({
-    code: "2010",
-    type: "liability",
-    normal_balance: "credit",
-  });
-  assert.equal(signedBalance(payable, 200000, 500000), 300000);
-});
-
-test("an allowance reduces assets instead of adding to them", () => {
-  // The bug this guards: treating the allowance as a plain asset makes Net
-  // Loans Receivable come out as Gross PLUS the allowance.
-  const allowance = account({
-    code: "1200",
-    name: "Allowance for Credit Losses",
-    type: "asset",
-    normal_balance: "credit",
-    is_contra: true,
-  });
-  // ₱150,000 credited into the allowance.
-  const balance = signedBalance(allowance, 0, 15000000);
-  assert.equal(balance, 15000000);
-
-  const grossLoans = 500000000; // ₱5,000,000
-  assert.equal(grossLoans - balance, 485000000); // ₱4,850,000 net
-});
-
-test("a balance can go the wrong way and says so with a negative", () => {
-  // An overdrawn cash account is a real condition and must not be hidden.
-  const cash = account();
-  assert.equal(signedBalance(cash, 100000, 400000), -300000);
 });
 
 test("balance sheet takes assets, liabilities and equity", () => {

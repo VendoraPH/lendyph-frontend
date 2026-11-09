@@ -12,19 +12,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { toCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import type { Account } from "@/types";
+import {
+  TRANSFER_REFERENCE_MAX,
+  buildTransferPayload,
+  type TransferPayload,
+} from "../_lib/transfer-payload";
 import { AccountSelect } from "./account-select";
-
-interface TransferPayload {
-  date: string;
-  from_account_id: number;
-  to_account_id: number;
-  amount: number;
-  charge?: number;
-  description: string;
-}
 
 interface TransferDialogProps {
   open: boolean;
@@ -55,34 +50,27 @@ export function TransferDialog({
   const [amount, setAmount] = useState("");
   const [charge, setCharge] = useState("");
   const [description, setDescription] = useState("");
+  const [reference, setReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const amountCentavos = toCentavos(amount);
-  const chargeCentavos = toCentavos(charge);
 
   // Same account on both sides is a no-op that still writes two lines against
   // one account, which reads as activity that never happened.
   const sameAccount = fromId !== null && fromId === toId;
-  const valid =
-    fromId !== null &&
-    toId !== null &&
-    !sameAccount &&
-    amountCentavos !== null &&
-    amountCentavos > 0 &&
-    description.trim().length > 0;
+  const payload = buildTransferPayload({
+    date,
+    fromId,
+    toId,
+    amount,
+    charge,
+    reference,
+    description,
+  });
 
   const submit = async () => {
-    if (submitting || !valid) return;
+    if (submitting || !payload) return;
     setSubmitting(true);
     try {
-      await onSubmit({
-        date,
-        from_account_id: fromId,
-        to_account_id: toId,
-        amount: amountCentavos,
-        charge: chargeCentavos ?? undefined,
-        description: description.trim(),
-      });
+      await onSubmit(payload);
     } finally {
       // Whatever the request did, the button has to come back. A rejection
       // that left this true would wedge the dialog with no way out but a
@@ -166,6 +154,17 @@ export function TransferDialog({
               placeholder="GCash to bank sweep"
             />
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="transfer-reference">Reference (optional)</Label>
+            <Input
+              id="transfer-reference"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              maxLength={TRANSFER_REFERENCE_MAX}
+              placeholder="Deposit slip or transaction number"
+            />
+          </div>
         </div>
 
         <div className="flex justify-end gap-2">
@@ -176,7 +175,7 @@ export function TransferDialog({
           >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!valid || submitting}>
+          <Button onClick={submit} disabled={!payload || submitting}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Recording…" : "Record transfer"}
           </Button>
