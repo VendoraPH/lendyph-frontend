@@ -13,7 +13,14 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { attachedCollateralValue, collateralSummaryFigures } from "./collateral-display";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  SHARE_CAPITAL_VALUE_HIDDEN,
+  attachedCollateralValue,
+  collateralSummaryFigures,
+  summaryShowsShortBy,
+} from "./collateral-display";
 
 test("shows the pivot's snapshot value", () => {
   assert.equal(attachedCollateralValue({ amount: 9999, pivot: { snapshot_value: 25000.5 } }), 25000.5);
@@ -56,4 +63,35 @@ test("collateral summary: a hidden share capital value is a dash (null), never â
 test("collateral summary: none sent is all dashes, with no hidden-value note", () => {
   assert.deepEqual(collateralSummaryFigures(null), { totalValue: null, shortBy: null, valueHidden: false });
   assert.deepEqual(collateralSummaryFigures(undefined), { totalValue: null, shortBy: null, valueHidden: false });
+});
+
+test("the card's Short by: left out when the figures are withheld or the status is null", () => {
+  assert.equal(
+    summaryShowsShortBy({ total_value: null, short_by: null, security_status: null, value_unknown: true }),
+    false,
+  );
+  assert.equal(
+    summaryShowsShortBy({ total_value: null, short_by: null, security_status: "partially_secured", value_unknown: true }),
+    false,
+  );
+  assert.equal(summaryShowsShortBy({ total_value: 40000, short_by: 10000, security_status: null }), false);
+  assert.equal(summaryShowsShortBy(null), false);
+  assert.equal(summaryShowsShortBy(undefined), false);
+});
+
+test("the card's Short by: shown when not secured, hidden when secured", () => {
+  assert.equal(summaryShowsShortBy({ total_value: 40000, short_by: 10000, security_status: "partially_secured" }), true);
+  assert.equal(summaryShowsShortBy({ total_value: 0, short_by: 50000, security_status: "unsecured", value_unknown: false }), true);
+  assert.equal(summaryShowsShortBy({ total_value: 60000, short_by: 0, security_status: "secured" }), false);
+});
+
+test("the card reads summaryShowsShortBy and the shared hidden-value note", () => {
+  assert.equal(SHARE_CAPITAL_VALUE_HIDDEN, "Share capital value hidden for your role");
+  const card = readFileSync(
+    join(process.cwd(), "src/app/(app)/loans/[id]/_components/loan-collaterals-card.tsx"),
+    "utf8",
+  );
+  assert.ok(card.includes("summaryShowsShortBy(summary)"));
+  assert.ok(card.includes("{SHARE_CAPITAL_VALUE_HIDDEN}"));
+  assert.ok(!card.includes('summary.security_status !== "secured"'));
 });

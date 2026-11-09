@@ -36,7 +36,6 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { securityStatusLabel } from "@/types/collateral";
 import type {
   CollateralType,
   Loan,
@@ -137,8 +136,11 @@ import {
   loanPreviewRequest,
   previewDeductionAmount,
   previewFailureText,
+  shownCollateralTotal,
+  shownSecurityStatus,
   showsShortBy,
 } from "./_lib/loan-preview";
+import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
@@ -1538,9 +1540,14 @@ function NewLoanApplicationInner() {
                   </p>
                   <p className="text-lg font-bold tabular-nums">
                     {previewCollateral
-                      ? formatCurrency(previewCollateral.total_value)
+                      ? currencyOrDash(shownCollateralTotal(previewCollateral))
                       : "—"}
                   </p>
+                  {previewCollateral?.value_unknown === true && (
+                    <p className="text-xs text-muted-foreground">
+                      {SHARE_CAPITAL_VALUE_HIDDEN}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                   {preview.status === "error" ? (
@@ -1557,23 +1564,25 @@ function NewLoanApplicationInner() {
                     </div>
                   ) : previewCollateral ? (
                     <>
-                      <Badge
-                        className={cn(
-                          previewCollateral.security_status === "secured" &&
-                            "bg-green-500/15 text-green-700 hover:bg-green-500/15",
-                          previewCollateral.security_status === "partially_secured" &&
-                            "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
-                          previewCollateral.security_status === "unsecured" &&
-                            "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                        )}
-                      >
-                        {securityStatusLabel(previewCollateral.security_status)}
-                      </Badge>
+                      {shownSecurityStatus(previewCollateral) !== null && (
+                        <Badge
+                          className={cn(
+                            previewCollateral.security_status === "secured" &&
+                              "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                            previewCollateral.security_status === "partially_secured" &&
+                              "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                            previewCollateral.security_status === "unsecured" &&
+                              "bg-destructive/15 text-destructive hover:bg-destructive/15",
+                          )}
+                        >
+                          {shownSecurityStatus(previewCollateral)}
+                        </Badge>
+                      )}
                       {showsShortBy(previewCollateral, principal) && (
                         <p className="text-xs text-muted-foreground">
                           Short by{" "}
                           <span className="font-medium text-foreground">
-                            {formatCurrency(previewCollateral.short_by)}
+                            {currencyOrDash(previewCollateral.short_by)}
                           </span>{" "}
                           vs. principal
                         </p>

@@ -87,7 +87,6 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { securityStatusLabel } from "@/types/collateral";
 import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
@@ -110,6 +109,7 @@ import {
   loanPreviewRequest,
   previewDeductionAmount,
   previewFailureText,
+  shownSecurityStatus,
 } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
 import {
@@ -1152,11 +1152,11 @@ function RestructureLoanInner() {
                 <div className="space-y-1">
                   <CardTitle className="text-base">
                     Collaterals
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      {previewCollateral
-                        ? securityStatusLabel(previewCollateral.security_status)
-                        : "—"}
-                    </Badge>
+                    {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
+                      </Badge>
+                    )}
                   </CardTitle>
                   {/* The source loan's security carries over to the replacement
                       rather than being released — say so, because the picker

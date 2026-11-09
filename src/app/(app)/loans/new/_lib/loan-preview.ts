@@ -3,6 +3,7 @@ import { getErrorMessage, httpStatusOf, type ApiErrorBody } from "@/lib/api-erro
 import { formatDateISO } from "@/lib/format";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
 import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
+import { securityStatusLabel } from "@/types/collateral";
 import { pledgedCollaterals, type SelectedCollateral } from "./edit-collaterals";
 
 /** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
@@ -228,16 +229,33 @@ export function previewFailureText<Row>(
   return refusedCollateralMessage(view.refused, removable);
 }
 
+type PreviewCollateral = LoanFormPreview["collateral"];
+
+/** Whether the server withheld the collateral figures (`value_unknown`). */
+function withheld(collateral: PreviewCollateral): boolean {
+  return collateral.value_unknown === true;
+}
+
 /**
  * Whether the collateral summary says how far short of the principal the
- * collateral falls: only when the server says the loan is not fully secured
- * and a principal has been entered.
+ * collateral falls: only when the server says the loan is not fully secured,
+ * sent the shortfall, and a principal has been entered. Withheld or null
+ * figures are no answer, never "not secured".
  */
-export function showsShortBy(
-  collateral: LoanFormPreview["collateral"],
-  principal: number,
-): boolean {
+export function showsShortBy(collateral: PreviewCollateral, principal: number): boolean {
+  if (withheld(collateral) || collateral.security_status === null || collateral.short_by === null) return false;
   return principal > 0 && collateral.security_status !== "secured";
+}
+
+/** Total Collateral Value as the server sent it; null (a dash) when withheld, never ₱0.00. */
+export function shownCollateralTotal(collateral: PreviewCollateral): number | null {
+  return withheld(collateral) ? null : collateral.total_value;
+}
+
+/** The security badge's label; null (no badge) when withheld or the status is null. */
+export function shownSecurityStatus(collateral: PreviewCollateral): string | null {
+  if (withheld(collateral) || collateral.security_status === null) return null;
+  return securityStatusLabel(collateral.security_status);
 }
 
 /** An interest method by name ("fixed" is the legacy spelling of "straight"). */

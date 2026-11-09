@@ -14,6 +14,8 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { LoanFormPreview } from "@/types";
 import type { SelectedCollateral } from "./edit-collaterals";
 import {
@@ -27,6 +29,8 @@ import {
   previewFailureText,
   refusedCollateral,
   refusedCollateralMessage,
+  shownSecurityStatus,
+  shownCollateralTotal,
   showsShortBy,
   type LoanPreviewInputs,
   type LoanPreviewOutcome,
@@ -437,6 +441,60 @@ describe("showsShortBy", () => {
 
   test("hidden with no principal entered", () => {
     assert.equal(showsShortBy({ total_value: 100, security_status: "unsecured", short_by: 0 }, 0), false);
+  });
+});
+
+describe("withheld collateral figures (no share_capital:view)", () => {
+  const WITHHELD = { total_value: null, security_status: null, short_by: null, value_unknown: true };
+
+  test("showsShortBy: withheld or null figures don't show, never read as not secured", () => {
+    assert.equal(showsShortBy(WITHHELD, 50000), false);
+    // A null status or shortfall without the flag is no answer either.
+    assert.equal(showsShortBy({ total_value: 40000, security_status: null, short_by: 10000 }, 50000), false);
+    assert.equal(showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: null }, 50000), false);
+    assert.equal(
+      showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: 10000, value_unknown: true }, 50000),
+      false,
+    );
+  });
+
+  test("showsShortBy: secured hides it and not secured shows it, as before", () => {
+    assert.equal(showsShortBy({ total_value: 60000, security_status: "secured", short_by: 0, value_unknown: false }, 50000), false);
+    assert.equal(showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: 10000, value_unknown: false }, 50000), true);
+    assert.equal(showsShortBy({ total_value: 0, security_status: "unsecured", short_by: 50000 }, 50000), true);
+  });
+
+  test("shownCollateralTotal: withheld is a dash (null), never ₱0.00; 0 sent stays 0", () => {
+    assert.equal(shownCollateralTotal(WITHHELD), null);
+    assert.equal(shownCollateralTotal({ ...WITHHELD, total_value: 0 }), null);
+    assert.equal(shownCollateralTotal({ total_value: 0, security_status: "unsecured", short_by: 50000 }), 0);
+    assert.equal(shownCollateralTotal({ total_value: 60000, security_status: "secured", short_by: 0 }), 60000);
+  });
+
+  test("shownSecurityStatus: no badge when withheld or null; the label otherwise", () => {
+    assert.equal(shownSecurityStatus(WITHHELD), null);
+    assert.equal(shownSecurityStatus({ total_value: 40000, security_status: null, short_by: null }), null);
+    assert.equal(shownSecurityStatus({ ...WITHHELD, security_status: "unsecured" }), null);
+    assert.equal(shownSecurityStatus({ total_value: 60000, security_status: "secured", short_by: 0 }), "Secured");
+    assert.equal(
+      shownSecurityStatus({ total_value: 40000, security_status: "partially_secured", short_by: 10000 }),
+      "Partially Secured",
+    );
+    assert.equal(shownSecurityStatus({ total_value: 0, security_status: "unsecured", short_by: 50000 }), "Unsecured");
+  });
+
+  test("the edit form and the restructure page read the helpers", () => {
+    const read = (path: string) => readFileSync(join(process.cwd(), "src/app/(app)/loans", path), "utf8");
+    const form = read("new/page.tsx");
+    assert.ok(form.includes("currencyOrDash(shownCollateralTotal(previewCollateral))"));
+    assert.ok(form.includes("previewCollateral?.value_unknown === true"));
+    assert.ok(form.includes("{SHARE_CAPITAL_VALUE_HIDDEN}"));
+    assert.ok(form.includes("shownSecurityStatus(previewCollateral)"));
+    assert.ok(!form.includes("formatCurrency(previewCollateral.total_value)"));
+    assert.ok(!form.includes("securityStatusLabel(previewCollateral.security_status)"));
+    const restructure = read("restructure/page.tsx");
+    assert.ok(restructure.includes("shownSecurityStatus(previewCollateral)"));
+    assert.ok(!restructure.includes("securityStatusLabel(previewCollateral.security_status)"));
   });
 });
 

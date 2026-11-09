@@ -224,10 +224,16 @@ export interface LoanFormPreview {
   maturity_date: string | null;
   /** Null until a product and a principal above zero are known. */
   deductions: LoanFormPreviewDeductions | null;
+  /**
+   * The three figures are null, and `value_unknown` is true, when the server
+   * withholds them: an edit's preview with no collaterals list sent, for a
+   * caller without `share_capital:view` holding a share capital pledge.
+   */
   collateral: {
-    total_value: number;
-    security_status: SecurityStatus;
-    short_by: number;
+    total_value: number | null;
+    security_status: SecurityStatus | null;
+    short_by: number | null;
+    value_unknown?: boolean;
   };
   amortization: {
     maturity_date: string;
@@ -553,7 +559,8 @@ export interface Loan {
    */
   collateral_summary?: {
     total_value: number | null;
-    security_status: SecurityStatus;
+    /** Null, with `value_unknown`, while the server withholds the figures. */
+    security_status: SecurityStatus | null;
     short_by: number | null;
     value_unknown?: boolean;
   } | null;
