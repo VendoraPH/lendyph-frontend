@@ -155,3 +155,23 @@ test("id 0 is an id, not a missing one", () => {
   assert.equal(doc?.text, "Loan #0");
   assert.equal(doc?.href, "/loans/0");
 });
+
+// ── Year-end close ──
+
+test("a year-end closing entry reads as the close of its year, never the class name", () => {
+  const doc = sourceDocument({
+    postable_type: "accounting_year_close_entry",
+    postable_id: 1,
+    postable_label: null,
+    source: "closing",
+    date: "2025-12-31",
+  });
+  assert.equal(doc?.text, "Year-end close 2025");
+  assert.equal(doc?.typeLabel, "Year-end close");
+  assert.equal(doc?.href, null);
+});
+
+test("a year-end closing entry without its date still reads in words", () => {
+  const doc = sourceDocument({ postable_type: "accounting_year_close_entry", postable_id: 1 });
+  assert.equal(doc?.text, "Year-end close");
+});

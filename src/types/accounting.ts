@@ -144,6 +144,7 @@ export type JournalPostableType =
   | "loan_adjustment"
   | "share_capital_entry"
   | "gcash_transaction"
+  | "accounting_year_close_entry"
   | (string & {});
 
 export interface JournalEntry {

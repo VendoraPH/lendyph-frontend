@@ -76,7 +76,22 @@ const POSTABLE_NAMES: Record<string, string | undefined> = {
   loan_adjustment: "Loan adjustment",
   share_capital_entry: "Share capital entry",
   gcash_transaction: "GCash transaction",
+  accounting_year_close_entry: "Year-end close",
 };
+
+/** The year a closing entry closes: closing entries are dated 31 December. */
+export function closedYear(date: string | undefined): string | null {
+  return date && /^\d{4}-/.test(date) ? date.slice(0, 4) : null;
+}
+
+/**
+ * A year-end close is named by the year it closes, as its own description
+ * reads ("Year-end close 2025"): its row id means nothing to a reader.
+ */
+function yearEndCloseText(date: string | undefined): string {
+  const year = closedYear(date);
+  return year ? `Year-end close ${year}` : "Year-end close";
+}
 
 /** "expense_payment" → "expense payment". Matches how the register renders `source`. */
 function humanise(type: string): string {
@@ -91,7 +106,8 @@ function humanise(type: string): string {
  * contains them.
  */
 export function sourceDocument(
-  entry: Pick<JournalEntry, "postable_type" | "postable_id" | "postable_label">
+  entry: Pick<JournalEntry, "postable_type" | "postable_id" | "postable_label"> &
+    Partial<Pick<JournalEntry, "source" | "date">>
 ): JournalSourceDocument | null {
   const type = entry.postable_type?.trim();
   if (!type) return null;
@@ -106,6 +122,10 @@ export function sourceDocument(
   const typeLabel = POSTABLE_NAMES[type] ?? humanise(type);
 
   const route = POSTABLE_ROUTES[type];
+
+  if (type === "accounting_year_close_entry") {
+    return { type, id, label, typeLabel, text: yearEndCloseText(entry.date), href: null };
+  }
 
   return {
     type,

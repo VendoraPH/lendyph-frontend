@@ -2,7 +2,10 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
+import { DisabledReason } from "@/components/common/disabled-reason";
+import { PLEDGE_ENTRY_CREATE_GATE, PLEDGE_UPDATE_GATE } from "@/lib/lending-write-gates";
+import { usePermission } from "@/hooks/use-permission";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -98,6 +101,11 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 function PledgeEntryContent() {
+  const { can } = usePermission();
+  // The amount, the schedule and auto-credit save through PUT /pledges/{id}
+  // and the auto-credit toggle, which both need share_capital:update.
+  const canUpdatePledge = can(PLEDGE_UPDATE_GATE.permission);
+  const pledgeUpdateReason = canUpdatePledge ? null : PLEDGE_UPDATE_GATE.tooltip;
   const [pledges, setPledges] = useState<LocalPledge[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -557,14 +565,16 @@ function PledgeEntryContent() {
           <span className="text-sm font-medium">
             {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
           </span>
-          <Button
+          <PermissionButton
+            permission={PLEDGE_ENTRY_CREATE_GATE.permission}
+            tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
             size="sm"
             className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             onClick={() => setBulkDialogOpen(true)}
           >
             <PlusCircle className="h-3.5 w-3.5 mr-1" />
             Manual Entry
-          </Button>
+          </PermissionButton>
           <Button
             variant="ghost"
             size="sm"
@@ -727,13 +737,19 @@ function PledgeEntryContent() {
                             </Button>
                           </div>
                         ) : (
-                          <span
-                            className="text-sm cursor-pointer hover:text-brand-orange hover:underline"
-                            onClick={() => startAmountEdit(pledge)}
-                            title="Click to edit"
-                          >
-                            {formatCurrency(pledge.amount)}
-                          </span>
+                          <DisabledReason reason={pledgeUpdateReason}>
+                            <span
+                              className={
+                                canUpdatePledge
+                                  ? "text-sm cursor-pointer hover:text-brand-orange hover:underline"
+                                  : "text-sm"
+                              }
+                              onClick={canUpdatePledge ? () => startAmountEdit(pledge) : undefined}
+                              title={canUpdatePledge ? "Click to edit" : undefined}
+                            >
+                              {formatCurrency(pledge.amount)}
+                            </span>
+                          </DisabledReason>
                         )}
                       </TableCell>
                       <TableCell>
@@ -760,29 +776,40 @@ function PledgeEntryContent() {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-xs cursor-pointer hover:border-brand-orange"
-                            onClick={() => startScheduleEdit(pledge)}
-                          >
-                            <Settings2 className="h-3 w-3 mr-1" />
-                            {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
-                          </Badge>
+                          <DisabledReason reason={pledgeUpdateReason}>
+                            <Badge
+                              variant="outline"
+                              className={
+                                canUpdatePledge
+                                  ? "text-xs cursor-pointer hover:border-brand-orange"
+                                  : "text-xs opacity-50"
+                              }
+                              onClick={canUpdatePledge ? () => startScheduleEdit(pledge) : undefined}
+                            >
+                              <Settings2 className="h-3 w-3 mr-1" />
+                              {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
+                            </Badge>
+                          </DisabledReason>
                         )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Switch
-                            checked={pledge.autoCredit}
-                            onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
-                          />
+                          <DisabledReason reason={pledgeUpdateReason}>
+                            <Switch
+                              checked={pledge.autoCredit}
+                              disabled={!canUpdatePledge}
+                              onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
+                            />
+                          </DisabledReason>
                           <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
                             {pledge.autoCredit ? "Active" : "Inactive"}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
+                        <PermissionButton
+                          permission={PLEDGE_ENTRY_CREATE_GATE.permission}
+                          tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
                           variant="ghost"
                           size="sm"
                           className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
@@ -796,7 +823,7 @@ function PledgeEntryContent() {
                         >
                           <PlusCircle className="h-3.5 w-3.5 mr-1" />
                           Entry
-                        </Button>
+                        </PermissionButton>
                       </TableCell>
                     </TableRow>
                     {manualEntryId === pledge.id && (

@@ -11,6 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, ArrowUpDown, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PermissionButton } from "@/components/common";
+import { AUTO_PAY_TOGGLE_GATE } from "@/lib/lending-write-gates";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   LOAN_STATUS_COLORS,
@@ -133,9 +135,12 @@ export function LoanTable({
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
                 {offersAutoPay(loan.status) ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+                  <PermissionButton
+                    permission={AUTO_PAY_TOGGLE_GATE.permission}
+                    tooltip={AUTO_PAY_TOGGLE_GATE.tooltip}
+                    variant="outline"
+                    size="xs"
+                    className="gap-1.5 rounded-full px-2.5 font-medium"
                     onClick={() => onAutoPayClick(loan)}
                   >
                     <Zap
@@ -155,7 +160,7 @@ export function LoanTable({
                     >
                       {loan.auto_pay_enabled ? "Enabled" : "Enable"}
                     </span>
-                  </button>
+                  </PermissionButton>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
