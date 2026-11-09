@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { amountDisplay } from "../statements/_lib/amount";
+import { amountDisplay } from "../_lib/amount";
 
 export interface ReportSectionLine {
   key: string;

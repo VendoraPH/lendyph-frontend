@@ -42,6 +42,11 @@ test("the two derived earnings lines read their fixed labels, whatever the serve
   );
 });
 
+test("a kind the screen doesn't know yet reads the line's own name, never a blank", () => {
+  const line = { ...account({ account_id: null, account_code: null, account_name: "Revaluation" }), kind: "revaluation" };
+  assert.equal(balanceSheetLineLabel(line as unknown as BalanceSheetLine), "Revaluation");
+});
+
 test("balance sheet lines keep the server's amount and give derived lines a key and no code", () => {
   const lines = balanceSheetLines([
     account(),

@@ -19,7 +19,7 @@ import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TrialBalance } from "@/types";
-import { outOfBalanceMessage } from "../statements/_lib/trial-balance-side";
+import { outOfBalanceMessage } from "../_lib/trial-balance-side";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import {

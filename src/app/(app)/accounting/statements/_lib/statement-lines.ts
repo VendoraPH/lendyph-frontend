@@ -12,14 +12,17 @@ import type { ReportSectionLine } from "../../_components/report-section";
  * own. Named here rather than taken from `account_name` so they always read
  * the same on screen, and so the line nobody can post to never looks like one.
  */
-const DERIVED_LABELS: Record<Exclude<BalanceSheetLineKind, "account">, string> = {
+const DERIVED_LABELS: Partial<Record<BalanceSheetLineKind, string>> = {
   current_year_earnings: "Current Year Earnings",
   prior_period_earnings: "Prior Period Earnings (not yet closed)",
 };
 
-/** What a balance sheet line reads: its account's name, or the derived line's label. */
+/**
+ * What a balance sheet line reads: the derived line's label, or else the
+ * line's own name (an account line, or a kind this screen doesn't know yet).
+ */
 export function balanceSheetLineLabel(line: BalanceSheetLine): string {
-  return line.kind === "account" ? line.account_name : DERIVED_LABELS[line.kind];
+  return DERIVED_LABELS[line.kind] ?? line.account_name;
 }
 
 const accountKey = (id: number | null | undefined, kind: string) =>
