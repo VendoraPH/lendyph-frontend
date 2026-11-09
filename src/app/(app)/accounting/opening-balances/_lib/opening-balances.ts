@@ -31,6 +31,7 @@ export const CONFLICT_MESSAGE = "Someone else changed the opening balances";
 export const FINALISE_CONFIRM =
   "This posts the opening balances once. It can't be undone; correct it later with a journal entry.";
 export const SUGGESTION_LABEL = "Put the difference on 3050 Opening Balance Equity";
+export const SUGGESTION_REMOVE_LABEL = "Remove the 3050 Opening Balance Equity line";
 
 const DASH = "—";
 const SAVE_FALLBACK = "Could not save the opening balances.";
@@ -55,13 +56,13 @@ const toEditor = (line: { account_id: number; debit: number; credit: number }): 
   credit: line.credit > 0 ? centavosToInput(line.credit) : "",
 });
 
-/** The editor's rows: the server's lines, the 3050 line kept once, or two blank rows to start. */
+/**
+ * The editor's rows: the server's `lines[]` and nothing else, or two blank rows
+ * to start. A saved 3050 line is already in `lines[]` (`opening_equity_line`
+ * repeats it), and the suggested line is added only when the user asks.
+ */
 export function editorLinesFrom(opening: OpeningBalance): EditorLine[] {
   const rows = opening.lines.map(toEditor);
-  const equity = opening.opening_equity_line;
-  if (equity && !opening.lines.some((line) => line.account_id === equity.account_id)) {
-    rows.push(toEditor(equity));
-  }
   return rows.length > 0 ? rows : [blankLine(), blankLine()];
 }
 
@@ -159,11 +160,18 @@ export function buildDraft(asOf: string, lines: EditorLine[], editVersion: numbe
   return { ok: true, draft: { as_of: asOf, lines: sent, edit_version: editVersion }, rowOf };
 }
 
-/** The server's 3050 line in the rows: it replaces a 3050 row already there, or is added. */
+const isZero = (line: OpeningBalanceSuggestedLine) => line.debit === 0 && line.credit === 0;
+
+/**
+ * The server's 3050 line in the rows: it replaces a 3050 row already there, or
+ * is added. A ₱0.00 suggestion means the server says the 3050 line should go,
+ * so that row is taken out.
+ */
 export function withSuggestedLine(
   lines: EditorLine[],
   suggested: OpeningBalanceSuggestedLine,
 ): EditorLine[] {
+  if (isZero(suggested)) return lines.filter((line) => line.account_id !== suggested.account_id);
   const row = toEditor(suggested);
   const at = lines.findIndex((line) => line.account_id === suggested.account_id);
   if (at === -1) return [...lines, row];
@@ -181,6 +189,7 @@ export interface SuggestionOffer {
 export function suggestionOffer(opening: OpeningBalance, dirty: boolean): SuggestionOffer | null {
   const line = opening.suggested_opening_equity_line;
   if (!line || dirty) return null;
+  if (isZero(line)) return { line, label: SUGGESTION_REMOVE_LABEL, amount: formatCentavos(0) };
   const amount =
     line.debit > 0 ? `Debit ${formatCentavos(line.debit)}` : `Credit ${formatCentavos(line.credit)}`;
   return { line, label: SUGGESTION_LABEL, amount };
@@ -227,8 +236,9 @@ export interface FinaliseState {
   hint: string | null;
 }
 
+/** The server decides: any blocking reason disables Finalise, shown as the server sends it. */
 export function finaliseState(opening: OpeningBalance, dirty: boolean): FinaliseState {
-  if (!opening.can_finalise) {
+  if (!opening.can_finalise || opening.blocking_reasons.length > 0) {
     return { enabled: false, reasons: opening.blocking_reasons, hint: null };
   }
   if (dirty) {
@@ -238,19 +248,52 @@ export function finaliseState(opening: OpeningBalance, dirty: boolean): Finalise
 }
 
 export type RequestFailure =
-  | { kind: "conflict" }
+  /** Reload the entry from the server, and show its message. */
+  | { kind: "reload"; message: string }
   | { kind: "error"; message: string; rows: number[] };
 
-/** A refused save or finalise: 409 is a conflict to reload; otherwise the server's words. */
+interface RefusalBody {
+  message?: unknown;
+  errors?: Record<string, unknown>;
+}
+
+const firstString = (value: unknown): string | null =>
+  Array.isArray(value) && typeof value[0] === "string" && value[0] ? value[0] : null;
+
+/**
+ * A refused save or finalise, in the server's words.
+ *
+ * Reload on a 409 (someone else saved, or it was already posted, by this
+ * screen or the command line) and on a 422 on `edit_version` (the version
+ * read is no longer the draft's). `reloadOnInvalid` also reloads on any other
+ * 422, for finalise: the reloaded entry carries the server's blocking reasons,
+ * which then keep Finalise disabled. Other 422s stay on the form, with the
+ * rows named by `lines.N.*`.
+ */
 export function requestFailure(
   err: unknown,
   rowOf: number[],
   fallback: string = SAVE_FALLBACK,
+  options: { reloadOnInvalid?: boolean } = {},
 ): RequestFailure {
-  if (httpStatusOf(err) === 409) return { kind: "conflict" };
-  const errors =
-    (err as { response?: { data?: { errors?: Record<string, unknown> } } } | null)?.response?.data
-      ?.errors ?? {};
+  const status = httpStatusOf(err);
+  const body: RefusalBody =
+    (err as { response?: { data?: RefusalBody } } | null)?.response?.data ?? {};
+  const errors = body.errors ?? {};
+
+  if (status === 409) {
+    const sent = typeof body.message === "string" && body.message.trim() !== "";
+    return {
+      kind: "reload",
+      message: sent ? getErrorMessage(err, fallback) : `${CONFLICT_MESSAGE}; reload and try again.`,
+    };
+  }
+  const versionError = firstString(errors.edit_version);
+  if (status === 422 && versionError) return { kind: "reload", message: versionError };
+  if (status === 422 && options.reloadOnInvalid) {
+    return { kind: "reload", message: getErrorMessage(err, fallback) };
+  }
+
   const rows = Object.keys(errors).flatMap((key) => {
     const match = /^lines\.(\d+)\./.exec(key);
     const row = match ? rowOf[Number(match[1])] : undefined;
