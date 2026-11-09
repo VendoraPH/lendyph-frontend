@@ -4,7 +4,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ACCEPT_SUGGESTIONS_BODY, matchBody } from "../_lib/line-actions";
 import { reconciliationMatch, recordLine, type LineRecordRequest } from "../_lib/reconciliation-api";
-import { afterAction, requestFailure, type RequestFailure, type WorksheetState } from "../_lib/reconciliation-view";
+import {
+  afterAction,
+  matchFailure,
+  requestFailure,
+  type RequestFailure,
+  type WorksheetState,
+} from "../_lib/reconciliation-view";
 import type { MatchReconciliationBody, ReconciliationRow } from "../_lib/types";
 
 interface Worksheet {
@@ -14,15 +20,15 @@ interface Worksheet {
 
 /**
  * The worksheet's writes. Each success re-renders from the answer's `data`
- * (no second GET). A 409 shows the server's words and reads the worksheet
- * again; any other refusal goes back to the caller to show in place.
+ * (no second GET). A 409, or a 422 on a match, shows the server's words and
+ * reads the worksheet again; any other refusal goes back to the caller to show
+ * in place.
  */
 export function useWorksheetActions(id: number, worksheet: Worksheet, canViewAll: boolean) {
   const [busy, setBusy] = useState(false);
   const [resolving, setResolving] = useState<ReconciliationRow | null>(null);
 
-  const refused = (err: unknown): RequestFailure => {
-    const failure = requestFailure(err, { canViewAll });
+  const settleRefusal = (failure: RequestFailure): RequestFailure => {
     if (failure.reload) {
       setResolving(null);
       toast.error(failure.message);
@@ -31,11 +37,14 @@ export function useWorksheetActions(id: number, worksheet: Worksheet, canViewAll
     return failure;
   };
 
+  const refused = (err: unknown): RequestFailure => settleRefusal(requestFailure(err, { canViewAll }));
+  const matchRefused = (err: unknown): RequestFailure => settleRefusal(matchFailure(err, { canViewAll }));
+
   const match = (body: MatchReconciliationBody): Promise<RequestFailure | null> =>
     reconciliationMatch(id, body).then((reconciliation) => {
       worksheet.replace({ reconciliation, notice: null });
       return null;
-    }, refused);
+    }, matchRefused);
 
   /** From the table: confirm a suggestion, undo a match, or accept every suggestion. */
   const runMatch = (body: MatchReconciliationBody) => {

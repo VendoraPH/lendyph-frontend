@@ -98,12 +98,20 @@ export function matchBody(lineId: number, journalLineId: number | null): MatchRe
 
 export const ACCEPT_SUGGESTIONS_BODY: MatchReconciliationBody = { accept_suggestions: true };
 
-/** Ledger lines in the window that no statement line claims, in the server's order. */
 /** A books-only row, which always carries its ledger line. */
 export type LedgerCandidate = ReconciliationRow & { journal_line_id: number };
 
-export function matchCandidates(lines: ReconciliationRow[]): LedgerCandidate[] {
+/** Ledger lines no statement line claims, outstanding items included, in the server's order. */
+export function bookRows(lines: ReconciliationRow[]): LedgerCandidate[] {
   return lines.filter((r): r is LedgerCandidate => r.source === "ledger" && r.journal_line_id !== null);
+}
+
+/**
+ * The books-only rows a statement line can be matched to by hand: those the
+ * server marks `matchable`. An older API that sends no `matchable` offers them all.
+ */
+export function matchCandidates(lines: ReconciliationRow[]): LedgerCandidate[] {
+  return bookRows(lines).filter((r) => r.matchable ?? true);
 }
 
 function postable(account: Account): boolean {

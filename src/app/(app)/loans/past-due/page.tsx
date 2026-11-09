@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatDate as formatShortDate } from "@/lib/format";
 import Link from "next/link";
 import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
@@ -52,11 +53,7 @@ import {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatShortDate(dateStr);
 };
 
 type AgingBucket = "all" | "1-30" | "31-60" | "61-90" | "90+";

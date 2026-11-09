@@ -1,4 +1,5 @@
 import type { ApiScheduleRow } from "@/lib/amortization";
+import { calendarDate } from "@/lib/format";
 import type { LoanSchedule } from "@/types/loan";
 
 /**
@@ -173,7 +174,7 @@ export function toDisplaySchedule(
       period: 1,
       periodNumber: null,
       scheduleId: null,
-      dueDate: new Date(lastRow.due_date),
+      dueDate: calendarDate(lastRow.due_date),
       principal: totals.principal,
       interest: totals.interest,
       shareCapitalBuildUp: totals.shareCapitalBuildUp,
@@ -188,7 +189,7 @@ export function toDisplaySchedule(
     period: idx + 1,
     periodNumber: serverId(row.period_number),
     scheduleId: serverId(row.id),
-    dueDate: new Date(row.due_date),
+    dueDate: calendarDate(row.due_date),
     principal: parseFloat(String(row.principal)) || 0,
     interest: parseFloat(String(row.interest)) || 0,
     shareCapitalBuildUp: serverFigure(row.share_capital_build_up),

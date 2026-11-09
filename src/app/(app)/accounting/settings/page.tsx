@@ -12,7 +12,7 @@ import type { AccountMapping } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
-import { GROUPS, type MappingField } from "./_lib/mapping-fields";
+import { GROUPS, accountsForField, saveFailureMessage } from "./_lib/mapping-fields";
 
 function AccountingSettingsContent() {
   const { postable, isTemplate } = useChartOfAccounts();
@@ -36,19 +36,12 @@ function AccountingSettingsContent() {
       await accountingService.updateAccountMapping(draft);
       toast.success("Default accounts saved.");
       resource.refetch();
-    } catch {
-      toast.error("Could not save these settings.");
+    } catch (err) {
+      toast.error(saveFailureMessage(err));
     } finally {
       setSaving(false);
     }
   };
-
-  const accountsFor = (field: MappingField) =>
-    postable.filter(
-      (account) =>
-        field.types.includes(account.type) &&
-        (!field.moneyOnly || Boolean(account.cash_kind)),
-    );
 
   return (
     <div className="space-y-6">
@@ -96,7 +89,7 @@ function AccountingSettingsContent() {
                       <div key={field.key} className="space-y-1">
                         <AccountSelect
                           label={field.label}
-                          accounts={accountsFor(field)}
+                          accounts={accountsForField(field, postable)}
                           value={draft[field.key] ?? null}
                           onChange={(id) =>
                             setDraft((current) => ({

@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatDateLong } from "@/lib/format";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -284,7 +285,7 @@ function RegistrationReviewContent() {
               {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Submitted {submittedAt ? new Date(submittedAt).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
+              Submitted {submittedAt ? formatDateLong(submittedAt) : "—"} ·{" "}
               {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
             </p>
           </div>

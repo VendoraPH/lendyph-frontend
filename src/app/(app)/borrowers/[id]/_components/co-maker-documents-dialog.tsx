@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatDate } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
@@ -36,14 +37,6 @@ interface CoMakerDocumentsDialogProps {
   coMakerName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function humanizeType(type: string): string {

@@ -88,9 +88,8 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatDateObj, formatDateISO } from "@/lib/format";
+import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
-import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
@@ -232,7 +231,7 @@ function RestructureLoanInner() {
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [scbAmount, setScbAmount] = useState<string>("");
-  const [restructureDate, setRestructureDate] = useState<Date | undefined>(new Date());
+  const [restructureDate, setRestructureDate] = useState<Date | undefined>(todayDate);
   const [restructureDateOpen, setRestructureDateOpen] = useState(false);
   const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
@@ -370,7 +369,7 @@ function RestructureLoanInner() {
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
 
       // Restructure date defaults to today
-      setRestructureDate(new Date());
+      setRestructureDate(todayDate());
 
       // Recalculate deductions from the selected product
       const prod = products.find((p) => p.id === Number(pid));
@@ -1350,7 +1349,7 @@ function RestructureLoanInner() {
                     <Label>Projected Maturity Date</Label>
                     <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
                       {previewMaturity
-                        ? formatDateObj(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                        ? formatDateObj(calendarDate(previewMaturity))
                         : "—"}
                     </div>
                   </div>
@@ -1633,7 +1632,7 @@ function RestructureLoanInner() {
                         {amortization.rows.map((row) => (
                           <TableRow key={row.period_number}>
                             <TableCell className="text-muted-foreground">{row.period_number}</TableCell>
-                            <TableCell>{formatDateObj(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                            <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
                             <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
                             {scb > 0 && <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>}

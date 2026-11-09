@@ -10,13 +10,9 @@ import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
 import { usePermission } from "@/hooks";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
 import { shareCapitalTabView } from "../_lib/share-capital-tab-view";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 /** "—" when the server sent no figure, never a browser stand-in. */
 function money(amount: number | null): string {

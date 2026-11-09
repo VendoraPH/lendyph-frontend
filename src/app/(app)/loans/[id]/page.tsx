@@ -238,6 +238,7 @@ import {
   formatDateObj,
   formatDateTime,
   formatRate,
+  todayDate,
   todayISO,
 } from "@/lib/format";
 import {
@@ -731,7 +732,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // re-reads its balance. No other action writes to that ledger.
   const [shareCapitalVersion, setShareCapitalVersion] = useState(0);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
-  const [paymentDate, setPaymentDate] = useState<Date>(new Date());
+  const [paymentDate, setPaymentDate] = useState<Date>(todayDate);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
@@ -1809,7 +1810,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       setPaymentRemarks("");
       setPaymentMethod(DEFAULT_PAYMENT_METHOD);
       setPaymentReference("");
-      setPaymentDate(new Date());
+      setPaymentDate(todayDate());
       setPaymentPreview(null);
       setPaymentMode("regular");
       setAdvancePeriods(1);
@@ -2003,7 +2004,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
     setAutoPayProcessing(true);
     try {
       const repayment = await repaymentService.create(loan.id, {
-        payment_date: formatDateISO(new Date()),
+        payment_date: todayISO(),
         amount_paid: amount,
         remarks: "[AUTO PAY]",
       });

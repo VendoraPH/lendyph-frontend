@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { formatDate } from "@/lib/format";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,10 +17,6 @@ import {
   readMemberLedger,
   type MemberLedgerView,
 } from "../_lib/ledger-rows";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 interface LedgerTabProps {
   borrowerId: number;
