@@ -33,6 +33,7 @@ import { DataState } from "../_components/data-state";
 import { periodStatusLabel } from "../_lib/display-labels";
 import { YearCloseHistory } from "./_components/year-close-history";
 import { YearEndCloseSection } from "./_components/year-end-close-section";
+import { REOPEN_THE_YEAR, monthAction, periodReopenFailure } from "./_lib/month-actions";
 import { periodYearEndLabels } from "./_lib/year-close";
 
 const NO_CLOSES: YearClose[] = [];
@@ -85,8 +86,8 @@ function PeriodClosingContent() {
       await accountingService.reopenPeriod(period.id);
       toast.success(`${period.name} reopened.`);
       resource.refetch();
-    } catch {
-      toast.error("Could not reopen this period.");
+    } catch (err) {
+      toast.error(periodReopenFailure(err));
     }
   };
 
@@ -139,7 +140,7 @@ function PeriodClosingContent() {
                     <TableHead className="w-56">Dates</TableHead>
                     <TableHead className="w-28">Status</TableHead>
                     <TableHead className="w-56">Closed</TableHead>
-                    <TableHead className="w-28" />
+                    <TableHead className="w-44" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -184,7 +185,7 @@ function PeriodClosingContent() {
                       </TableCell>
                       <TableCell className="text-right">
                         <PermissionGate permission="accounting:close">
-                          {period.status === "open" ? (
+                          {monthAction(period, yearEndLabels) === "close" && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -192,7 +193,8 @@ function PeriodClosingContent() {
                             >
                               Close
                             </Button>
-                          ) : (
+                          )}
+                          {monthAction(period, yearEndLabels) === "reopen" && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -200,6 +202,11 @@ function PeriodClosingContent() {
                             >
                               Reopen
                             </Button>
+                          )}
+                          {monthAction(period, yearEndLabels) === "year" && (
+                            <span className="text-xs text-muted-foreground">
+                              {REOPEN_THE_YEAR}
+                            </span>
                           )}
                         </PermissionGate>
                       </TableCell>
