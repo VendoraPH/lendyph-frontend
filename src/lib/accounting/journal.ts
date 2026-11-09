@@ -1,25 +1,26 @@
 /**
- * Journal entry rules: totalling a draft, validating it, and reversing a
- * posted one.
+ * Journal entry rules: the lines a draft sends to the server's preview,
+ * validating a draft, and converting it for the wire.
  *
  * The single rule everything here protects is that total debits must equal
- * total credits. A journal that fails it cannot be posted, because an
- * unbalanced entry propagates into the trial balance and every statement built
- * on top of it, and there is no way to find it afterwards except by hand.
+ * total credits. The totals are the server's (`POST /accounting/journals/preview`,
+ * summed exactly as posting sums them): this module parses what was typed and
+ * never adds it up.
  *
- * Correcting a posted entry is done by REVERSING it, never by editing or
- * deleting it. Both halves stay visible, which is what makes the books
- * auditable.
+ * Correcting a posted entry is done by REVERSING it on the server, never by
+ * editing or deleting it. Both halves stay visible, which is what makes the
+ * books auditable.
  */
 
-import { toCentavos, sumCentavos, formatCentavos } from "./money";
+import { toCentavos, formatCentavos } from "./money";
 import { isPostable } from "./account";
 import type {
   Account,
-  JournalEntry,
   JournalEntryDraft,
   JournalLine,
   JournalLineDraft,
+  JournalPreview,
+  JournalPreviewLine,
   JournalSource,
 } from "@/types/accounting";
 
@@ -36,14 +37,6 @@ export interface JournalError {
   index: number | null;
   field: JournalErrorField;
   message: string;
-}
-
-export interface JournalSummary {
-  total_debit: number;
-  total_credit: number;
-  /** `total_debit - total_credit`, in centavos. Zero when balanced. */
-  difference: number;
-  is_balanced: boolean;
 }
 
 export interface JournalValidation {
@@ -72,21 +65,36 @@ export function isBlankLine(line: JournalLineDraft): boolean {
 }
 
 /**
- * Running totals for the draft, for the live "Total Debit / Total Credit /
- * Difference" footer. Amounts that do not parse count as nothing, so the
- * footer keeps updating while someone is mid-keystroke instead of blanking.
+ * The lines to send to the server's preview: blank rows skipped, amounts
+ * parsed by `toCentavos`, exactly as `buildJournalPayload` parses them.
+ *
+ * An amount that doesn't parse (mid-keystroke text, a negative) is sent as 0,
+ * so the totals keep answering while someone types; validation names the line
+ * on save. Both sides are sent as typed: the one-side rule is validation's.
  */
-export function summariseDraft(draft: JournalEntryDraft): JournalSummary {
-  const rows = draft.lines.filter((line) => !isBlankLine(line));
-  const total_debit = sumCentavos(rows.map((line) => toCentavos(line.debit)));
-  const total_credit = sumCentavos(rows.map((line) => toCentavos(line.credit)));
-  const difference = total_debit - total_credit;
-  return {
-    total_debit,
-    total_credit,
-    difference,
-    is_balanced: difference === 0,
-  };
+export function previewLines(draft: JournalEntryDraft): JournalPreviewLine[] {
+  return draft.lines
+    .filter((line) => !isBlankLine(line))
+    .map((line) => ({
+      account_id: line.account_id,
+      debit: toCentavos(line.debit) ?? 0,
+      credit: toCentavos(line.credit) ?? 0,
+    }));
+}
+
+/**
+ * Whether the server's preview describes a balanced entry: at least two lines,
+ * a debit total above zero, and `is_balanced`. All three are server fields.
+ * `is_balanced` alone is true for an empty or all-zero body (0 = 0), which
+ * isn't an entry yet.
+ */
+export function previewIsBalanced(preview: JournalPreview | null): boolean {
+  return (
+    preview !== null &&
+    preview.line_count >= 2 &&
+    preview.total_debit > 0 &&
+    preview.is_balanced
+  );
 }
 
 /**
@@ -95,10 +103,15 @@ export function summariseDraft(draft: JournalEntryDraft): JournalSummary {
  * Returns every problem at once rather than the first, so the form can mark
  * each offending row in one pass instead of making someone fix errors one
  * submit at a time.
+ *
+ * The balance rule reads `preview`, the server's totals for these lines
+ * (`previewLines(draft)`). `null` means the answer for the current lines
+ * hasn't arrived, so the balance isn't known yet and the draft can't be saved.
  */
 export function validateJournalDraft(
   draft: JournalEntryDraft,
-  chart: Account[]
+  chart: Account[],
+  preview: JournalPreview | null
 ): JournalValidation {
   const errors: JournalError[] = [];
   const byId = new Map(chart.map((a) => [a.id, a]));
@@ -186,20 +199,31 @@ export function validateJournalDraft(
 
   // The central rule, checked last so a real imbalance is not reported on top
   // of rows that are simply still being filled in.
-  const summary = summariseDraft(draft);
   if (!errors.some((e) => e.field === "amount" || e.field === "lines")) {
-    if (summary.total_debit === 0 && summary.total_credit === 0) {
+    if (preview === null) {
+      errors.push({
+        index: null,
+        field: "balance",
+        message: "The totals are still being checked. Try again in a moment.",
+      });
+    } else if (preview.total_debit === 0 && preview.total_credit === 0) {
       errors.push({
         index: null,
         field: "balance",
         message: "This entry records nothing — enter the amounts before posting.",
       });
-    } else if (!summary.is_balanced) {
+    } else if (preview.line_count < 2) {
+      errors.push({
+        index: null,
+        field: "balance",
+        message: "A journal entry needs at least two lines — one debit and one credit.",
+      });
+    } else if (!previewIsBalanced(preview)) {
       errors.push({
         index: null,
         field: "balance",
         message: `Debits and credits differ by ${formatCentavos(
-          Math.abs(summary.difference)
+          preview.out_by
         )}. An entry must balance before it can be posted.`,
       });
     }
@@ -209,12 +233,9 @@ export function validateJournalDraft(
 }
 
 /**
- * The shape handed to the API to create a manual entry.
- *
- * Deliberately the same shape as `ReversalDraft` below: integer centavos, no
- * blank rows, and the totals alongside the lines. Both are "a journal, ready
- * for the wire", and the API should not be able to tell which code path built
- * one.
+ * The shape handed to the API to create or update a manual entry: integer
+ * centavos and no blank rows. No totals: the server works them out from the
+ * lines (and ignored the ones this used to send).
  */
 export interface JournalEntryPayload {
   date: string;
@@ -223,9 +244,6 @@ export interface JournalEntryPayload {
   branch_id: number | null;
   description: string;
   lines: Pick<JournalLine, "account_id" | "description" | "debit" | "credit">[];
-  /** Centavos. Equal by construction — `buildJournalPayload` refuses otherwise. */
-  total_debit: number;
-  total_credit: number;
 }
 
 /**
@@ -240,22 +258,22 @@ export interface JournalEntryPayload {
  * The balance panel was right the whole time; it was reading `toCentavos` while
  * the request was not.
  *
- * Three things happen here, and all three have to happen on the way OUT rather
- * than in the component, because the component is not the only possible caller
- * and the ledger is downstream of all of them:
+ * Two things happen here, and both have to happen on the way OUT rather than
+ * in the component, because the component is not the only possible caller and
+ * the ledger is downstream of all of them:
  *
  *  1. Blank rows are dropped. The entry form always keeps a spare row on screen,
  *     and it was being shipped as `{ account_id: null, debit: "", credit: "" }`.
  *  2. Every amount goes through `toCentavos`, so grouping, a peso sign and
  *     stray whitespace are resolved here instead of by PHP's cast.
- *  3. The totals are computed and compared. Debits must equal credits.
  *
- * Throws rather than returning errors, for the reason `buildReversal` does:
- * `validateJournalDraft` has already told the user about every one of these in
- * the form, so reaching this in a bad state is a call the UI should never have
- * made. If the API ever accepts an unbalanced DRAFT, this check and the
- * `balance` rule in `validateJournalDraft` are the two places that change —
- * they encode the same rule and must not drift apart.
+ * The balance is not checked here: that needs a total, and totals are the
+ * server's. The form refuses an unbalanced draft from the server's preview
+ * (`validateJournalDraft`), and posting refuses it again on the server.
+ *
+ * Throws rather than returning errors: `validateJournalDraft` has already told
+ * the user about every one of these in the form, so reaching this in a bad
+ * state is a call the UI should never have made.
  */
 export function buildJournalPayload(
   draft: JournalEntryDraft
@@ -304,16 +322,6 @@ export function buildJournalPayload(
     };
   });
 
-  const total_debit = sumCentavos(lines.map((l) => l.debit));
-  const total_credit = sumCentavos(lines.map((l) => l.credit));
-  if (total_debit !== total_credit) {
-    throw new Error(
-      `Debits and credits differ by ${formatCentavos(
-        Math.abs(total_debit - total_credit)
-      )}. An entry must balance.`
-    );
-  }
-
   return {
     date: draft.date,
     source: "manual",
@@ -322,66 +330,5 @@ export function buildJournalPayload(
     branch_id: draft.branch_id,
     description: draft.description.trim(),
     lines,
-    total_debit,
-    total_credit,
-  };
-}
-
-/** The shape handed to the API to create a reversing entry. */
-export interface ReversalDraft {
-  date: string;
-  source: JournalSource;
-  reference: string | null;
-  description: string;
-  branch_id: number | null;
-  reverses_journal_id: number;
-  lines: Pick<JournalLine, "account_id" | "debit" | "credit">[];
-  total_debit: number;
-  total_credit: number;
-}
-
-/**
- * The mirror image of a posted entry.
- *
- * Every debit becomes a credit and vice versa, against the same accounts, so
- * the pair nets to zero while both remain on the record. The original is never
- * modified — `status` moves to `reversed` and `reversed_by_journal_id` is set
- * by the server when the reversal posts.
- *
- * Throws rather than returning an error object: reversing a draft or a
- * already-reversed entry is not user input to be validated, it is a call the
- * UI should never have made, and failing loudly surfaces that in development.
- */
-export function buildReversal(
-  entry: JournalEntry,
-  date: string
-): ReversalDraft {
-  if (entry.status === "reversed" || entry.reversed_by_journal_id) {
-    throw new Error(
-      `Journal ${entry.journal_no} has already been reversed.`
-    );
-  }
-  if (entry.status !== "posted") {
-    throw new Error(
-      `Only a posted journal can be reversed; ${entry.journal_no || "this entry"} is a draft.`
-    );
-  }
-
-  const lines = entry.lines.map((line) => ({
-    account_id: line.account_id,
-    debit: line.credit,
-    credit: line.debit,
-  }));
-
-  return {
-    date,
-    source: "reversal",
-    reference: entry.reference ?? null,
-    description: `Reversal of ${entry.journal_no} — ${entry.description}`,
-    branch_id: entry.branch_id,
-    reverses_journal_id: entry.id,
-    lines,
-    total_debit: sumCentavos(lines.map((l) => l.debit)),
-    total_credit: sumCentavos(lines.map((l) => l.credit)),
   };
 }
