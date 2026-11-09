@@ -79,10 +79,12 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
 /**
  * Actions offered with their own checkbox only. The module's "toggle all"
  * neither grants nor revokes them: writing off a restructure's shortfall
- * destroys debt, so it's never swept in with the rest of Loans.
+ * destroys debt, and posting the allowance moves every branch's books, so
+ * neither is swept in with the rest of its module.
  */
 const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
   loans: ["write_off"],
+  accounting: ["allowance"],
 };
 
 /** The actions a module's "toggle all" checkbox covers. */

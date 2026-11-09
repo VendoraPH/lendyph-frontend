@@ -108,7 +108,8 @@ export const ROLES: Record<Role, RoleConfig> = {
   // Mirrors `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS` exactly (round C).
   // Every accounting permission and every branch, but only read access to the
   // lending side, and no `borrowers:view` (round fz personal-data rule), users
-  // or settings.
+  // or settings. No `audit_logs:view` either: audit rows carry members'
+  // personal data (backend #249 review).
   accountant: {
     label: "Accountant",
     description:
@@ -143,7 +144,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "share_capital:view",
       "gcash:view",
       "fees:view",
-      "audit_logs:view",
     ],
   },
   loan_officer: {

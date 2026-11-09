@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MODULE_ACTIONS } from "./permission-matrix";
+import { MODULE_ACTIONS, moduleToggleActions } from "./permission-matrix";
 
 const offered = Object.entries(MODULE_ACTIONS).flatMap(([mod, actions]) =>
   actions.map((action) => `${mod}:${action}`)
@@ -67,4 +67,12 @@ test("the matrix offers accounting:allowance beside the other accounting verbs",
 test("the roles screen labels the allowance permission in words", () => {
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
   assert.match(page, /allowance: \{ label: "Post the allowance"/);
+});
+
+// Posting the allowance moves the books for every branch, so ticking
+// "toggle all" on Accounting never grants it, as with `loans:write_off`.
+test("the Accounting toggle-all leaves out the allowance, which has its own checkbox", () => {
+  assert.deepEqual(moduleToggleActions("accounting"), ["view", "reconcile", "close", "settings"]);
+  assert.ok(MODULE_ACTIONS.accounting.includes("allowance"));
+  assert.deepEqual(moduleToggleActions("loans").includes("write_off"), false);
 });

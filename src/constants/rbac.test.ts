@@ -25,7 +25,8 @@ test("no role but admin holds a reminders permission", () => {
 });
 
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
-// (round C, slice C1). The roles screen seeds the Accountant's grid from
+// (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
+// whose rows carry members' personal data). The roles screen seeds the Accountant's grid from
 // `ROLES.accountant`, so it must match the server's list exactly.
 const ACCOUNTANT_PERMISSIONS = [
   "accounting:view",
@@ -57,7 +58,6 @@ const ACCOUNTANT_PERMISSIONS = [
   "share_capital:view",
   "gcash:view",
   "fees:view",
-  "audit_logs:view",
 ];
 
 test("the Accountant role is labelled in words and holds exactly the server's list", () => {
@@ -74,6 +74,8 @@ test("the Accountant role is labelled in words and holds exactly the server's li
 test("the Accountant holds no member permission and no lending write", () => {
   const held = ROLES.accountant.permissions;
   assert.equal(held.some((p) => p.startsWith("borrowers:")), false);
+  // Audit rows carry members' personal data (backend #249 review).
+  assert.equal(held.some((p) => p.startsWith("audit_logs:")), false);
   assert.equal(held.some((p) => p.startsWith("users:") || p.startsWith("settings:")), false);
   for (const p of held.filter((p) => /^(loans|payments|share_capital|gcash|fees):/.test(p))) {
     assert.match(p, /:view$/, p);
