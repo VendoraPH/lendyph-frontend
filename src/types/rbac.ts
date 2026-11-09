@@ -108,14 +108,14 @@ export type Module =
   // ── Automated due-date reminders ──
   //
   // `view` covers the dashboard, queue, message history and a loan's reminder
-  // timeline; `send` is a manual reminder to one borrower; `pause` stops
-  // reminders globally, per borrower or per loan; `settings` covers rules,
-  // templates and the SMS/email provider config (admin only — it holds
-  // provider credentials).
+  // timeline; `send` is a manual reminder to one member; `pause` stops
+  // reminders globally, per member or per loan; `settings` covers rules,
+  // templates and the SMS/email provider config (it holds provider
+  // credentials).
   //
-  // Same rule as `credit_scoring`: none of these are granted by the backend,
-  // and none should be until the reminder routes exist. The server withholding
-  // them is what keeps Loans → Reminders out of production.
+  // Phase 2: the backend seeds all four for admin and super_admin only, and
+  // the roles screen offers them. Nothing is sent to members: the engine runs
+  // on log-only drivers, and the screens show test mode.
   | "reminders";
 
 export type Action =
@@ -156,12 +156,15 @@ export type Action =
   // score, writing to an immutable audit trail. Distinct from `update`
   // because nothing about the score itself changes.
   | "override"
-  // Reminders: `send` contacts a borrower on demand, which is a different
+  // Reminders: `send` contacts a member on demand, which is a different
   // risk from creating anything; `pause` silences the automated ones.
   | "send"
   | "pause"
   // Loan products: one verb for create, edit and delete, as the API seeds it.
   | "manage"
+  // Expenses: settle a payable (`expenses:pay`, seeded by the server). Not
+  // offered in the role editor's matrix.
+  | "pay"
   // Branch access: see every branch, not only the ones a user is assigned to.
   | "view_all";
 

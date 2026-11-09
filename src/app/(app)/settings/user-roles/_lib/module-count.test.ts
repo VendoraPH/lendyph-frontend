@@ -44,17 +44,20 @@ test("admin's module count never exceeds the modules offered", () => {
 });
 
 // Admin is also granted `branches:view_all` (backend migration
-// 2026_11_02_210000), the one permission of the Branch Access module.
-test("admin holding loan_products:manage and branches:view_all is in every offered module", () => {
+// 2026_11_02_210000), the one permission of the Branch Access module, and the
+// four reminders permissions (Phase 2).
+const REMINDERS = ["reminders:view", "reminders:send", "reminders:pause", "reminders:settings"];
+
+test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {
   assert.equal(
-    roleModuleCount([...ADMIN_PERMISSIONS, "loan_products:manage", "branches:view_all"]),
+    roleModuleCount([...ADMIN_PERMISSIONS, ...REMINDERS, "loan_products:manage", "branches:view_all"]),
     OFFERED_MODULE_TOTAL,
   );
 });
 
 test("admin without branches:view_all is one module short", () => {
   assert.equal(
-    roleModuleCount([...ADMIN_PERMISSIONS, "loan_products:manage"]),
+    roleModuleCount([...ADMIN_PERMISSIONS, ...REMINDERS, "loan_products:manage"]),
     OFFERED_MODULE_TOTAL - 1,
   );
 });
@@ -72,9 +75,14 @@ test("a role holding every offered permission is in every offered module", () =>
 
 test("modules the matrix does not offer are not counted", () => {
   assert.equal(
-    roleModuleCount(["loan_adjustments:view", "auto_credit:process", "collections:view", "reminders:view"]),
+    roleModuleCount(["loan_adjustments:view", "auto_credit:process", "collections:view"]),
     0,
   );
+});
+
+test("reminders has checkboxes and counts as one module", () => {
+  assert.equal(roleModuleCount(["reminders:view"]), 1);
+  assert.equal(roleModuleCount(["reminders:view", "reminders:send", "reminders:pause", "reminders:settings"]), 1);
 });
 
 // The edit dialog shows such a module as 0 of its actions granted, so the

@@ -21,10 +21,11 @@ import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import {
   CHANNEL_LABELS,
   MAX_RULE_DAYS,
-  TEMPLATE_TYPES,
+  RULE_TEMPLATES_FOR_TRIGGER,
   TEMPLATE_TYPE_LABELS,
   TRIGGER_LABELS,
   describeRule,
+  fitRuleTemplate,
   formatSendTime,
   validateRule,
   type ContactWindow,
@@ -106,8 +107,20 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
   const set = <K extends keyof ReminderRuleInput>(key: K, value: ReminderRuleInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  // Only the templates that fit the trigger. A stored rule from before this
+  // rule keeps its own listed, so the select shows what it holds, and saving
+  // asks for a fitting one (validateRule; the API answers 422 too).
+  const fits = RULE_TEMPLATES_FOR_TRIGGER[form.trigger];
+  const templateOptions = fits.includes(form.template_type) ? fits : [form.template_type, ...fits];
+
+  // A trigger change resets a template that no longer fits it (FOR_TRIGGER).
   const setTrigger = (trigger: ReminderTrigger) =>
-    setForm((f) => ({ ...f, trigger, days: trigger === "on_due" ? 0 : f.days || 1 }));
+    setForm((f) => ({
+      ...f,
+      trigger,
+      days: trigger === "on_due" ? 0 : f.days || 1,
+      template_type: fitRuleTemplate(trigger, f.template_type),
+    }));
 
   const toggleChannel = (channel: ReminderChannel, on: boolean) =>
     setForm((f) => ({
@@ -122,7 +135,7 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
     form.loan_product_id !== null && !products.some((p) => p.id === form.loan_product_id);
 
   const save = () => {
-    const problems = validateRule(form, contactHours);
+    const problems = validateRule(form, contactHours, { allBranches: viewAll });
     if (problems.length) {
       notifyValidation(problems);
       return;
@@ -194,7 +207,8 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               onChange={(e) => set("send_time", e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Must fall within contact hours ({formatSendTime(contactHours.start)}–{formatSendTime(contactHours.end)}).
+              Must fall within contact hours: from {formatSendTime(contactHours.start)}, and before{" "}
+              {formatSendTime(contactHours.end)}.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -205,7 +219,7 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               value={form.template_type}
               onChange={(e) => set("template_type", e.target.value as ReminderTemplateType)}
             >
-              {TEMPLATE_TYPES.map((t) => (
+              {templateOptions.map((t) => (
                 <NativeSelectOption key={t} value={t}>
                   {TEMPLATE_TYPE_LABELS[t]}
                 </NativeSelectOption>
@@ -233,7 +247,15 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               value={form.branch_id ?? ""}
               onChange={(e) => set("branch_id", e.target.value ? Number(e.target.value) : null)}
             >
-              <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+              {/* An every-branch rule needs `branches:view_all`; a branch user
+                  picks one of their branches (the API answers 403 otherwise). */}
+              {viewAll ? (
+                <NativeSelectOption value="">{picker.allLabel}</NativeSelectOption>
+              ) : (
+                <NativeSelectOption value="" disabled>
+                  Choose a branch
+                </NativeSelectOption>
+              )}
               {picker.branches.map((b) => (
                 <NativeSelectOption key={b.id} value={b.id}>
                   {b.name}
