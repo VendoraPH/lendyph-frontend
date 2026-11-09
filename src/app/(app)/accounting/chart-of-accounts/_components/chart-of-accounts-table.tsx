@@ -16,7 +16,7 @@ import {
 import { sortAccounts } from "@/lib/accounting/account";
 import { cn } from "@/lib/utils";
 import type { Account, AccountType } from "@/types";
-import { accountTypeLabel, cashKindLabel } from "../../_lib/display-labels";
+import { accountTypeLabel, cashKindLabel, normalBalanceLabel } from "../../_lib/display-labels";
 import { accountBalanceText, accountStatusLabel } from "../_lib/account-form";
 
 const TYPE_STYLES: Record<AccountType, string> = {
@@ -157,9 +157,9 @@ export function ChartOfAccountsTable({ accounts, onEdit, onToggleActive }: Chart
                     {accountTypeLabel(account.type)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-sm capitalize text-muted-foreground">
+                <TableCell className="text-sm text-muted-foreground">
                   {/* Group headings never carry a balance of their own. */}
-                  {account.is_group ? "—" : account.normal_balance}
+                  {account.is_group ? "—" : normalBalanceLabel(account.normal_balance)}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {accountBalanceText(account)}

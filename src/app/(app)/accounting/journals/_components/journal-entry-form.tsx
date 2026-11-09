@@ -2,22 +2,32 @@
 
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
-import { useChartOfAccounts } from "@/hooks";
+import { useBranches, useChartOfAccounts } from "@/hooks";
 import {
   emptyLine,
   previewLineNumbers,
   previewLines,
   validateJournalDraft,
 } from "@/lib/accounting/journal";
+import { useAuthStore } from "@/store";
 import type { JournalEntryDraft, JournalLineDraft } from "@/types";
 import { JournalLineRows } from "../../_components/journal-line-rows";
+import { saveDraftState } from "../_lib/journal-actions";
+import { journalBranchField, journalBranchId } from "../_lib/journal-branch";
+import { JournalActionButton } from "./journal-action-button";
 import { JournalBalancePanel } from "./journal-balance-panel";
 import { useJournalPreview } from "./use-journal-preview";
 
@@ -32,13 +42,18 @@ interface JournalEntryFormProps {
 
 /**
  * The manual entry editor, shared by New Entry and editing a draft: the date,
- * reference and description, the lines, and the server's totals for them.
+ * reference, branch and description, the lines, and the server's totals for
+ * them. Save stays disabled, with the first thing left to fix as its reason,
+ * until the entry could be saved.
  */
 export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: JournalEntryFormProps) {
   const { postable, isTemplate, truncated, total } = useChartOfAccounts();
   const [draft, setDraft] = useState<JournalEntryDraft>(initial);
   const [saving, setSaving] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const { branches, loading: branchesLoading } = useBranches();
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const branchField = journalBranchField(branches, caller, viewAll, draft.branch_id);
 
   const lines = useMemo(() => previewLines(draft), [draft]);
   const rowNumbers = useMemo(() => previewLineNumbers(draft), [draft]);
@@ -48,12 +63,8 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
     [draft, postable, preview, failed],
   );
 
-  /**
-   * Errors stay hidden until the first save attempt. Every draft is invalid
-   * the moment it is opened, and colouring a blank form red tells the user
-   * nothing; the totals below are live from the start.
-   */
-  const showErrors = submitted;
+  const saveState = saveDraftState(validation, { isTemplate });
+  // Only lines with something typed are checked, so a blank form shows no red.
   const errorRows = useMemo(
     () =>
       new Set(
@@ -61,8 +72,6 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
       ),
     [validation],
   );
-  const entryErrors = validation.errors.filter((e) => e.index === null);
-  const lineErrors = validation.errors.filter((e) => e.index !== null);
 
   const patch = (changes: Partial<JournalEntryDraft>) => setDraft((d) => ({ ...d, ...changes }));
 
@@ -78,11 +87,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
     setDraft((d) => ({ ...d, lines: d.lines.filter((_, i) => i !== index) }));
 
   const save = async () => {
-    setSubmitted(true);
-    if (!validation.ok) {
-      toast.error("This entry is not ready to save.");
-      return;
-    }
+    if (saving || saveState.disabledReason !== null) return;
     setSaving(true);
     // `.finally` rather than try/finally, which the React Compiler skips.
     await onSave(draft).finally(() => setSaving(false));
@@ -134,6 +139,27 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
               placeholder="JV-2026-0001"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="journal-branch">Branch</Label>
+            {/* This Select hands back `string | null`; there is no null option here. */}
+            <Select
+              value={branchField.value}
+              onValueChange={(v) => v !== null && patch({ branch_id: journalBranchId(v) })}
+              items={branchField.items}
+              disabled={branchesLoading || branchField.items.length === 0}
+            >
+              <SelectTrigger id="journal-branch" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {branchField.items.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5 sm:col-span-3">
             <Label htmlFor="journal-description">Description</Label>
             <Textarea
@@ -152,7 +178,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
           <JournalLineRows
             lines={draft.lines}
             accounts={postable}
-            errorRows={showErrors ? errorRows : new Set()}
+            errorRows={errorRows}
             onChange={patchLine}
             onRemove={removeLine}
           />
@@ -164,26 +190,15 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
 
           <JournalBalancePanel preview={preview} failed={failed} onRetry={retry} />
 
-          {showErrors && validation.errors.length > 0 && (
-            <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-              {entryErrors.map((error, i) => (
-                <li key={i} className="text-sm text-destructive">
-                  {error.message}
-                </li>
-              ))}
-              {lineErrors.map((error, i) => (
-                <li key={`line-${i}`} className="text-sm text-destructive">
-                  Line {(error.index as number) + 1}: {error.message}
-                </li>
-              ))}
-            </ul>
-          )}
-
           <div className="flex justify-end gap-2">
             {cancel}
-            <Button onClick={save} disabled={saving || isTemplate}>
-              {saving ? "Saving…" : saveLabel}
-            </Button>
+            {saving ? (
+              <Button disabled>Saving…</Button>
+            ) : (
+              <JournalActionButton state={saveState} onClick={save}>
+                {saveLabel}
+              </JournalActionButton>
+            )}
           </div>
         </CardContent>
       </Card>

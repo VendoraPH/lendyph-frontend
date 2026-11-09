@@ -170,6 +170,7 @@ test("a parent is a heading of the same type, never the account itself", () => {
 test("the Balance column shows the server's balance; a heading or a missing one shows a dash", () => {
   assert.equal(accountBalanceText(BANK), "₱12,500.00");
   assert.equal(accountBalanceText({ ...BANK, balance: 0 }), "₱0.00");
+  assert.equal(accountBalanceText({ ...BANK, balance: -40_000 }), "(₱400.00)");
   assert.equal(accountBalanceText({ ...BANK, balance: undefined }), "—");
   assert.equal(accountBalanceText({ ...HEADING, balance: 99 }), "—");
 });

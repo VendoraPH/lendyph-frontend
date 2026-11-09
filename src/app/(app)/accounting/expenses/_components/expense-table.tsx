@@ -35,12 +35,11 @@ interface ExpenseTableProps {
 
 /** One server page of expenses. Balance is the server's `amount_due`. */
 export function ExpenseTable({ rows, onPay, onEdit, onAttachments }: ExpenseTableProps) {
-  const { can, permissions } = usePermission();
-  // Pay picks its money account from the cash accounts list, so it needs
-  // `cash_accounts:view` as well. `expenses:pay` is checked as a string until
-  // `pay` reaches the `Action` union.
-  const canPay =
-    new Set<string>(permissions).has("expenses:pay") && can("cash_accounts:view");
+  const { can } = usePermission();
+  // Pay needs `expenses:pay`, as the server's pay route does. It picks its
+  // money account from the cash accounts list, so it needs
+  // `cash_accounts:view` as well.
+  const canPay = can("expenses:pay") && can("cash_accounts:view");
   const canEdit = can("expenses:update");
 
   return (

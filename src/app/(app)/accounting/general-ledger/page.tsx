@@ -34,7 +34,7 @@ import type { GeneralLedgerPage as LedgerPage, JournalSource } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
-import { journalSourceLabel } from "../_lib/display-labels";
+import { journalSourceLabel, normalBalanceLabel } from "../_lib/display-labels";
 import { journalHref } from "../journals/_lib/journal-register";
 import { ANY_SOURCE, journalSourceItems } from "../_lib/select-items";
 import { centavosOrDash } from "../_lib/dashboard-figures";
@@ -224,8 +224,8 @@ function GeneralLedgerContent() {
                       {account.code}
                     </span>
                     <span className="font-medium">{account.name}</span>
-                    <Badge variant="outline" className="capitalize">
-                      {account.normal_balance}-normal
+                    <Badge variant="outline">
+                      {normalBalanceLabel(account.normal_balance)} normal balance
                     </Badge>
                   </div>
                 )}

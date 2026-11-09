@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import type { OpeningBalance } from "@/types";
-import { figuresView, postedJournalsWarning } from "../_lib/opening-balances";
+import { figuresView, openingWarnings, postedJournalsWarning } from "../_lib/opening-balances";
 
 interface OpeningBalanceFiguresProps {
   opening: OpeningBalance;
@@ -8,10 +8,16 @@ interface OpeningBalanceFiguresProps {
   dirty: boolean;
 }
 
-/** Totals, Difference and Balanced from the server's last answer, and its date warning. */
+/**
+ * Totals, Difference and Balanced from the server's last answer, its date
+ * warning, and its `warnings[]` as sent. None of them blocks Finalise.
+ */
 export function OpeningBalanceFigures({ opening, dirty }: OpeningBalanceFiguresProps) {
   const figures = figuresView(opening, dirty);
-  const warning = postedJournalsWarning(opening.posted_journals_on_or_before_as_of);
+  const warnings = [
+    postedJournalsWarning(opening.posted_journals_on_or_before_as_of),
+    ...openingWarnings(opening),
+  ].filter((text): text is string => text !== null);
   const items: Array<[string, string]> = [
     ["Total debit", figures.totalDebit],
     ["Total credit", figures.totalCredit],
@@ -30,12 +36,16 @@ export function OpeningBalanceFigures({ opening, dirty }: OpeningBalanceFiguresP
         ))}
       </dl>
       {figures.hint && <p className="text-xs text-muted-foreground">{figures.hint}</p>}
-      {warning && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+      {warnings.map((warning) => (
+        <div
+          key={warning}
+          role="note"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
           <span>{warning}</span>
         </div>
-      )}
+      ))}
     </div>
   );
 }

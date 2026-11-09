@@ -7,10 +7,10 @@
  * mapped account can't change type); its 422 message is shown as it is. The
  * checks here only stop a form that can't be sent at all.
  */
-import { formatCentavos } from "@/lib/accounting/money";
 import type { Account, AccountCashFlowCategory, AccountType, CashAccountKind } from "@/types";
 import { accountTypeLabel, cashKindLabel } from "../../_lib/display-labels";
 import type { SelectItemOption } from "../../_lib/select-items";
+import { signedCentavos } from "../../_lib/signed-money";
 
 /** Select values that stand for "none": a Select can't hold an empty string. */
 export const NO_PARENT = "none";
@@ -162,7 +162,7 @@ export function parentHeadingItems(
 /** The server's balance; a heading has none of its own, and a missing one reads as a dash. */
 export function accountBalanceText(account: Pick<Account, "is_group" | "balance">): string {
   if (account.is_group || account.balance == null) return "—";
-  return formatCentavos(account.balance);
+  return signedCentavos(account.balance);
 }
 
 export function accountStatusLabel(account: Pick<Account, "is_active">): string {

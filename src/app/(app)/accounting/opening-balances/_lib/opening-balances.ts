@@ -229,6 +229,18 @@ export function postedJournalsWarning(count: number): string | null {
   return `${subject} already posted on or before this date. Opening balances are usually dated before the first entry.`;
 }
 
+/**
+ * The server's `warnings[]`, each shown as sent. They never block: Finalise
+ * reads only `can_finalise` and `blocking_reasons`. Blank or non-text entries,
+ * and an API that sends none, show nothing.
+ */
+export function openingWarnings(opening: OpeningBalance): string[] {
+  if (!Array.isArray(opening.warnings)) return [];
+  return opening.warnings.filter(
+    (warning): warning is string => typeof warning === "string" && warning.trim() !== "",
+  );
+}
+
 export interface FinaliseState {
   enabled: boolean;
   /** The server's reasons, shown when it can't be finalised. */

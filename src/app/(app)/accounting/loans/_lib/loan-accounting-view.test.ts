@@ -129,6 +129,7 @@ test("the bar reads the server's percent, kept between 0 and 100", () => {
 
 test("a missing figure is a dash; zero is ₱0.00", () => {
   assert.equal(centavosOrDash(null), "—");
+  assert.equal(centavosOrDash(-150_050), "(₱1,500.50)");
   assert.equal(centavosOrDash(undefined), "—");
   assert.equal(centavosOrDash(0), "₱0.00");
   assert.equal(centavosOrDash(150_050), "₱1,500.50");
@@ -181,10 +182,34 @@ test("a difference is explained in plain words, pointing at opening balances", (
   });
   assert.equal(view.status, "differs");
   assert.equal(view.label, "Not reconciled");
-  assert.equal(view.figures[2].value, "-₱1.00");
+  assert.equal(view.figures[2].value, "(₱1.00)");
   assert.match(view.text, /released before the books/i);
   assert.match(view.text, /opening balance/i);
   assert.doesNotMatch(view.text, /books_principal|records_principal|is_reconciled/);
+});
+
+test("books below the records explain the imported loans and loans released before the books", () => {
+  const view = booksVsRecordsView({
+    ...COMPARISON,
+    books_principal: 0,
+    difference: -100,
+    is_reconciled: false,
+  });
+  assert.match(view.text, /less than the loan records/i);
+  assert.match(view.text, /imported loans/i);
+  assert.match(view.text, /released before the books/i);
+  assert.match(view.text, /no release journal/i);
+});
+
+test("books above the records don't claim imported loans as the cause", () => {
+  const view = booksVsRecordsView({
+    ...COMPARISON,
+    books_principal: 200,
+    difference: 100,
+    is_reconciled: false,
+  });
+  assert.equal(view.status, "differs");
+  assert.doesNotMatch(view.text, /imported loans/i);
 });
 
 test("before the server sends the comparison, every figure is a dash and nothing is claimed", () => {

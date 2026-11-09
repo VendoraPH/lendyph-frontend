@@ -1,4 +1,4 @@
-import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "./signed-money";
 
 /**
  * A server figure in centavos, or null when the server didn't send one.
@@ -14,10 +14,13 @@ export function centavosOrNull(value: number | string | null | undefined): numbe
   return null;
 }
 
-/** ₱ with two decimals; a missing figure shows a dash, and zero shows ₱0.00. */
+/**
+ * ₱ with two decimals, a negative in parentheses; a missing figure shows a
+ * dash, and zero shows ₱0.00.
+ */
 export function centavosOrDash(value: number | string | null | undefined): string {
   const centavos = centavosOrNull(value);
-  return centavos === null ? "—" : formatCentavos(centavos);
+  return centavos === null ? "—" : signedCentavos(centavos);
 }
 
 /**

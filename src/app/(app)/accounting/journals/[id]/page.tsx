@@ -20,7 +20,7 @@ import { JournalEntryForm } from "../_components/journal-entry-form";
 import { PostJournalDialog } from "../_components/post-journal-dialog";
 import { ReverseJournalDialog } from "../_components/reverse-journal-dialog";
 import { useJournalPreview } from "../_components/use-journal-preview";
-import { draftBalance, journalActions } from "../_lib/journal-actions";
+import { draftBalance, journalActions, journalPageDescription } from "../_lib/journal-actions";
 import { draftFromEntry } from "../_lib/journal-edit";
 import { journalTitle } from "../_lib/journal-register";
 
@@ -96,6 +96,27 @@ function JournalContent({ id }: { id: number }) {
 
   const loading = answer?.key !== key;
   const entry = answer?.entry ?? null;
+
+  // A reversal names the entry it reverses, by its number. The original is in
+  // the same branch, so whoever reads the reversal can read it; until it
+  // answers (or if it can't), the page says "another entry".
+  const reversesId = entry?.reverses_journal_id ?? null;
+  const [original, setOriginal] = useState<{ id: number; no: string } | null>(null);
+  useEffect(() => {
+    if (reversesId === null) return;
+    let current = true;
+    accountingService
+      .journal(reversesId)
+      .then((found) => {
+        if (current && found.journal_no) setOriginal({ id: reversesId, no: found.journal_no });
+      })
+      // Not loaded: the page keeps "another entry".
+      .catch(() => null);
+    return () => {
+      current = false;
+    };
+  }, [reversesId]);
+  const originalNo = original && original.id === reversesId ? original.no : null;
 
   // A draft's stored lines, checked by the server's preview so Post waits
   // until they balance (and while the check is out or failed). The preview
@@ -179,11 +200,7 @@ function JournalContent({ id }: { id: number }) {
     <div className="space-y-6">
       <AccountingPageHeader
         title={journalTitle(entry)}
-        description={
-          entry.status === "draft"
-            ? "A draft. Nothing moves in the books until it is posted."
-            : "Posted entries can't be edited, only reversed."
-        }
+        description={journalPageDescription(entry, originalNo)}
         actions={
           <div className="flex flex-wrap gap-2">
             <BackButton />
@@ -227,7 +244,7 @@ function JournalContent({ id }: { id: number }) {
         />
       ) : (
         <div className={loading ? "opacity-60" : undefined} aria-busy={loading}>
-          <JournalDetails entry={entry} />
+          <JournalDetails entry={entry} originalNo={originalNo} />
         </div>
       )}
 

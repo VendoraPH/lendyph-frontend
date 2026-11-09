@@ -1014,6 +1014,11 @@ export interface OpeningBalance {
   can_finalise: boolean;
   /** Why finalising would be refused, in words. */
   blocking_reasons: string[];
+  /**
+   * Notices in words that never block finalising, such as a contra account on
+   * its unusual side (a debit on 1200). Absent from an older API.
+   */
+  warnings?: string[];
 }
 
 export interface OpeningBalanceDraftLine {

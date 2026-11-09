@@ -13,6 +13,7 @@ import {
   equityAccountId,
   figuresView,
   finaliseState,
+  openingWarnings,
   postedElsewhereText,
   postedJournalsWarning,
   requestFailure,
@@ -468,5 +469,25 @@ describe("read-only wording", () => {
     assert.match(notice, /whole organisation/);
     assert.match(notice, /every branch/);
     assert.doesNotMatch(notice, /branches:view_all|403/);
+  });
+});
+
+describe("the server's warnings", () => {
+  const CONTRA =
+    "1200 Allowance for Credit Losses has a debit of ₱400.00. It is a contra account, so its balance is usually a credit.";
+
+  test("each warning shows as the server sent it, and Finalise stays enabled", () => {
+    const ready = opening({ can_finalise: true, blocking_reasons: [], warnings: [CONTRA] });
+    assert.deepEqual(openingWarnings(ready), [CONTRA]);
+    assert.equal(finaliseState(ready, false).enabled, true);
+  });
+
+  test("an answer without warnings, or with blank or odd entries, shows none of them", () => {
+    assert.deepEqual(openingWarnings(opening()), []);
+    assert.deepEqual(openingWarnings(opening({ warnings: null as never })), []);
+    assert.deepEqual(
+      openingWarnings(opening({ warnings: ["", "  ", 5 as never, CONTRA] })),
+      [CONTRA],
+    );
   });
 });

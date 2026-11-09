@@ -6,7 +6,6 @@
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { normaliseSearchQuery } from "@/hooks/use-search-page";
 import { AGING_BUCKETS, agingBucketLabel } from "@/lib/accounting/aging";
-import { formatCentavos } from "@/lib/accounting/money";
 import type {
   LoanAccountingGroup,
   LoanAccountingLoansQuery,
@@ -17,6 +16,7 @@ import type {
   LoanAccountingSummary,
 } from "@/types";
 import { agingBucketItems, type SelectItemOption } from "../../_lib/select-items";
+import { signedCentavos } from "../../_lib/signed-money";
 
 /** Rows per page of the Loan Accounting list. */
 export const LOAN_ACCOUNTING_PAGE_SIZE = 25;
@@ -105,9 +105,12 @@ export function shareBarValue(share: string | null | undefined): number {
   return Math.min(100, Number(share));
 }
 
-/** A server figure in ₱ with two decimals; a missing one is a dash, and zero is ₱0.00. */
+/**
+ * A server figure in ₱ with two decimals, a negative in parentheses; a missing
+ * one is a dash, and zero is ₱0.00.
+ */
 export function centavosOrDash(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? formatCentavos(value) : "—";
+  return typeof value === "number" && Number.isFinite(value) ? signedCentavos(value) : "—";
 }
 
 export function daysPastDueLabel(days: number): string {
@@ -205,6 +208,16 @@ export function booksVsRecordsView(comparison: Comparison | undefined): {
       status: "reconciled",
       label: "Reconciled",
       text: "The loans receivable in the books equal the principal still owed on the loan records.",
+      figures,
+    };
+  }
+  // Only the server's sign is read: a negative difference means the books
+  // hold less than the records.
+  if (comparison.difference < 0) {
+    return {
+      status: "differs",
+      label: "Not reconciled",
+      text: "The books hold less than the loan records. Imported loans and loans released before the books existed post no release journal, so their principal is on the loan records but not in the books. Entering the opening balances corrects it.",
       figures,
     };
   }
