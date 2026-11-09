@@ -93,10 +93,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       // `configure` (since corrected, but older copies were not). A backend
       // seeded from that wording creates a permission nothing here reads.
       "credit_scoring:settings",
-      // Reminders — DOCUMENTED ONLY. The reminder
-      // routes do not exist yet, so the server must not grant these until
-      // they ship; seeding them early reveals Loans → Reminders to this role.
-      // `:settings` holds the SMS/email provider credentials — admin only.
+      // Reminders (Phase 2). Seeded for admin and super_admin only; other
+      // roles get them only through the roles screen. `:settings` holds the
+      // SMS/email provider credentials.
       "reminders:view",
       "reminders:send",
       "reminders:pause",
@@ -125,9 +124,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "collaterals:view",
       "collaterals:create",
       "collaterals:update",
-      // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
-      "reminders:view",
-      "reminders:send",
     ],
   },
   cashier: {
@@ -230,10 +226,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "journals:view",
       "expenses:view",
       "cash_accounts:view",
-      // Reminders — DOCUMENTED ONLY; see the note on `admin` above.
-      "reminders:view",
-      "reminders:send",
-      "reminders:pause",
     ],
   },
   bod1: {

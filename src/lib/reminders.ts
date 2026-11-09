@@ -3,15 +3,23 @@
  * length, rule descriptions, form validation and the settings payload.
  *
  * None of this decides whether a reminder is sent or what it says to a real
- * borrower — the server owns eligibility and renders every real message.
- * `renderTemplateSample` is only the template editor's live preview.
+ * member — the server owns eligibility and renders every real message.
+ * `renderTemplateSample` is only the template editor's sample preview: fixed
+ * sample values, never a figure worked out for a loan.
+ *
+ * Test mode: while the deployment sends nothing (log-only drivers, live
+ * sending off, or the cooperative's switch off) every screen says so, and a
+ * reminder that was only logged never reads as "Sent".
  */
 
 import type {
   DeliveryStatus,
   ReminderChannel,
+  ReminderDashboardCounts,
   ReminderMessage,
+  ReminderQueueItem,
   ReminderQueueStatus,
+  ReminderReasonCode,
   ReminderRuleInput,
   ReminderSettingsUpdate,
   ReminderTemplateType,
@@ -44,12 +52,14 @@ export const QUEUE_STATUS_META: Record<ReminderQueueStatus, StatusMeta> = {
   cancelled: {
     label: "Cancelled",
     className: GRAY,
-    description: "No longer needed — the installment was paid, or the loan closed or changed.",
+    description:
+      "No longer needed: the installment was paid, the loan closed or was restructured, the schedule changed, or another reminder covers the loan that day.",
   },
   skipped: {
     label: "Skipped",
     className: SLATE,
-    description: "Still needed but could not be sent — no valid contact, opted out, or paused.",
+    description:
+      "Still needed but could not be sent: paused, the member opted out, no valid contact, outside contact hours, not on the allow-list, no active template, or Collected by Auto-Pay.",
   },
 };
 
@@ -62,6 +72,416 @@ export const DELIVERY_STATUS_META: Record<DeliveryStatus, StatusMeta> = {
   rejected: { label: "Rejected", className: RED, description: "The provider refused the message." },
   bounced: { label: "Bounced", className: AMBER, description: "The email address bounced." },
 };
+
+// ---------------------------------------------------------------------------
+// Test mode
+// ---------------------------------------------------------------------------
+
+/** The line every reminders screen shows while the deployment sends nothing. */
+export const TEST_MODE_BANNER = "Test mode: reminders are logged, not sent";
+
+/**
+ * Whether messages are only logged: `true` test mode, `false` live, `null`
+ * not known. The screens use the live words ("Sent", "Delivered") only on a
+ * known `false`, test-mode words on `true`, and neutral words on `null`.
+ */
+export type SendMode = boolean | null;
+
+/**
+ * The deployment's mode, read from the server's own `test_mode` (log-only
+ * drivers, live sending off, no provider set up), on the settings or the
+ * dashboard. Never guessed: a missing `test_mode`, or no answer, is `null`.
+ */
+export function reminderTestMode(
+  source: { test_mode?: boolean | null; enabled?: boolean | null } | null | undefined,
+): SendMode {
+  if (!source || typeof source.test_mode !== "boolean") return null;
+  return source.test_mode;
+}
+
+/**
+ * Two sources of the deployment's mode (settings, dashboard). Any "test"
+ * wins; "live" counts only when neither source says test.
+ */
+export function combineTestMode(a: SendMode, b: SendMode): SendMode {
+  if (a === true || b === true) return true;
+  if (a === false || b === false) return false;
+  return null;
+}
+
+/** One row's mode: its own `test_mode` when sent, else the deployment's. */
+export function rowTestMode(
+  row: { test_mode?: boolean | null },
+  deployment: SendMode | undefined,
+): SendMode {
+  if (typeof row.test_mode === "boolean") return row.test_mode;
+  return deployment ?? null;
+}
+
+const LOGGED_META: StatusMeta = {
+  label: "Logged",
+  className: SLATE,
+  description: "Test mode: logged only, not sent. Nothing reached the member.",
+};
+
+/** A handed-over row whose mode isn't known: neither "Sent" nor "Logged". */
+const PROCESSED_META: StatusMeta = {
+  label: "Processed",
+  className: SLATE,
+  description: "Handled by the reminder service. Whether this deployment reaches members could not be read.",
+};
+
+/** The "delivered" filter option outside live mode, kept apart from "sent". */
+const CONFIRMED_OPTION: StatusMeta = {
+  label: "Confirmed",
+  className: EMERALD,
+  description: "Confirmed by the receiving service.",
+};
+
+/** Test-mode and neutral lines for statuses whose live line names sending. */
+const QUEUE_DESCRIPTIONS: Partial<Record<ReminderQueueStatus, { test: string; unknown: string }>> = {
+  queued: { test: "Ready to be logged.", unknown: "Ready for the reminder service." },
+  processing: { test: "Being logged now.", unknown: "Being handled now." },
+};
+
+/** Statuses that would say a message went out. */
+const QUEUE_WENT_OUT: ReadonlySet<ReminderQueueStatus> = new Set(["sent", "delivered"]);
+const DELIVERY_WENT_OUT: ReadonlySet<DeliveryStatus> = new Set(["sent", "delivered", "opened"]);
+
+/** Whether a queue status says the reminder was handed over (sent or delivered). */
+export function queueStatusWentOut(status: ReminderQueueStatus): boolean {
+  return QUEUE_WENT_OUT.has(status);
+}
+
+/** Whether a delivery status says the message was handed over. */
+export function deliveryStatusWentOut(status: DeliveryStatus): boolean {
+  return DELIVERY_WENT_OUT.has(status);
+}
+
+function wentOutMeta(mode: SendMode): StatusMeta | null {
+  if (mode === true) return LOGGED_META;
+  if (mode === null) return PROCESSED_META;
+  return null;
+}
+
+/** A queue status as the screens read it in `mode` (the row's own, see `rowTestMode`). */
+export function queueStatusMeta(status: ReminderQueueStatus, mode: SendMode): StatusMeta | undefined {
+  if (!Object.hasOwn(QUEUE_STATUS_META, status)) return undefined;
+  const live = QUEUE_STATUS_META[status];
+  if (mode === false) return live;
+  if (QUEUE_WENT_OUT.has(status)) return wentOutMeta(mode)!;
+  const lines = QUEUE_DESCRIPTIONS[status];
+  if (!lines) return live;
+  return { ...live, description: mode === true ? lines.test : lines.unknown };
+}
+
+/** A delivery status as the screens read it in `mode`. */
+export function deliveryStatusMeta(status: DeliveryStatus, mode: SendMode): StatusMeta | undefined {
+  if (!Object.hasOwn(DELIVERY_STATUS_META, status)) return undefined;
+  if (mode !== false && DELIVERY_WENT_OUT.has(status)) return wentOutMeta(mode)!;
+  return DELIVERY_STATUS_META[status];
+}
+
+/**
+ * The queue's status filter options. Outside live mode "sent" reads Logged
+ * (test) or Processed (unknown) and "delivered" reads Confirmed, so no option
+ * claims sending and no two read the same.
+ */
+export function queueStatusOptions(mode: SendMode): Record<ReminderQueueStatus, StatusMeta> {
+  if (mode === false) return QUEUE_STATUS_META;
+  const options = { ...QUEUE_STATUS_META, sent: wentOutMeta(mode)!, delivered: CONFIRMED_OPTION };
+  for (const status of ["queued", "processing"] as const) options[status] = queueStatusMeta(status, mode)!;
+  return options;
+}
+
+/** As `queueStatusOptions`, for message history's delivery statuses. */
+export function deliveryStatusOptions(mode: SendMode): Record<DeliveryStatus, StatusMeta> {
+  if (mode === false) return DELIVERY_STATUS_META;
+  return { ...DELIVERY_STATUS_META, sent: wentOutMeta(mode)!, delivered: CONFIRMED_OPTION };
+}
+
+/**
+ * The dashboard chart's bar names; "Sent" and "Delivered" only when live.
+ * When the answer carries `daily[].logged` (`hasLogged`), "sent" leaves out
+ * logged-only messages, so it keeps "Sent", as the counts do.
+ */
+export function chartSeriesLabel(
+  series: "sent" | "logged" | "delivered" | "failed",
+  mode: SendMode,
+  hasLogged = false,
+): string {
+  if (series === "failed") return "Failed";
+  if (series === "logged") return LOGGED_META.label;
+  if (series === "sent" && hasLogged) return "Sent";
+  if (mode === false) return series === "sent" ? "Sent" : "Delivered";
+  if (series === "delivered") return CONFIRMED_OPTION.label;
+  return wentOutMeta(mode)!.label;
+}
+
+/**
+ * Dashboard count labels. The `logged*` counts are logged-only messages and
+ * the `sent*` counts leave them out (R2), so each keeps its own word.
+ */
+export const KPI_LABELS: Record<keyof ReminderDashboardCounts, string> = {
+  today: "Reminders today",
+  sent: "Sent",
+  logged: "Logged",
+  pending: "Pending",
+  failed: "Failed",
+  sms_sent: "SMS sent",
+  sms_logged: "SMS logged",
+  emails_sent: "Emails sent",
+  emails_logged: "Emails logged",
+  upcoming_due: "Upcoming due",
+  overdue: "Overdue",
+};
+
+const PROCESSED_KPI_LABELS: Partial<Record<keyof ReminderDashboardCounts, string>> = {
+  sent: "Processed",
+  sms_sent: "SMS processed",
+  emails_sent: "Emails processed",
+};
+
+/**
+ * The dashboard's count labels for one answer. An answer without the
+ * `logged*` counts can't say its `sent*` counts leave out logged-only
+ * messages, so outside a known live mode those read "Processed".
+ */
+/** In test mode a plain "Sent" reads as if something went out; these say what they count. */
+const REAL_PROVIDER_KPI_LABELS: Partial<Record<keyof ReminderDashboardCounts, string>> = {
+  sent: "Sent by a real provider",
+  sms_sent: "SMS sent by a real provider",
+  emails_sent: "Emails sent by a real provider",
+};
+
+export function kpiLabels(
+  counts: Partial<ReminderDashboardCounts>,
+  mode: SendMode,
+): Record<keyof ReminderDashboardCounts, string> {
+  if (mode === false) return KPI_LABELS;
+  if (counts.logged === undefined) return { ...KPI_LABELS, ...PROCESSED_KPI_LABELS };
+  return mode === true ? { ...KPI_LABELS, ...REAL_PROVIDER_KPI_LABELS } : KPI_LABELS;
+}
+
+/** The usage card's monthly line, by the same rule as `kpiLabels`. */
+export function smsMonthLabel(
+  sms: { sent_this_month?: number; logged_this_month?: number },
+  mode: SendMode,
+): string {
+  if (mode === false) return "Messages sent";
+  if (sms.logged_this_month === undefined) return "Messages processed";
+  return mode === true ? "Messages sent by a real provider" : "Messages sent";
+}
+
+/**
+ * Whether to say "Couldn't read sending status": the settings call has
+ * settled (answered or failed) and still gives no `test_mode`.
+ */
+export function sendingStatusUnreadable(
+  settings: { loading: boolean; data: { test_mode?: boolean | null; enabled?: boolean | null } | null },
+  active = true,
+): boolean {
+  return active && !settings.loading && reminderTestMode(settings.data) === null;
+}
+
+// ---------------------------------------------------------------------------
+// Access (R2 security fixes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a branch user can't change something company-wide: settings shared by
+ * every branch, templates, and rules for every branch need
+ * `branches:view_all`. The server is the source (403); this only explains.
+ */
+export const COMPANY_WIDE_REASON = "Only users with access to every branch can change this; it applies to every branch.";
+
+/** A stored rule a branch user can't edit or switch off: one for every branch. */
+export function ruleLockReason(rule: { branch_id: number | null }, allBranches: boolean): string | null {
+  return rule.branch_id === null && !allBranches ? COMPANY_WIDE_REASON : null;
+}
+
+/** The manual send types offered when the server doesn't list them. */
+const MANUAL_FALLBACK: readonly ReminderTemplateType[] = [
+  "upcoming",
+  "due_today",
+  "past_due",
+  "long_past_due",
+  "partial_payment",
+];
+
+export const NO_TEMPLATE_FITS =
+  "No reminder fits this loan today: nothing is due yet, it is still within its grace period, or it has nothing to confirm.";
+
+/**
+ * The templates the Send dialog offers: the server's `allowed_template_types`
+ * (what fits the loan today), known types only, in its order. An answer
+ * without the list offers every manual reminder type; the server still
+ * refuses one that doesn't fit (422).
+ */
+export function offeredTemplates(allowed: readonly ReminderTemplateType[] | null | undefined): ReminderTemplateType[] {
+  if (!Array.isArray(allowed)) return [...MANUAL_FALLBACK];
+  const known = new Set<string>(Object.keys(TEMPLATE_TYPE_LABELS));
+  return [...new Set(allowed)].filter((t) => known.has(t));
+}
+
+/**
+ * A member contact on the preferences card. Without `borrowers:view` the
+ * server leaves contacts out (null), which is not "none on file".
+ */
+export function contactValueLabel(value: string | null, canSeeContacts: boolean): string {
+  if (value) return value;
+  return canSeeContacts ? "None on file" : HIDDEN_CONTACT;
+}
+
+/** Where a contact would show, for a user who can't see member details. */
+export const HIDDEN_CONTACT = "Hidden (needs access to member details)";
+
+/**
+ * A masked recipient. The API sends null both when the contact is hidden
+ * (no `borrowers:view`, or not the member's branch) and when there is none,
+ * so without `borrowers:view` a null reads "Hidden"; with it, a dash.
+ */
+export function recipientLabel(recipient: string | null | undefined, canSeeContacts = true): string {
+  if (recipient?.trim()) return recipient;
+  return canSeeContacts ? "—" : HIDDEN_CONTACT;
+}
+
+/** " — <reason>" after a pause line, or nothing when the server leaves it out. */
+export function pauseReasonSuffix(pause: { reason: string | null }): string {
+  const reason = pause.reason?.trim();
+  return reason ? ` — ${reason}` : "";
+}
+
+/** The loan card's button that opens the Send dialog: the dialog's own wording. */
+export function sendButtonLabel(mode: SendMode): string {
+  return manualSendWording(mode).button;
+}
+
+/** The Templates tab's one-line intro; it never says a reminder sends. */
+export const TEMPLATES_PAGE_INTRO =
+  "One template per reminder type and channel. Amounts and dates are filled in from the loan when a reminder is made.";
+
+export interface ManualSendWording {
+  title: string;
+  button: string;
+  busy: string;
+  toastTitle: string;
+  toastBody: string;
+  /** The preview's notice when something blocks it. */
+  blocked: string;
+}
+
+/** The Send reminder dialog's words: live only when the mode is known live. */
+export function manualSendWording(mode: SendMode): ManualSendWording {
+  if (mode === false) {
+    return {
+      title: "Send reminder",
+      button: "Send reminder",
+      busy: "Sending…",
+      toastTitle: "Reminder queued for sending",
+      toastBody: "It shows in Message History once it has gone out.",
+      blocked: "This reminder can't be sent",
+    };
+  }
+  if (mode === true) {
+    return {
+      title: "Log a reminder (test mode)",
+      button: "Log reminder (test mode)",
+      busy: "Logging…",
+      toastTitle: "Reminder queued in test mode",
+      toastBody: "It is logged in Message History, not sent to the member.",
+      blocked: "This reminder can't be logged",
+    };
+  }
+  return {
+    title: "Queue a reminder",
+    button: "Queue reminder",
+    busy: "Queuing…",
+    toastTitle: "Reminder queued",
+    toastBody: "Queued; see Message History for its result.",
+    blocked: "This reminder can't be queued",
+  };
+}
+
+/** A message's provider; the log driver reaches nobody, so it isn't one. */
+export function providerLabel(provider: string | null): string | null {
+  if (provider === null) return null;
+  return provider === "log" ? "none (test mode, logged only)" : provider;
+}
+
+/** A message whose text was blanked 2 years after its loan closed. */
+export function isMessageRedacted(message: Pick<ReminderMessage, "body"> & { redacted_at?: string | null }): boolean {
+  return Boolean(message.redacted_at) || message.body === null;
+}
+
+// ---------------------------------------------------------------------------
+// Reasons
+// ---------------------------------------------------------------------------
+
+/**
+ * The engine's reason codes in words (backend #232). The server sends
+ * `reason` in words too, and that wins; these cover a row without one.
+ */
+export const REMINDER_REASON_LABELS: Record<ReminderReasonCode, string> = {
+  paid: "Payment received before send time",
+  schedule_changed: "Schedule changed: the due date moved or the period closed",
+  nothing_due: "Nothing is due on this loan",
+  loan_closed: "Loan is closed",
+  rule_not_applicable: "The rule no longer covers this loan",
+  superseded: "Another reminder covers this loan today",
+  rule_inactive: "Reminder rule is switched off",
+  reminders_off: "Automated reminders are switched off",
+  channel_off: "This channel is switched off",
+  auto_pay: "Collected by Auto-Pay",
+  paused: "Reminders are paused",
+  opted_out: "Member turned off these reminders",
+  no_contact: "Member has no contact on file for this channel",
+  invalid_contact: "Contact is not a valid mobile number or email address",
+  contact_flagged: "Contact was marked invalid after a failed send",
+  not_allowed: "Recipient is not on the allow-list",
+  fire_date_passed: "Its day has passed",
+  outside_contact_hours: "Outside contact hours",
+  template_unavailable: "No active template for this reminder and channel",
+  rule_deleted: "Its rule was deleted",
+  not_set_up: "Sending is not set up",
+  retry_window_closed: "Could not be retried within contact hours",
+  interrupted: "Sending was interrupted; not resent so the member is not sent it twice",
+  error: "Could not be prepared for sending",
+  driver_error: "The driver failed",
+  already_handed_over: "Its message was already handed over; not sent again",
+};
+
+/** "some_new_code" → "Some new code". */
+function codeInWords(code: string): string {
+  const words = code.split("_").filter(Boolean).join(" ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Shown where a failure's reason would be, when the server leaves the
+ * provider's text out (a caller without `borrowers:view` or the member's
+ * branch).
+ */
+export const HIDDEN_DETAILS = "Details hidden (needs access to member details)";
+
+/**
+ * Why a reminder was cancelled, skipped or failed, in words; null when none.
+ * A failed row (`failed: true`) always has a reason, so one without its text
+ * was hidden by the server: it reads `HIDDEN_DETAILS`.
+ */
+export function reminderReason(
+  item: Pick<ReminderQueueItem, "reason"> & { reason_code?: string | null },
+  options: { failed?: boolean } = {},
+): string | null {
+  const text = item.reason?.trim();
+  if (text) return text;
+  if (options.failed) return HIDDEN_DETAILS;
+  const code = item.reason_code?.trim();
+  if (!code) return null;
+  return Object.hasOwn(REMINDER_REASON_LABELS, code)
+    ? REMINDER_REASON_LABELS[code as ReminderReasonCode]
+    : codeInWords(code);
+}
 
 export const TEMPLATE_TYPE_LABELS: Record<ReminderTemplateType, string> = {
   upcoming: "Upcoming due",
@@ -90,30 +510,65 @@ export function channelsLabel(channels: ReminderChannel[]): string {
   return channels.map((c) => CHANNEL_LABELS[c]).join(" + ");
 }
 
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  /** Fixed sample text for SMS (and for email unless `emailSample` is set). */
+  sample: string;
+  /** Email's own sample, where the server formats email differently. */
+  emailSample?: string;
+  /** For an alias: the variable it renders the same as. */
+  aliasOf?: string;
+}
+
+/** The server's amount format per channel, shown on fixed sample values only. */
+const SAMPLE_AMOUNT = { sms: "PHP 2,500.00", email: "₱2,500.00" } as const;
+
 /**
  * Variables a template may use, with the sample value the editor previews.
  *
- * Samples follow the server's rendering ("PHP 2,541.67", "Oct 5, 2026"), not
- * the screen's: the SMS part counter runs on the rendered sample, and a "₱"
- * would switch it to Unicode and roughly double the parts it reports.
+ * Samples follow the server's rendering, not the screen's: "PHP 2,500.00" on
+ * SMS and "₱2,500.00" on email, dates like "Sep 15, 2026". The SMS part
+ * counter runs on the rendered SMS sample, and a "₱" would switch it to
+ * Unicode and roughly double the parts it reports.
+ *
+ * `amount_due` and `remaining_balance` render the same server figure (what is
+ * due by the period's due date), so they share one sample. The last four are
+ * the task's own names, which the server accepts as aliases.
  */
-export const TEMPLATE_VARIABLES = [
+export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
   { key: "borrower_first_name", label: "First name", sample: "Juan" },
   { key: "borrower_full_name", label: "Full name", sample: "Juan Dela Cruz" },
   { key: "loan_number", label: "Loan number", sample: "LN-2026-00123" },
   { key: "installment_number", label: "Installment no.", sample: "4" },
-  { key: "due_date", label: "Due date", sample: "Oct 15, 2026" },
-  { key: "amount_due", label: "Amount due", sample: "PHP 2,500.00" },
-  { key: "remaining_balance", label: "Remaining due", sample: "PHP 1,200.00" },
+  { key: "due_date", label: "Due date", sample: "Sep 15, 2026" },
+  { key: "amount_due", label: "Amount due", sample: SAMPLE_AMOUNT.sms, emailSample: SAMPLE_AMOUNT.email },
+  { key: "remaining_balance", label: "Remaining due", sample: SAMPLE_AMOUNT.sms, emailSample: SAMPLE_AMOUNT.email },
   { key: "days_overdue", label: "Days overdue", sample: "3" },
   { key: "lender_name", label: "Lender name", sample: "Sample Cooperative" },
   { key: "branch_name", label: "Branch", sample: "Main Branch" },
   { key: "branch_phone", label: "Branch phone", sample: "(082) 123-4567" },
   { key: "payment_method", label: "Payment instructions", sample: "Pay at any branch or via GCash." },
-] as const;
+  {
+    key: "remaining_amount",
+    label: "Remaining amount",
+    sample: SAMPLE_AMOUNT.sms,
+    emailSample: SAMPLE_AMOUNT.email,
+    aliasOf: "remaining_balance",
+  },
+  { key: "company_name", label: "Company name", sample: "Sample Cooperative", aliasOf: "lender_name" },
+  { key: "company_phone", label: "Company phone", sample: "(082) 123-4567", aliasOf: "branch_phone" },
+  { key: "payment_reference", label: "Payment reference", sample: "LN-2026-00123", aliasOf: "loan_number" },
+];
+
+/** The label of the variable an alias stands for. */
+export function aliasTargetLabel(variable: TemplateVariable): string | null {
+  if (!variable.aliasOf) return null;
+  return TEMPLATE_VARIABLES.find((v) => v.key === variable.aliasOf)?.label ?? null;
+}
 
 const VARIABLE_PATTERN = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
-const KNOWN_VARIABLES = new Map<string, string>(TEMPLATE_VARIABLES.map((v) => [v.key, v.sample]));
+const KNOWN_VARIABLES = new Map<string, TemplateVariable>(TEMPLATE_VARIABLES.map((v) => [v.key, v]));
 
 /** `{{name}}` tokens in `text` that are not template variables. */
 export function unknownVariables(text: string): string[] {
@@ -124,11 +579,17 @@ export function unknownVariables(text: string): string[] {
   return [...unknown];
 }
 
-/** Replace known variables with sample values; unknown tokens stay visible. */
-export function renderTemplateSample(text: string): string {
-  return text.replace(VARIABLE_PATTERN, (token, name: string) =>
-    KNOWN_VARIABLES.get(name.toLowerCase()) ?? token,
-  );
+/**
+ * Replace known variables with the channel's fixed sample values; unknown
+ * tokens stay visible. A sample, never a real loan's figures: the server's
+ * preview shows those.
+ */
+export function renderTemplateSample(text: string, channel: ReminderChannel = "sms"): string {
+  return text.replace(VARIABLE_PATTERN, (token, name: string) => {
+    const variable = KNOWN_VARIABLES.get(name.toLowerCase());
+    if (!variable) return token;
+    return channel === "email" ? (variable.emailSample ?? variable.sample) : variable.sample;
+  });
 }
 
 // The GSM 03.38 basic set plus its extension table (which costs two units).
@@ -242,8 +703,33 @@ export function validateContactWindow(window: ContactWindow): string | null {
 
 export const MAX_RULE_DAYS = 90;
 
-/** Field-level problems with a rule, in form order. Empty when valid. */
-export function validateRule(rule: ReminderRuleInput, contactHours: ContactWindow): string[] {
+/**
+ * The templates a rule may use, by its trigger, as R2's
+ * `TemplateFit::FOR_TRIGGER` (422 otherwise). The payment-state templates
+ * (partial payment, payment confirmation) don't apply to rules.
+ */
+export const RULE_TEMPLATES_FOR_TRIGGER: Record<ReminderTrigger, readonly ReminderTemplateType[]> = {
+  before_due: ["upcoming"],
+  on_due: ["due_today"],
+  after_due: ["past_due", "long_past_due"],
+};
+
+/** The template after a trigger change: kept when it fits, else the trigger's first. */
+export function fitRuleTemplate(trigger: ReminderTrigger, current: ReminderTemplateType): ReminderTemplateType {
+  const fits = RULE_TEMPLATES_FOR_TRIGGER[trigger];
+  return fits.includes(current) ? current : fits[0];
+}
+
+/**
+ * Field-level problems with a rule, in form order. Empty when valid.
+ * `allBranches: false` (no `branches:view_all`): a rule with no branch is
+ * refused, as the API refuses it (403).
+ */
+export function validateRule(
+  rule: ReminderRuleInput,
+  contactHours: ContactWindow,
+  options: { allBranches?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   if (!rule.name.trim()) problems.push("Rule name");
   if (rule.trigger !== "on_due") {
@@ -258,12 +744,20 @@ export function validateRule(rule: ReminderRuleInput, contactHours: ContactWindo
   const end = minutesOf(contactHours.end);
   if (send === null) {
     problems.push("Send time");
-  } else if (start !== null && end !== null && (send < start || send > end)) {
-    problems.push(
-      `Send time (within contact hours, ${formatSendTime(contactHours.start)}–${formatSendTime(contactHours.end)})`,
-    );
+  } else if (start !== null && end !== null && send < start) {
+    problems.push(`Send time (not before contact hours open at ${formatSendTime(contactHours.start)})`);
+  } else if (start !== null && end !== null && send >= end) {
+    // The end is exclusive, as the engine reads it.
+    problems.push(`Send time (before contact hours end at ${formatSendTime(contactHours.end)})`);
+  }
+  const fits = RULE_TEMPLATES_FOR_TRIGGER[rule.trigger];
+  if (fits && !fits.includes(rule.template_type)) {
+    problems.push(`Template (${fits.map((t) => TEMPLATE_TYPE_LABELS[t]).join(" or ")} for this trigger)`);
   }
   if (rule.channels.length === 0) problems.push("At least one channel");
+  if (options.allBranches === false && rule.branch_id === null) {
+    problems.push("Branch (rules for every branch need access to every branch)");
+  }
   return problems;
 }
 
@@ -277,7 +771,7 @@ export const DEFAULT_RULES: Pick<
   "name" | "trigger" | "days" | "send_time" | "channels" | "template_type"
 >[] = [
   { name: "Upcoming due", trigger: "before_due", days: 3, send_time: "09:00", channels: ["sms", "email"], template_type: "upcoming" },
-  { name: "Due today", trigger: "on_due", days: 0, send_time: "08:00", channels: ["sms"], template_type: "due_today" },
+  { name: "Due today", trigger: "on_due", days: 0, send_time: "08:00", channels: ["sms", "email"], template_type: "due_today" },
   { name: "3 days overdue", trigger: "after_due", days: 3, send_time: "09:00", channels: ["sms", "email"], template_type: "past_due" },
   { name: "7 days overdue", trigger: "after_due", days: 7, send_time: "09:00", channels: ["sms", "email"], template_type: "past_due" },
   { name: "15 days overdue", trigger: "after_due", days: 15, send_time: "09:00", channels: ["sms", "email"], template_type: "long_past_due" },
@@ -305,12 +799,26 @@ export function toSettingsPayload(form: ReminderSettingsUpdate): ReminderSetting
 
 /**
  * The line beside a message's status badge: who sent it, or "Failed" when it
- * never went out, so a failed message is not described as sent.
+ * never went out, so a failed message is not described as sent. A message
+ * that was only logged (test mode) says so, and never "Sent"; when its mode
+ * can't be read the line only says who started it.
  */
 export function messageSourceLabel(
-  message: Pick<ReminderMessage, "status" | "source" | "created_by_name">,
+  message: Pick<ReminderMessage, "status" | "source" | "created_by_name" | "test_mode">,
+  deploymentTestMode: SendMode = null,
 ): string {
   if (message.status === "failed") return "Failed";
+  const mode = rowTestMode(message, deploymentTestMode);
+  if (mode === null) {
+    if (message.source === "manual") return `Manual${message.created_by_name ? `, by ${message.created_by_name}` : ""}`;
+    return "Automatic";
+  }
+  if (mode) {
+    if (message.source === "manual") {
+      return `Logged${message.created_by_name ? ` by ${message.created_by_name}` : " manually"}, not sent (test mode)`;
+    }
+    return "Logged automatically, not sent (test mode)";
+  }
   if (message.source === "manual") {
     return `Sent manually${message.created_by_name ? ` by ${message.created_by_name}` : ""}`;
   }

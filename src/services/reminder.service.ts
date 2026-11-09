@@ -1,9 +1,10 @@
 /**
  * Automated due-date reminders.
  *
- * NONE of these endpoints exist yet — see `API_ENDPOINTS.REMINDERS`. Wired now
- * against the contract in `@/types/reminder`, so the day the backend lands the
- * screens start returning rows without a frontend change.
+ * The endpoints are `API_ENDPOINTS.REMINDERS`, served by the reminders API
+ * (Phase 2, slice R2) against the contract in `@/types/reminder`. Until it is
+ * deployed every screen shows "Not connected yet". Nothing here sends to a
+ * member: the engine runs on log-only drivers, and the screens show test mode.
  */
 
 import { api } from "@/lib/api-client";

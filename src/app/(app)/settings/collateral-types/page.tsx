@@ -67,6 +67,13 @@ interface FormState {
   is_visible: boolean;
 }
 
+// Passed to the Source <Select items>, so the trigger reads "Manual entry",
+// not the stored "manual".
+const SOURCE_OPTIONS: { value: CollateralSource; label: string }[] = [
+  { value: "manual", label: "Manual entry" },
+  { value: "share_capital", label: "Share Capital (auto-derived)" },
+];
+
 const EMPTY_FORM: FormState = {
   name: "",
   detail_field_label: "",
@@ -377,6 +384,7 @@ function CollateralTypesSettingsContent() {
             <div className="space-y-2">
               <Label>Source</Label>
               <Select
+                items={SOURCE_OPTIONS}
                 value={form.source}
                 onValueChange={(v) =>
                   setForm((f) => ({ ...f, source: v as CollateralSource }))
@@ -387,10 +395,11 @@ function CollateralTypesSettingsContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manual">Manual entry</SelectItem>
-                  <SelectItem value="share_capital">
-                    Share Capital (auto-derived)
-                  </SelectItem>
+                  {SOURCE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
