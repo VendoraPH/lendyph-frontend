@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Lock, LockOpen } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate, RouteGuard } from "@/components/common";
@@ -26,11 +26,16 @@ import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { DrainResult } from "@/lib/paginate";
-import type { AccountingPeriod } from "@/types";
+import type { AccountingPeriod, YearClose, YearClosePage } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { periodStatusLabel } from "../_lib/display-labels";
+import { YearCloseHistory } from "./_components/year-close-history";
+import { YearEndCloseSection } from "./_components/year-end-close-section";
+import { periodYearEndLabels } from "./_lib/year-close";
+
+const NO_CLOSES: YearClose[] = [];
 
 function PeriodClosingContent() {
   const [confirming, setConfirming] = useState<AccountingPeriod | null>(null);
@@ -40,6 +45,29 @@ function PeriodClosingContent() {
   // someone opens this screen to close.
   const fetcher = useCallback(() => accountingService.periodsListAll(), []);
   const resource = useAccountingResource<DrainResult<AccountingPeriod>>(fetcher);
+
+  // The year closes, newest first, up to the API's 100: which months a close
+  // closed, which years are closed, and the latest one (the only one that can
+  // reopen). The history below pages on its own. If this fails, the months
+  // simply don't say which close closed them.
+  const closesFetcher = useCallback(
+    () => accountingService.yearClosesPage({ page: 1, per_page: 100 }),
+    [],
+  );
+  const closesResource = useAccountingResource<YearClosePage>(closesFetcher);
+  const closes = closesResource.data?.data ?? NO_CLOSES;
+  const yearEndLabels = useMemo(() => periodYearEndLabels(closes), [closes]);
+
+  // A close or a reopen changes the months, the closes, the preview and the
+  // history: refetch the first two and remount the year-end cards.
+  const [yearEndVersion, setYearEndVersion] = useState(0);
+  const refetchPeriods = resource.refetch;
+  const refetchCloses = closesResource.refetch;
+  const yearEndChanged = useCallback(() => {
+    refetchPeriods();
+    refetchCloses();
+    setYearEndVersion((v) => v + 1);
+  }, [refetchPeriods, refetchCloses]);
 
   const close = async (period: AccountingPeriod) => {
     try {
@@ -66,7 +94,7 @@ function PeriodClosingContent() {
     <div className="space-y-6">
       <AccountingPageHeader
         title="Period Closing"
-        description="Lock a month once it has been reviewed."
+        description="Lock a month once it has been reviewed, and close the year once its books are final."
       />
 
       {/*
@@ -143,6 +171,11 @@ function PeriodClosingContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
+                        {yearEndLabels.has(period.id) && (
+                          <p className="font-medium text-foreground">
+                            {yearEndLabels.get(period.id)}
+                          </p>
+                        )}
                         {period.closed_at
                           ? `${formatDateTime(period.closed_at)}${
                               period.closed_by ? ` · ${period.closed_by}` : ""
@@ -178,6 +211,22 @@ function PeriodClosingContent() {
           </Card>
         )}
       </DataState>
+
+      <PermissionGate permission="accounting:close">
+        {resource.data && !closesResource.loading && (
+          <YearEndCloseSection
+            key={`close-${yearEndVersion}`}
+            periods={resource.data.rows}
+            closes={closes}
+            onChanged={yearEndChanged}
+          />
+        )}
+        <YearCloseHistory
+          key={`history-${yearEndVersion}`}
+          closes={closes}
+          onChanged={yearEndChanged}
+        />
+      </PermissionGate>
 
       <Dialog
         open={confirming !== null}
