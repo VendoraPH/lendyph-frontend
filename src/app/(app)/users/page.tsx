@@ -84,7 +84,7 @@ import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
-import { isInactiveRole, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
+import { isInactiveRole, roleOptionLabel, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
 import { USERNAME_PLACEHOLDER, permissionChipLabel, userStatusLabel } from "./_lib/user-labels";
 import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
@@ -155,7 +155,7 @@ function RoleSelector({
               >
                 <Users className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xs font-medium leading-tight">{roleDisplayName(role)}</p>
+              <p className="text-xs font-medium leading-tight">{roleOptionLabel(role)}</p>
               {isInactiveRole(role) && (
                 <p className="text-[10px] leading-tight text-amber-700">Inactive: grants no access</p>
               )}
@@ -168,7 +168,7 @@ function RoleSelector({
         if (!selected) return null;
         return (
           <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
-            <p className="text-xs font-medium mb-1">{roleDisplayName(selected)} can access:</p>
+            <p className="text-xs font-medium mb-1">{roleOptionLabel(selected)} can access:</p>
             {selected.permissions.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {selected.permissions.map((p) => (
