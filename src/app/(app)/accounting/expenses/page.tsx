@@ -21,6 +21,7 @@ import { accountingService } from "@/services";
 import type { PayExpenseData } from "@/services/accounting.service";
 import type { Expense, ExpensePage } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
+import { AttachmentsDialog } from "../_components/attachments-dialog";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { EditExpenseDialog, ExpenseDialog } from "../_components/expense-dialog";
@@ -44,6 +45,7 @@ function ExpensesContent() {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<Expense | null>(null);
   const [editing, setEditing] = useState<Expense | null>(null);
+  const [attaching, setAttaching] = useState<Expense | null>(null);
 
   // The search goes to the server once typing settles, from page one.
   useEffect(() => {
@@ -207,7 +209,12 @@ function ExpensesContent() {
                       {filtered ? "No expense matches these filters." : "No expense recorded yet."}
                     </p>
                   ) : (
-                    <ExpenseTable rows={rows} onPay={setPaying} onEdit={setEditing} />
+                    <ExpenseTable
+                      rows={rows}
+                      onPay={setPaying}
+                      onEdit={setEditing}
+                      onAttachments={setAttaching}
+                    />
                   )}
                   {typeof answer.meta?.total === "number" && answer.meta.total > 0 && (
                     <TablePagination
@@ -236,6 +243,10 @@ function ExpensesContent() {
         expense={editing}
         onOpenChange={(open) => !open && setEditing(null)}
         onSubmit={update}
+      />
+      <AttachmentsDialog
+        expense={attaching}
+        onOpenChange={(open) => !open && setAttaching(null)}
       />
     </div>
   );
