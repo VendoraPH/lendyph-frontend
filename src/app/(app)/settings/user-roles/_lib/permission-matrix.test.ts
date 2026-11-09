@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { MODULE_ACTIONS } from "./permission-matrix";
 
 const offered = Object.entries(MODULE_ACTIONS).flatMap(([mod, actions]) =>
@@ -47,4 +49,22 @@ test("the matrix offers loan_products:manage and nothing else for loan products"
 // would be refused whole on save (422), breaking every later save of the role.
 test("the matrix offers branches:view_all and nothing else for branches", () => {
   assert.deepEqual(offered.filter((p) => p.startsWith("branches:")), ["branches:view_all"]);
+});
+
+// Round C: posting the allowance is its own permission (backend C1 seeds
+// `accounting:allowance` for super_admin, admin and accountant), so a
+// bookkeeper who can post journals still can't post it.
+test("the matrix offers accounting:allowance beside the other accounting verbs", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("accounting:")), [
+    "accounting:view",
+    "accounting:reconcile",
+    "accounting:close",
+    "accounting:settings",
+    "accounting:allowance",
+  ]);
+});
+
+test("the roles screen labels the allowance permission in words", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.match(page, /allowance: \{ label: "Post the allowance"/);
 });

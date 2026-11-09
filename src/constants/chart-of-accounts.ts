@@ -1,11 +1,13 @@
 /**
- * The default Lendy chart of accounts.
+ * The default Lendy chart of accounts, and the cooperative template built on it.
  *
  * A TEMPLATE, not a fixed structure — administrators add, rename and
- * deactivate accounts, and a cooperative's equity and liability sections look
- * different from a lending corporation's (share capital, statutory funds and
- * undivided net surplus in place of capital and retained earnings). This is
- * what a new organisation is seeded with on day one.
+ * deactivate accounts. `POST /accounting/accounts/seed` takes one of two
+ * templates (`ChartTemplate`): the lending company chart below
+ * (`DEFAULT_CHART_OF_ACCOUNTS`, the default), or the cooperative chart, which
+ * is the same chart plus `COOPERATIVE_CHART_ADDITIONS` (savings and time
+ * deposits, statutory funds and undivided net surplus). Both mirror
+ * lendyph-backend's `ChartOfAccountsSeeder`.
  *
  * Codes follow the classification convention `account.ts` relies on: 1xxx
  * asset, 2xxx liability, 3xxx equity, 4xxx income, 5xxx expense. Keep it that
@@ -17,6 +19,7 @@ import type {
   AccountMapping,
   AccountType,
   CashAccountKind,
+  ChartTemplate,
   NormalBalance,
 } from "@/types/accounting";
 
@@ -118,9 +121,9 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "2390", name: "Suspense Account", type: "liability", parent: "2000" },
 
   // ── Equity ──
-  // A cooperative replaces these with Share Capital, Statutory Funds, Reserve
-  // Fund and Undivided Net Surplus. Left as the corporate default; the
-  // organisation type decides which set is seeded.
+  // The lending company's equity. The cooperative template keeps 3010-3030
+  // (an admin can deactivate them, and every mapping keeps working) and adds
+  // its statutory funds and Undivided Net Surplus (`COOPERATIVE_CHART_ADDITIONS`).
   { code: "3000", name: "Equity", type: "equity", is_group: true },
   { code: "3010", name: "Capital", type: "equity", parent: "3000" },
   { code: "3020", name: "Additional Capital", type: "equity", parent: "3000" },
@@ -231,6 +234,49 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   net_surplus: "3030",
   suspense: "2390",
 } as const satisfies Record<keyof AccountMapping, string>;
+
+/**
+ * What the cooperative template adds to the lending company chart. Mirrors
+ * lendyph-backend `ChartOfAccountsSeeder::COOPERATIVE_ADDITIONS` code for code
+ * and name for name; the codes stay off 2500/2510.
+ */
+export const COOPERATIVE_CHART_ADDITIONS: SeedAccount[] = [
+  // Members' deposits, owed back to them.
+  { code: "2050", name: "Savings Deposits", type: "liability", parent: "2000" },
+  { code: "2060", name: "Time Deposits", type: "liability", parent: "2000" },
+  // Declared out of the net surplus and owed to members until paid.
+  { code: "2070", name: "Interest on Share Capital Payable", type: "liability", parent: "2000" },
+  { code: "2080", name: "Patronage Refund Payable", type: "liability", parent: "2000" },
+  // The funds a cooperative must set aside from its net surplus.
+  { code: "3070", name: "Statutory Funds", type: "equity", is_group: true, parent: "3000" },
+  { code: "3071", name: "Reserve Fund", type: "equity", parent: "3070" },
+  { code: "3072", name: "Education and Training Fund", type: "equity", parent: "3070" },
+  { code: "3073", name: "Community Development Fund", type: "equity", parent: "3070" },
+  { code: "3074", name: "Optional Fund", type: "equity", parent: "3070" },
+  // Where a cooperative's year-end close moves the result.
+  { code: "3080", name: "Undivided Net Surplus", type: "equity", parent: "3000" },
+];
+
+/**
+ * The cooperative template's posting roles that differ from
+ * `DEFAULT_ACCOUNT_MAPPING_CODES`: its year-end result goes to Undivided Net
+ * Surplus, not Retained Earnings.
+ */
+export const COOPERATIVE_MAPPING_OVERRIDES = {
+  net_surplus: "3080",
+} as const satisfies Partial<Record<keyof AccountMapping, string>>;
+
+/**
+ * The rows a template seeds, in code order: what the seed card previews before
+ * the chart is created. The lending company template is
+ * `DEFAULT_CHART_OF_ACCOUNTS` itself.
+ */
+export function templateChart(template: ChartTemplate): SeedAccount[] {
+  if (template === "lending_company") return DEFAULT_CHART_OF_ACCOUNTS;
+  return [...DEFAULT_CHART_OF_ACCOUNTS, ...COOPERATIVE_CHART_ADDITIONS].sort((a, b) =>
+    a.code.localeCompare(b.code),
+  );
+}
 
 /** The normal balance a seed row implies, for building the account record. */
 export function seedNormalBalance(seed: SeedAccount): NormalBalance {

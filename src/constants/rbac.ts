@@ -70,6 +70,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "accounting:reconcile",
       "accounting:close",
       "accounting:settings",
+      // Posting the allowance for credit losses. Seeded for super_admin, admin
+      // and accountant only (round C).
+      "accounting:allowance",
       "chart_of_accounts:view",
       "chart_of_accounts:create",
       "chart_of_accounts:update",
@@ -100,6 +103,47 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reminders:send",
       "reminders:pause",
       "reminders:settings",
+    ],
+  },
+  // Mirrors `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS` exactly (round C).
+  // Every accounting permission and every branch, but only read access to the
+  // lending side, and no `borrowers:view` (round fz personal-data rule), users
+  // or settings.
+  accountant: {
+    label: "Accountant",
+    description:
+      "Keeps the books: journals, expenses, reconciliation, period and year-end close, opening balances and the allowance. Assigned by the owner.",
+    permissions: [
+      "accounting:view",
+      "accounting:reconcile",
+      "accounting:close",
+      "accounting:settings",
+      "accounting:allowance",
+      "chart_of_accounts:view",
+      "chart_of_accounts:create",
+      "chart_of_accounts:update",
+      "chart_of_accounts:delete",
+      "journals:view",
+      "journals:create",
+      "journals:post",
+      "journals:reverse",
+      "expenses:view",
+      "expenses:create",
+      "expenses:update",
+      "expenses:pay",
+      "cash_accounts:view",
+      "cash_accounts:transfer",
+      "branches:view_all",
+      "dashboard:view",
+      "reports:view",
+      "reports:export",
+      "loans:view",
+      "payments:view",
+      "loan_adjustments:view",
+      "share_capital:view",
+      "gcash:view",
+      "fees:view",
+      "audit_logs:view",
     ],
   },
   loan_officer: {
