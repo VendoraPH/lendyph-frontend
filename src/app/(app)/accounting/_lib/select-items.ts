@@ -1,6 +1,12 @@
-import type { Account, AgingBucket, JournalSource } from "@/types";
+import type {
+  Account,
+  AgingBucket,
+  AllowanceBucket,
+  ChartTemplate,
+  JournalSource,
+} from "@/types";
 import { AGING_BUCKETS, agingBucketLabel } from "@/lib/accounting/aging";
-import { journalSourceLabel } from "./display-labels";
+import { allowanceBucketLabel, chartTemplateLabel, journalSourceLabel } from "./display-labels";
 
 /** One option of a Base UI `<Select items>` list. */
 export interface SelectItemOption {
@@ -44,6 +50,7 @@ const JOURNAL_SOURCES: Record<JournalSource, true> = {
   opening_balance: true,
   credit_loss: true,
   share_capital: true,
+  closing: true,
 };
 
 export const journalSourceItems: readonly SelectItemOption[] = [
@@ -80,3 +87,23 @@ export const expenseStatusItems: readonly SelectItemOption[] = [
 export function accountSelectItems(accounts: readonly Account[]): SelectItemOption[] {
   return accounts.map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }));
 }
+
+/** The chart templates, the default (today's chart) first. */
+const CHART_TEMPLATES: readonly ChartTemplate[] = ["lending_company", "cooperative"];
+
+export const chartTemplateItems: readonly SelectItemOption[] = CHART_TEMPLATES.map(
+  (template) => ({ value: template, label: chartTemplateLabel(template) }),
+);
+
+/** The allowance buckets, youngest first. */
+const ALLOWANCE_BUCKETS: readonly AllowanceBucket[] = [
+  "1_30",
+  "31_60",
+  "61_90",
+  "91_120",
+  "over_120",
+];
+
+export const allowanceBucketItems: readonly SelectItemOption[] = ALLOWANCE_BUCKETS.map(
+  (bucket) => ({ value: bucket, label: allowanceBucketLabel(bucket) }),
+);

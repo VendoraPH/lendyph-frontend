@@ -382,6 +382,36 @@ export const API_ENDPOINTS = {
 
     // Settings
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
+
+    // Round C. Seeding keeps ACCOUNTS_SEED; its body gains `template`.
+    // Opening balances: one organisation-wide entry, a draft until finalised.
+    OPENING_BALANCES: "/accounting/opening-balances",
+    OPENING_BALANCES_FINALISE: "/accounting/opening-balances/finalise",
+
+    // Year-end close: the list, the preview, and reopening the latest close.
+    YEAR_CLOSES: "/accounting/year-closes",
+    YEAR_CLOSES_PREVIEW: "/accounting/year-closes/preview",
+    YEAR_CLOSES_REOPEN: (id: number) => `/accounting/year-closes/${id}/reopen`,
+
+    // Allowance for credit losses: the preview, and the postings list and run.
+    ALLOWANCE_PREVIEW: "/accounting/allowance/preview",
+    ALLOWANCE_POSTINGS: "/accounting/allowance/postings",
+
+    // Reconciliation actions: book an unmatched statement line and match it.
+    RECONCILIATION_LINE_EXPENSE: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/expense`,
+    RECONCILIATION_LINE_TRANSFER: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/transfer`,
+    RECONCILIATION_LINE_SUSPENSE: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/suspense`,
+
+    // Attachments on a journal or an expense.
+    JOURNAL_ATTACHMENTS: (journalId: number) => `/accounting/journals/${journalId}/attachments`,
+    JOURNAL_ATTACHMENT: (journalId: number, attachmentId: number) =>
+      `/accounting/journals/${journalId}/attachments/${attachmentId}`,
+    EXPENSE_ATTACHMENTS: (expenseId: number) => `/accounting/expenses/${expenseId}/attachments`,
+    EXPENSE_ATTACHMENT: (expenseId: number, attachmentId: number) =>
+      `/accounting/expenses/${expenseId}/attachments/${attachmentId}`,
   },
   /**
    * None of these exist yet: the credit-scoring backend is not built, and

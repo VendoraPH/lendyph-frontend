@@ -111,7 +111,8 @@ export type JournalSource =
   | "reversal"
   | "opening_balance"
   | "credit_loss"
-  | "share_capital";
+  | "share_capital"
+  | "closing";
 
 /**
  * `draft` is editable and affects nothing. `posted` is live and immutable —
@@ -912,3 +913,347 @@ export type LoanAgingPage<Row extends LoanAgingRow | MemberAgingRow = LoanAgingR
     stats: Record<AgingBucket, number>;
   }
 >;
+
+/**
+ * ─── Round C: templates, opening balances, year-end, allowance,
+ * reconciliation actions and attachments ───
+ *
+ * Built from the round's backend contracts (brief-ac1 to brief-ac6). Money is
+ * integer centavos, as everywhere in this file; rates are strings, never
+ * rounded.
+ */
+
+/** Which chart a fresh organisation is seeded with. The server defaults to `lending_company`. */
+export type ChartTemplate = "lending_company" | "cooperative";
+
+/** A user named on a record: who finalised, closed, posted or uploaded. */
+export interface AccountingUserRef {
+  id: number;
+  name: string;
+}
+
+export interface AccountingBranchRef {
+  id: number;
+  name: string;
+}
+
+export interface AccountingJournalRef {
+  id: number;
+  journal_no: string;
+}
+
+export interface AccountingAccountRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
+/** An accounting period named on a close: the months it closed, or would close. */
+export interface AccountingPeriodRef {
+  id: number;
+  name: string;
+}
+
+// ── Opening balances (C2) ──
+
+/**
+ * `none`: nothing saved and no opening journal. `posted_elsewhere`: an
+ * `opening_balance` journal exists that this screen didn't post (the CLI ran).
+ */
+export type OpeningBalanceStatus = "none" | "draft" | "finalised" | "posted_elsewhere";
+
+export interface OpeningBalanceLine {
+  id: number;
+  account_id: number;
+  account_code: string;
+  account_name: string;
+  account_type: AccountType;
+  /** Centavos. Exactly one side is above zero. */
+  debit: number;
+  credit: number;
+}
+
+/** The 3050 line the server offers for the difference. The screen never adds it by itself. */
+export interface OpeningBalanceSuggestedLine {
+  account_id: number;
+  account_code: string;
+  account_name: string;
+  debit: number;
+  credit: number;
+}
+
+/** The one organisation-wide opening entry, with no branch. */
+export interface OpeningBalance {
+  status: OpeningBalanceStatus;
+  /** Null when `status` is `none`. */
+  id: number | null;
+  as_of: string | null;
+  /** In code order. */
+  lines: OpeningBalanceLine[];
+  total_debit: number;
+  total_credit: number;
+  /** `total_debit - total_credit`, from the server. */
+  difference: number;
+  /** Two or more lines, and total debit equals total credit above zero. */
+  is_balanced: boolean;
+  /** The line on 3050 Opening Balance Equity, if there is one. */
+  opening_equity_line: OpeningBalanceLine | null;
+  /** Null when balanced, or when 3050 is missing from the chart. */
+  suggested_opening_equity_line: OpeningBalanceSuggestedLine | null;
+  /** Posted journals dated on or before `as_of`: a warning figure. */
+  posted_journals_on_or_before_as_of: number;
+  journal: AccountingJournalRef | null;
+  edit_version: number;
+  finalised_at: string | null;
+  finalised_by: AccountingUserRef | null;
+  can_edit: boolean;
+  can_finalise: boolean;
+  /** Why finalising would be refused, in words. */
+  blocking_reasons: string[];
+}
+
+export interface OpeningBalanceDraftLine {
+  account_id: number;
+  /** Centavos. Exactly one side above zero. */
+  debit: number;
+  credit: number;
+}
+
+/** The PUT body. `lines` replaces the draft's lines wholesale (at most 500, may be empty). */
+export interface OpeningBalanceDraft {
+  as_of: string;
+  lines: OpeningBalanceDraftLine[];
+  /** The version last read; a stale one answers 409. */
+  edit_version?: number;
+}
+
+// ── Year-end close (C3) ──
+
+export type YearCloseStatus = "closed" | "reopened";
+
+/** One closing entry: one per branch, plus one for journals with no branch. */
+export interface YearCloseEntry {
+  /** Null for the no-branch entry, shown with `branches:view_all` only. */
+  branch: AccountingBranchRef | null;
+  journal: AccountingJournalRef;
+  /** Centavos, signed: a profit is positive. */
+  net_surplus: number;
+}
+
+export interface YearClose {
+  id: number;
+  year: number;
+  status: YearCloseStatus;
+  /** Centavos, signed. The sum of the entries the caller sees. */
+  net_surplus: number;
+  net_surplus_account: AccountingAccountRef;
+  entries: YearCloseEntry[];
+  periods_closed: AccountingPeriodRef[];
+  closed_at: string;
+  closed_by: AccountingUserRef | null;
+  reopened_at: string | null;
+  reopened_by: AccountingUserRef | null;
+  reopen_reason: string | null;
+}
+
+export type YearClosePage = PageWithMeta<
+  YearClose,
+  {
+    /** Over the matching rows the caller sees, not the page. */
+    totals: { net_surplus: number };
+  }
+>;
+
+export interface YearClosePreviewLine {
+  account_id: number;
+  account_code: string;
+  account_name: string;
+  type: AccountType;
+  /** The account's net for the year, positive as it normally reads. */
+  amount: number;
+}
+
+/** A branch with income or expense activity in the year; null is the no-branch journals. */
+export interface YearClosePreviewBranch {
+  branch: AccountingBranchRef | null;
+  lines: YearClosePreviewLine[];
+  total_income: number;
+  total_expenses: number;
+  net_surplus: number;
+}
+
+export interface YearClosePreview {
+  year: number;
+  /** "YYYY-12-31", the closing entries' date. */
+  as_of: string;
+  net_surplus_account: AccountingAccountRef;
+  branches: YearClosePreviewBranch[];
+  total_income: number;
+  total_expenses: number;
+  net_surplus: number;
+  periods_to_close: AccountingPeriodRef[];
+  /** Draft journals dated in the year; any blocks the close. */
+  draft_journals: number;
+  can_close: boolean;
+  blocking_reasons: string[];
+}
+
+// ── Allowance for credit losses (C4) ──
+
+/** Days from the oldest unpaid instalment's due date. `91_120` and `over_120` take the over-90 rate. */
+export type AllowanceBucket = "1_30" | "31_60" | "61_90" | "91_120" | "over_120";
+
+export interface AllowanceRate {
+  bucket: AllowanceBucket;
+  label: string;
+  /** "5", "15", "25", "50". Never rounded. */
+  rate_percent: string;
+}
+
+export interface AllowanceBucketRow {
+  bucket: AllowanceBucket;
+  loan_count: number;
+  principal: number;
+  rate_percent: string;
+  /** Rounded half up to the centavo by the server. */
+  required: number;
+}
+
+/** One branch of the preview. Every active branch appears, with zeros where there's nothing. */
+export interface AllowanceBranch {
+  branch: AccountingBranchRef;
+  buckets: AllowanceBucketRow[];
+  principal: number;
+  required: number;
+  /** The branch's 1200 balance, as a positive credit. */
+  current_balance: number;
+  /** `required - current_balance`, from the server: positive provides, negative releases. */
+  adjustment: number;
+}
+
+export interface AllowancePreview {
+  as_of: string;
+  rates: AllowanceRate[];
+  branches: AllowanceBranch[];
+  totals: {
+    loan_count: number;
+    principal: number;
+    required: number;
+    current_balance: number;
+    /** Sent back as `expected_adjustment` when posting. */
+    adjustment: number;
+  };
+  /** The 1200 balance on journals with no branch, shown and left alone. */
+  unassigned_balance: number;
+  last_posting: {
+    as_of: string;
+    posted_at: string;
+    posted_by: AccountingUserRef | null;
+  } | null;
+  can_post: boolean;
+  blocking_reasons: string[];
+}
+
+/** One branch's posting in a run. `journal` is null when that branch's adjustment was 0. */
+export interface AllowancePosting {
+  id: number;
+  branch: AccountingBranchRef;
+  required: number;
+  previous_balance: number;
+  adjustment: number;
+  journal: AccountingJournalRef | null;
+}
+
+/** What posting the allowance answers: one run, one posting per branch. */
+export interface AllowanceRun {
+  /** A uuid shared by the run's postings. */
+  run_id: string;
+  as_of: string;
+  postings: AllowancePosting[];
+  totals: { required: number; previous_balance: number; adjustment: number };
+}
+
+/** A row of the postings list: a posting with its run. */
+export interface AllowancePostingRow extends AllowancePosting {
+  run_id: string;
+  as_of: string;
+  created_by: AccountingUserRef | null;
+  created_at: string;
+}
+
+export type AllowancePostingPage = PageWithMeta<
+  AllowancePostingRow,
+  {
+    /** Over every matching row, not the page. */
+    totals: { adjustment: number };
+  }
+>;
+
+/** The provisioning report's `principal_basis` bucket keys. `91_120` and `over_120` fold into `over_90`. */
+export type ProvisioningBasisBucket = "1_30" | "31_60" | "61_90" | "over_90";
+
+/**
+ * `GET /reports/provisioning`'s `principal_basis`: the allowance calculator's
+ * figures in PESOS with two decimals, like the rest of `/reports`, converted
+ * once by the server. Not centavos.
+ */
+export interface ProvisioningPrincipalBasis {
+  buckets: Record<
+    ProvisioningBasisBucket,
+    { principal: number; count: number; rate_percent: string; required_allowance: number }
+  >;
+  totals: { principal: number; count: number; required_allowance: number };
+  basis_note: string;
+}
+
+// ── Reconciliation actions (C5) ──
+
+export interface ReconcileLineAsExpenseBody {
+  expense_account_id: number;
+  /** Required, at most 255 characters. */
+  payee: string;
+  /** At most 500 characters. */
+  description?: string;
+}
+
+export interface ReconcileLineAsTransferBody {
+  /** A money account other than the reconciled one. */
+  counter_account_id: number;
+  description?: string;
+}
+
+export interface ReconcileLineToSuspenseBody {
+  description?: string;
+}
+
+/**
+ * What each action answers: the reconciliation exactly as its show route
+ * answers it, with the line now matched, and the record the action created.
+ */
+export interface ReconciliationActionResult {
+  data: Reconciliation;
+  created: {
+    type: "expense" | "transfer" | "journal";
+    id: number;
+    journal_id: number;
+    journal_no: string;
+  };
+}
+
+// ── Attachments (C6) ──
+
+/** A file on a journal or an expense. At most 20 per owner. */
+export interface AccountingAttachment {
+  id: number;
+  label: string | null;
+  original_filename: string;
+  mime_type: string;
+  /** Bytes. */
+  file_size: number;
+  /** A signed, short-lived link: read it when opening, never store it. */
+  url: string;
+  uploaded_by: AccountingUserRef | null;
+  created_at: string;
+  /** The caller may remove it now (draft journal, or `accounting:settings`). */
+  can_remove: boolean;
+}
