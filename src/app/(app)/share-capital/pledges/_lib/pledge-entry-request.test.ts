@@ -91,6 +91,18 @@ test("the bulk dialog closes only once the batch has posted", () => {
   assert.match(page, /if \(await handleBulkSubmit\(\)\) setBulkDialogOpen\(false\)/);
 });
 
+test("the bulk dialog can't close while its batch posts, nor submit without a needed reference", () => {
+  const page = readPage();
+  assert.match(page, /onOpenChange=\{\(open\) => \{\s*if \(!bulkSubmitting\) setBulkDialogOpen\(open\);\s*\}\}/);
+  assert.match(page, /disabled=\{bulkSubmitting \|\| bulkReferenceProblem !== null\}/);
+});
+
+test("a member's entry posts once: Submit and Enter both wait while it posts", () => {
+  const page = readPage();
+  assert.match(page, /async function handleManualEntry\(id: number\) \{\s*if \(manualSubmitting\) return;/);
+  assert.match(page, /disabled=\{manualSubmitting \|\| !manualAmount \|\| manualReferenceProblem !== null\}/);
+});
+
 function readPage(): string {
   return readFileSync(join(process.cwd(), "src/app/(app)/share-capital/pledges/page.tsx"), "utf8");
 }

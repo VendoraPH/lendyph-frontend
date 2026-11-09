@@ -74,10 +74,10 @@ import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import {
+  releaseDialogView,
   releaseInsuranceQuery,
   releaseMethodDetails,
   releaseRequest,
-  restructureReleaseRows,
 } from "./_lib/release-figures";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
@@ -1407,14 +1407,18 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Release stays off until then.
   const releaseAnswer = releaseConfirm.status === "ready" ? releaseConfirm.answer : null;
   const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
-  const releaseReferenceProblem = paymentReferenceError(releaseMethod, releaseReference, "release");
+  // A restructure pays nothing out: the dialog shows how the release settles
+  // the old loan, from the server's `restructure` block, instead of a net, and
+  // its method is how the deductions were collected from the member.
+  const releaseView = releaseDialogView(loan.is_restructure, releaseAnswer);
+  const releaseRestructureRows = releaseView.restructureRows;
+  const releaseReferenceProblem = paymentReferenceError(
+    releaseMethod,
+    releaseReference,
+    releaseView.referenceSubject,
+  );
   const canConfirmRelease =
     releaseAnswer !== null && !releaseExceedsNet && releaseReferenceProblem === null && !actionLoading;
-  // A restructure pays nothing out: the dialog shows how the release settles
-  // the old loan, from the server's `restructure` block, instead of a net.
-  const releaseRestructureRows = loan.is_restructure
-    ? restructureReleaseRows(releaseAnswer?.restructure ?? null)
-    : null;
   const loanReleaseMethod = releaseMethodDetails(loan);
 
   const handleRelease = async () => {
@@ -3846,7 +3850,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
             <MethodReferenceFields
               idPrefix="release"
-              methodLabel="Release Method"
+              methodLabel={releaseView.methodLabel}
               options={PAYMENT_METHOD_OPTIONS}
               method={releaseMethod}
               reference={releaseReference}

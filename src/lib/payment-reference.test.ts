@@ -46,14 +46,21 @@ test("each screen says what the reference is for", () => {
   );
 });
 
+test("a restructure's release collects its deductions, so its reference says so", () => {
+  assert.equal(
+    paymentReferenceError("gcash", "", "restructure_collection"),
+    "Enter the reference number for this GCash collection of the restructure's deductions.",
+  );
+});
+
 test("cash needs no reference on any screen", () => {
-  for (const subject of ["payment", "release", "extension", "share_capital"] as const) {
+  for (const subject of ["payment", "release", "restructure_collection", "extension", "share_capital"] as const) {
     assert.equal(paymentReferenceError("cash", "", subject), null, subject);
   }
 });
 
 test("every other method needs one, on every screen", () => {
-  for (const subject of ["payment", "release", "extension", "share_capital"] as const) {
+  for (const subject of ["payment", "release", "restructure_collection", "extension", "share_capital"] as const) {
     for (const method of ["gcash", "maya", "bank_transfer", "online"] as const) {
       assert.ok(paymentReferenceError(method, "   ", subject), `${subject} ${method}`);
       assert.equal(paymentReferenceError(method, "REF-1", subject), null, `${subject} ${method}`);

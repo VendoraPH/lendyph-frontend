@@ -178,6 +178,8 @@ function PledgeEntryContent() {
   // How the entry's money came in or went out; the reference is required unless cash.
   const [manualMethod, setManualMethod] = useState<RecordPaymentMethod>("cash");
   const [manualReference, setManualReference] = useState("");
+  // Each entry posts a journal: Submit and Enter wait while one posts.
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   // Per-member bulk entry dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -347,6 +349,7 @@ function PledgeEntryContent() {
   }
 
   async function handleManualEntry(id: number) {
+    if (manualSubmitting) return;
     const parsed = parsePledgeAmount(manualAmount);
     if (!parsed.ok) {
       toast.error(parsed.message);
@@ -367,6 +370,7 @@ function PledgeEntryContent() {
       toast.error(request.message);
       return;
     }
+    setManualSubmitting(true);
     try {
       await shareCapitalService.ledgerCreate(request.data);
       toast.success(
@@ -379,6 +383,8 @@ function PledgeEntryContent() {
       setManualReference("");
     } catch (err) {
       notifyError(err, "We couldn't create the manual entry. Please try again.");
+    } finally {
+      setManualSubmitting(false);
     }
   }
 
@@ -862,7 +868,7 @@ function PledgeEntryContent() {
                                 <Button
                                   size="sm"
                                   className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                                  disabled={!manualAmount || manualReferenceProblem !== null}
+                                  disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
                                   onClick={() => handleManualEntry(pledge.id)}
                                 >
                                   Submit
@@ -949,7 +955,12 @@ function PledgeEntryContent() {
         </CardContent>
       </Card>
       {/* Bulk Entry Dialog */}
-      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+      <Dialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!bulkSubmitting) setBulkDialogOpen(open);
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Manual Pledge Entry</DialogTitle>
@@ -1023,7 +1034,7 @@ function PledgeEntryContent() {
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              disabled={bulkSubmitting}
+              disabled={bulkSubmitting || bulkReferenceProblem !== null}
               onClick={async () => {
                 // Closes only once the batch has posted: a missing field or a
                 // refusal keeps every row typed so far.

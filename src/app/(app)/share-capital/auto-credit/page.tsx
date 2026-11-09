@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { shareCapitalService } from "@/services";
 import type { AutoCreditMember } from "@/types";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
@@ -131,8 +132,10 @@ function AutoCreditContent() {
         `Auto-credit completed: ${formatCurrency(result.total_amount ?? totalPledge)} credited to ${result.processed_count ?? activeMembers.length} members`
       );
       fetchStatus();
-    } catch {
-      toast.error("We couldn't process auto-credit. Please try again.");
+    } catch (err) {
+      // A 422 (method or reference) or the 409 that posted nothing: in the
+      // server's words.
+      notifyError(err, "We couldn't process auto-credit. Please try again.");
     } finally {
       setProcessing(false);
     }
@@ -262,7 +265,12 @@ function AutoCreditContent() {
       )}
 
       {/* Confirm Dialog — Total Pledge Amount (large font) */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!processing) setConfirmOpen(open);
+        }}
+      >
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

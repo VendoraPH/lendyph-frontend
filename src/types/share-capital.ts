@@ -1,3 +1,6 @@
+import type { RecordPaymentMethod } from "@/constants/payment-methods";
+import type { AutoCreditMethod } from "@/lib/payment-reference";
+
 /**
  * One row of `ShareCapitalLedgerResource`, exactly as the API sends it —
  * `GET /share-capital/ledger`, `POST /share-capital/ledger` and
@@ -120,7 +123,7 @@ export interface AutoCreditMember {
  * through (Bank, `bank_transfer`, when left out) and an optional reference.
  */
 export interface AutoCreditProcessData {
-  method?: "cash" | "gcash" | "maya" | "bank_transfer";
+  method?: AutoCreditMethod;
   reference_number?: string;
 }
 
@@ -137,7 +140,7 @@ export interface AutoCreditProcessResult {
  * reverse.
  */
 export interface ShareCapitalMethodFields {
-  method?: "cash" | "gcash" | "maya" | "bank_transfer" | "online";
+  method?: RecordPaymentMethod;
   reference_number?: string;
 }
 

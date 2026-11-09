@@ -7,7 +7,12 @@
 import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
 
 /** What a reference is asked for, so the reason a blank one can't go reads right on each screen. */
-export type PaymentReferenceSubject = "payment" | "release" | "extension" | "share_capital";
+export type PaymentReferenceSubject =
+  | "payment"
+  | "release"
+  | "restructure_collection"
+  | "extension"
+  | "share_capital";
 
 function methodName(method: string): string {
   return PAYMENT_METHOD_OPTIONS.find((o) => o.value === method)?.label ?? method;
@@ -33,6 +38,8 @@ export function paymentReferenceError(
   switch (subject) {
     case "release":
       return `Enter the reference number of the ${name} transfer that pays out this loan.`;
+    case "restructure_collection":
+      return `Enter the reference number for this ${name} collection of the restructure's deductions.`;
     case "extension":
       return `Enter the reference number for this ${name} payment collected to extend the loan.`;
     case "share_capital":

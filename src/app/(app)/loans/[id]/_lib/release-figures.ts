@@ -7,7 +7,7 @@
 
 import { knownPaymentMethodName, type RecordPaymentMethod } from "@/constants/payment-methods";
 import { getErrorMessage } from "@/lib/api-error";
-import { paymentMethodFields } from "@/lib/payment-reference";
+import { paymentMethodFields, type PaymentReferenceSubject } from "@/lib/payment-reference";
 import type { ReleaseLoanPayload, ReleasePreviewInsuranceQuery } from "@/services/loan.service";
 import type { Loan, LoanReleasePreview, LoanReleaseRestructure } from "@/types/loan";
 import type { InsurancePremiumValue } from "../_components/insurance-premium.types";
@@ -272,4 +272,29 @@ export function releaseMethodDetails(
   if (stored == null || stored === "") return { method: NOT_RECORDED, reference: NOT_RECORDED };
   const reference = loan.release_reference?.trim();
   return { method: knownPaymentMethodName(stored) ?? "Other", reference: reference ? reference : "—" };
+}
+
+/**
+ * What the Release dialog shows for this loan. A restructure pays nothing
+ * out: its method is how the deductions were collected from the member, and
+ * the server's `restructure` block (dashes until it answers) stands in for
+ * Net Proceeds. Any other loan shows Net Proceeds and asks how the proceeds
+ * are paid out.
+ */
+export function releaseDialogView(
+  isRestructure: boolean | undefined,
+  answer: LoanReleasePreview | null,
+): {
+  restructureRows: RestructureReleaseRow[] | null;
+  methodLabel: string;
+  referenceSubject: PaymentReferenceSubject;
+} {
+  if (isRestructure === true) {
+    return {
+      restructureRows: restructureReleaseRows(answer?.restructure ?? null),
+      methodLabel: "Collection Method",
+      referenceSubject: "restructure_collection",
+    };
+  }
+  return { restructureRows: null, methodLabel: "Release Method", referenceSubject: "release" };
 }

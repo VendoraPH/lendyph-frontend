@@ -30,6 +30,7 @@ import {
   releaseInsuranceView,
   staleReread,
   type ReleaseInsuranceOutcome,
+  releaseDialogView,
   releaseMethodDetails,
   releaseRequest,
   restructureReleaseRows,
@@ -383,5 +384,42 @@ describe("releaseMethodDetails", () => {
 
   test("a stored key the screen doesn't know never shows raw", () => {
     assert.equal(releaseMethodDetails({ release_method: "cheque_x", release_reference: "C-1" }).method, "Other");
+  });
+});
+
+describe("releaseDialogView", () => {
+  const RESTRUCTURE = {
+    carried_principal: "40000.00",
+    capitalised_interest: "1500.00",
+    capitalised_penalty: "250.00",
+    written_off_principal: "0.00",
+    collected_now: "850.00",
+    paid_out: "0.00",
+  };
+
+  test("an ordinary loan shows Net Proceeds and asks how the proceeds are paid out", () => {
+    const view = releaseDialogView(false, { ...PREVIEW, restructure: RESTRUCTURE });
+    assert.equal(view.restructureRows, null);
+    assert.equal(view.methodLabel, "Release Method");
+    assert.equal(view.referenceSubject, "release");
+  });
+
+  test("a restructure shows the server's block instead, and asks how the deductions were collected", () => {
+    const view = releaseDialogView(true, { ...PREVIEW, restructure: RESTRUCTURE });
+    assert.deepEqual(view.restructureRows, restructureReleaseRows(RESTRUCTURE));
+    assert.equal(view.methodLabel, "Collection Method");
+    assert.equal(view.referenceSubject, "restructure_collection");
+  });
+
+  test("a restructure whose answer isn't in yet shows the block with dashes, never Net Proceeds", () => {
+    for (const answer of [null, PREVIEW]) {
+      const view = releaseDialogView(true, answer);
+      assert.ok(view.restructureRows !== null);
+      assert.ok(view.restructureRows.every((row) => row.amount === null));
+    }
+  });
+
+  test("a loan with no restructure flag is an ordinary release", () => {
+    assert.equal(releaseDialogView(undefined, PREVIEW).restructureRows, null);
   });
 });
