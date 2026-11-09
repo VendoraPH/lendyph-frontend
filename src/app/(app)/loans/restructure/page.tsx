@@ -576,6 +576,9 @@ function RestructureLoanInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // The preview's restructure block (the request names the source loan once a
+  // principal is entered): the shortfall, and what is collected and paid out.
+  const previewRestructure = preview.status === "ready" ? (preview.preview.restructure ?? null) : null;
 
   // Restructuring for less than the restructurable balance writes the
   // difference off, so the API requires remarks explaining it, and the
@@ -584,9 +587,7 @@ function RestructureLoanInner() {
   // principal is entered); nothing is subtracted here. Unknown while the
   // preview loads or after it failed: no figure, and the server still checks
   // on save.
-  const restructure = readRestructurePreview(
-    preview.status === "ready" ? preview.preview.restructure : null,
-  );
+  const restructure = readRestructurePreview(previewRestructure);
   const shortfallState = restructureShortfallState(principal, restructure, canWriteOff);
   const remarksRequired = shortfallState.remarksRequired;
   // The amount hint's one balance: the preview's, the summary's until then.
@@ -1493,6 +1494,7 @@ function RestructureLoanInner() {
                   {proceedsFigures(true, {
                     totalDeductions: previewDeductions?.total_deductions ?? null,
                     netProceeds: null,
+                    restructure: previewRestructure,
                   }).map((figure) => (
                     <div key={figure.label} className="flex justify-between font-semibold">
                       <span>{figure.label}</span>

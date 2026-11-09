@@ -5,9 +5,12 @@
  * of Net Proceeds, as the release dialog does.
  *
  * WHAT THIS PROVES: an ordinary loan shows Net Proceeds; a restructure shows
- * the server's collected figure (the release preview's `collected_now` when it
- * sent one, else its total deductions) and Paid out, the server's `paid_out`
- * when sent; a missing figure is a dash.
+ * the server's collected figure and Paid out. Once a preview's `restructure`
+ * block has come back (the release preview, or POST /loans/preview with
+ * `source_loan_id`), both are its `collected_now` and `paid_out` and nothing
+ * else: a figure it left out is a dash, never the total deductions or ₱0.00.
+ * Without that block (a released loan's recorded figures) the loan's total
+ * deductions are what was collected. A missing figure is a dash.
  * WHAT IT DOES NOT PROVE: the figures themselves (backend tests).
  */
 import { test } from "node:test";
@@ -43,6 +46,27 @@ test("the release preview's restructure block wins when it was sent", () => {
   );
 });
 
+test("once the server's restructure block is back, a figure it left out is a dash, never a browser figure", () => {
+  assert.deepEqual(
+    proceedsFigures(true, { totalDeductions: "850.00", netProceeds: "18816.67", restructure: {} }),
+    [
+      { label: "Collected from the member", amount: null },
+      { label: "Paid out", amount: null },
+    ],
+  );
+  assert.deepEqual(
+    proceedsFigures(true, {
+      totalDeductions: "850.00",
+      netProceeds: null,
+      restructure: { collected_now: "0.00", paid_out: undefined },
+    }),
+    [
+      { label: "Collected from the member", amount: "0.00" },
+      { label: "Paid out", amount: null },
+    ],
+  );
+});
+
 test("a figure the server didn't send is null, never worked out", () => {
   assert.deepEqual(proceedsFigures(true, { totalDeductions: null, netProceeds: null })[0], {
     label: "Collected from the member",
@@ -69,11 +93,16 @@ test("the loan page's card and the loan form both use it", () => {
   const form = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
   assert.ok(page.includes("proceedsFigures(!!loan.is_restructure"));
   assert.ok(form.includes("proceedsFigures(isRestructureEdit"));
+  // The edit form's one preview names the source loan, so its block is the server's too.
+  assert.match(form, /proceedsFigures\(isRestructureEdit, \{[\s\S]*?restructure: previewRestructure,[\s\S]*?\}\)/);
 });
 
 test("the restructure page shows what is collected and paid out, never Net Proceeds", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/restructure/page.tsx"), "utf8");
   assert.ok(page.includes("proceedsFigures(true, {"));
+  // The preview's own restructure block, sent because the request names the source loan.
+  assert.match(page, /proceedsFigures\(true, \{[\s\S]*?restructure: previewRestructure,[\s\S]*?\}\)/);
+  assert.match(page, /const previewRestructure =\s*preview\.status === "ready" \? \(preview\.preview\.restructure \?\? null\) : null;/);
   assert.ok(!page.includes("Net Proceeds"));
   assert.ok(!page.includes("net_proceeds"));
 });

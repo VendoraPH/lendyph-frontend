@@ -106,10 +106,8 @@ import {
 import {
   PROCESSING_FEE_LABEL,
   SERVICE_FEE_LABEL,
-  readRestructurableBalance,
   readRestructurePreview,
   restructurableBalanceHint,
-  restructurableBalanceShown,
   restructureShortfallState,
   type LoanDeduction,
 } from "@/lib/loan-restructure";
@@ -150,7 +148,7 @@ import {
   remarksRefusal,
   remarksRequired,
   restructureEditFields,
-  restructureEditPreviewRequest,
+  restructureEditSourceId,
   scbRuleError,
 } from "./_lib/restructure-edit";
 import { proceedsFigures } from "@/lib/restructure-proceeds";
@@ -515,48 +513,18 @@ function NewLoanApplicationInner() {
   // exempts it from the product's minimum and build-up range, and it carries
   // remarks of its own.
   const isRestructureEdit = isEditMode && existingLoan?.is_restructure === true;
+  // A restructure's source loan, named by the form's one preview beside the
+  // edited loan (needs loans:restructure).
+  const restructureSourceId = restructureEditSourceId({
+    isRestructureEdit,
+    sourceLoanId: existingLoan?.source_loan_id,
+    canRestructure,
+  });
   const storedPrincipal =
     isRestructureEdit && existingLoan?.principal_amount != null ? Number(existingLoan.principal_amount) : null;
   // Asked for by the server, and only while the principal differs from the
   // stored one (the server keeps the stored remarks otherwise).
   const remarksNeeded = remarksRequired(remarksRequiredMessage, principal, storedPrincipal);
-
-  // The source loan's restructurable balance, which may have moved since the
-  // restructure was approved (a payment, waiver or adjustment): the most this
-  // restructure can take as principal. The server's figure, from the
-  // restructure preview for the principal on screen, or from the source loan's
-  // summary until that answers or without loans:restructure.
-  const sourceLoanId = isRestructureEdit ? (existingLoan?.source_loan_id ?? null) : null;
-  const [sourceSummaryBalance, setSourceSummaryBalance] = useState<{ loanId: number; balance: number | null } | null>(null);
-  useEffect(() => {
-    if (sourceLoanId === null) return;
-    let cancelled = false;
-    loanService
-      .summary(sourceLoanId)
-      .then((summary) => readRestructurableBalance(summary as unknown as Record<string, unknown>, null))
-      .catch(() => null)
-      .then((balance) => {
-        if (!cancelled) setSourceSummaryBalance({ loanId: sourceLoanId, balance });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceLoanId]);
-  const { view: restructurePreview } = useLoanPreview(
-    restructureEditPreviewRequest({ sourceLoanId, principalAmount, canRestructure }),
-  );
-  const editRestructure = readRestructurePreview(
-    restructurePreview.status === "ready" ? restructurePreview.preview.restructure : null,
-  );
-  const editShowsShortfall = restructureShortfallState(principal, editRestructure, canWriteOff).showsShortfall;
-  const restructureBalanceHint = restructurableBalanceHint(
-    editShowsShortfall,
-    editRestructure.shortfall,
-    restructurableBalanceShown(
-      editRestructure,
-      sourceSummaryBalance !== null && sourceSummaryBalance.loanId === sourceLoanId ? sourceSummaryBalance.balance : null,
-    ),
-  );
 
   // Validation messages
   const principalError = useMemo(() => {
@@ -663,6 +631,7 @@ function NewLoanApplicationInner() {
   const { view: preview, retry: retryPreview } = useLoanPreview(
     loanPreviewRequest({
       borrowerId,
+      sourceLoanId: restructureSourceId,
       editLoanId,
       productId,
       principalAmount,
@@ -686,6 +655,20 @@ function NewLoanApplicationInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // A restructure's block from the same preview (it names the source loan):
+  // the source loan's restructurable balance, which may have moved since the
+  // restructure was approved (a payment, waiver or adjustment), so the most
+  // this restructure can take as principal; the shortfall; and what is
+  // collected from the member and paid out. All the server's; no hint while
+  // the preview loads, after it failed, or without loans:restructure.
+  const previewRestructure = preview.status === "ready" ? (preview.preview.restructure ?? null) : null;
+  const editRestructure = readRestructurePreview(previewRestructure);
+  const editShowsShortfall = restructureShortfallState(principal, editRestructure, canWriteOff).showsShortfall;
+  const restructureBalanceHint = restructurableBalanceHint(
+    editShowsShortfall,
+    editRestructure.shortfall,
+    editRestructure.restructurableBalance,
+  );
   // A collateral the preview refused is worded by whether this user can take
   // it off the form: only when the collaterals can change, and in edit mode
   // not one the loan already holds.
@@ -1861,6 +1844,7 @@ function NewLoanApplicationInner() {
             {proceedsFigures(isRestructureEdit, {
               totalDeductions: previewDeductions?.total_deductions,
               netProceeds: previewDeductions?.net_proceeds,
+              restructure: previewRestructure,
             }).map((figure) => (
               <div
                 key={figure.label}

@@ -159,14 +159,23 @@ describe("loanPreviewRequest", () => {
     }
   });
 
-  test("a restructure names its source loan, never loan_id", () => {
+  test("a restructure edit names both the edited loan and its source, in one request", () => {
     const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40, editLoanId: 7 });
     assert.ok(request);
     assert.equal(request.source_loan_id, 40);
-    assert.equal("loan_id" in request, false);
+    assert.equal(request.loan_id, 7);
+    // No principal to measure yet: the edited loan still goes up, the source waits.
     const blankPrincipal = loanPreviewRequest({ ...COMPLETE, principalAmount: "", sourceLoanId: 40, editLoanId: 7 });
     assert.ok(blankPrincipal);
-    assert.equal("loan_id" in blankPrincipal, false);
+    assert.equal(blankPrincipal.loan_id, 7);
+    assert.equal("source_loan_id" in blankPrincipal, false);
+  });
+
+  test("a new restructure names only its source loan", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40 });
+    assert.ok(request);
+    assert.equal(request.source_loan_id, 40);
+    assert.equal("loan_id" in request, false);
   });
 
   test("never sends a snapshot_value, whatever the form shows", () => {

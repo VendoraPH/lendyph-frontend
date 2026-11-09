@@ -25,7 +25,7 @@ export interface LoanPreviewInputs {
   borrowerId: number | null;
   /** The loan a restructure replaces; absent or null for a new application. */
   sourceLoanId?: number | null;
-  /** The loan being edited; absent or null for a new application or a restructure. */
+  /** The loan being edited; absent or null for a new application or a new restructure. */
   editLoanId?: number | null;
   /** Only each row's collateral id goes up; the figure a row shows never does. */
   collaterals: readonly Pick<SelectedCollateral, "collateral">[];
@@ -67,9 +67,9 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   // The shortfall needs a principal to measure, so a restructure names its
   // source loan only once one above 0 is entered.
   const sourceLoanId = principal !== undefined ? inputs.sourceLoanId ?? undefined : undefined;
-  // Only an edit names its loan; a restructure names its source loan instead.
-  const editLoanId =
-    inputs.sourceLoanId == null ? inputs.editLoanId ?? undefined : undefined;
+  // Only an edit names its loan. A restructure being edited names both, so one
+  // preview carries the edited loan's collaterals and the restructure block.
+  const editLoanId = inputs.editLoanId ?? undefined;
   const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
 
   if (productId === undefined && !valuable) return null;
