@@ -3,14 +3,14 @@
 import { useCallback } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { BalanceSheet } from "@/types";
-import { DataState } from "../../_components/data-state";
 import { Amount, ReportSection } from "../../_components/report-section";
 import { balanceSheetLines } from "../_lib/statement-lines";
+import { StatementState } from "./statement-state";
+import { useStatementResource } from "./use-statement-resource";
 
 interface BalanceSheetReportProps {
   asOf: string;
@@ -31,11 +31,12 @@ export function BalanceSheetReport({ asOf, branchId }: BalanceSheetReportProps) 
     [asOf, branchId],
   );
 
-  const resource = useAccountingResource<BalanceSheet>(fetcher);
+  const { resource, refusal } = useStatementResource<BalanceSheet>(fetcher);
 
   return (
-    <DataState
+    <StatementState
       resource={resource}
+      refusal={refusal}
       summary="What the business owns, owes and is worth on a date."
       endpoints={["GET /accounting/statements/balance-sheet"]}
       isEmpty={(sheet) =>
@@ -46,7 +47,7 @@ export function BalanceSheetReport({ asOf, branchId }: BalanceSheetReportProps) 
       emptyMessage="No posted entry on or before this date."
     >
       {(sheet) => <Sheet sheet={sheet} />}
-    </DataState>
+    </StatementState>
   );
 }
 

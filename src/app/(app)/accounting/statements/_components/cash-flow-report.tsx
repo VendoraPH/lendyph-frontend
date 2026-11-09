@@ -3,13 +3,13 @@
 import { useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate } from "@/lib/format";
 import type { CashFlowStatement } from "@/types";
-import { DataState } from "../../_components/data-state";
 import { Amount, ReportSection } from "../../_components/report-section";
 import { cashFlowLines } from "../_lib/statement-lines";
+import { StatementState } from "./statement-state";
+import { useStatementResource } from "./use-statement-resource";
 
 interface CashFlowReportProps {
   from: string;
@@ -31,11 +31,12 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
     () => accountingService.cashFlow({ from, to, branch_id: branchId }),
     [from, to, branchId],
   );
-  const resource = useAccountingResource<CashFlowStatement>(fetcher);
+  const { resource, refusal } = useStatementResource<CashFlowStatement>(fetcher);
 
   return (
-    <DataState
+    <StatementState
       resource={resource}
+      refusal={refusal}
       summary="Where cash came from and where it went, split into operating, investing and financing."
       endpoints={["GET /accounting/statements/cash-flow"]}
     >
@@ -105,7 +106,7 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
           )}
         </div>
       )}
-    </DataState>
+    </StatementState>
   );
 }
 

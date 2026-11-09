@@ -2,13 +2,13 @@
 
 import { useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate } from "@/lib/format";
 import type { IncomeStatement } from "@/types";
-import { DataState } from "../../_components/data-state";
 import { Amount, ReportSection } from "../../_components/report-section";
 import { incomeStatementLines } from "../_lib/statement-lines";
+import { StatementState } from "./statement-state";
+import { useStatementResource } from "./use-statement-resource";
 
 interface IncomeStatementReportProps {
   from: string;
@@ -30,11 +30,12 @@ export function IncomeStatementReport({
     [from, to, branchId],
   );
 
-  const resource = useAccountingResource<IncomeStatement>(fetcher);
+  const { resource, refusal } = useStatementResource<IncomeStatement>(fetcher);
 
   return (
-    <DataState
+    <StatementState
       resource={resource}
+      refusal={refusal}
       summary="Income earned and expenses incurred between two dates, and what is left."
       endpoints={["GET /accounting/statements/income-statement"]}
       isEmpty={(statement) =>
@@ -43,7 +44,7 @@ export function IncomeStatementReport({
       emptyMessage="No posted entry in this period."
     >
       {(statement) => <Statement statement={statement} />}
-    </DataState>
+    </StatementState>
   );
 }
 
