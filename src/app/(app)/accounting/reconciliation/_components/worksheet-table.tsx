@@ -11,10 +11,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import { bookRows as booksOnly, rowMatchAction } from "../_lib/line-actions";
 import { journalHref, ledgerLineText, rowFigures } from "../_lib/reconciliation-view";
+import { signedCentavos } from "../_lib/signed-money";
 import { FigureWithNote } from "./figure-with-note";
 import type { ReconciliationDetail, ReconciliationRow } from "../_lib/types";
 import { MatchBadge } from "./match-badge";
@@ -129,7 +129,7 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {row.external_reference || "—"}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCentavos(row.amount)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{signedCentavos(row.amount)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{ledgerLineText(row)}</TableCell>
                   </TableRow>
                 ))}

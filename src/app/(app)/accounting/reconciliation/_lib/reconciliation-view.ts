@@ -1,4 +1,4 @@
-import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "./signed-money";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { formatDate } from "@/lib/format";
 import type { ReconciliationMatch } from "@/types";
@@ -45,9 +45,9 @@ export interface HeaderFigure {
 
 export function headerFigures(r: ReconciliationDetail): HeaderFigure[] {
   return [
-    { key: "statement", label: "Statement balance", value: formatCentavos(r.statement_balance), money: true },
-    { key: "book", label: "Book balance", value: formatCentavos(r.book_balance), money: true },
-    { key: "difference", label: "Difference", value: formatCentavos(r.difference), money: true },
+    { key: "statement", label: "Statement balance", value: signedCentavos(r.statement_balance), money: true },
+    { key: "book", label: "Book balance", value: signedCentavos(r.book_balance), money: true },
+    { key: "difference", label: "Difference", value: signedCentavos(r.difference), money: true },
     { key: "matched", label: "Matched", value: String(r.matched_count), money: false },
     { key: "possible", label: "Possible matches", value: String(r.possible_count), money: false },
     { key: "unmatched", label: "Unmatched", value: String(r.unmatched_count), money: false },
@@ -96,7 +96,7 @@ export interface RowFigures {
  */
 export function rowFigures(row: ReconciliationRow): RowFigures {
   const date = formatDate(row.date);
-  const amount = formatCentavos(row.amount);
+  const amount = signedCentavos(row.amount);
   const caption = pairedFiguresCaption(row);
   if (caption === null) return { date, amount, dateNote: null, amountNote: null };
 
@@ -105,7 +105,7 @@ export function rowFigures(row: ReconciliationRow): RowFigures {
   const hasAmount = typeof statementAmount === "number";
   return {
     date: hasDate ? formatDate(statementDate) : date,
-    amount: hasAmount ? formatCentavos(statementAmount) : amount,
+    amount: hasAmount ? signedCentavos(statementAmount) : amount,
     dateNote: hasDate ? `${caption}: ${date}` : caption,
     amountNote: hasAmount ? `${caption}: ${amount}` : caption,
   };

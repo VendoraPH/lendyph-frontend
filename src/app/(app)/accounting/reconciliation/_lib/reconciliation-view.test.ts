@@ -68,9 +68,9 @@ describe("the header shows the server's figures", () => {
     );
   });
 
-  test("a zero reads ₱0.00 and a negative keeps its sign", () => {
+  test("a zero reads ₱0.00 and a negative reads in parentheses", () => {
     const figures = headerFigures(detail({ difference: 0, statement_balance: -150_000 }));
-    assert.equal(figures[0].value, "-₱1,500.00");
+    assert.equal(figures[0].value, "(₱1,500.00)");
     assert.equal(figures[2].value, "₱0.00");
   });
 
@@ -229,7 +229,8 @@ describe("outstanding items and manual-match refusals", () => {
   });
 
   test("a match refused for its amount or side shows the server's words in place, without a reload", () => {
-    const differs = "This statement line is ₱88.00 out; the entry is ₱2,000.00 in.";
+    const differs =
+      "This statement line is ₱88.00 out; the entry is ₱2,000.00 in. Only an entry for the same amount, in the same direction, can be matched to it.";
     assert.deepEqual(
       matchFailure(
         httpError(422, { message: "The given data was invalid.", errors: { matches: [differs] } }),
@@ -402,6 +403,14 @@ describe("a paired statement line's date and amount", () => {
       amountNote: "Books entry JE-000002",
     });
     assert.deepEqual(rowFigures({ ...paired, statement_date: null, statement_amount: null }), rowFigures(paired));
+  });
+
+  test("read money out in parentheses, on both the statement and the books figures", () => {
+    const out = { ...paired, amount: -200_000, statement_date: "2026-08-28", statement_amount: -8_800 };
+    const figures = rowFigures(out);
+    assert.equal(figures.amount, "(₱88.00)");
+    assert.equal(figures.amountNote, "Books entry JE-000002: (₱2,000.00)");
+    assert.equal(rowFigures({ ...out, source: "ledger", statement_line_id: null }).amount, "(₱2,000.00)");
   });
 
   test("on a row with one side only, are its own, with no note", () => {
