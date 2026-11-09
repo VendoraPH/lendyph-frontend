@@ -166,6 +166,8 @@ export interface JournalEntry {
   total_credit: number;
   /** Set on a reversal, pointing at the entry it undoes. */
   reverses_journal_id?: number | null;
+  /** The number of the entry a reversal undoes ("JE-000154"); null otherwise. */
+  reverses_journal_no?: string | null;
   /** Set on an entry that has been reversed, pointing at its reversal. */
   reversed_by_journal_id?: number | null;
   /**

@@ -16,6 +16,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import type { JournalEntry } from "@/types";
 import { JournalReferenceCell } from "../../_components/journal-source-document";
 import { journalSourceLabel } from "../../_lib/display-labels";
+import { reversedEntryText } from "../_lib/journal-actions";
 import { JournalStatusBadge } from "./journal-status-badge";
 
 /** "Name, 3 Nov 2026, 10:15 am", or a dash when nobody is recorded. */
@@ -44,14 +45,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 }
 
 /** One journal as the server sent it: its details, every line and its totals. */
-export function JournalDetails({
-  entry,
-  originalNo = null,
-}: {
-  entry: JournalEntry;
-  /** For a reversal, the number of the entry it reverses, once loaded. */
-  originalNo?: string | null;
-}) {
+export function JournalDetails({ entry }: { entry: JournalEntry }) {
   return (
     <div className="space-y-6">
       <Card>
@@ -80,7 +74,7 @@ export function JournalDetails({
             <div className="mt-4 space-y-1 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm">
               {entry.reverses_journal_id && (
                 <p>
-                  This entry reverses {originalNo ?? "another entry"}.{" "}
+                  This entry reverses {reversedEntryText(entry)}.{" "}
                   <Link
                     className="font-medium underline underline-offset-4"
                     href={`/accounting/journals/${entry.reverses_journal_id}`}

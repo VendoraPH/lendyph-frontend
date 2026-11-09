@@ -116,17 +116,24 @@ export function saveDraftState(
 }
 
 /**
+ * The entry a reversal undoes, by the number the server sends with the
+ * reversal (`reverses_journal_no`); "another entry" when it isn't sent.
+ */
+export function reversedEntryText(entry: Pick<JournalEntry, "reverses_journal_no">): string {
+  return entry.reverses_journal_no || "another entry";
+}
+
+/**
  * The journal page's description under its title. A reversal names the entry
- * it reverses (`originalNo`, once the original has loaded); it is never
- * reversed itself, so it doesn't say "only reversed".
+ * it reverses; it is never reversed itself, so it doesn't say "only reversed".
  */
 export function journalPageDescription(
-  entry: Pick<JournalEntry, "status" | "reverses_journal_id" | "reversed_by_journal_id">,
-  originalNo: string | null,
+  entry: Pick<JournalEntry, "status" | "reverses_journal_id" | "reversed_by_journal_id"> &
+    Partial<Pick<JournalEntry, "reverses_journal_no">>,
 ): string {
   if (entry.status === "draft") return "A draft. Nothing moves in the books until it is posted.";
   if (entry.reverses_journal_id) {
-    return originalNo ? `This entry reverses ${originalNo}.` : "This entry reverses another entry.";
+    return `This entry reverses ${reversedEntryText(entry)}.`;
   }
   if (entry.status === "reversed" || entry.reversed_by_journal_id) {
     return "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.";
