@@ -12,12 +12,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { DEFAULT_CHART_OF_ACCOUNTS } from "@/constants/chart-of-accounts";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
-
-const ACCOUNT_COUNT = DEFAULT_CHART_OF_ACCOUNTS.length;
+import type { ChartTemplate } from "@/types";
+import { chartTemplateLabel } from "../../_lib/display-labels";
+import { chartTemplateItems } from "../../_lib/select-items";
+import {
+  TEMPLATE_SUMMARIES,
+  chartTemplateFromValue,
+  seedPreviewRows,
+  seedTemplateError,
+} from "../_lib/seed-template";
+import { SeedPreviewList } from "./seed-preview-list";
 
 /**
  * Structural status read, matching `api-error.ts` — `instanceof AxiosError` is
@@ -46,19 +61,34 @@ interface SeedChartCardProps {
  * that needs a real account id refuses to submit. The module is unusable until
  * this endpoint is called, and there was previously no way to call it from the
  * app at all.
+ *
+ * The organisation picks its template first (lending company or cooperative).
+ * There is no preselected answer: a chart is seeded once, so Create stays
+ * disabled until someone has chosen.
  */
 export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
+  const [template, setTemplate] = useState<ChartTemplate | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  const rows = template ? seedPreviewRows(template) : [];
+
+  const pick = (value: string | null) => {
+    setTemplate(chartTemplateFromValue(value));
+    setTemplateError(null);
+  };
 
   const seed = async () => {
+    if (template === null) return;
     setSaving(true);
+    setTemplateError(null);
     try {
-      const created = await accountingService.seedAccounts();
+      const created = await accountingService.seedAccounts(template);
       // Defensive: a successful POST whose body is not the array we expect
       // must not throw here, or a chart that WAS created reports as a failure
       // and the next attempt 409s with no explanation.
-      const count = Array.isArray(created) ? created.length : ACCOUNT_COUNT;
+      const count = Array.isArray(created) ? created.length : rows.length;
       setConfirming(false);
       notifySuccess(
         "Chart of accounts created",
@@ -93,6 +123,13 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
         return;
       }
 
+      // The server refused the template: show its words beside the choice.
+      const refused = seedTemplateError(err);
+      if (refused) {
+        setTemplateError(refused);
+        return;
+      }
+
       notifyError(err, "Could not create the chart of accounts.");
     } finally {
       setSaving(false);
@@ -101,47 +138,87 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
 
   if (!notBuiltYet) return null;
 
+  const templateName = template ? chartTemplateLabel(template).toLowerCase() : "";
+
   return (
     <PermissionGate permission="chart_of_accounts:create">
       <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
+        <CardContent className="space-y-4 pt-6">
           <div className="space-y-1">
             <p className="font-medium">Your chart of accounts is not set up</p>
             <p className="max-w-xl text-sm text-muted-foreground">
-              Create it from the template below and the accounting module
-              becomes usable — journals, expenses and transfers all need real
-              accounts to post against.
+              Create it and the accounting module becomes usable — journals,
+              expenses and transfers all need real accounts to post against.
             </p>
           </div>
-          <Button onClick={() => setConfirming(true)}>
-            <Sprout className="mr-2 h-4 w-4" />
-            Seed default chart
-          </Button>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full max-w-md space-y-1.5">
+              <Label htmlFor="seed-chart-template">
+                Which chart fits this organisation?
+              </Label>
+              <Select
+                value={template}
+                onValueChange={pick}
+                items={chartTemplateItems}
+              >
+                <SelectTrigger id="seed-chart-template" className="w-full">
+                  <SelectValue placeholder="Choose a chart" />
+                </SelectTrigger>
+                <SelectContent>
+                  {chartTemplateItems.map((item) => {
+                    const choice = chartTemplateFromValue(item.value);
+                    return (
+                      <SelectItem key={item.value} value={item.value}>
+                        {choice ? TEMPLATE_SUMMARIES[choice] : item.label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              disabled={template === null}
+              onClick={() => setConfirming(true)}
+            >
+              <Sprout className="mr-2 h-4 w-4" />
+              Create chart
+            </Button>
+          </div>
+          {templateError && (
+            <p role="alert" className="text-sm text-destructive">
+              {templateError}
+            </p>
+          )}
         </CardContent>
       </Card>
 
       <Dialog
-        open={confirming}
+        open={confirming && template !== null}
         onOpenChange={(open) => !saving && setConfirming(open)}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create the default chart of accounts?</DialogTitle>
+            <DialogTitle>Create the {templateName} chart of accounts?</DialogTitle>
             <DialogDescription>
-              This writes {ACCOUNT_COUNT} accounts to your organisation — the
-              full template shown on this page, across assets, liabilities,
-              equity, income and expenses.
+              This writes {rows.length} accounts to your organisation, across
+              assets, liabilities, equity, income and expenses.
             </DialogDescription>
           </DialogHeader>
           {/*
-            A sibling rather than a second paragraph inside the description:
-            Base UI renders `DialogDescription` as a <p>, so nesting block
-            content in it produces invalid HTML.
+            Siblings rather than more content inside the description: Base UI
+            renders `DialogDescription` as a <p>, so nesting block content in
+            it produces invalid HTML.
           */}
+          <SeedPreviewList rows={rows} />
           <p className="text-sm text-muted-foreground">
             Do it once. You can rename, add and deactivate accounts afterwards,
             and every journal entry from here on posts into this tree.
           </p>
+          {templateError && (
+            <p role="alert" className="text-sm text-destructive">
+              {templateError}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
@@ -150,9 +227,12 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
             >
               Cancel
             </Button>
-            <Button disabled={saving} onClick={seed}>
+            <Button
+              disabled={saving || template === null}
+              onClick={seed}
+            >
               {saving && <Spinner className="mr-2 h-4 w-4" />}
-              {saving ? "Creating…" : `Create ${ACCOUNT_COUNT} accounts`}
+              {saving ? "Creating…" : `Create ${rows.length} accounts`}
             </Button>
           </div>
         </DialogContent>
