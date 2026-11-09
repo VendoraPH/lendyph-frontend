@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { proceedsFigures } from "./restructure-proceeds";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "./restructure-proceeds";
 
 test("an ordinary loan shows Net Proceeds", () => {
   assert.deepEqual(proceedsFigures(false, { totalDeductions: "850.00", netProceeds: "19150.00" }), [
@@ -105,4 +105,36 @@ test("the restructure page shows what is collected and paid out, never Net Proce
   assert.match(page, /const previewRestructure =\s*preview\.status === "ready" \? \(preview\.preview\.restructure \?\? null\) : null;/);
   assert.ok(!page.includes("Net Proceeds"));
   assert.ok(!page.includes("net_proceeds"));
+});
+
+test("the loan form's preview labels the collected figure as before insurance; Paid out is unchanged", () => {
+  assert.equal(COLLECTED_BEFORE_INSURANCE, "Collected from the member (before insurance)");
+  const figures = {
+    totalDeductions: "850.00",
+    netProceeds: null,
+    restructure: { collected_now: "850.00", paid_out: "0.00" },
+  };
+  assert.deepEqual(proceedsFigures(true, figures, { collectedLabel: COLLECTED_BEFORE_INSURANCE }), [
+    { label: "Collected from the member (before insurance)", amount: "850.00" },
+    { label: "Paid out", amount: "0.00" },
+  ]);
+  // Without the override (the release preview, which includes insurance), the label stays.
+  assert.equal(proceedsFigures(true, figures)[0]?.label, "Collected from the member");
+  assert.equal(
+    proceedsFigures(true, { totalDeductions: "850.00", netProceeds: null }, { collectedLabel: COLLECTED_BEFORE_INSURANCE })[0]?.label,
+    "Collected from the member (before insurance)",
+  );
+  // An ordinary loan still reads Net Proceeds.
+  assert.deepEqual(
+    proceedsFigures(false, { totalDeductions: "850.00", netProceeds: "19150.00" }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }),
+    [{ label: "Net Proceeds", amount: "19150.00" }],
+  );
+});
+
+test("the restructure page and the edit form say before insurance; the loan page doesn't", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), "src/app/(app)/loans", path), "utf8");
+  for (const path of ["restructure/page.tsx", "new/page.tsx"]) {
+    assert.match(read(path), /proceedsFigures\([\s\S]*?\{ collectedLabel: COLLECTED_BEFORE_INSURANCE \}\)/, path);
+  }
+  assert.ok(!read("[id]/page.tsx").includes("COLLECTED_BEFORE_INSURANCE"));
 });

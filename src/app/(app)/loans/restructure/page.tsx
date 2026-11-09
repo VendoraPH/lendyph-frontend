@@ -90,7 +90,7 @@ import {
 import { securityStatusLabel } from "@/types/collateral";
 import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
-import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
@@ -1495,7 +1495,7 @@ function RestructureLoanInner() {
                     totalDeductions: previewDeductions?.total_deductions ?? null,
                     netProceeds: null,
                     restructure: previewRestructure,
-                  }).map((figure) => (
+                  }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
                     <div key={figure.label} className="flex justify-between font-semibold">
                       <span>{figure.label}</span>
                       <span>{currencyOrDash(figure.amount)}</span>

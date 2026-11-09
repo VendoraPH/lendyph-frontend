@@ -151,7 +151,7 @@ import {
   restructureEditSourceId,
   scbRuleError,
 } from "./_lib/restructure-edit";
-import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
 
 // ── Helpers ──
@@ -1845,7 +1845,7 @@ function NewLoanApplicationInner() {
               totalDeductions: previewDeductions?.total_deductions,
               netProceeds: previewDeductions?.net_proceeds,
               restructure: previewRestructure,
-            }).map((figure) => (
+            }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
               <div
                 key={figure.label}
                 className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3"

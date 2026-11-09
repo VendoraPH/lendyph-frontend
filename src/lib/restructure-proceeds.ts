@@ -14,6 +14,16 @@ type Figure = string | number | null | undefined;
 
 const known = (value: Figure): string | number | null => (value === undefined ? null : value);
 
+const COLLECTED = "Collected from the member";
+
+/**
+ * The loan form's label for `POST /loans/preview`'s `collected_now`, which
+ * leaves out the insurance premium (chosen at release). The release preview's
+ * figure includes it, so the release dialog and the loan page keep
+ * "Collected from the member".
+ */
+export const COLLECTED_BEFORE_INSURANCE = "Collected from the member (before insurance)";
+
 export function proceedsFigures(
   isRestructure: boolean,
   figures: {
@@ -25,6 +35,7 @@ export function proceedsFigures(
      */
     restructure?: { collected_now?: Figure; paid_out?: Figure } | null;
   },
+  { collectedLabel = COLLECTED }: { collectedLabel?: string } = {},
 ): ProceedsFigure[] {
   if (!isRestructure) return [{ label: "Net Proceeds", amount: known(figures.netProceeds) }];
   const block = figures.restructure;
@@ -32,7 +43,7 @@ export function proceedsFigures(
     // The server has answered for this restructure: its two figures, and a
     // dash for one it left out, never one worked out here.
     return [
-      { label: "Collected from the member", amount: known(block.collected_now) },
+      { label: collectedLabel, amount: known(block.collected_now) },
       { label: "Paid out", amount: known(block.paid_out) },
     ];
   }
@@ -41,7 +52,7 @@ export function proceedsFigures(
   // posting rule (A1). Until the server has sent a figure, both are dashes.
   const collected = known(figures.totalDeductions);
   return [
-    { label: "Collected from the member", amount: collected },
+    { label: collectedLabel, amount: collected },
     { label: "Paid out", amount: collected === null ? null : 0 },
   ];
 }
