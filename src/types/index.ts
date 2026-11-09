@@ -46,6 +46,7 @@ export type {
 export type {
   AccountType,
   NormalBalance,
+  AccountCashFlowCategory,
   CashAccountKind,
   Account,
   JournalLine,

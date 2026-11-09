@@ -3,8 +3,8 @@
  * statement it lands on, and whether it may be posted to at all.
  *
  * Everything here is derived from the account's own properties rather than
- * looked up per screen, so the balance sheet, the trial balance and the
- * general ledger cannot disagree about what an account means.
+ * looked up per screen, so screens cannot disagree about what an account
+ * means. Balances themselves come from the server.
  */
 
 import type {
@@ -52,24 +52,6 @@ export function normalBalanceFor(
     type === "asset" || type === "expense" ? "debit" : "credit";
   if (!isContra) return base;
   return base === "debit" ? "credit" : "debit";
-}
-
-/**
- * The account's balance expressed in its own normal direction, in centavos.
- *
- * A positive result means the account sits where it should; a negative one
- * means it has swung the other way — an overdrawn cash account, say — which is
- * a real condition and is reported rather than clamped to zero.
- *
- * Because contra accounts are credit-normal, an allowance returns a POSITIVE
- * number here, and callers subtract it from the gross figure.
- */
-export function signedBalance(
-  account: Pick<Account, "normal_balance">,
-  debit: number,
-  credit: number
-): number {
-  return account.normal_balance === "debit" ? debit - credit : credit - debit;
 }
 
 export type StatementSection = "balance_sheet" | "income_statement";
