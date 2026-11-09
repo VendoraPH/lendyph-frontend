@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { todayISO } from "@/lib/format";
 import { AccountingPageHeader } from "../_components/page-header";
@@ -16,9 +17,21 @@ import { BalanceSheetReport } from "./_components/balance-sheet-report";
 import { IncomeStatementReport } from "./_components/income-statement-report";
 import { CashFlowReport } from "./_components/cash-flow-report";
 import { EquityChangesReport } from "./_components/equity-changes-report";
+import { statementRangeError } from "./_lib/statement-request";
 
 function startOfYearISO(): string {
   return `${new Date().getFullYear()}-01-01`;
+}
+
+/** Shown in place of a range statement while From is after To; nothing is sent. */
+function RangeRefused({ message }: { message: string }) {
+  return (
+    <Card>
+      <CardContent className="py-12 text-center text-sm text-muted-foreground">
+        {message} Change the dates to see this statement.
+      </CardContent>
+    </Card>
+  );
 }
 
 /**
@@ -41,6 +54,9 @@ export default function FinancialStatementsPage() {
   // The balance sheet is a position on a date, not a range — it reads the
   // period's end, so moving `to` moves the sheet with it.
   const asOf = to;
+  // A To before From is refused here, so the three range statements never ask.
+  const rangeError = statementRangeError(from, to);
+  const showRangeError = tab !== "balance-sheet" && rangeError !== null;
 
   return (
     <RouteGuard permission="accounting:view" pageName="Financial Statements">
@@ -60,6 +76,11 @@ export default function FinancialStatementsPage() {
             onChange={setTo}
           />
           <BranchFilter value={branch} onChange={setBranch} />
+          {showRangeError && (
+            <p role="alert" className="pb-2 text-sm text-destructive">
+              {rangeError}
+            </p>
+          )}
         </FilterBar>
 
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
@@ -74,13 +95,25 @@ export default function FinancialStatementsPage() {
             <BalanceSheetReport asOf={asOf} branchId={branchId} />
           </TabsContent>
           <TabsContent value="income-statement" className="mt-4">
-            <IncomeStatementReport from={from} to={to} branchId={branchId} />
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <IncomeStatementReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
           <TabsContent value="cash-flow" className="mt-4">
-            <CashFlowReport from={from} to={to} branchId={branchId} />
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <CashFlowReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
           <TabsContent value="equity" className="mt-4">
-            <EquityChangesReport from={from} to={to} branchId={branchId} />
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <EquityChangesReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
         </Tabs>
       </div>

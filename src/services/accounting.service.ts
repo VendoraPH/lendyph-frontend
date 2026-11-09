@@ -217,14 +217,6 @@ export const accountingService = {
       params: query,
     }),
 
-  /** Every journal matching `query`. The register is the last list that should stop at 15. */
-  journalsListAll: (
-    query: JournalQuery = {},
-  ): Promise<DrainResult<JournalEntry>> =>
-    fetchAllPages<JournalEntry>(({ page, per_page }) =>
-      accountingService.journalsList({ ...query, page, per_page }),
-    ),
-
   /**
    * Creates a manual entry from the form's draft.
    *
@@ -264,6 +256,7 @@ export const accountingService = {
   /**
    * Saves a draft. Converted by `buildJournalPayload`, as `createJournal` is,
    * and `async` for the same reason: its throw becomes this call's rejection.
+   * The balance is the server's: the form checks it with `previewJournal`.
    */
   updateJournal: async (id: number, draft: JournalEntryDraft): Promise<JournalEntry> =>
     api.put<JournalEntry>(
@@ -293,22 +286,6 @@ export const accountingService = {
     api.getRaw<ListPage<LedgerEntry>>(API_ENDPOINTS.ACCOUNTING.GENERAL_LEDGER, {
       params: query,
     }),
-
-  /**
-   * An account's whole history over the range, not the first page of it.
-   *
-   * Worse here than on any other list in the module, because each row carries a
-   * `running_balance`: a ledger cut off at row 15 does not merely hide
-   * movements, it presents the balance AFTER the fifteenth entry as the
-   * account's current position. The number is on screen, formatted, and wrong,
-   * and there is nothing about it that looks partial.
-   */
-  generalLedgerListAll: (
-    query: LedgerQuery,
-  ): Promise<DrainResult<LedgerEntry>> =>
-    fetchAllPages<LedgerEntry>(({ page, per_page }) =>
-      accountingService.generalLedgerList({ ...query, page, per_page }),
-    ),
 
   /**
    * One page of an account's ledger. `meta` carries the opening and closing
@@ -375,20 +352,6 @@ export const accountingService = {
       params,
     }),
 
-  /**
-   * Every expense, because the screen totals them.
-   *
-   * The Expenses screen sums `amount - amount_paid` over what it holds and
-   * renders it as "Outstanding ₱X" in headline type. On a co-op with 40 open
-   * payables that headline was the total of the first 15 — and the status
-   * filter above it narrows the same short page client-side, so filtering to
-   * "Unpaid" made the figure smaller again rather than more complete.
-   */
-  expensesListAll: (): Promise<DrainResult<Expense>> =>
-    fetchAllPages<Expense>(({ page, per_page }) =>
-      accountingService.expensesList({ page, per_page }),
-    ),
-
   /** One page, with the server's totals (amount due included) and per-status counts. */
   expensesPage: (query: ExpensePageQuery = {}): Promise<ExpensePage> =>
     api.getRaw<ExpensePage>(API_ENDPOINTS.ACCOUNTING.EXPENSES_LIST, { params: query }),
@@ -428,6 +391,8 @@ export const accountingService = {
     amount: number;
     charge?: number;
     description: string;
+    /** At most 64 characters. */
+    reference?: string;
   }): Promise<JournalEntry> =>
     api.post<JournalEntry>(API_ENDPOINTS.ACCOUNTING.CASH_TRANSFER, data),
 
