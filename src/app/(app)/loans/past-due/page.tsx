@@ -61,6 +61,15 @@ const formatDate = (dateStr: string | null) => {
 
 type AgingBucket = "all" | "1-30" | "31-60" | "61-90" | "90+";
 
+// Passed to <Select items>, so the trigger shows "1–30 days", not "1-30".
+const BUCKET_OPTIONS: { value: AgingBucket; label: string }[] = [
+  { value: "all", label: "All ages" },
+  { value: "1-30", label: "1–30 days" },
+  { value: "31-60", label: "31–60 days" },
+  { value: "61-90", label: "61–90 days" },
+  { value: "90+", label: "90+ days" },
+];
+
 const inBucket = (days: number, bucket: AgingBucket): boolean => {
   if (bucket === "all") return true;
   if (bucket === "1-30") return days >= 1 && days <= 30;
@@ -356,6 +365,7 @@ function PastDueLoansContent() {
               />
             </div>
             <Select
+              items={BUCKET_OPTIONS}
               value={bucket}
               onValueChange={(v) => setBucket(v as AgingBucket)}
               disabled={loading}
@@ -364,11 +374,11 @@ function PastDueLoansContent() {
                 <SelectValue placeholder="Aging bucket" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All ages</SelectItem>
-                <SelectItem value="1-30">1–30 days</SelectItem>
-                <SelectItem value="31-60">31–60 days</SelectItem>
-                <SelectItem value="61-90">61–90 days</SelectItem>
-                <SelectItem value="90+">90+ days</SelectItem>
+                {BUCKET_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
