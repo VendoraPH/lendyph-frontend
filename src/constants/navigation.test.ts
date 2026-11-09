@@ -28,3 +28,16 @@ test("every Credit Scoring route answers not found while the flag is off", () =>
 test(".env.example documents the flag, off", () => {
   assert.match(read(".env.example"), /^NEXT_PUBLIC_ENABLE_CREDIT_SCORING=false$/m);
 });
+
+test("Opening Balances sits under Accounting, after Period Closing, for accounting:settings", () => {
+  const accounting = SIDEBAR_NAV.find((item) => item.href === "/accounting");
+  assert.ok(accounting?.children, "Accounting has children");
+  const hrefs = accounting.children.map((child) => child.href);
+  const at = hrefs.indexOf("/accounting/opening-balances");
+  assert.equal(hrefs[at - 1], "/accounting/period-closing");
+  assert.deepEqual(accounting.children[at], {
+    title: "Opening Balances",
+    href: "/accounting/opening-balances",
+    permission: "accounting:settings",
+  });
+});
