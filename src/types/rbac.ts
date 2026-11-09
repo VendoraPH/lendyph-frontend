@@ -16,6 +16,9 @@
  */
 export type Role =
   | "admin"
+  // Keeps the books (round C). A system role nobody gets from a seeder; the
+  // owner assigns it in Users.
+  | "accountant"
   | "loan_officer"
   | "loan_processor"
   | "cashier"
@@ -73,8 +76,9 @@ export type Module =
   // through a single grant.
   //
   // `accounting` itself covers the read-only reporting surface — dashboard,
-  // general ledger, trial balance, financial statements — plus the three
-  // privileged verbs that have no other home: `reconcile`, `close`, `settings`.
+  // general ledger, trial balance, financial statements — plus the privileged
+  // verbs that have no other home: `reconcile`, `close`, `settings` and
+  // `allowance`.
   | "accounting"
   | "chart_of_accounts"
   | "journals"
@@ -149,6 +153,9 @@ export type Action =
   | "reverse"
   | "reconcile"
   | "close"
+  // Posting the allowance for credit losses (`accounting:allowance`). Its own
+  // verb rather than `journals:post`, so a bookkeeper can't post one.
+  | "allowance"
   | "transfer"
   // A credit score is never hand-edited — only recalculated by the backend
   // and then acted on. `override` is that act: a human records a Decision

@@ -2771,6 +2771,70 @@ const PROVISIONING_COLUMNS: ReportColumn[] = [
   },
 ];
 
+/** The allowance calculator's principal basis (round C, C4), beside the overdue schedule. */
+const PROVISIONING_BASIS_COLUMNS: ReportColumn[] = [
+  { key: "bucket", header: "Bucket", format: "text", width: 150 },
+  { key: "count", header: "Loans", format: "number", align: "right", width: 90 },
+  { key: "principal", header: "Principal", format: "currency", align: "right", width: 170 },
+  { key: "rate", header: "Rate", format: "text", align: "right", width: 100 },
+  {
+    key: "required_allowance",
+    header: "Required",
+    format: "currency",
+    align: "right",
+    width: 170,
+  },
+];
+
+/** A rate exactly as the server wrote it ("2.375" reads "2.375%", never rounded); null when absent. */
+function exactRate(block: Record<string, unknown> | null): string | null {
+  const rate = pick(block, ["rate_percent"]);
+  if (rate === null || rate === undefined || rate === "") return null;
+  return `${String(rate)}%`;
+}
+
+/**
+ * The `principal_basis` block: each bucket's outstanding principal, its loans,
+ * the rate and the required allowance, all the server's (in pesos, converted
+ * once from the allowance calculator's centavos). Every bucket shows even when
+ * the block is missing, with dashes; nothing is added up or multiplied here.
+ */
+function provisioningBasisSections(raw: unknown): ReportSection[] {
+  const basis = asRecord(raw);
+  const buckets = asRecord(pick(basis, ["buckets"]));
+  const totals = asRecord(pick(basis, ["totals"]));
+  const rows = AGING_BUCKETS.map(([label, keys]) => {
+    const bucket = asRecord(pick(buckets, keys));
+    return {
+      bucket: label,
+      count: serverFigure(bucket, "count"),
+      principal: serverFigure(bucket, "principal"),
+      rate: exactRate(bucket),
+      required_allowance: serverFigure(bucket, "required_allowance"),
+    };
+  });
+  const note = pick(basis, ["basis_note"]);
+
+  const sections: ReportSection[] = [
+    {
+      kind: "table",
+      title: "Principal Basis",
+      columns: PROVISIONING_BASIS_COLUMNS,
+      rows,
+      totals: [
+        { column: "count", label: "Total", value: countOrDash(serverFigure(totals, "count")) },
+        totalCell("principal", serverFigure(totals, "principal")),
+        totalCell("required_allowance", serverFigure(totals, "required_allowance")),
+      ],
+      emptyText: "No overdue principal required a provision on this date.",
+    },
+  ];
+  if (typeof note === "string" && note.trim() !== "") {
+    sections.push({ kind: "note", text: note });
+  }
+  return sections;
+}
+
 /**
  * Required allowance by aging bucket.
  *
@@ -2851,6 +2915,7 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
         " Bucket amounts add up to the total overdue; the delinquent loan count does not — a loan " +
         "that is late in two buckets is still one delinquent loan.",
     },
+    ...provisioningBasisSections(pick(obj, ["principal_basis"])),
   ];
 
   return {
