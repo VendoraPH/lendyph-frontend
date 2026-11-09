@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  AGING_COUNT_HEADING,
   ANY_BUCKET,
   LOAN_ACCOUNTING_PAGE_SIZE,
   accountNumberLabel,
@@ -245,4 +248,14 @@ test("before the server sends the books, each card is a dash and nothing needs r
 test("an imported loan with no account number reads as a dash", () => {
   assert.equal(accountNumberLabel(null), "—");
   assert.equal(accountNumberLabel("LN-000004"), "LN-000004");
+});
+
+test("the aging count column is headed Instalments, the server's count of unpaid schedule rows", () => {
+  assert.equal(AGING_COUNT_HEADING, "Instalments");
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/accounting/loans/_components/aging-table.tsx"),
+    "utf8",
+  );
+  assert.match(source, /\{AGING_COUNT_HEADING\}/);
+  assert.doesNotMatch(source, />\s*Accounts\s*</);
 });

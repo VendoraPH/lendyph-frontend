@@ -12,6 +12,7 @@ import {
 import { formatDate } from "@/lib/format";
 import type { Aging } from "@/types";
 import {
+  AGING_COUNT_HEADING,
   bucketLabel,
   centavosOrDash,
   shareBarValue,
@@ -36,7 +37,7 @@ export function AgingTable({ aging }: { aging: Aging }) {
           <TableHeader>
             <TableRow>
               <TableHead>Bucket</TableHead>
-              <TableHead className="w-24 text-right">Accounts</TableHead>
+              <TableHead className="w-24 text-right">{AGING_COUNT_HEADING}</TableHead>
               <TableHead className="w-40 text-right">Amount</TableHead>
               <TableHead className="w-56">Share</TableHead>
             </TableRow>

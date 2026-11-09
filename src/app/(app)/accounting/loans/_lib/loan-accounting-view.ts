@@ -21,6 +21,12 @@ import { agingBucketItems, type SelectItemOption } from "../../_lib/select-items
 /** Rows per page of the Loan Accounting list. */
 export const LOAN_ACCOUNTING_PAGE_SIZE = 25;
 
+/**
+ * The aging table's count column. The server's `count` and `count_total` are
+ * outstanding instalments (schedule rows), not loans, so it isn't "Accounts".
+ */
+export const AGING_COUNT_HEADING = "Instalments";
+
 /** "Any bucket" as a Select value: a Select cannot hold an empty string. */
 export const ANY_BUCKET = "any";
 
