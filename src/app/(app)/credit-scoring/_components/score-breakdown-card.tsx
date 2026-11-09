@@ -29,7 +29,7 @@ export function ScoreBreakdownCard({
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium">{row.category}</span>
                 <span className="text-muted-foreground">
-                  {note ?? `${row.points_earned}/${row.points_possible} pts`} · {String(row.weight_percent)}% weight
+                  {`${note ?? `${row.points_earned}/${row.points_possible} pts`} · ${row.weight_percent}% weight`}
                 </span>
               </div>
               {note === null && (

@@ -51,3 +51,9 @@ test("the loan page gains exactly one import and one render line, after the docu
   const at = lines.findIndex((l) => l.includes("<CreditAssessmentCard"));
   assert.match(lines[at - 1], /<LoanDocumentsCard /);
 });
+
+test("a save compares the box with how it loaded, and a disabled Record Decision says why", () => {
+  assert.match(card, /assessmentBody\(form, loaded\)/);
+  assert.match(card, /const loaded = assessmentFormFrom\(assessment\.application_profile\)/);
+  assert.match(card, /\{!score\?\.id && \(\s*<p id="assessment-decision-reason"[^>]*>\s*\{NO_SCORE_DECISION_REASON\}/);
+});

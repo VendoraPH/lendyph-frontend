@@ -11,8 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatDateTime } from "@/lib/format";
 import { INCOME_VERIFICATION_LABELS } from "@/lib/credit-scoring/labels";
-import { SAVE_BLOCKED_REASON, type AssessmentForm, type AssessmentTextField } from "@/lib/credit-scoring/assessment-card";
+import {
+  SAVE_BLOCKED_REASON,
+  noticeStatus,
+  type AssessmentForm,
+  type AssessmentTextField,
+} from "@/lib/credit-scoring/assessment-card";
 import type { IncomeVerification, LoanCreditAssessment } from "@/types/credit-scoring";
 
 /** A Select can't hold an empty value, so "not given" has its own key. */
@@ -55,6 +61,7 @@ export function AssessmentFormFields({
       label: INCOME_VERIFICATION_LABELS[v],
     })),
   ];
+  const notice = noticeStatus(assessment.application_profile);
 
   return (
     <section aria-labelledby="application-details-heading" className="space-y-4">
@@ -145,6 +152,12 @@ export function AssessmentFormFields({
             The member has been given this notice and acknowledges it.
           </Label>
         </div>
+        {notice.kind !== "none" && (
+          <p className="text-xs text-muted-foreground">
+            Acknowledged under v{notice.version} on {formatDateTime(notice.at)}
+            {notice.kind === "earlier" ? ". Tick the box once the member acknowledges this version." : "."}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

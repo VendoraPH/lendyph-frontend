@@ -10,6 +10,7 @@ import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../../_components/page-header";
 import { ScoreDetail } from "../../_components/score-detail";
+import { CapacitySection } from "../../_components/capacity-section";
 import { PolicyFlagAlert } from "../../_components/policy-flag-alert";
 import { ScoreHistoryChart } from "./_components/score-history-chart";
 import { MemberScoreHistory } from "./_components/member-score-history";
@@ -85,6 +86,14 @@ function BorrowerCreditProfileContent({
             )}
 
             <ScoreDetail score={profile} />
+
+            {profile.status !== "not_scored" && (
+              <Card>
+                <CardContent className="pt-6">
+                  <CapacitySection capacity={profile.capacity} financialsHidden={profile.financials_hidden} />
+                </CardContent>
+              </Card>
+            )}
 
             <ScoreHistoryChart borrowerId={borrowerId} />
             <MemberScoreHistory borrowerId={borrowerId} />

@@ -15,6 +15,7 @@ import {
   assessmentFormFrom,
   assessmentSaveErrors,
   canSaveAssessment,
+  NO_SCORE_DECISION_REASON,
   showsCreditAssessment,
   type AssessmentForm,
 } from "@/lib/credit-scoring/assessment-card";
@@ -53,11 +54,11 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
   const [saving, setSaving] = useState(false);
   const [decisionOpen, setDecisionOpen] = useState(false);
 
-  async function handleSave(form: AssessmentForm) {
+  async function handleSave(form: AssessmentForm, loaded: AssessmentForm) {
     setSaving(true);
     setErrors([]);
     try {
-      const next = await creditScoringService.saveLoanAssessment(loanId, assessmentBody(form));
+      const next = await creditScoringService.saveLoanAssessment(loanId, assessmentBody(form, loaded));
       setSaved(next);
       setDraft(null);
       notifySuccess("Credit assessment saved.");
@@ -84,7 +85,8 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
         endpoints={[`GET /credit-scoring/loans/${loanId}/assessment`]}
       >
         {(assessment) => {
-          const form = draft ?? assessmentFormFrom(assessment.application_profile);
+          const loaded = assessmentFormFrom(assessment.application_profile);
+          const form = draft ?? loaded;
           const score = assessment.score;
           return (
             <div className="space-y-6">
@@ -127,11 +129,17 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
                     size="sm"
                     variant="outline"
                     disabled={!score?.id}
+                    aria-describedby={score?.id ? undefined : "assessment-decision-reason"}
                     onClick={() => setDecisionOpen(true)}
                   >
                     Record Decision
                   </PermissionButton>
                 </div>
+                {!score?.id && (
+                  <p id="assessment-decision-reason" className="text-xs text-muted-foreground">
+                    {NO_SCORE_DECISION_REASON}
+                  </p>
+                )}
                 <DecisionList decisions={assessment.decisions} total={assessment.decisions_total} />
               </section>
 
@@ -144,7 +152,7 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
                     canSave={canSave}
                     saving={saving}
                     onChange={setDraft}
-                    onSave={() => handleSave(form)}
+                    onSave={() => handleSave(form, loaded)}
                   />
                 </>
               )}

@@ -4,6 +4,7 @@ import {
   assessmentBody,
   assessmentFormFrom,
   assessmentSaveErrors,
+  noticeStatus,
   canSaveAssessment,
   showsCreditAssessment,
 } from "./assessment-card";
@@ -73,8 +74,9 @@ test("the form starts from the saved details, blanks for nulls", () => {
 });
 
 test("the PUT body sends what was typed, and an empty field clears to null", () => {
-  const form = { ...assessmentFormFrom(profile), other_income: " 5000.505 ", household_expenses: "", income_verification: "" as const };
-  assert.deepEqual(assessmentBody(form), {
+  const loaded = assessmentFormFrom(profile);
+  const form = { ...loaded, other_income: " 5000.505 ", household_expenses: "", income_verification: "" as const, notice_acknowledged: false };
+  assert.deepEqual(assessmentBody(form, loaded), {
     other_income: "5000.505",
     business_income: null,
     household_expenses: null,
@@ -85,7 +87,7 @@ test("the PUT body sends what was typed, and an empty field clears to null", () 
     years_at_residence: "3.50",
     verified_references_count: "0",
     income_verification: null,
-    notice_acknowledged: true,
+    notice_acknowledged: false,
   });
 });
 
@@ -108,4 +110,34 @@ test("a 422 lists every field message on the card; a 409 shows the server's reas
   ]);
   const e409 = { response: { status: 409, data: { message: "The member is being scored right now. Try again in a moment." } } };
   assert.deepEqual(assessmentSaveErrors(e409), ["The member is being scored right now. Try again in a moment."]);
+});
+
+const olderConsent: CreditApplicationProfile = {
+  ...profile,
+  notice_version: 1,
+  notice_acknowledged_at: "2026-10-01T09:00:00+08:00",
+  notice_acknowledged: false,
+};
+
+test("a save with the notice box untouched leaves the acknowledgement out, so earlier consent stays", () => {
+  const loaded = assessmentFormFrom(olderConsent);
+  assert.equal(loaded.notice_acknowledged, false);
+  const body = assessmentBody({ ...loaded, other_income: "6000.00" }, loaded);
+  assert.equal("notice_acknowledged" in body, false);
+  assert.equal(body.other_income, "6000.00");
+  assert.equal("notice_acknowledged" in assessmentBody(assessmentFormFrom(null), assessmentFormFrom(null)), false);
+});
+
+test("ticking or clearing the box sends the change", () => {
+  const unticked = assessmentFormFrom(olderConsent);
+  assert.equal(assessmentBody({ ...unticked, notice_acknowledged: true }, unticked).notice_acknowledged, true);
+  const ticked = assessmentFormFrom(profile);
+  assert.equal(assessmentBody({ ...ticked, notice_acknowledged: false }, ticked).notice_acknowledged, false);
+});
+
+test("the notice status names an earlier version's acknowledgement", () => {
+  assert.deepEqual(noticeStatus(olderConsent), { kind: "earlier", version: "1", at: "2026-10-01T09:00:00+08:00" });
+  assert.deepEqual(noticeStatus(profile), { kind: "current", version: "2", at: "2026-11-09T09:00:00+08:00" });
+  assert.deepEqual(noticeStatus(null), { kind: "none" });
+  assert.deepEqual(noticeStatus({ ...profile, notice_acknowledged: false, notice_version: null, notice_acknowledged_at: null }), { kind: "none" });
 });

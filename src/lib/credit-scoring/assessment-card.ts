@@ -11,6 +11,8 @@ export const ASSESSABLE_STATUSES: readonly string[] = ["draft", "for_review"];
 
 export const SAVE_BLOCKED_REASON = "Saving the assessment needs permission to edit loans.";
 
+export const NO_SCORE_DECISION_REASON = "Save the application's details to score it first.";
+
 type Can = (permission: Permission) => boolean;
 
 /**
@@ -71,16 +73,39 @@ export function assessmentFormFrom(profile: CreditApplicationProfile | null): As
   };
 }
 
-/** The PUT body: every field as typed, an empty one cleared to null. */
-export function assessmentBody(form: AssessmentForm): SaveLoanAssessmentData {
+/**
+ * The PUT body: every field as typed, an empty one cleared to null.
+ *
+ * `notice_acknowledged` goes only when the box differs from how it loaded.
+ * The server clears a stored acknowledgement on false, and the box loads
+ * unticked for a member who acknowledged an earlier notice version, so
+ * sending it on every save would erase that earlier consent.
+ */
+export function assessmentBody(form: AssessmentForm, loaded: AssessmentForm): SaveLoanAssessmentData {
   const body: SaveLoanAssessmentData = {};
   for (const key of ASSESSMENT_TEXT_FIELDS) {
     const value = form[key].trim();
     body[key] = value === "" ? null : value;
   }
   body.income_verification = form.income_verification === "" ? null : form.income_verification;
-  body.notice_acknowledged = form.notice_acknowledged;
+  if (form.notice_acknowledged !== loaded.notice_acknowledged) {
+    body.notice_acknowledged = form.notice_acknowledged;
+  }
   return body;
+}
+
+export type NoticeStatus =
+  | { kind: "none" }
+  | { kind: "current" | "earlier"; version: string; at: string };
+
+/** Whether, and under which notice version, the member acknowledged the privacy notice. */
+export function noticeStatus(profile: CreditApplicationProfile | null): NoticeStatus {
+  if (!profile?.notice_acknowledged_at || profile.notice_version === null) return { kind: "none" };
+  return {
+    kind: profile.notice_acknowledged ? "current" : "earlier",
+    version: String(profile.notice_version),
+    at: profile.notice_acknowledged_at,
+  };
 }
 
 /**
