@@ -124,12 +124,15 @@ export function removeBlockedReason(owner: AttachmentOwner): string {
   return "Only users who manage accounting settings can remove an attachment from a posted or reversed journal.";
 }
 
-/** A removal that lost a race (posted meanwhile, or already gone) reloads the list. */
+/**
+ * A removal that lost a race (posted meanwhile, already gone, or a permission
+ * changed so `can_remove` was stale) reloads the list.
+ */
 export function removalFailure(err: unknown): { message: string; reload: boolean } {
   const status = httpStatusOf(err);
   return {
     message: getErrorMessage(err, "Could not remove this attachment."),
-    reload: status === 409 || status === 404,
+    reload: status === 409 || status === 404 || status === 403,
   };
 }
 

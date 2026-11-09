@@ -13,6 +13,7 @@ import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { JournalEntry, JournalEntryDraft, JournalPreviewLine } from "@/types";
 import { AccountingPageHeader } from "../../_components/page-header";
+import { AttachmentsPanel } from "../../_components/attachments-panel";
 import { JournalActionButton } from "../_components/journal-action-button";
 import { JournalDetails } from "../_components/journal-details";
 import { JournalEntryForm } from "../_components/journal-entry-form";
@@ -229,6 +230,8 @@ function JournalContent({ id }: { id: number }) {
           <JournalDetails entry={entry} />
         </div>
       )}
+
+      <AttachmentsPanel owner={{ kind: "journal", id: entry.id, status: entry.status }} />
 
       <PostJournalDialog
         open={posting}

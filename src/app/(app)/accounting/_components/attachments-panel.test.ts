@@ -12,6 +12,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AccountingAttachment } from "@/types/accounting";
 
 type Panel = typeof import("./attachments-panel");
@@ -304,6 +306,13 @@ describe("remove", () => {
     });
     const gone = { response: { status: 404, data: { message: "Not found." } } };
     assert.equal(panel.removalFailure(gone).reload, true);
+    // A caller who can remove nothing on the route gets 403 before any lookup:
+    // its can_remove was stale, so the list is read again to turn Remove off.
+    const refused = { response: { status: 403, data: { message: "You can't remove this attachment." } } };
+    assert.deepEqual(panel.removalFailure(refused), {
+      message: "You can't remove this attachment.",
+      reload: true,
+    });
     const invalid = {
       response: { status: 422, data: { message: "x", errors: { reason: ["The reason field is required."] } } },
     };
@@ -311,5 +320,36 @@ describe("remove", () => {
       message: "The reason field is required.",
       reload: false,
     });
+  });
+});
+
+describe("wiring", () => {
+  const source = (path: string) =>
+    readFileSync(join(process.cwd(), "src/app/(app)/accounting", path), "utf8");
+
+  test("the journal page shows the panel under the lines, for every status", () => {
+    const page = source("journals/[id]/page.tsx");
+    assert.match(
+      page,
+      /<AttachmentsPanel owner=\{\{ kind: "journal", id: entry\.id, status: entry\.status \}\} \/>/,
+    );
+    // After the lines (details or the edit form), outside any status check.
+    assert.ok(page.indexOf("<AttachmentsPanel") > page.indexOf("<JournalDetails"));
+    assert.doesNotMatch(page, /status === "draft"[^\n]*<AttachmentsPanel/);
+  });
+
+  test("each expense row opens its attachments in a dialog, for anyone who can see the list", () => {
+    const page = source("expenses/page.tsx");
+    assert.match(page, /onAttachments=\{setAttaching\}/);
+    assert.match(page, /<AttachmentsDialog\s+expense=\{attaching\}/);
+
+    const table = source("expenses/_components/expense-table.tsx");
+    assert.match(table, /onClick=\{\(\) => onAttachments\(expense\)\}/);
+    assert.match(table, />\s*Attachments\s*</);
+    // The Actions column no longer depends on Pay or Edit.
+    assert.doesNotMatch(table, /hasActions/);
+
+    const dialog = source("_components/attachments-dialog.tsx");
+    assert.match(dialog, /<AttachmentsPanel owner=\{\{ kind: "expense", id: expense\.id, status: expense\.status \}\} \/>/);
   });
 });

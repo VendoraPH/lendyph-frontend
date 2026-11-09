@@ -29,10 +29,12 @@ interface ExpenseTableProps {
   rows: Expense[];
   onPay: (expense: Expense) => void;
   onEdit: (expense: Expense) => void;
+  /** Open the expense's attachments; offered to everyone who can see the list. */
+  onAttachments: (expense: Expense) => void;
 }
 
 /** One server page of expenses. Balance is the server's `amount_due`. */
-export function ExpenseTable({ rows, onPay, onEdit }: ExpenseTableProps) {
+export function ExpenseTable({ rows, onPay, onEdit, onAttachments }: ExpenseTableProps) {
   const { can, permissions } = usePermission();
   // Pay picks its money account from the cash accounts list, so it needs
   // `cash_accounts:view` as well. `expenses:pay` is checked as a string until
@@ -40,7 +42,6 @@ export function ExpenseTable({ rows, onPay, onEdit }: ExpenseTableProps) {
   const canPay =
     new Set<string>(permissions).has("expenses:pay") && can("cash_accounts:view");
   const canEdit = can("expenses:update");
-  const hasActions = canPay || canEdit;
 
   return (
     <Table>
@@ -53,7 +54,7 @@ export function ExpenseTable({ rows, onPay, onEdit }: ExpenseTableProps) {
           <TableHead className="w-32">Status</TableHead>
           <TableHead className="w-32 text-right">Amount</TableHead>
           <TableHead className="w-32 text-right">Balance</TableHead>
-          {hasActions && <TableHead className="w-40 text-right">Actions</TableHead>}
+          <TableHead className="w-56 text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -83,32 +84,38 @@ export function ExpenseTable({ rows, onPay, onEdit }: ExpenseTableProps) {
             <TableCell className="text-right font-mono text-sm font-medium">
               {centavosOrDash(expense.amount_due)}
             </TableCell>
-            {hasActions && (
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  {canPay && canPayExpense(expense) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onPay(expense)}
-                      aria-label={`Pay ${expense.payee}`}
-                    >
-                      Pay
-                    </Button>
-                  )}
-                  {canEdit && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onEdit(expense)}
-                      aria-label={`Edit ${expense.payee}`}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                </div>
-              </TableCell>
-            )}
+            <TableCell className="text-right">
+              <div className="flex justify-end gap-1">
+                {canPay && canPayExpense(expense) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onPay(expense)}
+                    aria-label={`Pay ${expense.payee}`}
+                  >
+                    Pay
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onEdit(expense)}
+                    aria-label={`Edit ${expense.payee}`}
+                  >
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onAttachments(expense)}
+                  aria-label={`Attachments for ${expense.payee}`}
+                >
+                  Attachments
+                </Button>
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
