@@ -1,24 +1,25 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCentavos } from "@/lib/accounting/money";
 import { cn } from "@/lib/utils";
+import { amountDisplay } from "../statements/_lib/amount";
 
 export interface ReportSectionLine {
   key: string;
   code?: string;
   label: string;
-  /** Centavos, already netted into the direction the section reads. */
+  /** Centavos from the server, in the direction the section reads. */
   amount: number;
 }
 
 interface ReportSectionProps {
   title: string;
   lines: ReportSectionLine[];
-  total: number;
+  /** Centavos from the server. Missing reads as a dash. */
+  total: number | null | undefined;
   totalLabel?: string;
-  /** An extra line under the total, e.g. "Total liabilities and equity". */
-  footer?: { label: string; amount: number };
+  /** An extra server figure under the total, e.g. "Total liabilities and equity". */
+  footer?: { label: string; amount: number | null | undefined };
   emptyMessage?: string;
 }
 
@@ -26,9 +27,10 @@ interface ReportSectionProps {
  * One block of a financial statement: a heading, its lines, and its total.
  *
  * Shared by the balance sheet, income statement and cash flow because all
- * three are the same shape — a list of netted account amounts under a
- * subtotal. Negative amounts are shown in parentheses, which is how every
- * accountant reading this expects to see a contra or a loss.
+ * three are the same shape: a list of server amounts under the server's
+ * subtotal. Nothing is added up here. Negative amounts are shown in
+ * parentheses, which is how every accountant reading this expects to see a
+ * contra or a loss.
  */
 export function ReportSection({
   title,
@@ -86,15 +88,18 @@ export function ReportSection({
   );
 }
 
-/** Parentheses for negatives — accounting convention, not a minus sign. */
+/**
+ * Parentheses for negatives (accounting convention, not a minus sign), and a
+ * dash for a figure the server didn't send.
+ */
 export function Amount({
   value,
   className,
 }: {
-  value: number;
+  value: number | null | undefined;
   className?: string;
 }) {
-  const negative = value < 0;
+  const { text, negative } = amountDisplay(value);
   return (
     <span
       className={cn(
@@ -103,9 +108,7 @@ export function Amount({
         className,
       )}
     >
-      {negative
-        ? `(${formatCentavos(-value)})`
-        : formatCentavos(value)}
+      {text}
     </span>
   );
 }
