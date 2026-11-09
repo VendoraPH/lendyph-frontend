@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JournalPreview, Permission } from "@/types";
-import { draftBalance, journalActions, type DraftBalance } from "./journal-actions";
+import type { JournalValidation } from "@/lib/accounting/journal";
+import {
+  draftBalance,
+  journalActions,
+  journalPageDescription,
+  saveDraftState,
+  type DraftBalance,
+} from "./journal-actions";
 
 const ALL: Permission[] = ["journals:create", "journals:post", "journals:reverse"];
 
@@ -149,4 +156,80 @@ test("the reversal of a closing entry (a reopen) doesn't offer Reverse", () => {
     { editing: false, balance: "balanced" },
   );
   assert.equal(actions.reverse.shown, false);
+});
+
+// ── Save draft ──
+
+const READY_TO_SAVE: JournalValidation = { ok: true, errors: [] };
+
+test("Save draft is offered and ready once the entry could be saved", () => {
+  assert.deepEqual(saveDraftState(READY_TO_SAVE, { isTemplate: false }), {
+    shown: true,
+    disabledReason: null,
+  });
+});
+
+test("Save draft is disabled with the first problem as its reason, never a toast", () => {
+  const state = saveDraftState(
+    {
+      ok: false,
+      errors: [
+        { index: 0, field: "account", message: "Select an account for Line 1." },
+        { index: 1, field: "amount", message: "Enter a debit or a credit for Line 2." },
+      ],
+    },
+    { isTemplate: false },
+  );
+  assert.equal(state.shown, true);
+  assert.equal(state.disabledReason, "Select an account for Line 1. (1 more to fix)");
+});
+
+test("an entry-wide problem reads as it is", () => {
+  const state = saveDraftState(
+    {
+      ok: false,
+      errors: [{ index: null, field: "balance", message: "The totals are still being checked. Try again in a moment." }],
+    },
+    { isTemplate: false },
+  );
+  assert.equal(state.disabledReason, "The totals are still being checked. Try again in a moment.");
+});
+
+test("on the template chart Save draft says why it can't save", () => {
+  const state = saveDraftState(READY_TO_SAVE, { isTemplate: true });
+  assert.match(state.disabledReason ?? "", /default template/);
+});
+
+// ── The page's description ──
+
+test("a reversal's page names the entry it reverses, and never says it can only be reversed", () => {
+  const text = journalPageDescription(
+    { status: "posted", reverses_journal_id: 14, reversed_by_journal_id: null },
+    "JE-000014",
+  );
+  assert.equal(text, "This entry reverses JE-000014.");
+  assert.doesNotMatch(text, /only reversed/);
+});
+
+test("a reversal whose original's number isn't known yet still says what it is", () => {
+  const text = journalPageDescription(
+    { status: "posted", reverses_journal_id: 14, reversed_by_journal_id: null },
+    null,
+  );
+  assert.equal(text, "This entry reverses another entry.");
+});
+
+test("a draft, a posted entry and a reversed one each read their own way", () => {
+  assert.equal(
+    journalPageDescription({ status: "draft", reverses_journal_id: null, reversed_by_journal_id: null }, null),
+    "A draft. Nothing moves in the books until it is posted.",
+  );
+  assert.equal(
+    journalPageDescription({ status: "posted", reverses_journal_id: null, reversed_by_journal_id: null }, null),
+    "Posted entries can't be edited, only reversed.",
+  );
+  assert.equal(
+    journalPageDescription({ status: "reversed", reverses_journal_id: null, reversed_by_journal_id: 15 }, null),
+    "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.",
+  );
 });

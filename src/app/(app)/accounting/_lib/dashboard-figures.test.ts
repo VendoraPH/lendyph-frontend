@@ -4,10 +4,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { centavosOrDash, clearingNeedsReview } from "./dashboard-figures";
 
-test("a figure shows ₱ with two decimals, and zero shows ₱0.00", () => {
+test("a figure shows ₱ with two decimals, zero shows ₱0.00, and a negative reads in parentheses", () => {
   assert.equal(centavosOrDash(150_050), "₱1,500.50");
   assert.equal(centavosOrDash(0), "₱0.00");
-  assert.equal(centavosOrDash(-1_050), "-₱10.50");
+  assert.equal(centavosOrDash(-1_050), "(₱10.50)");
 });
 
 test("a missing figure shows a dash", () => {

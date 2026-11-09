@@ -187,6 +187,30 @@ test("a difference is explained in plain words, pointing at opening balances", (
   assert.doesNotMatch(view.text, /books_principal|records_principal|is_reconciled/);
 });
 
+test("books below the records explain the imported loans and loans released before the books", () => {
+  const view = booksVsRecordsView({
+    ...COMPARISON,
+    books_principal: 0,
+    difference: -100,
+    is_reconciled: false,
+  });
+  assert.match(view.text, /less than the loan records/i);
+  assert.match(view.text, /imported loans/i);
+  assert.match(view.text, /released before the books/i);
+  assert.match(view.text, /no release journal/i);
+});
+
+test("books above the records don't claim imported loans as the cause", () => {
+  const view = booksVsRecordsView({
+    ...COMPARISON,
+    books_principal: 200,
+    difference: 100,
+    is_reconciled: false,
+  });
+  assert.equal(view.status, "differs");
+  assert.doesNotMatch(view.text, /imported loans/i);
+});
+
 test("before the server sends the comparison, every figure is a dash and nothing is claimed", () => {
   const view = booksVsRecordsView(undefined);
   assert.equal(view.status, "pending");

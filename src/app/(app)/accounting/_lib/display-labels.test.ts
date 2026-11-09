@@ -8,6 +8,7 @@ import {
   expenseStatusLabel,
   journalSourceLabel,
   journalStatusLabel,
+  normalBalanceLabel,
   openingBalanceStatusLabel,
   periodStatusLabel,
   yearCloseStatusLabel,
@@ -87,4 +88,10 @@ test("the opening balances' status reads in words", () => {
   assert.equal(openingBalanceStatusLabel("draft"), "Draft");
   assert.equal(openingBalanceStatusLabel("finalised"), "Posted");
   assert.equal(openingBalanceStatusLabel("posted_elsewhere"), "Posted from the command line");
+});
+
+test("an account's normal side reads Debit or Credit, never the stored key", () => {
+  assert.equal(normalBalanceLabel("debit"), "Debit");
+  assert.equal(normalBalanceLabel("credit"), "Credit");
+  assert.equal(normalBalanceLabel("Credit"), "Credit");
 });

@@ -44,7 +44,14 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 }
 
 /** One journal as the server sent it: its details, every line and its totals. */
-export function JournalDetails({ entry }: { entry: JournalEntry }) {
+export function JournalDetails({
+  entry,
+  originalNo = null,
+}: {
+  entry: JournalEntry;
+  /** For a reversal, the number of the entry it reverses, once loaded. */
+  originalNo?: string | null;
+}) {
   return (
     <div className="space-y-6">
       <Card>
@@ -73,7 +80,7 @@ export function JournalDetails({ entry }: { entry: JournalEntry }) {
             <div className="mt-4 space-y-1 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm">
               {entry.reverses_journal_id && (
                 <p>
-                  This entry reverses another one.{" "}
+                  This entry reverses {originalNo ?? "another entry"}.{" "}
                   <Link
                     className="font-medium underline underline-offset-4"
                     href={`/accounting/journals/${entry.reverses_journal_id}`}

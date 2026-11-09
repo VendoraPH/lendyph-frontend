@@ -29,6 +29,8 @@ export const journalSourceLabel = (source: string): string =>
 export const journalStatusLabel = (status: string): string => inWords(status);
 export const accountTypeLabel = (type: string): string => inWords(type);
 export const cashKindLabel = (kind: string): string => inWords(kind);
+/** An account's normal side, "debit" or "credit", as "Debit" or "Credit". */
+export const normalBalanceLabel = (side: string): string => inWords(side.toLowerCase());
 export const periodStatusLabel = (status: string): string => inWords(status);
 
 /** As the Expenses status filter reads them; any other status reads in words. */

@@ -251,7 +251,7 @@ test("the history asks the server for 25 rows a page and pages from its meta", (
     meta: { current_page: 2, last_page: 3, per_page: 25, total: 60, totals: { net_surplus: -123456 } },
   };
   assert.deepEqual(historyPaging(page), { page: 2, perPage: 25, total: 60 });
-  assert.equal(historyTotal(page), "-₱1,234.56");
+  assert.equal(historyTotal(page), "(₱1,234.56)");
   assert.equal(historyTotal({ ...page, meta: { ...page.meta, totals: { net_surplus: 0 } } }), "₱0.00");
   assert.equal(historyTotal({ ...page, meta: { ...page.meta, totals: undefined as never } }), "—");
 });
@@ -265,7 +265,7 @@ test("a history row shows the status in words, each branch's entry linked to its
     view.entries.map((e) => [e.branch, e.journalNo, e.href, e.netSurplus]),
     [
       ["Main", "JV-000501", "/accounting/journals/501", "₱45,000.00"],
-      ["Journals with no branch", "JV-000502", "/accounting/journals/502", "-₱3,000.00"],
+      ["Journals with no branch", "JV-000502", "/accounting/journals/502", "(₱3,000.00)"],
     ],
   );
   assert.equal(view.closedBy, "Ana Cruz");

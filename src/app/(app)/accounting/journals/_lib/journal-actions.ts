@@ -6,7 +6,7 @@
  * take, is hidden. One that is offered but can't be taken right now carries
  * the reason, for a disabled button.
  */
-import { previewIsBalanced } from "@/lib/accounting/journal";
+import { previewIsBalanced, type JournalValidation } from "@/lib/accounting/journal";
 import { closedYear } from "@/lib/accounting/source-document";
 import type { JournalEntry, JournalPreview, Permission } from "@/types";
 
@@ -90,4 +90,46 @@ export function journalActions(
         ? { shown: true, disabledReason: reverseRefusal(entry) }
         : HIDDEN,
   };
+}
+
+const TEMPLATE_CHART =
+  "The accounts shown are the default template, not your saved chart, so this entry can't be saved yet.";
+
+/**
+ * The entry form's save button (Save draft, Save changes). It is disabled
+ * until the entry could be saved, and its reason is the first thing left to
+ * fix, so nobody has to click to find out.
+ */
+export function saveDraftState(
+  validation: JournalValidation,
+  { isTemplate }: { isTemplate: boolean },
+): JournalActionState {
+  if (isTemplate) return { shown: true, disabledReason: TEMPLATE_CHART };
+  const [first, ...rest] = validation.errors;
+  if (validation.ok || !first) return READY;
+  const line = first.index === null ? null : `Line ${first.index + 1}`;
+  const message = line && !first.message.includes(line) ? `${line}: ${first.message}` : first.message;
+  return {
+    shown: true,
+    disabledReason: rest.length > 0 ? `${message} (${rest.length} more to fix)` : message,
+  };
+}
+
+/**
+ * The journal page's description under its title. A reversal names the entry
+ * it reverses (`originalNo`, once the original has loaded); it is never
+ * reversed itself, so it doesn't say "only reversed".
+ */
+export function journalPageDescription(
+  entry: Pick<JournalEntry, "status" | "reverses_journal_id" | "reversed_by_journal_id">,
+  originalNo: string | null,
+): string {
+  if (entry.status === "draft") return "A draft. Nothing moves in the books until it is posted.";
+  if (entry.reverses_journal_id) {
+    return originalNo ? `This entry reverses ${originalNo}.` : "This entry reverses another entry.";
+  }
+  if (entry.status === "reversed" || entry.reversed_by_journal_id) {
+    return "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.";
+  }
+  return "Posted entries can't be edited, only reversed.";
 }

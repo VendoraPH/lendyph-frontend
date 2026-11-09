@@ -1,4 +1,4 @@
-import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "./signed-money";
 
 /**
  * How a statement figure reads. Centavos in, ₱ with two decimals out, and
@@ -14,8 +14,5 @@ export function amountDisplay(value: number | null | undefined): {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return { text: "—", negative: false };
   }
-  if (value < 0) {
-    return { text: `(${formatCentavos(value).replace("-", "")})`, negative: true };
-  }
-  return { text: formatCentavos(value), negative: false };
+  return { text: signedCentavos(value), negative: value < 0 };
 }

@@ -43,6 +43,38 @@ export function buildPayExpensePayload(form: PayExpenseForm): PayExpenseData | n
   return { date: form.date, amount, account_id: form.accountId };
 }
 
+/** What the New Expense form holds. Amounts stay as typed until they are parsed. */
+export interface NewExpenseForm {
+  date: string;
+  payee: string;
+  expenseAccountId: number | null;
+  /** As typed, in pesos. */
+  amount: string;
+  paidNow: boolean;
+  paymentAccountId: number | null;
+  dueDate: string;
+  reference: string;
+  description: string;
+}
+
+/**
+ * A blank New Expense, dated `today`, with "Paid now?" on. The dialog starts
+ * from this every time it opens, so nothing carries over from the last entry.
+ */
+export function newExpenseForm(today: string): NewExpenseForm {
+  return {
+    date: today,
+    payee: "",
+    expenseAccountId: null,
+    amount: "",
+    paidNow: true,
+    paymentAccountId: null,
+    dueDate: "",
+    reference: "",
+    description: "",
+  };
+}
+
 /** The descriptive fields, the only ones an expense's edit can change. */
 export interface ExpenseEditForm {
   payee: string;

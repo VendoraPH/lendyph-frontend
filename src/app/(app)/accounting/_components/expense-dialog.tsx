@@ -21,8 +21,10 @@ import type { Expense } from "@/types";
 import {
   buildExpenseEditPayload,
   expenseEditForm,
+  newExpenseForm,
   type ExpenseEditForm,
   type ExpenseEditPayload,
+  type NewExpenseForm,
 } from "../expenses/_lib/expense-forms";
 import { AccountSelect } from "./account-select";
 
@@ -45,21 +47,41 @@ interface ExpenseDialogProps {
  * The distinction is the only accounting decision the user makes here, and it
  * is asked in plain language ("Paid now?") rather than as a choice between
  * two journal shapes. Paid now credits the money account; unpaid credits
- * Accounts Payable and waits to be settled.
+ * Accounts Payable and waits to be settled. Each opening starts blank, with
+ * "Paid now?" on, so nothing carries over from the last entry.
  */
 export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogProps) {
   const { postable, isTemplate } = useChartOfAccounts();
 
-  const [date, setDate] = useState(todayISO());
-  const [payee, setPayee] = useState("");
-  const [expenseAccountId, setExpenseAccountId] = useState<number | null>(null);
-  const [amount, setAmount] = useState("");
-  const [paidNow, setPaidNow] = useState(true);
-  const [paymentAccountId, setPaymentAccountId] = useState<number | null>(null);
-  const [dueDate, setDueDate] = useState("");
-  const [reference, setReference] = useState("");
-  const [description, setDescription] = useState("");
+  const [form, setForm] = useState<NewExpenseForm>(() => newExpenseForm(todayISO()));
   const [submitting, setSubmitting] = useState(false);
+
+  if (useDialogOpening(open, null)) setForm(newExpenseForm(todayISO()));
+
+  const set =
+    <K extends keyof NewExpenseForm>(field: K) =>
+    (value: NewExpenseForm[K]) =>
+      setForm((prev) => ({ ...prev, [field]: value }));
+  const {
+    date,
+    payee,
+    expenseAccountId,
+    amount,
+    paidNow,
+    paymentAccountId,
+    dueDate,
+    reference,
+    description,
+  } = form;
+  const setDate = set("date");
+  const setPayee = set("payee");
+  const setExpenseAccountId = set("expenseAccountId");
+  const setAmount = set("amount");
+  const setPaidNow = set("paidNow");
+  const setPaymentAccountId = set("paymentAccountId");
+  const setDueDate = set("dueDate");
+  const setReference = set("reference");
+  const setDescription = set("description");
 
   const expenseAccounts = postable.filter((a) => a.type === "expense");
   const moneyAccounts = postable.filter((a) => Boolean(a.cash_kind));

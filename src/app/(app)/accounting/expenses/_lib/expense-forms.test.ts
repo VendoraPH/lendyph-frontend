@@ -6,6 +6,7 @@ import {
   buildPayExpensePayload,
   canPayExpense,
   expenseEditForm,
+  newExpenseForm,
   payAmountDefault,
   payFromAccounts,
 } from "./expense-forms";
@@ -136,4 +137,18 @@ test("pay offers only active money accounts that can take a posting", () => {
     payFromAccounts(accounts).map((a) => a.id),
     [1, 4],
   );
+});
+
+test("a New Expense opens blank, dated today, with Paid now on", () => {
+  assert.deepEqual(newExpenseForm("2026-11-09"), {
+    date: "2026-11-09",
+    payee: "",
+    expenseAccountId: null,
+    amount: "",
+    paidNow: true,
+    paymentAccountId: null,
+    dueDate: "",
+    reference: "",
+    description: "",
+  });
 });

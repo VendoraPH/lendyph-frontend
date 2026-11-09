@@ -4,6 +4,7 @@
 // Dependency-free apart from formatters, so it runs under `tsx --test`.
 
 import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "../../_lib/signed-money";
 import { getErrorMessage, getFieldErrors, httpStatusOf } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
 import type {
@@ -46,9 +47,12 @@ const MONTHS = [
   "December",
 ];
 
-/** ₱ with two decimals; ₱0.00 for a zero, and "—" only when the figure is missing. */
+/**
+ * ₱ with two decimals, a loss in parentheses; ₱0.00 for a zero, and "—" only
+ * when the figure is missing.
+ */
 export function centavosOrDash(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? formatCentavos(value) : "—";
+  return typeof value === "number" && Number.isFinite(value) ? signedCentavos(value) : "—";
 }
 
 export interface NetResult {
@@ -63,7 +67,7 @@ export function netResult(net: number | null | undefined): NetResult {
   const loss = typeof net === "number" && net < 0;
   return {
     label: loss ? "Net loss" : "Net surplus",
-    amount: centavosOrDash(net).replace(/^-/, ""),
+    amount: typeof net === "number" && Number.isFinite(net) ? formatCentavos(net).replace(/^-/, "") : "—",
     loss,
   };
 }

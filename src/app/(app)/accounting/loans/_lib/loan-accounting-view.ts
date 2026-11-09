@@ -208,6 +208,16 @@ export function booksVsRecordsView(comparison: Comparison | undefined): {
       figures,
     };
   }
+  // Only the server's sign is read: a negative difference means the books
+  // hold less than the records.
+  if (comparison.difference < 0) {
+    return {
+      status: "differs",
+      label: "Not reconciled",
+      text: "The books hold less than the loan records. Imported loans and loans released before the books existed post no release journal, so their principal is on the loan records but not in the books. Entering the opening balances corrects it.",
+      figures,
+    };
+  }
   return {
     status: "differs",
     label: "Not reconciled",
