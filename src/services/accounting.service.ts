@@ -18,6 +18,7 @@ import { buildJournalPayload } from "@/lib/accounting/journal";
 import type { PaginatedResponse } from "@/types";
 import type {
   Account,
+  AccountingAttachment,
   AccountMapping,
   AccountingBook,
   AccountingDashboard,
@@ -26,7 +27,11 @@ import type {
   AgingBucket,
   BalanceSheet,
   BookKind,
+  AllowancePostingPage,
+  AllowancePreview,
+  AllowanceRun,
   CashAccountPage,
+  ChartTemplate,
   CashFlowStatement,
   ColumnBook,
   ColumnBookKind,
@@ -46,8 +51,17 @@ import type {
   LoanAgingPage,
   LoanAgingRow,
   MemberAgingRow,
+  OpeningBalance,
+  OpeningBalanceDraft,
+  ReconcileLineAsExpenseBody,
+  ReconcileLineAsTransferBody,
+  ReconcileLineToSuspenseBody,
   Reconciliation,
+  ReconciliationActionResult,
   TrialBalance,
+  YearClose,
+  YearClosePage,
+  YearClosePreview,
 } from "@/types/accounting";
 
 /**
@@ -192,9 +206,13 @@ export const accountingService = {
       accountingService.accountsList({ page, per_page }),
     ),
 
-  /** Seed a fresh organisation with the default chart. One-time, admin-only. */
-  seedAccounts: (): Promise<Account[]> =>
-    api.post<Account[]>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_SEED, {}),
+  /**
+   * Seed a fresh organisation's chart. One-time, admin-only. `template` is sent
+   * only when given, so a call without one sends exactly the empty body it
+   * always has and the server seeds the lending company chart.
+   */
+  seedAccounts: (template?: ChartTemplate): Promise<Account[]> =>
+    api.post<Account[]>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_SEED, template ? { template } : {}),
 
   createAccount: (data: Partial<Account>): Promise<Account> =>
     api.post<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_CREATE, data),
@@ -440,4 +458,153 @@ export const accountingService = {
 
   updateAccountMapping: (mapping: Partial<AccountMapping>): Promise<AccountMapping> =>
     api.put<AccountMapping>(API_ENDPOINTS.ACCOUNTING.ACCOUNT_MAPPING, mapping),
+
+  // ── Round C: opening balances ──
+  /** The one organisation-wide entry, whatever its state (`status: "none"` before any). */
+  openingBalances: (): Promise<OpeningBalance> =>
+    api.get<OpeningBalance>(API_ENDPOINTS.ACCOUNTING.OPENING_BALANCES),
+
+  /** Creates the draft or replaces its lines wholesale. A stale `edit_version` answers 409. */
+  saveOpeningBalances: (draft: OpeningBalanceDraft): Promise<OpeningBalance> =>
+    api.put<OpeningBalance>(API_ENDPOINTS.ACCOUNTING.OPENING_BALANCES, draft),
+
+  /** Posts the draft once, as one journal. Refused unless balanced. */
+  finaliseOpeningBalances: (editVersion: number): Promise<OpeningBalance> =>
+    api.post<OpeningBalance>(API_ENDPOINTS.ACCOUNTING.OPENING_BALANCES_FINALISE, {
+      edit_version: editVersion,
+    }),
+
+  // ── Round C: year-end close ──
+  /** One page of closes, newest year first, with `meta.totals.net_surplus`. */
+  yearClosesPage: (query: PageParams = {}): Promise<YearClosePage> =>
+    api.getRaw<YearClosePage>(API_ENDPOINTS.ACCOUNTING.YEAR_CLOSES, { params: query }),
+
+  /** What closing `year` would post, and why it can't yet. Writes nothing. */
+  yearClosePreview: (year: number): Promise<YearClosePreview> =>
+    api.get<YearClosePreview>(API_ENDPOINTS.ACCOUNTING.YEAR_CLOSES_PREVIEW, {
+      params: { year },
+    }),
+
+  closeYear: (year: number): Promise<YearClose> =>
+    api.post<YearClose>(API_ENDPOINTS.ACCOUNTING.YEAR_CLOSES, { year }),
+
+  /** The latest closed year only. Reverses its closing entries and reopens its months. */
+  reopenYear: (id: number, reason: string): Promise<YearClose> =>
+    api.post<YearClose>(API_ENDPOINTS.ACCOUNTING.YEAR_CLOSES_REOPEN(id), { reason }),
+
+  // ── Round C: allowance for credit losses ──
+  /** Without `asOf` the server uses today in Manila. Writes nothing. */
+  allowancePreview: (asOf?: string): Promise<AllowancePreview> =>
+    api.get<AllowancePreview>(API_ENDPOINTS.ACCOUNTING.ALLOWANCE_PREVIEW, {
+      params: { as_of: asOf },
+    }),
+
+  /**
+   * Posts one adjustment per branch. `expectedAdjustment` is the preview's
+   * `totals.adjustment` in centavos; if the server's figure moved since, it
+   * answers 409 and nothing posts.
+   */
+  postAllowance: (asOf: string, expectedAdjustment: number): Promise<AllowanceRun> =>
+    api.post<AllowanceRun>(API_ENDPOINTS.ACCOUNTING.ALLOWANCE_POSTINGS, {
+      as_of: asOf,
+      expected_adjustment: expectedAdjustment,
+    }),
+
+  /** One page of postings, newest first, with `meta.totals.adjustment`. */
+  allowancePostingsPage: (query: PageParams = {}): Promise<AllowancePostingPage> =>
+    api.getRaw<AllowancePostingPage>(API_ENDPOINTS.ACCOUNTING.ALLOWANCE_POSTINGS, {
+      params: query,
+    }),
+
+  // ── Round C: reconciliation actions ──
+  // Read whole: the answer carries `created` beside `data`, which `api.post` would drop.
+  /** Money out only: records a paid expense from the reconciled account and matches the line. */
+  reconcileLineAsExpense: (
+    reconciliationId: number,
+    lineId: number,
+    body: ReconcileLineAsExpenseBody,
+  ): Promise<ReconciliationActionResult> =>
+    api.rawPost<ReconciliationActionResult>(
+      API_ENDPOINTS.ACCOUNTING.RECONCILIATION_LINE_EXPENSE(reconciliationId, lineId),
+      body,
+    ),
+
+  reconcileLineAsTransfer: (
+    reconciliationId: number,
+    lineId: number,
+    body: ReconcileLineAsTransferBody,
+  ): Promise<ReconciliationActionResult> =>
+    api.rawPost<ReconciliationActionResult>(
+      API_ENDPOINTS.ACCOUNTING.RECONCILIATION_LINE_TRANSFER(reconciliationId, lineId),
+      body,
+    ),
+
+  /** Posts a suspense journal at once and matches the line to it. */
+  reconcileLineToSuspense: (
+    reconciliationId: number,
+    lineId: number,
+    body: ReconcileLineToSuspenseBody = {},
+  ): Promise<ReconciliationActionResult> =>
+    api.rawPost<ReconciliationActionResult>(
+      API_ENDPOINTS.ACCOUNTING.RECONCILIATION_LINE_SUSPENSE(reconciliationId, lineId),
+      body,
+    ),
+
+  // ── Round C: attachments ──
+  journalAttachments: (journalId: number): Promise<AccountingAttachment[]> =>
+    api.get<AccountingAttachment[]>(API_ENDPOINTS.ACCOUNTING.JOURNAL_ATTACHMENTS(journalId)),
+
+  /** Multipart: `file` (10 MB; jpg, jpeg, png, pdf, doc, docx) and an optional `label`. */
+  uploadJournalAttachment: (
+    journalId: number,
+    file: File,
+    label?: string,
+  ): Promise<AccountingAttachment> =>
+    api.upload<AccountingAttachment>(
+      API_ENDPOINTS.ACCOUNTING.JOURNAL_ATTACHMENTS(journalId),
+      attachmentFormData(file, label),
+    ),
+
+  /** A posted or reversed journal needs `accounting:settings` and a `reason`. */
+  removeJournalAttachment: (
+    journalId: number,
+    attachmentId: number,
+    reason?: string,
+  ): Promise<{ message: string }> =>
+    api.rawDelete<{ message: string }>(
+      API_ENDPOINTS.ACCOUNTING.JOURNAL_ATTACHMENT(journalId, attachmentId),
+      { data: reason === undefined ? undefined : { reason } },
+    ),
+
+  expenseAttachments: (expenseId: number): Promise<AccountingAttachment[]> =>
+    api.get<AccountingAttachment[]>(API_ENDPOINTS.ACCOUNTING.EXPENSE_ATTACHMENTS(expenseId)),
+
+  uploadExpenseAttachment: (
+    expenseId: number,
+    file: File,
+    label?: string,
+  ): Promise<AccountingAttachment> =>
+    api.upload<AccountingAttachment>(
+      API_ENDPOINTS.ACCOUNTING.EXPENSE_ATTACHMENTS(expenseId),
+      attachmentFormData(file, label),
+    ),
+
+  /** Any expense's attachment needs `accounting:settings` and a `reason`. */
+  removeExpenseAttachment: (
+    expenseId: number,
+    attachmentId: number,
+    reason?: string,
+  ): Promise<{ message: string }> =>
+    api.rawDelete<{ message: string }>(
+      API_ENDPOINTS.ACCOUNTING.EXPENSE_ATTACHMENT(expenseId, attachmentId),
+      { data: reason === undefined ? undefined : { reason } },
+    ),
 };
+
+/** The attachment upload body: the file, and the label only when there is one. */
+function attachmentFormData(file: File, label?: string): FormData {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (label) formData.append("label", label);
+  return formData;
+}

@@ -2,11 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   accountTypeLabel,
+  allowanceBucketLabel,
   cashKindLabel,
+  chartTemplateLabel,
   expenseStatusLabel,
   journalSourceLabel,
   journalStatusLabel,
+  openingBalanceStatusLabel,
   periodStatusLabel,
+  yearCloseStatusLabel,
 } from "./display-labels";
 
 test("a journal's status reads in words", () => {
@@ -50,4 +54,37 @@ test("an expense's status reads as the status filter reads it", () => {
 
 test("an expense status the screen doesn't know yet still reads in words", () => {
   assert.equal(expenseStatusLabel("written_off"), "Written Off");
+});
+
+test("the year-end closing source and the two statement-line sources read as staff say them", () => {
+  assert.equal(journalSourceLabel("closing"), "Year-end closing");
+  assert.equal(journalSourceLabel("bank_transaction"), "Bank statement entry");
+  assert.equal(journalSourceLabel("cash_transaction"), "Cash count entry");
+  assert.equal(journalSourceLabel("opening_balance"), "Opening Balance");
+});
+
+test("a chart template reads in words", () => {
+  assert.equal(chartTemplateLabel("lending_company"), "Lending company");
+  assert.equal(chartTemplateLabel("cooperative"), "Cooperative");
+  assert.equal(chartTemplateLabel("something_new"), "Something New");
+});
+
+test("an allowance bucket reads as a range of days", () => {
+  assert.equal(allowanceBucketLabel("1_30"), "1–30 days");
+  assert.equal(allowanceBucketLabel("31_60"), "31–60 days");
+  assert.equal(allowanceBucketLabel("61_90"), "61–90 days");
+  assert.equal(allowanceBucketLabel("91_120"), "91–120 days");
+  assert.equal(allowanceBucketLabel("over_120"), "Over 120 days");
+});
+
+test("a year close's status reads in words", () => {
+  assert.equal(yearCloseStatusLabel("closed"), "Closed");
+  assert.equal(yearCloseStatusLabel("reopened"), "Reopened");
+});
+
+test("the opening balances' status reads in words", () => {
+  assert.equal(openingBalanceStatusLabel("none"), "Not started");
+  assert.equal(openingBalanceStatusLabel("draft"), "Draft");
+  assert.equal(openingBalanceStatusLabel("finalised"), "Posted");
+  assert.equal(openingBalanceStatusLabel("posted_elsewhere"), "Posted from the command line");
 });
