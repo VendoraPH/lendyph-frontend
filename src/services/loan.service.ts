@@ -6,6 +6,7 @@ import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, Amorti
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
+import type { RecordPaymentMethod } from "@/constants/payment-methods";
 
 /**
  * `POST /loans` and `PUT /loans/{id}`. `deductions` go up as rates and pesos
@@ -41,6 +42,22 @@ export type ReleaseLoanPayload = {
    * configuration has changed since.
    */
   fee_fingerprint?: string;
+  /** How the proceeds are paid out; the server takes cash when it is left out. */
+  method?: RecordPaymentMethod;
+  /** Required unless the method is cash, at most 100 characters. */
+  reference_number?: string;
+};
+
+/**
+ * `POST /loans/{id}/extend`. On "pay" the collection takes `method` (cash when
+ * left out) and `reference_number` (required unless cash); "defer" collects
+ * nothing and sends neither.
+ */
+export type ExtendLoanPayload = {
+  remarks?: string;
+  interest_option: ExtensionInterestOption;
+  method?: RecordPaymentMethod;
+  reference_number?: string;
 };
 
 /**
@@ -233,6 +250,17 @@ export const loanService = {
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id), payload),
 
   /**
+   * Sends an approved, unreleased restructure back into review, with a reason
+   * (required, at most 1000 characters), so its figures are taken again on
+   * re-submit and approval. Answers the loan, now `for_review`. Offered only
+   * when the loan's `can_send_back_approved` is true; the server refuses
+   * anything else (409 when the loan changed meanwhile, 422 on `status` or
+   * `reason`).
+   */
+  sendBackApproved: (id: number, data: { reason: string }) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.SEND_BACK_APPROVED(id), data),
+
+  /**
    * What releasing the loan would withhold and pay out. With `insurance`, the
    * server also works out the premium and the deductions and net after it.
    * Needs `loans:release`, and 422s unless the loan is `approved`, when the
@@ -281,7 +309,7 @@ export const loanService = {
    * ("defer"). The API performs the collection itself, in the same
    * transaction as the extension.
    */
-  extend: (id: number, data: { remarks?: string; interest_option: ExtensionInterestOption }) =>
+  extend: (id: number, data: ExtendLoanPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
 
   /**

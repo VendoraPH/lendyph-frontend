@@ -4,7 +4,8 @@ import { useCallback, useState } from "react";
 import { Mail, MessageSquare } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
-import { DeliveryStatusBadge } from "@/components/reminders/reminder-status-badge";
+import { DeliveryStatusBadge, TestModeBadge } from "@/components/reminders/reminder-status-badge";
+import { useReminderTestModeContext } from "@/components/reminders/test-mode";
 import {
   Table,
   TableBody,
@@ -13,9 +14,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatDateTime } from "@/lib/format";
-import { DELIVERY_STATUS_META, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
+import {
+  TEMPLATE_TYPE_LABELS,
+  deliveryStatusOptions,
+  deliveryStatusWentOut,
+  recipientLabel,
+  rowTestMode,
+} from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { ReminderHistoryFilters, ReminderMessage } from "@/types/reminder";
 import { ReminderFilters, StatusSelect } from "../_components/reminder-filters";
@@ -28,20 +35,24 @@ export default function ReminderHistoryPage() {
   const fetcher = useCallback(() => reminderService.listHistory(filters), [filters]);
   const history = useApiResource(fetcher);
   const [selected, setSelected] = useState<ReminderMessage | null>(null);
+  const { testMode } = useReminderTestModeContext();
+  // A null recipient is hidden or missing; only `borrowers:view` tells which.
+  const canSeeContacts = usePermission().can("borrowers:view");
+  const loggedOnly = (m: ReminderMessage) => deliveryStatusWentOut(m.status) && rowTestMode(m, testMode) === true;
 
   return (
     <div className="space-y-4">
       <ReminderFilters value={filters} onChange={setFilters} dates="range">
         <StatusSelect
           value={filters.status}
-          options={DELIVERY_STATUS_META}
+          options={deliveryStatusOptions(testMode)}
           onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}
         />
       </ReminderFilters>
 
       <DataState
         resource={history}
-        summary="Every reminder ever sent — the exact text, delivery result and provider reference — will be logged here once the reminder service is connected."
+        summary="Every reminder message — the exact text, delivery result and provider reference — will be listed here once the reminder service is connected."
         endpoints={["GET /reminders/history", "GET /reminders/history/{id}"]}
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No messages match these filters."
@@ -52,7 +63,8 @@ export default function ReminderHistoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Sent</TableHead>
+                    {/* "Date", not "Sent": in test mode a message is logged, not sent. */}
+                    <TableHead>Date</TableHead>
                     <TableHead>Member</TableHead>
                     <TableHead>Loan</TableHead>
                     <TableHead>Channel</TableHead>
@@ -68,7 +80,11 @@ export default function ReminderHistoryPage() {
                   {res.data.map((m) => (
                     <TableRow key={m.id} className="cursor-pointer" onClick={() => setSelected(m)}>
                       <TableCell className="whitespace-nowrap text-sm">
-                        {m.sent_at ? formatDateTime(m.sent_at) : <span className="text-muted-foreground">Not sent</span>}
+                        {m.sent_at ? (
+                          formatDateTime(m.sent_at)
+                        ) : (
+                          <span className="text-muted-foreground">Not sent</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium">
                         <button
@@ -88,7 +104,7 @@ export default function ReminderHistoryPage() {
                           ) : (
                             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
-                          {m.recipient}
+                          {recipientLabel(m.recipient, canSeeContacts)}
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">
@@ -98,7 +114,10 @@ export default function ReminderHistoryPage() {
                         {m.source === "manual" ? `Manual${m.created_by_name ? ` · ${m.created_by_name}` : ""}` : "Automatic"}
                       </TableCell>
                       <TableCell>
-                        <DeliveryStatusBadge status={m.status} />
+                        <span className="flex flex-wrap items-center gap-1">
+                          <DeliveryStatusBadge status={m.status} mode={rowTestMode(m, testMode)} />
+                          {loggedOnly(m) && <TestModeBadge />}
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -117,7 +136,11 @@ export default function ReminderHistoryPage() {
         )}
       </DataState>
 
-      <MessageDetailSheet message={selected} onOpenChange={(open) => !open && setSelected(null)} />
+      <MessageDetailSheet
+        message={selected}
+        testMode={testMode}
+        onOpenChange={(open) => !open && setSelected(null)}
+      />
     </div>
   );
 }

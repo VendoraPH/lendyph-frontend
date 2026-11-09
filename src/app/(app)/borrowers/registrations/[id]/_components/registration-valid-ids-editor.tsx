@@ -211,6 +211,7 @@ export function RegistrationValidIdsEditor({ drafts, onChange }: Props) {
                     <div className="space-y-1.5">
                       <Label className="text-xs">ID Type</Label>
                       <Select
+                        items={VALID_ID_OPTIONS}
                         value={d.type || null}
                         onValueChange={(v) => patch(d.key, { type: v ?? "" })}
                       >
