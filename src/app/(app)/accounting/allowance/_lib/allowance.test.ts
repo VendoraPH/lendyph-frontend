@@ -18,6 +18,7 @@ import {
   accessNotice,
   adjustmentText,
   branchViews,
+  canPostAllowance,
   confirmLines,
   historyQuery,
   historyRows,
@@ -174,7 +175,7 @@ describe("the preview shows the server's figures", () => {
     assert.equal(unassignedNotice(null), null);
     assert.equal(
       unassignedNotice(123_456),
-      "₱1,234.56 of the allowance is on journals with no branch. It isn't changed by this run; move it with a journal entry if it belongs to a branch.",
+      "₱1,234.56 of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with a journal entry.",
     );
   });
 
@@ -228,10 +229,36 @@ describe("the Post button", () => {
     });
   });
 
-  test("without permission, the permission reason wins over the server's", () => {
-    const blocked = preview({ can_post: false, blocking_reasons: ["Nothing changes."] });
-    assert.equal(postState(blocked, false).reason, POST_PERMISSION_REASON);
-    assert.equal(postState(blocked, false).enabled, false);
+  test("without permission, the server's reasons still show as sent, with the permission reason", () => {
+    const sent = "You don't have permission to post the allowance for credit losses.";
+    const blocked = preview({ can_post: false, blocking_reasons: [sent] });
+    assert.deepEqual(postState(blocked, false), {
+      enabled: false,
+      reason: POST_PERMISSION_REASON,
+      reasons: [sent],
+    });
+  });
+
+  test("a no-branch allowance balance blocks posting, in the server's words", () => {
+    const sent =
+      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with a journal entry first, then post.";
+    const blocked = preview({ unassigned_balance: 70_000, can_post: false, blocking_reasons: [sent] });
+    assert.deepEqual(postState(blocked, true), { enabled: false, reason: null, reasons: [sent] });
+  });
+
+  test("a date before an existing posting blocks posting, in the server's words", () => {
+    const sent = "An allowance was already posted as of 2026-11-30. Post only on or after that date.";
+    const blocked = preview({ can_post: false, blocking_reasons: [sent] });
+    assert.deepEqual(postState(blocked, true).reasons, [sent]);
+    assert.equal(postState(blocked, true).enabled, false);
+  });
+
+  test("posting needs accounting:allowance, accounting:view and branches:view_all", () => {
+    const holding = (...held: string[]) => (permission: string) => held.includes(permission);
+    assert.equal(canPostAllowance(holding("accounting:allowance", "accounting:view", "branches:view_all")), true);
+    assert.equal(canPostAllowance(holding("accounting:allowance", "branches:view_all")), false);
+    assert.equal(canPostAllowance(holding("accounting:view", "branches:view_all")), false);
+    assert.equal(canPostAllowance(holding("accounting:allowance", "accounting:view")), false);
   });
 });
 
@@ -279,14 +306,34 @@ describe("posting", () => {
     assert.deepEqual(postFailure(err), { kind: "conflict" });
   });
 
-  test("a 422 shows the server's words", () => {
+  test("a 422 shows the server's words beside its field", () => {
     const nothing = "Nothing to post: every branch's allowance already equals what is required.";
     const err = { response: { status: 422, data: { message: nothing, errors: { allowance: [nothing] } } } };
-    assert.deepEqual(postFailure(err), { kind: "error", message: nothing });
+    assert.deepEqual(postFailure(err), { kind: "error", field: "allowance", message: nothing });
 
     const future = "The allowance can't be posted for a date in the future.";
     const dated = { response: { status: 422, data: { message: future, errors: { as_of: [future] } } } };
-    assert.deepEqual(postFailure(dated), { kind: "error", message: future });
+    assert.deepEqual(postFailure(dated), { kind: "error", field: "as_of", message: future });
+  });
+
+  test("a 422 for a balance on entries with no branch is the allowance's", () => {
+    const sent =
+      "The allowance has ₱700.00 on entries with no branch. Move it to the branches with a journal entry first, then post.";
+    const err = { response: { status: 422, data: { message: sent, errors: { allowance: [sent] } } } };
+    assert.deepEqual(postFailure(err), { kind: "error", field: "allowance", message: sent });
+  });
+
+  test("a 422 for a date before an existing posting is the As of date's", () => {
+    const sent = "An allowance was already posted as of 2026-11-30. Post only on or after that date.";
+    const err = { response: { status: 422, data: { message: sent, errors: { as_of: [sent] } } } };
+    assert.deepEqual(postFailure(err), { kind: "error", field: "as_of", message: sent });
+  });
+
+  test("a refusal with no field still shows the server's words", () => {
+    const err = { response: { status: 403, data: { message: "This action is unauthorized." } } };
+    const failure = postFailure(err);
+    assert.equal(failure.kind, "error");
+    assert.equal(failure.kind === "error" && failure.field, null);
   });
 });
 

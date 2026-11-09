@@ -18,6 +18,7 @@ import type { AllowancePreview } from "@/types";
 import {
   ALLOWANCE_PERMISSION,
   POST_PERMISSION_REASON,
+  canPostAllowance,
   confirmLines,
   postFailure,
   postFromPreview,
@@ -28,6 +29,8 @@ interface PostAllowancePanelProps {
   preview: AllowancePreview;
   onPosted: () => void;
   onConflict: () => void;
+  /** A 422 on `as_of`: the page shows the server's words beside the As of date. */
+  onDateRefused: (message: string) => void;
 }
 
 /**
@@ -35,12 +38,17 @@ interface PostAllowancePanelProps {
  * whether it can, and the preview's own total goes with the request, so a
  * figure that moved since is refused (409) instead of posted.
  */
-export function PostAllowancePanel({ preview, onPosted, onConflict }: PostAllowancePanelProps) {
+export function PostAllowancePanel({
+  preview,
+  onPosted,
+  onConflict,
+  onDateRefused,
+}: PostAllowancePanelProps) {
   const { can } = usePermission();
   const [confirming, setConfirming] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const state = postState(preview, can(ALLOWANCE_PERMISSION));
+  const state = postState(preview, canPostAllowance(can));
   const lines = confirmLines(preview);
 
   const open = () => {
@@ -62,6 +70,9 @@ export function PostAllowancePanel({ preview, onPosted, onConflict }: PostAllowa
         if (failure.kind === "conflict") {
           setConfirming(false);
           onConflict();
+        } else if (failure.field === "as_of") {
+          setConfirming(false);
+          onDateRefused(failure.message);
         } else {
           setError(failure.message);
         }
@@ -88,7 +99,10 @@ export function PostAllowancePanel({ preview, onPosted, onConflict }: PostAllowa
           Post the allowance
         </PermissionButton>
       </div>
-      {state.reason && <p className="text-sm text-muted-foreground">{state.reason}.</p>}
+      {/* The button's tooltip always carries it; said here only when the server listed nothing. */}
+      {state.reason && state.reasons.length === 0 && (
+        <p className="text-sm text-muted-foreground">{state.reason}.</p>
+      )}
       {state.reasons.length > 0 && (
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
           {state.reasons.map((reason) => (

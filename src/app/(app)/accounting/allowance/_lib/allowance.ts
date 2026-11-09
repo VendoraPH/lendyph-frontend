@@ -149,10 +149,10 @@ export function totalsView(preview: AllowancePreview): TotalsView {
   };
 }
 
-/** The 1200 balance on journals with no branch: named, and left alone by the run. */
+/** The 1200 balance on journals with no branch: named; the server won't post while it isn't 0. */
 export function unassignedNotice(balance: number | null | undefined): string | null {
   if (!isFigure(balance) || balance <= 0) return null;
-  return `${formatCentavos(balance)} of the allowance is on journals with no branch. It isn't changed by this run; move it with a journal entry if it belongs to a branch.`;
+  return `${formatCentavos(balance)} of the allowance is on journals with no branch. The allowance can't be posted until it is moved to the branches with a journal entry.`;
 }
 
 export function lastPostingText(last: AllowancePreview["last_posting"]): string {
@@ -161,21 +161,24 @@ export function lastPostingText(last: AllowancePreview["last_posting"]): string 
   return `Last posted as of ${formatDate(last.as_of)}${by}`;
 }
 
+/** The post needs `accounting:allowance`, `accounting:view` and `branches:view_all`. */
+export function canPostAllowance(can: (permission: Permission) => boolean): boolean {
+  return can(ALLOWANCE_PERMISSION) && can("accounting:view") && can("branches:view_all");
+}
+
 export interface PostState {
   enabled: boolean;
-  /** Why the user can't post at all; shown beside the disabled button. */
+  /** Why the user can't post at all; the disabled button's reason. */
   reason: string | null;
-  /** The server's reasons it can't post on this date. */
+  /** The server's `blocking_reasons`, exactly as sent, whenever it can't post. */
   reasons: string[];
 }
 
-/** Enabled only with `accounting:allowance` and the server's `can_post`. */
+/** Enabled only with the permissions and the server's `can_post`. */
 export function postState(preview: AllowancePreview, canPost: boolean): PostState {
-  if (!canPost) return { enabled: false, reason: POST_PERMISSION_REASON, reasons: [] };
-  if (!preview.can_post) {
-    return { enabled: false, reason: null, reasons: preview.blocking_reasons ?? [] };
-  }
-  return { enabled: true, reason: null, reasons: [] };
+  const reasons = preview.can_post ? [] : (preview.blocking_reasons ?? []);
+  if (!canPost) return { enabled: false, reason: POST_PERMISSION_REASON, reasons };
+  return { enabled: preview.can_post, reason: null, reasons };
 }
 
 export interface ConfirmLines {
@@ -202,12 +205,28 @@ export function postFromPreview(preview: AllowancePreview, post: PostAllowance):
   return post(preview.as_of, preview.totals.adjustment);
 }
 
-export type PostFailure = { kind: "conflict" } | { kind: "error"; message: string };
+/** The fields a refused post names: the As of date, the allowance itself, or the books' setup. */
+export type PostField = "as_of" | "allowance" | "accounting";
+const POST_FIELDS: readonly PostField[] = ["as_of", "allowance", "accounting"];
 
-/** 409: the figures moved, so the preview reloads. Anything else: the server's words. */
+export type PostFailure =
+  | { kind: "conflict" }
+  | { kind: "error"; field: PostField | null; message: string };
+
+/**
+ * 409: the figures moved (or a collision), so the preview reloads. A 422 names
+ * its field, so the screen shows the server's words beside it; anything else
+ * is the server's words alone.
+ */
 export function postFailure(err: unknown): PostFailure {
   if (httpStatusOf(err) === 409) return { kind: "conflict" };
-  return { kind: "error", message: getErrorMessage(err, POST_FALLBACK) };
+  const errors =
+    (err as { response?: { data?: { errors?: Record<string, unknown> } } } | null)?.response?.data
+      ?.errors ?? {};
+  const field = POST_FIELDS.find((key) => key in errors) ?? null;
+  const sent = field ? errors[field] : null;
+  const first = Array.isArray(sent) && typeof sent[0] === "string" ? sent[0] : null;
+  return { kind: "error", field, message: first ?? getErrorMessage(err, POST_FALLBACK) };
 }
 
 export function historyQuery(page: number, perPage: number) {

@@ -27,6 +27,7 @@ function AllowanceContent() {
 
   const [asOf, setAsOf] = useState(todayISO());
   const [conflict, setConflict] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [postings, setPostings] = useState(0);
 
   // Every allowance route answers 403 without access to every branch, so don't ask.
@@ -35,12 +36,20 @@ function AllowanceContent() {
 
   const changeDate = (next: string) => {
     setConflict(false);
+    setDateError(null);
     setAsOf(next);
   };
 
   const posted = () => {
     setConflict(false);
+    setDateError(null);
     setPostings((n) => n + 1);
+    preview.refetch();
+  };
+
+  // The preview then lists the same refusal among its blocking reasons.
+  const dateRefused = (message: string) => {
+    setDateError(message);
     preview.refetch();
   };
 
@@ -64,6 +73,11 @@ function AllowanceContent() {
         <>
           <FilterBar>
             <DateFilter label="As of" value={asOf} onChange={changeDate} />
+            {dateError && (
+              <p role="alert" className="max-w-md self-center text-sm text-destructive">
+                {dateError}
+              </p>
+            )}
           </FilterBar>
 
           {conflict && (
@@ -89,6 +103,7 @@ function AllowanceContent() {
                       preview={data}
                       onPosted={posted}
                       onConflict={figuresChanged}
+                      onDateRefused={dateRefused}
                     />
                   </CardContent>
                 </Card>
