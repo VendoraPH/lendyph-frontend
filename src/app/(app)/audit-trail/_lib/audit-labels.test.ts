@@ -13,6 +13,7 @@ import {
   auditFieldLabel,
   auditModuleLabel,
   auditTargetType,
+  auditTargetTypeLine,
   auditUserName,
   auditUserRole,
 } from "./audit-labels";
@@ -231,6 +232,33 @@ test("an audit target reads in words, and a member's reads Member, not the class
   assert.equal(auditTargetType("CoMaker"), "Co-maker");
   assert.equal(auditTargetType("LoanApprovalStep"), "Loan approval step");
   assert.equal(auditTargetType("GCashTransaction"), "GCash transaction");
+});
+
+test("a target with no name reads once: the type and id line is skipped when it repeats the label", () => {
+  const target = { id: 1, type: "AccountingReconciliationLine", label: "Accounting reconciliation line #1" };
+  assert.equal(auditTargetType(target.type), "Accounting reconciliation line");
+  assert.equal(auditTargetTypeLine(target), null);
+  // Case and spacing don't make it different.
+  assert.equal(auditTargetTypeLine({ ...target, label: "  ACCOUNTING  Reconciliation line # 1 " }), null);
+  assert.equal(auditTargetTypeLine({ id: 21, type: "CoMaker", label: "Co-maker #21" }), null);
+});
+
+test("a named target keeps its type and id line", () => {
+  assert.equal(
+    auditTargetTypeLine({ id: 12, type: "JournalEntry", label: "JE-000012" }),
+    "Journal entry #12",
+  );
+  // Another record of the same type is not a repeat.
+  assert.equal(
+    auditTargetTypeLine({ id: 2, type: "AccountingReconciliationLine", label: "Accounting reconciliation line #1" }),
+    "Accounting reconciliation line #2",
+  );
+});
+
+test("the audit detail prints the type and id line through auditTargetTypeLine", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
+  assert.ok(page.includes("auditTargetTypeLine(log.target)"));
+  assert.ok(!page.includes("{auditTargetType(log.target.type)} #{log.target.id}"));
 });
 
 test("the module filter says Members and still sends borrowers", () => {

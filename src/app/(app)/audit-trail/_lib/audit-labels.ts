@@ -114,6 +114,22 @@ export function auditTargetType(type: string): string {
     .join(" ");
 }
 
+/** Lower case with no spacing, so "Line #1" and "line # 1" compare equal. */
+function compact(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, "");
+}
+
+/**
+ * The audit detail's line under the target's label: its type in words and its
+ * id ("Journal entry #12"). Null when the label already reads the same (a
+ * target with no name of its own, "Accounting reconciliation line #1"), so it
+ * shows once.
+ */
+export function auditTargetTypeLine(target: { id: number; type: string; label: string }): string | null {
+  const line = `${auditTargetType(target.type)} #${target.id}`;
+  return compact(line) === compact(target.label) ? null : line;
+}
+
 /** The row's action: a known label, or the server's key in words. */
 export function auditActionLabel(action: string): string {
   return ACTION_LABELS[action] ?? inWords(action);
