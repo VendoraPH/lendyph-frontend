@@ -6,7 +6,6 @@
 
 import { restructureSuccessor } from "@/lib/loan-restructure";
 import { currencyOrDash } from "@/lib/report-format";
-import type { Loan } from "@/types/loan";
 
 export interface WriteOffFigure {
   label: string;
@@ -15,12 +14,25 @@ export interface WriteOffFigure {
 }
 
 function figure(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
-export function restructureWriteOffFigures(
-  loan: Pick<Loan, "write_off_amount" | "restructured_into">,
-): WriteOffFigure[] {
+/**
+ * What the closed loan carries: its own `write_off_amount`, and the
+ * restructures raised on it, of which the released one holds the books figure.
+ * Loose, so the printables can pass the API's raw record.
+ */
+export interface RestructuredLoanWriteOff {
+  write_off_amount?: unknown;
+  restructured_into?: readonly { status?: unknown; restructure_written_off_principal?: unknown }[] | null;
+}
+
+export function restructureWriteOffFigures(loan: RestructuredLoanWriteOff): WriteOffFigure[] {
   const successor = restructureSuccessor(loan.restructured_into);
   return [
     { label: "Forgiven (approved)", amount: figure(loan.write_off_amount) },

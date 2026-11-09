@@ -31,7 +31,16 @@ import {
 } from "@/lib/insurance-premium";
 import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
-import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import { sortWorkflowEvents, workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import { revisionRoundView, sentBackEvents } from "./_lib/approval-rounds";
+import {
+  SEND_BACK_REASON_MAX,
+  canSendBackApproved,
+  sendBackApprovedPayload,
+  sendBackFailureAction,
+  sendBackReasonError,
+} from "./_lib/send-back-approved";
+import type { LoanApprovalRound } from "@/types/loan-approval";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -214,6 +223,7 @@ import {
   Zap,
   RefreshCw,
   Info,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
@@ -555,15 +565,18 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   approved: <UserCheck className="h-4 w-4 text-blue-600" />,
   rejected: <Ban className="h-4 w-4 text-red-600" />,
   released: <Unlock className="h-4 w-4 text-cyan-600" />,
+  sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
 };
 
-function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events = workflowEvents(loan);
+function WorkflowHistory({ loan, rounds }: { loan: Loan; rounds: LoanApprovalRound[] }) {
+  // The loan's own milestones, plus each round the chain sent back (a release
+  // step included, when an approved restructure went back before release).
+  const events = sortWorkflowEvents([...workflowEvents(loan), ...sentBackEvents(rounds)], loan.created_at);
 
   return (
     <div className="space-y-4">
-      {events.map((event) => (
-        <div key={event.key} className="flex items-start gap-3">
+      {events.map((event, i) => (
+        <div key={`${event.key}-${i}`} className="flex items-start gap-3">
           <div className="mt-0.5">{WORKFLOW_ICONS[event.key]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{event.label}</p>
@@ -1013,6 +1026,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
+  // "Send back for approval" on an approved restructure: its reason, cleared
+  // each time the dialog opens.
+  const [sendBackApprovedOpen, setSendBackApprovedOpen] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState("");
+  const [sendBackApprovedLoading, setSendBackApprovedLoading] = useState(false);
+  if (useDialogOpening(sendBackApprovedOpen, loanId)) setSendBackReason("");
   // How the proceeds are paid out, and its reference. Every opening starts at
   // Cash with no reference, so a later release can't go out under an old one.
   const [releaseMethod, setReleaseMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
@@ -1492,6 +1511,37 @@ function LoanDetail({ loanId }: { loanId: number }) {
     } else {
       notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
+  };
+
+  const sendBackReasonProblem = sendBackReasonError(sendBackReason);
+
+  // An approved, unreleased restructure back into review, offered only on the
+  // server's `can_send_back_approved`. The loan and its chain are read again
+  // after, since the server reopened the chain.
+  const handleSendBackApproved = async () => {
+    if (sendBackReasonProblem !== null || sendBackApprovedLoading) return;
+    setSendBackApprovedLoading(true);
+    try {
+      await loanService.sendBackApproved(loan.id, sendBackApprovedPayload(sendBackReason));
+    } catch (err) {
+      notifyError(err, "We couldn't send this restructure back for approval. Please try again.");
+      if (sendBackFailureAction(err) === "reload") {
+        // The loan moved on meanwhile (released, voided, already sent back):
+        // show where it now stands.
+        setSendBackApprovedOpen(false);
+        reloadLoan();
+        void refreshApproval();
+      }
+      setSendBackApprovedLoading(false);
+      return;
+    }
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setSendBackApprovedLoading(false);
+    setSendBackApprovedOpen(false);
+    toast.success("Restructure sent back for approval");
+    void refreshApproval();
+    if (reloaded) setLoan(reloaded);
+    else notifyWarning("The page couldn't refresh", "Reload to see the loan back in approval.");
   };
 
   // ── Multi-step approval handlers ──
@@ -2198,6 +2248,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
+            {canSendBackApproved(loan) && (
+              <Button
+                variant="outline"
+                onClick={() => setSendBackApprovedOpen(true)}
+                className="w-full sm:w-auto"
+              >
+                <Undo2 className="mr-2 h-4 w-4" />
+                Send back for approval
+              </Button>
+            )}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanTotalOutstanding ?? 0) > 0 && (
@@ -2462,43 +2522,48 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Previous Revisions
                 </p>
-                {approvalRounds.map((round) => (
-                  <div
-                    key={round.round}
-                    className="rounded-lg border border-dashed bg-muted/30 p-3"
-                  >
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                        Round {round.round}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Sent back by {round.sent_back_by} ·{" "}
-                        {formatDateTime(round.sent_back_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
-                      &ldquo;{round.sent_back_remarks}&rdquo;
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {round.steps
-                        .filter((s) => s.status === "approved" || s.status === "sent_back")
-                        .map((s) => (
+                {approvalRounds.map((round) => {
+                  // Any step kind can close a round, a release step included
+                  // (an approved restructure sent back before release).
+                  const view = revisionRoundView(round);
+                  return (
+                    <div
+                      key={round.round}
+                      className="rounded-lg border border-dashed bg-muted/30 p-3"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          Round {round.round}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {view.heading} ·{" "}
+                          {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
+                        </span>
+                      </div>
+                      {view.remarks !== null && (
+                        <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                          &ldquo;{view.remarks}&rdquo;
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {view.badges.map((badge) => (
                           <Badge
-                            key={s.index}
+                            key={badge.key}
                             variant="outline"
                             className={cn(
                               "text-[10px] h-4 px-1.5",
-                              s.status === "approved"
+                              badge.outcome === "approved"
                                 ? "bg-green-500/10 text-green-700 border-green-500/30"
                                 : "bg-red-500/10 text-red-700 border-red-500/30"
                             )}
                           >
-                            {s.status === "approved" ? "✓" : "✗"} {s.name}
+                            {badge.text}
                           </Badge>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {/* Current step action panel — matches the original screenshot
@@ -3233,7 +3298,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </CardHeader>
             <CollapsibleContent>
               <CardContent>
-                <WorkflowHistory loan={loan} />
+                <WorkflowHistory loan={loan} rounds={approvalRounds} />
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -3762,6 +3827,63 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setSoaOpen(false)}>
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send an approved restructure back for approval */}
+      <Dialog
+        open={sendBackApprovedOpen}
+        onOpenChange={(open) => {
+          if (!sendBackApprovedLoading) setSendBackApprovedOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send back for approval</DialogTitle>
+            <DialogDescription>
+              This restructure goes back to its approval chain and must be submitted and approved
+              again before release. Its figures are taken again then.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-back-approved-reason">
+              Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="send-back-approved-reason"
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              maxLength={SEND_BACK_REASON_MAX}
+              rows={3}
+              required
+              disabled={sendBackApprovedLoading}
+              aria-describedby="send-back-approved-hint"
+              placeholder="e.g. the source loan was paid down after approval"
+            />
+            <p id="send-back-approved-hint" className="text-xs text-muted-foreground">
+              {sendBackReasonProblem ?? `${sendBackReason.trim().length} of ${SEND_BACK_REASON_MAX} characters`}
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setSendBackApprovedOpen(false)}
+              disabled={sendBackApprovedLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendBackApproved}
+              disabled={sendBackApprovedLoading || sendBackReasonProblem !== null}
+            >
+              {sendBackApprovedLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Undo2 className="mr-2 h-4 w-4" />
+              )}
+              {sendBackApprovedLoading ? "Sending back..." : "Send back for approval"}
             </Button>
           </div>
         </DialogContent>

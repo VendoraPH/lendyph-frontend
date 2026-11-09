@@ -13,6 +13,7 @@
  */
 
 import { restructureSuccessor } from "@/lib/loan-restructure";
+import { restructureWriteOffFigures, writeOffFigureText } from "@/lib/restructure-write-off";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
@@ -62,8 +63,16 @@ function emptyScheduleText(loan: Record<string, unknown> | null): string {
   }
   const restructuredAt = pick(loan, ["restructured_at"]);
   const balance = pickNumber(loan, ["restructured_balance"]);
-  const writeOff = pickNumber(loan, ["write_off_amount"]) ?? 0;
-  const successor = restructureSuccessor(asArray(pick(loan, ["restructured_into"])));
+  const restructuredInto = asArray(pick(loan, ["restructured_into"]));
+  const successor = restructureSuccessor(restructuredInto);
+  // The forgiveness approved and the principal the books wrote off: two
+  // different figures, each labelled, each the server's (a dash when not sent).
+  const writeOffs = restructureWriteOffFigures({
+    write_off_amount: pick(loan, ["write_off_amount"]),
+    restructured_into: restructuredInto,
+  })
+    .map((f) => ` ${f.label}: ${writeOffFigureText(f.amount)}.`)
+    .join("");
   const successorNumber = pick(successor, ["loan_account_number", "application_number"]);
   return (
     (restructuredAt
@@ -72,8 +81,9 @@ function emptyScheduleText(loan: Record<string, unknown> | null): string {
     ", and its remaining balance" +
     (balance !== null ? ` of ${formatCurrency(balance)}` : "") +
     (successorNumber ? ` moved to loan ${String(successorNumber)}` : " moved to a new loan") +
-    (writeOff > 0 ? `, less ${formatCurrency(writeOff)} written off` : "") +
-    ". No instalments remain on it."
+    "." +
+    writeOffs +
+    " No instalments remain on it."
   );
 }
 

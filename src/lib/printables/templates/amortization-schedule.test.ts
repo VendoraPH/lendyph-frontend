@@ -160,17 +160,21 @@ test("amortization schedule: a restructured loan says where its balance went", (
       write_off_amount: 850.5,
       restructured_into: [
         { id: 60, application_number: "APP-2026-0060", loan_account_number: null, status: "rejected", principal_amount: 33850.5, start_date: null },
-        { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20" },
+        { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20", restructure_written_off_principal: 400.25 },
       ],
     })
   );
   assert.equal(table.rows.length, 0);
+  // Two different figures, each labelled: the forgiveness approved, and the
+  // principal the books wrote off (the released restructure's).
   assert.equal(
     table.emptyText,
     `This loan was restructured on ${formatValue(new Date("2026-09-20T02:30:00.000000Z"), "date")}, ` +
-      `and its remaining balance of ${formatCurrency(33850.5)} moved to loan LN-2026-0061, ` +
-      `less ${formatCurrency(850.5)} written off. No instalments remain on it.`
+      `and its remaining balance of ${formatCurrency(33850.5)} moved to loan LN-2026-0061. ` +
+      `Forgiven (approved): ${formatCurrency(850.5)}. ` +
+      `Principal written off in the books: ${formatCurrency(400.25)}. No instalments remain on it.`
   );
+  assert.ok(!/less .* written off/.test(table.emptyText ?? ""));
 });
 
 test("amortization schedule: a restructured loan with no released successor names none", () => {
@@ -189,7 +193,8 @@ test("amortization schedule: a restructured loan with no released successor name
   );
   assert.equal(
     table.emptyText,
-    `This loan was restructured, and its remaining balance of ${formatCurrency(1200)} moved to a new loan. No instalments remain on it.`
+    `This loan was restructured, and its remaining balance of ${formatCurrency(1200)} moved to a new loan. ` +
+      `Forgiven (approved): ${formatCurrency(0)}. Principal written off in the books: —. No instalments remain on it.`
   );
 });
 

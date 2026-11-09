@@ -429,6 +429,12 @@ export interface Loan {
    */
   release_method?: string | null;
   release_reference?: string | null;
+  /**
+   * The server's answer to whether the caller may send this loan back for
+   * approval: an approved, unreleased restructure and `loans:release`. The
+   * screen never works it out.
+   */
+  can_send_back_approved?: boolean;
   rejection_remarks?: string;
   rejected_at?: string;
   amortization_schedules?: ApiScheduleRow[];

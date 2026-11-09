@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { restructureSuccessor } from "@/lib/loan-restructure";
 import type { Loan } from "@/types/loan";
-import { restructureWriteOffFigures, writeOffFigureText } from "../_lib/restructure-write-off";
+import { restructureWriteOffFigures, writeOffFigureText } from "@/lib/restructure-write-off";
 
 /** Where the schedule request stands. Rows only ever come from `loaded`. */
 export type ScheduleLoad = "loading" | "failed" | "loaded";

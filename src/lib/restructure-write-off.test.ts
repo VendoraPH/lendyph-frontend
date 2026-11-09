@@ -42,6 +42,13 @@ test("the books figure is the released successor's, not a rejected or voided app
   assert.equal(restructureWriteOffFigures(loan)[1].amount, 0);
 });
 
+test("a figure sent as a 2-decimal string reads the same", () => {
+  assert.deepEqual(
+    restructureWriteOffFigures({ write_off_amount: "9500.01", restructured_into: [{ status: "released", restructure_written_off_principal: "5000.01" }] }).map((f) => f.amount),
+    [9500.01, 5000.01],
+  );
+});
+
 test("a figure the server didn't send is null, shown as a dash; zero is ₱0.00", () => {
   const figures = restructureWriteOffFigures({ write_off_amount: null, restructured_into: [successor({})] });
   assert.deepEqual(figures.map((f) => f.amount), [null, null]);
