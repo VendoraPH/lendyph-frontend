@@ -16,8 +16,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   advancePresetAmount,
+  interestAmountFigure,
   offeredAdvancePresets,
   outstandingPrincipal,
   presetButtons,
@@ -196,4 +199,29 @@ test("presetButtons: a payoff of 0.00 is a real figure and keeps the button", ()
   assert.deepEqual(presetButtons({ payoff_amount: "0.00" }, 1), [
     { label: "Pay all remaining", periods: 1, amount: 0 },
   ]);
+});
+
+test("interestAmountFigure: the server's contract_interest when it is sent", () => {
+  // A restructured source: the original contract's interest, so that
+  // Principal + Interest = Contract Total, whatever its schedule now holds.
+  assert.equal(
+    interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65", contract_interest: "13587.65" }, 2000),
+    13587.65,
+  );
+  assert.equal(interestAmountFigure({ contract_interest: 2000 }, 1500), 2000);
+  // 0 is a real figure; null was sent on purpose and reads as a dash.
+  assert.equal(interestAmountFigure({ contract_interest: "0.00" }, 2000), 0);
+  assert.equal(interestAmountFigure({ contract_interest: null }, 2000), null);
+});
+
+test("interestAmountFigure: without contract_interest, the stored schedule's interest, never contract total less principal", () => {
+  assert.equal(interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65" }, 2000), 2000);
+  assert.equal(interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65" }, null), null);
+  assert.equal(interestAmountFigure(null, 0), 0);
+});
+
+test("the loan page's Interest Amount reads interestAmountFigure", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.match(page, /const loanInterestAmount: number \| null = interestAmountFigure\(\s*loan,/);
+  assert.doesNotMatch(page, /contract_total\)?\s*-\s*Number\(loan\.principal_amount/);
 });

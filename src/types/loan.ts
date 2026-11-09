@@ -498,6 +498,12 @@ export interface Loan {
   total_payable?: number | null;
   /** The contract's principal plus interest, shown on its own line. */
   contract_total?: number | string | null;
+  /**
+   * The contract's interest, by the same rule as `contract_total` (a
+   * restructured source's original contract), on GET /loans/{id} only; null on
+   * lists.
+   */
+  contract_interest?: number | string | null;
   /** Everything still owed on the loan, insurance premium included. */
   total_outstanding?: number | string | null;
   /** Principal still owed; the premium owed is `insurance_owed`. */
