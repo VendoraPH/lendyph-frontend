@@ -15,6 +15,7 @@ import {
   ledgerLineText,
   loadFailure,
   matchFailure,
+  pairedFiguresCaption,
   matchLabel,
   reconciledLabel,
   requestFailure,
@@ -331,5 +332,33 @@ describe("C5 review fixes", () => {
         message: words,
       });
     }
+  });
+});
+
+describe("a paired statement line's date and amount", () => {
+  const paired: ReconciliationRow = {
+    journal_id: 2,
+    date: "2026-08-30",
+    description: "Deposit",
+    amount: 200_000,
+    match: "matched",
+    external_reference: null,
+    journal_no: "JE-000002",
+    source: "both",
+    statement_line_id: 41,
+    journal_line_id: 9,
+  };
+
+  test("are labelled as the books entry's, the only figures the server sends for the pair", () => {
+    assert.equal(pairedFiguresCaption(paired), "Books entry JE-000002");
+    assert.equal(pairedFiguresCaption({ ...paired, match: "possible" }), "Books entry JE-000002");
+    assert.equal(pairedFiguresCaption({ ...paired, journal_no: null }), "Books entry");
+  });
+
+  test("an unpaired statement line's figures are its own, with no label", () => {
+    assert.equal(
+      pairedFiguresCaption({ ...paired, source: "statement", match: "unmatched", journal_id: null, journal_line_id: null }),
+      null,
+    );
   });
 });

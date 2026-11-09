@@ -70,6 +70,16 @@ export function ledgerLineText(row: ReconciliationRow): string {
   return row.match === "possible" ? `Suggested: ${entry}` : `Matched to ${entry}`;
 }
 
+/**
+ * Whose date and amount a statement row shows. A paired row (matched or
+ * suggested) carries only the books entry's figures, so they are labelled as
+ * such; a statement line on its own shows its own, unlabelled.
+ */
+export function pairedFiguresCaption(row: ReconciliationRow): string | null {
+  if (row.source !== "both") return null;
+  return row.journal_no ? `Books entry ${row.journal_no}` : "Books entry";
+}
+
 /** A hand-match candidate's date, marked when it is an outstanding item from before the period. */
 export function candidateDateText(row: ReconciliationRow): string {
   return row.outside_period ? ledgerLineText(row) : formatDate(row.date);

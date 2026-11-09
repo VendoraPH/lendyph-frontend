@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { formatDateObj } from "@/lib/format";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -142,7 +143,7 @@ test("a zero server balance is shown as zero, never a browser running balance", 
       [3, 4000, 80, 50, 4130, 0, "pending"],
     ],
   );
-  assert.deepEqual(rows[2]?.dueDate, new Date("2026-10-31"));
+  assert.deepEqual(rows[2]?.dueDate, new Date(2026, 9, 31));
 });
 
 test("a server balance above zero is shown as the server sent it", () => {
@@ -252,7 +253,7 @@ test("an upon-maturity schedule collapses, for display, into one row of the serv
       period: 1,
       periodNumber: null,
       scheduleId: null,
-      dueDate: new Date("2026-11-30"),
+      dueDate: new Date(2026, 10, 30),
       principal: 10000,
       interest: 900.01,
       shareCapitalBuildUp: 301.5,
@@ -281,7 +282,7 @@ test("the amount to pay is the open period's own total payment, never the merged
     period: 2,
     periodNumber: 2,
     scheduleId: 502,
-    dueDate: new Date("2026-11-30"),
+    dueDate: new Date(2026, 10, 30),
     principal: 10000,
     interest: 300,
     shareCapitalBuildUp: 100,
@@ -498,4 +499,20 @@ test("a preview envelope with no row list is unreadable", () => {
   assert.equal(readPreviewResponse({ totals: {} }, 42), null);
   assert.equal(readPreviewResponse(undefined, 42), null);
   assert.equal(readPreviewResponse(PREVIEW_ROWS, 42), null);
+});
+
+test("due dates read the server's day on a computer west of UTC (New York)", () => {
+  const original = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  try {
+    const schedule = readScheduleRows(ZERO_BALANCE_ROWS, 42)!.schedule;
+    assert.deepEqual(
+      toDisplaySchedule(schedule, DISPLAY).map((row) => formatDateObj(row.dueDate)),
+      ["Aug 31, 2026", "Sep 30, 2026", "Oct 31, 2026"],
+    );
+    const [maturity] = toDisplaySchedule(schedule, { ...DISPLAY, isUponMaturity: true });
+    assert.equal(formatDateObj(maturity!.dueDate), "Oct 31, 2026");
+  } finally {
+    process.env.TZ = original;
+  }
 });

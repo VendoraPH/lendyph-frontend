@@ -82,7 +82,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDateISO, formatDateObj, formatRate, todayDate } from "@/lib/format";
+import { calendarDate, formatCurrency, formatDateISO, formatDateObj, formatRate, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import {
   decimalInputValue,
@@ -137,7 +137,6 @@ import {
   showsShortBy,
 } from "./_lib/loan-preview";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
-import { parseApiDate } from "@/lib/printables/templates/shared";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
@@ -311,7 +310,7 @@ function NewLoanApplicationInner() {
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
           setInterestRate(decimalInputValue(loan.interest_rate));
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
-          if (loan.start_date) setReleaseDate(new Date(loan.start_date));
+          if (loan.start_date) setReleaseDate(calendarDate(loan.start_date));
           if (loan.policy_exception) {
             setPolicyException(true);
             setPolicyExceptionDetails(loan.policy_exception_details ?? "");
@@ -1600,7 +1599,7 @@ function NewLoanApplicationInner() {
               <Label>Maturity Date</Label>
               <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
                 {previewMaturity
-                  ? formatDateObj(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                  ? formatDateObj(calendarDate(previewMaturity))
                   : "—"}
               </div>
             </div>
@@ -1897,7 +1896,7 @@ function NewLoanApplicationInner() {
                         <TableCell className="text-center">
                           {row.period_number}
                         </TableCell>
-                        <TableCell>{formatDateObj(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                        <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(row.principal_due)}
                         </TableCell>

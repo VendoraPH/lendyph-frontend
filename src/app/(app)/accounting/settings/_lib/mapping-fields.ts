@@ -1,4 +1,5 @@
-import type { AccountMapping, AccountType } from "@/types";
+import { getErrorMessage } from "@/lib/api-error";
+import type { Account, AccountMapping, AccountType } from "@/types";
 
 export interface MappingField {
   key: keyof AccountMapping;
@@ -8,7 +9,12 @@ export interface MappingField {
   types: AccountType[];
   /** True when only a money account makes sense. */
   moneyOnly?: boolean;
+  /** Account codes the server refuses for this role. */
+  excludedCodes?: string[];
 }
+
+/** 3050 Opening Balance Equity, as the server's opening balance poster names it. */
+export const OPENING_BALANCE_EQUITY_CODE = "3050";
 
 /**
  * Every role the posting engine resolves, grouped the way an operator thinks.
@@ -189,9 +195,26 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
       {
         key: "net_surplus",
         label: "Retained earnings or net surplus",
-        hint: "Retained Earnings on a company chart, Undivided Net Surplus on a cooperative's.",
+        hint: "Retained Earnings on a company chart, Undivided Net Surplus on a cooperative's. Never 3050 Opening Balance Equity.",
         types: ["equity"],
+        // The server refuses it: the year's result would mix into the opening balances.
+        excludedCodes: [OPENING_BALANCE_EQUITY_CODE],
       },
     ],
   },
 ];
+
+/** The accounts a role may resolve to: its types, money accounts where it needs one, never a refused code. */
+export function accountsForField(field: MappingField, accounts: Account[]): Account[] {
+  return accounts.filter(
+    (account) =>
+      field.types.includes(account.type) &&
+      (!field.moneyOnly || Boolean(account.cash_kind)) &&
+      !field.excludedCodes?.includes(account.code),
+  );
+}
+
+/** A refused save in the server's words, for example a 422 on `net_surplus`. */
+export function saveFailureMessage(err: unknown): string {
+  return getErrorMessage(err, "Could not save these settings.");
+}

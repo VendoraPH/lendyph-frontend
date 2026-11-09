@@ -88,9 +88,8 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
+import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
-import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
@@ -1350,7 +1349,7 @@ function RestructureLoanInner() {
                     <Label>Projected Maturity Date</Label>
                     <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
                       {previewMaturity
-                        ? formatDateObj(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                        ? formatDateObj(calendarDate(previewMaturity))
                         : "—"}
                     </div>
                   </div>
@@ -1633,7 +1632,7 @@ function RestructureLoanInner() {
                         {amortization.rows.map((row) => (
                           <TableRow key={row.period_number}>
                             <TableCell className="text-muted-foreground">{row.period_number}</TableCell>
-                            <TableCell>{formatDateObj(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                            <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
                             <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
                             {scb > 0 && <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>}

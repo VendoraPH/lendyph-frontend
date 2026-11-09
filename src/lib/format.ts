@@ -161,8 +161,29 @@ export function todayISO(): string {
  * Use it for a picker's default instead of `new Date()`.
  */
 export function todayDate(): Date {
-  const [year, month, day] = todayISO().split("-").map(Number);
-  return new Date(year, month - 1, day);
+  return calendarDate(new Date());
+}
+
+/**
+ * A server date as the calendar day it names in the app's zone, held as a date
+ * picker holds a day: a `Date` at the computer's own midnight, for
+ * `formatDateObj` and `formatDateISO`. A date alone, or a server time with no
+ * zone, keeps its own day. A timestamp with a zone takes Manila's day.
+ *
+ * `new Date("2026-11-09")` is midnight UTC, which a computer west of UTC
+ * holds as the evening of the 8th, so a due date read a day early there.
+ */
+export function calendarDate(value: string | Date): Date {
+  let day: string;
+  if (typeof value === "string" && (DATE_ONLY.test(value.trim()) || NO_ZONE.test(value.trim()))) {
+    day = value.trim().slice(0, 10);
+  } else {
+    const instant = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(instant.getTime())) return new Date(Number.NaN);
+    day = appDayFmt.format(instant);
+  }
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date);
 }
 
 // ---------------------------------------------------------------------------

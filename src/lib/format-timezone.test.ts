@@ -15,6 +15,7 @@ import {
   formatDateObj,
   formatDateTime,
   formatTime,
+  calendarDate,
   todayDate,
   todayISO,
 } from "./format";
@@ -160,4 +161,20 @@ test("no screen formats a date or time in the computer's zone", () => {
     zonelessCalls(readFileSync(file, "utf8")).map((call) => `${file}: ${call}`),
   );
   assert.deepEqual(offenders, []);
+});
+
+test("a server date becomes Manila's calendar day, held as a picker holds it", () => {
+  onEveryComputer(() => {
+    for (const [value, day] of [
+      ["2026-11-09", "2026-11-09"],
+      ["2026-08-09T00:00:00.000000Z", "2026-08-09"],
+      ["2026-11-09T20:00:00Z", "2026-11-10"],
+      ["2026-11-09 23:30:00", "2026-11-09"],
+    ]) {
+      const held = calendarDate(value);
+      assert.equal(formatDateISO(held), day, value);
+      assert.deepEqual([held.getHours(), held.getMinutes()], [0, 0]);
+    }
+    assert.ok(Number.isNaN(calendarDate("not a date").getTime()));
+  });
 });
