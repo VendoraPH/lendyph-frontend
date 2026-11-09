@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   EXPENSE_PAGE_SIZE,
-  expenseListKey,
   expenseListQuery,
   expensePageToStepBackTo,
   expenseStatusCounts,
@@ -38,12 +37,6 @@ test("the search goes to the server, trimmed, and is left out when blank", () =>
     search: "Meralco Inc",
   });
   assert.equal("search" in expenseListQuery({ status: "any", search: "   ", page: 1 }), false);
-});
-
-test("a reload asks again for the same filters", () => {
-  const query = expenseListQuery({ status: "unpaid", search: "x", page: 1 });
-  assert.notEqual(expenseListKey(query, 0), expenseListKey(query, 1));
-  assert.equal(expenseListKey(query, 0), expenseListKey({ ...query }, 0));
 });
 
 test("a page left empty by a payment or a filter steps back, never forward", () => {

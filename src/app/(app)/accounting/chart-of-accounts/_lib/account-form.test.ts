@@ -4,7 +4,6 @@ import type { Account } from "@/types";
 import {
   AUTO_CATEGORY,
   NO_CASH_KIND,
-  type AccountWithCategory,
   NO_PARENT,
   accountBalanceText,
   accountFormFromAccount,
@@ -30,7 +29,7 @@ const HEADING: Account = {
   is_active: true,
 };
 
-const BANK: AccountWithCategory = {
+const BANK: Account = {
   id: 12,
   code: "1030",
   name: "Cash in Bank - BDO",

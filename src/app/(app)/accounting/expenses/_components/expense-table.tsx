@@ -34,9 +34,11 @@ interface ExpenseTableProps {
 /** One server page of expenses. Balance is the server's `amount_due`. */
 export function ExpenseTable({ rows, onPay, onEdit }: ExpenseTableProps) {
   const { can, permissions } = usePermission();
-  // `expenses:pay` is seeded by the server but isn't in the `Permission` union
-  // (`pay` is missing from `Action`), so it is checked as the string it is.
-  const canPay = new Set<string>(permissions).has("expenses:pay");
+  // Pay picks its money account from the cash accounts list, so it needs
+  // `cash_accounts:view` as well. `expenses:pay` is checked as a string until
+  // `pay` reaches the `Action` union.
+  const canPay =
+    new Set<string>(permissions).has("expenses:pay") && can("cash_accounts:view");
   const canEdit = can("expenses:update");
   const hasActions = canPay || canEdit;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,12 +12,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { useChartOfAccounts, useDialogOpening } from "@/hooks";
+import { useAccountingResource, useDialogOpening } from "@/hooks";
 import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
+import { accountingService } from "@/services";
 import type { PayExpenseData } from "@/services/accounting.service";
-import type { Expense } from "@/types";
-import { buildPayExpensePayload, payAmountDefault } from "../expenses/_lib/expense-forms";
+import type { CashAccountPage, Expense } from "@/types";
+import { CASH_ACCOUNTS_PER_PAGE, cashListIsIncomplete } from "../cash-bank/_lib/cash-bank";
+import {
+  buildPayExpensePayload,
+  payAmountDefault,
+  payFromAccounts,
+} from "../expenses/_lib/expense-forms";
 import { AccountSelect } from "./account-select";
 
 interface PayExpenseDialogProps {
@@ -34,12 +40,19 @@ interface PayExpenseDialogProps {
 /**
  * Pay an expense, in full or in part, from a money account.
  *
+ * The money accounts come from `GET /accounting/cash-accounts`, read each time
+ * the dialog opens, so the caller must also hold `cash_accounts:view`.
+ *
  * The amount starts at what the server says is still owed. Whether a typed
  * amount is too much is the server's decision; its message is shown as it is.
  */
 export function PayExpenseDialog({ expense, onOpenChange, onSubmit }: PayExpenseDialogProps) {
   const open = expense !== null;
-  const { postable, isTemplate } = useChartOfAccounts();
+  const fetcher = useCallback(
+    () => accountingService.cashAccountsPage({ per_page: CASH_ACCOUNTS_PER_PAGE }),
+    [],
+  );
+  const cash = useAccountingResource<CashAccountPage>(fetcher, open);
 
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState("");
@@ -52,11 +65,12 @@ export function PayExpenseDialog({ expense, onOpenChange, onSubmit }: PayExpense
     setAccountId(null);
   }
 
-  const moneyAccounts = postable.filter((a) => Boolean(a.cash_kind));
+  const moneyAccounts = payFromAccounts(cash.data?.data ?? []);
+  const accountsShort = cashListIsIncomplete(cash.data?.meta, (cash.data?.data ?? []).length);
   const payload = buildPayExpensePayload({ date, amount, accountId });
 
   const submit = async () => {
-    if (!expense || !payload || submitting || isTemplate) return;
+    if (!expense || !payload || submitting) return;
     setSubmitting(true);
     try {
       await onSubmit(expense, payload);
@@ -111,10 +125,20 @@ export function PayExpenseDialog({ expense, onOpenChange, onSubmit }: PayExpense
             className="w-full"
           />
 
-          {isTemplate && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-700">
-              The chart of accounts has not been saved to the server yet, so
-              this cannot be submitted.
+          {cash.loading && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+              <Spinner className="h-4 w-4" />
+              Loading money accounts…
+            </p>
+          )}
+          {(cash.error || cash.unavailable) && (
+            <p className="text-sm text-destructive" role="alert">
+              The money accounts couldn&rsquo;t be loaded, so this can&rsquo;t be paid yet.
+            </p>
+          )}
+          {accountsShort && (
+            <p className="text-sm text-amber-700">
+              Only the first {CASH_ACCOUNTS_PER_PAGE} money accounts are listed.
             </p>
           )}
         </div>
@@ -123,7 +147,7 @@ export function PayExpenseDialog({ expense, onOpenChange, onSubmit }: PayExpense
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!payload || isTemplate || submitting}>
+          <Button onClick={submit} disabled={!payload || submitting}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Paying…" : "Record payment"}
           </Button>

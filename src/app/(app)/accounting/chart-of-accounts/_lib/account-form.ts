@@ -8,15 +8,9 @@
  * checks here only stop a form that can't be sent at all.
  */
 import { formatCentavos } from "@/lib/accounting/money";
-import type { Account, AccountType, CashAccountKind } from "@/types";
+import type { Account, AccountCashFlowCategory, AccountType, CashAccountKind } from "@/types";
 import { accountTypeLabel, cashKindLabel } from "../../_lib/display-labels";
 import type { SelectItemOption } from "../../_lib/select-items";
-
-/** The server's cash flow sections (`CashFlowCategories::ALL`). */
-export type CashFlowCategory = "operating" | "investing" | "financing" | "cash";
-
-/** The account as the server sends it, with its cash flow category. */
-export type AccountWithCategory = Account & { cash_flow_category?: CashFlowCategory | null };
 
 /** Select values that stand for "none": a Select can't hold an empty string. */
 export const NO_PARENT = "none";
@@ -32,7 +26,7 @@ export const DESCRIPTION_MAX = 500;
 const ACCOUNT_TYPES: readonly AccountType[] = ["asset", "liability", "equity", "income", "expense"];
 const CASH_KINDS: readonly CashAccountKind[] = ["cash", "bank", "gcash", "maya", "wallet"];
 
-const CASH_FLOW_CATEGORY_LABELS: Record<CashFlowCategory, string> = {
+const CASH_FLOW_CATEGORY_LABELS: Record<AccountCashFlowCategory, string> = {
   operating: "Operating activities",
   investing: "Investing activities",
   financing: "Financing activities",
@@ -66,7 +60,7 @@ export function emptyAccountForm(): AccountFormValues {
   };
 }
 
-export function accountFormFromAccount(account: AccountWithCategory): AccountFormValues {
+export function accountFormFromAccount(account: Account): AccountFormValues {
   return {
     code: account.code,
     name: account.name,
@@ -88,7 +82,7 @@ export interface AccountPayload {
   is_contra: boolean;
   cash_kind: CashAccountKind | null;
   /** Left out to let the server set it (new) or keep the stored one (edit). */
-  cash_flow_category?: CashFlowCategory;
+  cash_flow_category?: AccountCashFlowCategory;
   description: string | null;
 }
 
@@ -114,7 +108,7 @@ export function buildAccountPayload(values: AccountFormValues): AccountPayload |
     description: description || null,
   };
   if (values.cashFlowCategory in CASH_FLOW_CATEGORY_LABELS) {
-    payload.cash_flow_category = values.cashFlowCategory as CashFlowCategory;
+    payload.cash_flow_category = values.cashFlowCategory as AccountCashFlowCategory;
   }
   return payload;
 }
@@ -132,7 +126,7 @@ export const cashKindItems: readonly SelectItemOption[] = [
 /** A stored category reads in words; one the screen doesn't know reads its key in words. */
 export function cashFlowCategoryLabel(category: string): string {
   return (
-    CASH_FLOW_CATEGORY_LABELS[category as CashFlowCategory] ??
+    CASH_FLOW_CATEGORY_LABELS[category as AccountCashFlowCategory] ??
     category
       .split("_")
       .filter(Boolean)
@@ -143,7 +137,7 @@ export function cashFlowCategoryLabel(category: string): string {
 
 /** "Automatic" is offered only where leaving the field out means the server sets it. */
 export function cashFlowCategoryItems(withAutomatic: boolean): SelectItemOption[] {
-  const categories = (Object.keys(CASH_FLOW_CATEGORY_LABELS) as CashFlowCategory[]).map(
+  const categories = (Object.keys(CASH_FLOW_CATEGORY_LABELS) as AccountCashFlowCategory[]).map(
     (category) => ({ value: category, label: CASH_FLOW_CATEGORY_LABELS[category] }),
   );
   return withAutomatic

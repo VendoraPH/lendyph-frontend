@@ -7,7 +7,7 @@
  * more than what's owed is the server's call (its 422 is shown as it is).
  */
 import { fromCentavos, toCentavos } from "@/lib/accounting/money";
-import type { Expense } from "@/types";
+import type { Account, Expense } from "@/types";
 import type { PayExpenseData } from "@/services/accounting.service";
 
 /** Pay is offered only while the server says something is still owed. */
@@ -18,6 +18,15 @@ export function canPayExpense(expense: Pick<Expense, "amount_due">): boolean {
 /** The server's amount due, written for the amount box ("1500.00"); blank when nothing is due. */
 export function payAmountDefault(expense: Pick<Expense, "amount_due">): string {
   return canPayExpense(expense) ? fromCentavos(expense.amount_due).toFixed(2) : "";
+}
+
+/**
+ * The money accounts a payment can come out of, as the server checks them:
+ * active, not a heading, and carrying a cash kind. The cash accounts list
+ * also holds inactive ones, for their balances.
+ */
+export function payFromAccounts(accounts: readonly Account[]): Account[] {
+  return accounts.filter((a) => a.is_active && !a.is_group && Boolean(a.cash_kind));
 }
 
 export interface PayExpenseForm {

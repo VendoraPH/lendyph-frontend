@@ -45,8 +45,6 @@ function CashAndBankContent() {
 
   const transfer = async (data: TransferPayload) => {
     try {
-      // The service's parameter type predates `reference`; the server accepts
-      // it, and `data` is sent as it is.
       await accountingService.transfer(data);
       notifySuccess("Transfer recorded");
       setTransferring(false);

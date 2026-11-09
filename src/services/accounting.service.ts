@@ -414,6 +414,8 @@ export const accountingService = {
     amount: number;
     charge?: number;
     description: string;
+    /** At most 64 characters. */
+    reference?: string;
   }): Promise<JournalEntry> =>
     api.post<JournalEntry>(API_ENDPOINTS.ACCOUNTING.CASH_TRANSFER, data),
 

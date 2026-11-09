@@ -142,6 +142,7 @@ function ExpensesContent() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Payee or reference"
+              maxLength={100}
               className="w-[240px] pl-9"
             />
           </div>

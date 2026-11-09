@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Expense } from "@/types";
+import type { Account, Expense } from "@/types";
 import {
   buildExpenseEditPayload,
   buildPayExpensePayload,
   canPayExpense,
   expenseEditForm,
   payAmountDefault,
+  payFromAccounts,
 } from "./expense-forms";
 
 const EXPENSE: Expense = {
@@ -108,5 +109,31 @@ test("the edit payload clears a blanked field and refuses a blank payee", () => 
   assert.equal(
     buildExpenseEditPayload({ payee: "   ", reference: "", description: "", dueDate: "" }),
     null,
+  );
+});
+
+test("pay offers only active money accounts that can take a posting", () => {
+  const base: Account = {
+    id: 1,
+    code: "1010",
+    name: "Cash on Hand",
+    type: "asset",
+    normal_balance: "debit",
+    is_contra: false,
+    parent_id: null,
+    is_group: false,
+    is_active: true,
+    cash_kind: "cash",
+  };
+  const accounts: Account[] = [
+    base,
+    { ...base, id: 2, code: "1030", name: "Old Bank", cash_kind: "bank", is_active: false },
+    { ...base, id: 3, code: "1000", name: "Cash heading", is_group: true },
+    { ...base, id: 4, code: "1040", name: "GCash", cash_kind: "gcash" },
+    { ...base, id: 5, code: "1100", name: "Receivable", cash_kind: null },
+  ];
+  assert.deepEqual(
+    payFromAccounts(accounts).map((a) => a.id),
+    [1, 4],
   );
 });

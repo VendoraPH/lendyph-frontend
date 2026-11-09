@@ -31,11 +31,6 @@ export function expenseListQuery(filters: ExpenseListFilters): ExpensePageQuery 
   return query;
 }
 
-/** Identifies one request. `reload` asks again for the same filters, as after a save. */
-export function expenseListKey(query: ExpensePageQuery, reload: number): string {
-  return `${JSON.stringify(query)}#${reload}`;
-}
-
 /**
  * The page to go back to when a page came back empty: a payment or a filter can
  * leave it past the end. Always lower than `page`. Null when this page stands.

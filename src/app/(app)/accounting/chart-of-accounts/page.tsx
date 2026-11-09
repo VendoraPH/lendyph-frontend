@@ -16,7 +16,7 @@ import { AccountDialog, type AccountDialogState } from "./_components/account-di
 import { AccountStatusDialog } from "./_components/account-status-dialog";
 import { ChartOfAccountsTable } from "./_components/chart-of-accounts-table";
 import { SeedChartCard } from "./_components/seed-chart-card";
-import type { AccountPayload, AccountWithCategory } from "./_lib/account-form";
+import type { AccountPayload } from "./_lib/account-form";
 
 function ChartOfAccountsContent() {
   // The module's existing hook rather than a fetch of its own: it drains every
@@ -31,7 +31,7 @@ function ChartOfAccountsContent() {
   // The template's ids are placeholders, so nothing in it can be edited.
   const canEdit = can("chart_of_accounts:update") && !isTemplate;
 
-  const save = async (payload: AccountPayload, account: AccountWithCategory | null) => {
+  const save = async (payload: AccountPayload, account: Account | null) => {
     try {
       if (account) {
         await accountingService.updateAccount(account.id, payload);
@@ -65,12 +65,16 @@ function ChartOfAccountsContent() {
         title="Chart of Accounts"
         description="The account tree every journal entry posts into."
         actions={
-          <PermissionGate permission="chart_of_accounts:create">
-            <Button onClick={() => setDialog({ mode: "create" })} disabled={loading || isTemplate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add account
-            </Button>
-          </PermissionGate>
+          // Hidden on the template chart: its ids are placeholders, and the
+          // seed card is the way to save it first.
+          !loading && !isTemplate ? (
+            <PermissionGate permission="chart_of_accounts:create">
+              <Button onClick={() => setDialog({ mode: "create" })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add account
+              </Button>
+            </PermissionGate>
+          ) : undefined
         }
       />
 

@@ -36,14 +36,13 @@ import {
   parentHeadingItems,
   type AccountFormValues,
   type AccountPayload,
-  type AccountWithCategory,
 } from "../_lib/account-form";
 
 /** Closed, adding a new account, or editing one. */
 export type AccountDialogState =
   | null
   | { mode: "create" }
-  | { mode: "edit"; account: AccountWithCategory };
+  | { mode: "edit"; account: Account };
 
 interface AccountDialogProps {
   state: AccountDialogState;
@@ -51,7 +50,7 @@ interface AccountDialogProps {
   accounts: Account[];
   onClose: () => void;
   /** Must return the request's promise, and reject on failure so the form stays. */
-  onSubmit: (payload: AccountPayload, account: AccountWithCategory | null) => Promise<void>;
+  onSubmit: (payload: AccountPayload, account: Account | null) => Promise<void>;
 }
 
 /**

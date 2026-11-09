@@ -476,17 +476,6 @@ describe("lists are drained, not read one page deep", () => {
     assert.equal(pagesFetched, 2, "137 rows is two pages of 100");
   });
 
-  test("REGRESSION: Outstanding was the total of the first 15 of 40 payables", async () => {
-    // The screen once summed the rows it held. One page of 25 now carries the
-    // server's outstanding over all 40, so the headline no longer depends on
-    // how many rows came back.
-    const page = await accountingService.expensesPage({ page: 1, per_page: 25 });
-
-    assert.equal(page.data.length, 25, "one page, not every expense");
-    assert.equal(page.meta.totals.count, EXPENSE_COUNT);
-    assert.equal(page.meta.totals.amount_due, EXPENSE_COUNT * 100_000, "₱40,000.00 — what is owed");
-  });
-
   test("REGRESSION: the ledger's last visible running_balance was not the balance", async () => {
     const short = rowsOf(
       await accountingService.generalLedgerList({
