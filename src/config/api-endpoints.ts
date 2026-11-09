@@ -291,8 +291,10 @@ export const API_ENDPOINTS = {
   },
   /**
    * Accounting. The backend serves every path here under `/accounting`; its
-   * `routes/api.php` is the source of truth. Only paths the app calls are
-   * listed; add one alongside the service method that needs it.
+   * `routes/api.php` (and its `routes/accounting/*.php` partials) is the source
+   * of truth. Paths are listed alongside the service method that needs them;
+   * the reconciliation create, show and match routes are listed ahead of the
+   * screen that will call them.
    *
    * Posting and reversing are verbs on the server (POST
    * /accounting/journals/{id}/post and /reverse), and the automatic postings
@@ -308,27 +310,37 @@ export const API_ENDPOINTS = {
 
     // Chart of accounts
     ACCOUNTS_LIST: "/accounting/accounts",
+    ACCOUNTS_CREATE: "/accounting/accounts",
     ACCOUNTS_SEED: "/accounting/accounts/seed",
+    ACCOUNTS_SHOW: (id: number) => `/accounting/accounts/${id}`,
+    ACCOUNTS_UPDATE: (id: number) => `/accounting/accounts/${id}`,
+    ACCOUNTS_DELETE: (id: number) => `/accounting/accounts/${id}`,
 
     // Journals. Posting and reversing are separate verbs, not a PUT on the
     // entry — a posted journal is immutable, and `reverse` writes a second
     // entry rather than editing the first.
     JOURNALS_LIST: "/accounting/journals",
     JOURNALS_CREATE: "/accounting/journals",
+    JOURNALS_SHOW: (id: number) => `/accounting/journals/${id}`,
+    /** Drafts only: the server refuses anything that is not a draft. */
+    JOURNALS_UPDATE: (id: number) => `/accounting/journals/${id}`,
+    /** The server's totals for lines being typed. Writes nothing. */
+    JOURNALS_PREVIEW: "/accounting/journals/preview",
     JOURNALS_POST: (id: number) => `/accounting/journals/${id}/post`,
     JOURNALS_REVERSE: (id: number) => `/accounting/journals/${id}/reverse`,
 
     // Reporting
     GENERAL_LEDGER: "/accounting/general-ledger",
     TRIAL_BALANCE: "/accounting/trial-balance",
-    // No BALANCE_SHEET / INCOME_STATEMENT entry, deliberately. Both statements
-    // are derived in the browser from TRIAL_BALANCE by
-    // `src/lib/accounting/statements.ts` (two reads: closing and opening), and
-    // the backend documents the absence of those routes as intentional. Listing
-    // them here only implies server work nobody wants.
+    BALANCE_SHEET: "/accounting/statements/balance-sheet",
+    INCOME_STATEMENT: "/accounting/statements/income-statement",
     CASH_FLOW: "/accounting/statements/cash-flow",
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
+
+    // Loan Accounting: the summary is one document, the loans list pages.
+    LOAN_ACCOUNTING_SUMMARY: "/accounting/loan-accounting/summary",
+    LOAN_ACCOUNTING_LOANS: "/accounting/loan-accounting/loans",
 
     // BIR books. One path per book, keyed by `BookKind`, so the books screen
     // can pick by tab without a switch statement per call site.
@@ -338,6 +350,11 @@ export const API_ENDPOINTS = {
       cash_receipts: "/accounting/books/cash-receipts",
       cash_disbursements: "/accounting/books/cash-disbursements",
     },
+    // The two cash books in columns, one per mapped account role.
+    BOOK_COLUMNS: {
+      cash_receipts: "/accounting/books/cash-receipts/columns",
+      cash_disbursements: "/accounting/books/cash-disbursements/columns",
+    },
 
     // Cash and bank
     CASH_ACCOUNTS_LIST: "/accounting/cash-accounts",
@@ -346,9 +363,15 @@ export const API_ENDPOINTS = {
     // Expenses and payables
     EXPENSES_LIST: "/accounting/expenses",
     EXPENSES_CREATE: "/accounting/expenses",
+    EXPENSES_SHOW: (id: number) => `/accounting/expenses/${id}`,
+    EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
+    EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
 
     // Reconciliation
     RECONCILIATIONS_LIST: "/accounting/reconciliations",
+    RECONCILIATIONS_CREATE: "/accounting/reconciliations",
+    RECONCILIATIONS_SHOW: (id: number) => `/accounting/reconciliations/${id}`,
+    RECONCILIATIONS_MATCH: (id: number) => `/accounting/reconciliations/${id}/match`,
 
     // Periods
     PERIODS_LIST: "/accounting/periods",

@@ -18,3 +18,14 @@ export const journalStatusLabel = (status: string): string => inWords(status);
 export const accountTypeLabel = (type: string): string => inWords(type);
 export const cashKindLabel = (kind: string): string => inWords(kind);
 export const periodStatusLabel = (status: string): string => inWords(status);
+
+/** As the Expenses status filter reads them; any other status reads in words. */
+const EXPENSE_STATUS_LABELS: Record<string, string> = {
+  unpaid: "Unpaid",
+  partially_paid: "Partially paid",
+  paid: "Paid",
+  overdue: "Overdue",
+};
+
+export const expenseStatusLabel = (status: string): string =>
+  EXPENSE_STATUS_LABELS[status] ?? inWords(status);
