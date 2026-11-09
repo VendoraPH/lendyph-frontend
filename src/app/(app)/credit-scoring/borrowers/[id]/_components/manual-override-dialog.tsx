@@ -23,20 +23,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { creditScoringService } from "@/services";
-import type { CreateCreditDecisionData, CreditDecision } from "@/types/credit-scoring";
+import { getErrorMessage } from "@/lib/api-error";
+import { DECISION_LABELS } from "@/lib/credit-scoring/labels";
+import type { CreateCreditDecisionData, CreditDecision, CreditDecisionValue } from "@/types/credit-scoring";
 
-const DECISION_OPTIONS: { value: CreditDecision["decision"]; label: string }[] = [
-  { value: "approve", label: "Approve" },
-  { value: "decline", label: "Decline" },
-  { value: "refer", label: "Refer for Review" },
-  { value: "hold", label: "Hold" },
-];
+const DECISION_OPTIONS = (Object.keys(DECISION_LABELS) as CreditDecisionValue[]).map((value) => ({
+  value,
+  label: DECISION_LABELS[value],
+}));
 
 interface ManualOverrideDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   borrowerId: number;
   creditScoreId: number;
+  /** Set for a decision on a loan assessment's score; the server requires it there. */
+  loanId?: number;
   onDecisionRecorded: () => void;
 }
 
@@ -45,6 +47,7 @@ export function ManualOverrideDialog({
   onOpenChange,
   borrowerId,
   creditScoreId,
+  loanId,
   onDecisionRecorded,
 }: ManualOverrideDialogProps) {
   const [decision, setDecision] = useState<CreditDecision["decision"] | "">("");
@@ -63,6 +66,7 @@ export function ManualOverrideDialog({
       decision,
       reason: reason.trim(),
       remarks: remarks.trim() || undefined,
+      ...(loanId !== undefined ? { loan_id: loanId } : {}),
     };
     try {
       await creditScoringService.createCreditDecision(payload);
@@ -73,12 +77,7 @@ export function ManualOverrideDialog({
       onOpenChange(false);
       onDecisionRecorded();
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 404 || status === 501) {
-        toast.error("Not connected yet — decisions cannot be recorded until the backend is live.");
-      } else {
-        toast.error("Unable to record this decision.");
-      }
+      toast.error(getErrorMessage(err, "Unable to record this decision."));
     } finally {
       setSubmitting(false);
     }
@@ -97,13 +96,13 @@ export function ManualOverrideDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Decision</Label>
+            <Label id="decision-label">Decision</Label>
             <Select
               value={decision}
               onValueChange={(v) => setDecision(v as CreditDecision["decision"])}
               items={DECISION_OPTIONS}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full" aria-labelledby="decision-label">
                 <SelectValue placeholder="Select a decision" />
               </SelectTrigger>
               <SelectContent>
@@ -115,8 +114,10 @@ export function ManualOverrideDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Reason (required)</Label>
+            <Label htmlFor="decision-reason">Reason (required)</Label>
             <Textarea
+              id="decision-reason"
+              maxLength={255}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Why this decision, given the score and factors above?"
@@ -124,8 +125,9 @@ export function ManualOverrideDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Remarks (optional)</Label>
+            <Label htmlFor="decision-remarks">Remarks (optional)</Label>
             <Textarea
+              id="decision-remarks"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Any additional notes for the audit trail."

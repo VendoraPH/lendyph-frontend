@@ -1,23 +1,16 @@
 "use client";
 
 import { useCallback } from "react";
+import Link from "next/link";
 import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
-import { RiskLevelBadge } from "../../_components/risk-level-badge";
-import { ConfidenceBadge } from "../../_components/confidence-badge";
-import { ScoreBreakdownCard } from "../../_components/score-breakdown-card";
-import { ScoreFactorList } from "../../_components/score-factor-list";
-import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
+import { ScoreDetail } from "../../_components/score-detail";
 import type { CreditScore } from "@/types/credit-scoring";
 
 /**
- * Self-contained by design: takes only a `borrowerId` and renders the full
- * assessment. This is a standalone page today (`/credit-scoring/assessment`)
- * but the shape is deliberately drop-in-ready for embedding into the new
- * loan application flow (`loans/new/page.tsx`) in a future PR — that embed
- * is explicitly out of scope here.
+ * A member's current score, in every state. A loan application's own
+ * assessment lives on the loan page's Credit Assessment card.
  */
 export function CreditAssessmentPanel({ borrowerId }: { borrowerId: number }) {
   const fetcher = useCallback(
@@ -29,32 +22,18 @@ export function CreditAssessmentPanel({ borrowerId }: { borrowerId: number }) {
   return (
     <DataState
       resource={resource}
-      summary="A fresh credit assessment for this member will appear here once the backend is connected."
+      summary="This member's current credit score."
       endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
     >
       {(profile) => (
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-4 pt-6">
-              <div>
-                <p className="text-3xl font-semibold">{profile.score}</p>
-                <p className="text-xs text-muted-foreground">out of 100</p>
-              </div>
-              <RiskLevelBadge level={profile.risk_level} />
-              <ConfidenceBadge level={profile.confidence} />
-              <span className="text-xs text-muted-foreground">
-                {formatDateTime(profile.calculated_at)}
-              </span>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium">System Recommendation</p>
-              <p className="mt-1 text-sm text-muted-foreground">{profile.recommendation}</p>
-            </CardContent>
-          </Card>
-          <ScoreBreakdownCard breakdown={profile.category_breakdown} />
-          <ScoreFactorList factors={profile.factors} />
+        <div className="space-y-4">
+          <p className="text-sm">
+            <Link href={`/credit-scoring/borrowers/${borrowerId}`} className="font-medium hover:underline">
+              Open {profile.borrower_name}&apos;s credit profile
+            </Link>{" "}
+            <span className="text-muted-foreground">for score history, flags and decisions.</span>
+          </p>
+          <ScoreDetail score={profile} />
         </div>
       )}
     </DataState>

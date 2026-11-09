@@ -1,4 +1,4 @@
-import type { RiskLevel } from "@/types/credit-scoring";
+import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
 import { RISK_LEVEL_COLORS, RISK_LEVEL_LABELS } from "@/constants/risk-level";
 
 export function riskLevelLabel(level: RiskLevel): string {
@@ -9,19 +9,13 @@ export function riskLevelColor(level: RiskLevel): string {
   return RISK_LEVEL_COLORS[level];
 }
 
-export interface RiskLevelThreshold {
+export interface RiskLegendItem {
   level: RiskLevel;
-  min: number;
+  label: string;
+  count: string;
 }
 
-/**
- * Client-side display only — for the Scorecard Configuration form's live
- * preview as an admin edits thresholds. The backend is the source of truth
- * for a borrower's actual `risk_level` and returns it directly; this never
- * recomputes one for a real score.
- */
-export function riskLevelFromScore(score: number, thresholds: RiskLevelThreshold[]): RiskLevel {
-  const sorted = [...thresholds].sort((a, b) => b.min - a.min);
-  const match = sorted.find((t) => score >= t.min);
-  return match ? match.level : sorted[sorted.length - 1].level;
+/** The donut's legend: each band the server sent, its name and its count, in the server's order. */
+export function riskLegend(distribution: CreditScoringDashboardSummary["risk_distribution"]): RiskLegendItem[] {
+  return distribution.map((d) => ({ level: d.risk_level, label: RISK_LEVEL_LABELS[d.risk_level], count: String(d.count) }));
 }
