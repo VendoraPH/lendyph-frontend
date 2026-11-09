@@ -302,6 +302,14 @@ export const accountingService = {
   generalLedgerPage: (query: GeneralLedgerPageQuery): Promise<GeneralLedgerPage> =>
     api.getRaw<GeneralLedgerPage>(API_ENDPOINTS.ACCOUNTING.GENERAL_LEDGER, { params: query }),
 
+  /**
+   * One page of an account's ledger. `meta` carries the opening and closing
+   * balances and the range's totals; with `source` each row keeps the
+   * account's true running balance.
+   */
+  generalLedgerPage: (query: GeneralLedgerPageQuery): Promise<GeneralLedgerPage> =>
+    api.getRaw<GeneralLedgerPage>(API_ENDPOINTS.ACCOUNTING.GENERAL_LEDGER, { params: query }),
+
   trialBalance: (asOf: string, branchId?: number): Promise<TrialBalance> =>
     api.get<TrialBalance>(API_ENDPOINTS.ACCOUNTING.TRIAL_BALANCE, {
       params: { as_of: asOf, branch_id: branchId },

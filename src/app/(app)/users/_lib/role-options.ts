@@ -1,3 +1,4 @@
+import { roleDisplayName } from "@/lib/role-display-name";
 import type { ApiRole } from "@/services/role.service";
 import type { UpdateUserData } from "@/services/user.service";
 
@@ -19,6 +20,16 @@ export function roleOptions(roles: ApiRole[], heldRole?: string): ApiRole[] {
 
 export function isInactiveRole(role: ApiRole): boolean {
   return role.is_active === false;
+}
+
+/**
+ * The label the role picker shows: the role's display name, with
+ * " (inactive)" after a deactivated one, both on its option and where the
+ * selected role is named. Active roles read their name alone.
+ */
+export function roleOptionLabel(role: ApiRole): string {
+  const name = roleDisplayName(role);
+  return isInactiveRole(role) ? `${name} (inactive)` : name;
 }
 
 /**

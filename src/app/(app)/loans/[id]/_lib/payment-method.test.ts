@@ -5,6 +5,8 @@ import { join } from "node:path";
 import {
   DEFAULT_PAYMENT_METHOD,
   PAYMENT_METHOD_OPTIONS,
+  extensionMethodFields,
+  extensionReferenceError,
   paymentMethodFields,
   paymentMethodLabel,
   paymentReferenceError,
@@ -75,4 +77,23 @@ test("the loan page clears the method and reference every time the window opens"
 test("the loan page clears the reference when the method changes", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
   assert.ok(page.includes("referenceAfterMethodChange(paymentMethod, next, paymentReference)"));
+});
+
+test("an extension on \"pay\" sends the method and reference it was collected by", () => {
+  assert.deepEqual(extensionMethodFields("pay", "gcash", " GC-9 "), { method: "gcash", reference_number: "GC-9" });
+  assert.deepEqual(extensionMethodFields("pay", "cash", ""), { method: "cash" });
+});
+
+test("an extension on \"defer\" collects nothing, so it sends neither", () => {
+  assert.deepEqual(extensionMethodFields("defer", "gcash", "GC-9"), {});
+  assert.deepEqual(extensionMethodFields("defer", "cash", ""), {});
+});
+
+test("the extension's reference is asked for only on \"pay\"", () => {
+  assert.equal(extensionReferenceError("defer", "gcash", ""), null);
+  assert.equal(
+    extensionReferenceError("pay", "gcash", ""),
+    "Enter the reference number for this GCash payment collected to extend the loan.",
+  );
+  assert.equal(extensionReferenceError("pay", "cash", ""), null);
 });
