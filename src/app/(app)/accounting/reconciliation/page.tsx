@@ -18,8 +18,6 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource, useChartOfAccounts, usePermission } from "@/hooks";
 import { accountingService } from "@/services";
-import { formatCentavos } from "@/lib/accounting/money";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DrainResult } from "@/lib/paginate";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
@@ -28,10 +26,12 @@ import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { AccountSelect } from "../_components/account-select";
 import { BranchAccessNotice } from "./_components/branch-access-notice";
-import { MatchBadge, ReconciledBadge } from "./_components/match-badge";
+import { FigureWithNote } from "./_components/figure-with-note";
+import { ReconciledBadge, RowMatchBadge } from "./_components/match-badge";
 import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
 import { ReasonButton } from "./_components/reason-button";
-import { accountLabel, reconciledLabel } from "./_lib/reconciliation-view";
+import { accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
+import { signedCentavos } from "./_lib/signed-money";
 import type { ReconciliationDetail } from "./_lib/types";
 
 const DESCRIPTION = "Prove each money account against its statement.";
@@ -235,21 +235,26 @@ function ReconciliationCard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {reconciliation.lines.map((line) => (
-              <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
-                <TableCell className="text-sm">{formatDate(line.date)}</TableCell>
-                <TableCell className="text-sm">{line.description}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {line.external_reference || "—"}
-                </TableCell>
-                <TableCell>
-                  <MatchBadge match={line.match} />
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm">
-                  {formatCentavos(line.amount)}
-                </TableCell>
-              </TableRow>
-            ))}
+            {reconciliation.lines.map((line) => {
+              const figures = rowFigures(line);
+              return (
+                <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
+                  <TableCell className="text-sm">
+                    <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                  </TableCell>
+                  <TableCell className="text-sm">{line.description}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {line.external_reference || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <RowMatchBadge row={line} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    <FigureWithNote figure={figures.amount} note={figures.amountNote} />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>
@@ -270,7 +275,7 @@ function Figure({
     <div className="space-y-1">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className={cn("font-mono text-lg font-semibold", className)}>
-        {formatCentavos(value)}
+        {signedCentavos(value)}
       </p>
     </div>
   );

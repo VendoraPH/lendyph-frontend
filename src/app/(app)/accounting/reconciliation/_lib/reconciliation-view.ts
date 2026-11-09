@@ -1,4 +1,4 @@
-import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "./signed-money";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { formatDate } from "@/lib/format";
 import type { ReconciliationMatch } from "@/types";
@@ -24,6 +24,15 @@ export function matchLabel(match: ReconciliationMatch): string {
   return MATCH_LABELS[match];
 }
 
+/**
+ * A row's status in words. An outstanding entry whose reversal pair nets to
+ * zero (the server's `netted`) is left out of the outstanding count, so it
+ * reads as such rather than "Unmatched".
+ */
+export function rowMatchLabel(row: ReconciliationRow): string {
+  return row.netted ? NETTED : matchLabel(row.match);
+}
+
 export function reconciledLabel(reconciliation: ReconciliationDetail): string {
   return reconciliation.is_reconciled ? "Reconciled" : "Not reconciled";
 }
@@ -45,9 +54,9 @@ export interface HeaderFigure {
 
 export function headerFigures(r: ReconciliationDetail): HeaderFigure[] {
   return [
-    { key: "statement", label: "Statement balance", value: formatCentavos(r.statement_balance), money: true },
-    { key: "book", label: "Book balance", value: formatCentavos(r.book_balance), money: true },
-    { key: "difference", label: "Difference", value: formatCentavos(r.difference), money: true },
+    { key: "statement", label: "Statement balance", value: signedCentavos(r.statement_balance), money: true },
+    { key: "book", label: "Book balance", value: signedCentavos(r.book_balance), money: true },
+    { key: "difference", label: "Difference", value: signedCentavos(r.difference), money: true },
     { key: "matched", label: "Matched", value: String(r.matched_count), money: false },
     { key: "possible", label: "Possible matches", value: String(r.possible_count), money: false },
     { key: "unmatched", label: "Unmatched", value: String(r.unmatched_count), money: false },
@@ -63,6 +72,7 @@ export function headerFigures(r: ReconciliationDetail): HeaderFigure[] {
 /** The ledger line a row is matched to or suggested for, or which side it is missing from. */
 export function ledgerLineText(row: ReconciliationRow): string {
   if (row.source === "ledger") {
+    if (row.netted) return NETTED;
     return row.outside_period ? `Outstanding from ${formatDate(row.date)}` : "Not on the statement";
   }
   if (row.source === "statement") return "Not in the books";
@@ -70,19 +80,59 @@ export function ledgerLineText(row: ReconciliationRow): string {
   return row.match === "possible" ? `Suggested: ${entry}` : `Matched to ${entry}`;
 }
 
-/**
- * Whose date and amount a statement row shows. A paired row (matched or
- * suggested) carries only the books entry's figures, so they are labelled as
- * such; a statement line on its own shows its own, unlabelled.
- */
+/** An outstanding entry whose reversal pair nets to zero, left out of the outstanding count. */
+const NETTED = "Outstanding, nets to zero";
+
+/** The label on a paired row's books figures: "Books entry JE-…". Null on a row with one side only. */
 export function pairedFiguresCaption(row: ReconciliationRow): string | null {
   if (row.source !== "both") return null;
   return row.journal_no ? `Books entry ${row.journal_no}` : "Books entry";
 }
 
+export interface RowFigures {
+  date: string;
+  amount: string;
+  /** The line under each figure: on a paired row, whose figure it is, or the books entry's own. */
+  dateNote: string | null;
+  amountNote: string | null;
+}
+
+/**
+ * The date and amount a statement row shows. A paired row shows the statement
+ * line's own (`statement_date`, `statement_amount`), with the books entry's
+ * labelled under them. From an API that sends no statement figures, it shows
+ * the books entry's, labelled as such. Every figure is the server's.
+ */
+export function rowFigures(row: ReconciliationRow): RowFigures {
+  const date = formatDate(row.date);
+  const amount = signedCentavos(row.amount);
+  const caption = pairedFiguresCaption(row);
+  if (caption === null) return { date, amount, dateNote: null, amountNote: null };
+
+  const { statement_date: statementDate, statement_amount: statementAmount } = row;
+  const hasDate = typeof statementDate === "string";
+  const hasAmount = typeof statementAmount === "number";
+  return {
+    date: hasDate ? formatDate(statementDate) : date,
+    amount: hasAmount ? signedCentavos(statementAmount) : amount,
+    dateNote: hasDate ? `${caption}: ${date}` : caption,
+    amountNote: hasAmount ? `${caption}: ${amount}` : caption,
+  };
+}
+
 /** A hand-match candidate's date, marked when it is an outstanding item from before the period. */
 export function candidateDateText(row: ReconciliationRow): string {
-  return row.outside_period ? ledgerLineText(row) : formatDate(row.date);
+  if (!row.outside_period) return formatDate(row.date);
+  const outstanding = `Outstanding from ${formatDate(row.date)}`;
+  return row.netted ? `${outstanding}, nets to zero` : outstanding;
+}
+
+/**
+ * A hand-match candidate's title. A suggested pair carries the statement
+ * line's description, not the entry's, so it names the line it is suggested for.
+ */
+export function candidateTitle(row: ReconciliationRow): string {
+  return row.source === "both" ? `Suggested for the statement line "${row.description}"` : row.description;
 }
 
 export function journalHref(journalId: number): string {
@@ -153,13 +203,28 @@ export function requestFailure(err: unknown, { canViewAll }: AccessContext): Req
 }
 
 /**
+ * The refusal of a hand match whose amount or side differs from the statement
+ * line's ("This statement line is ₱88.00 out; the entry is ₱2,000.00 in.").
+ */
+const AMOUNT_OR_SIDE_DIFFERS = /^This statement line is .+; the entry is /i;
+
+function matchErrors(err: unknown): string[] {
+  const matches = (err as { response?: { data?: { errors?: { matches?: unknown } } } })?.response?.data?.errors
+    ?.matches;
+  return Array.isArray(matches) ? matches.filter((m): m is string => typeof m === "string") : [];
+}
+
+/**
  * A refused match. Besides the 409s, a 422 (a draft entry, or a leg that wasn't
  * live at the period end) means the worksheet offered something stale, so it
- * shows the server's words and is read again.
+ * shows the server's words and is read again. A 422 for a different amount or
+ * side is the choice, not the worksheet: its words show in place, with no reload.
  */
 export function matchFailure(err: unknown, context: AccessContext): RequestFailure {
   const failure = requestFailure(err, context);
   if (httpStatusOf(err) !== 422) return failure;
+  const differs = matchErrors(err).find((m) => AMOUNT_OR_SIDE_DIFFERS.test(m));
+  if (differs) return { reload: false, message: differs };
   return { reload: true, message: getErrorMessage(err) };
 }
 

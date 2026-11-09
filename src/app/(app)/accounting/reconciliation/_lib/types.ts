@@ -32,6 +32,18 @@ export interface ReconciliationRow extends ReconciliationLine {
   matchable?: boolean;
   /** The ledger entry is dated outside the period (an outstanding item); `date` is its own. */
   outside_period?: boolean;
+  /**
+   * On a paired row, the statement line's own date and amount (centavos);
+   * `date` and `amount` are the books entry's. Absent from an API older than
+   * backend f2c, where a paired row carries the books figures only.
+   */
+  statement_date?: string | null;
+  statement_amount?: number | null;
+  /**
+   * An outstanding row whose reversal pair nets to zero, so it is left out of
+   * `outstanding_count`. Absent from an API older than backend f2c.
+   */
+  netted?: boolean;
 }
 
 export interface ReconciliationDetail extends Reconciliation {

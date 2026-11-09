@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDialogOpening, usePermission } from "@/hooks";
-import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import type { Account } from "@/types";
 import {
@@ -25,9 +24,11 @@ import type { LineRecordRequest } from "../_lib/reconciliation-api";
 import {
   accountLabel,
   candidateDateText,
+  candidateTitle,
   directionLabel,
   type RequestFailure,
 } from "../_lib/reconciliation-view";
+import { signedCentavos } from "../_lib/signed-money";
 import type { LineActionKind, ReconciliationDetail, ReconciliationRow } from "../_lib/types";
 import { ExpenseForm, SuspenseForm, TransferForm } from "./line-action-forms";
 import { HiddenActionHint, ReasonButton } from "./reason-button";
@@ -129,7 +130,7 @@ export function ResolveLineDialog({
         <DialogHeader>
           <DialogTitle>Resolve statement line</DialogTitle>
           <DialogDescription>
-            {`${formatDate(row.date)} · ${row.description} · ${directionLabel(row.amount)} ${formatCentavos(row.amount)}`}
+            {`${formatDate(row.date)} · ${row.description} · ${directionLabel(row.amount)} ${signedCentavos(row.amount)}`}
             {row.external_reference ? ` · Reference ${row.external_reference}` : ""}
           </DialogDescription>
         </DialogHeader>
@@ -175,14 +176,14 @@ export function ResolveLineDialog({
                   className="flex items-center justify-between gap-3 rounded-lg border p-2 text-sm"
                 >
                   <div className="min-w-0">
-                    <p className="truncate">{candidate.description}</p>
+                    <p className="truncate">{candidateTitle(candidate)}</p>
                     <p className="text-xs text-muted-foreground">
                       {`${candidateDateText(candidate)} · ${candidate.journal_no ?? "Journal"}`}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {candidate.amount === row.amount && <Badge variant="outline">Same amount</Badge>}
-                    <span className="font-mono">{formatCentavos(candidate.amount)}</span>
+                    <span className="font-mono">{signedCentavos(candidate.amount)}</span>
                     <Button
                       size="sm"
                       disabled={submitting}

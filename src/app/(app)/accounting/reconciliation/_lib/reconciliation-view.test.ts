@@ -8,6 +8,7 @@ import {
   BRANCH_ACCESS_EXPLANATION,
   afterAction,
   candidateDateText,
+  candidateTitle,
   createdNotice,
   descriptionDefault,
   directionLabel,
@@ -19,6 +20,8 @@ import {
   matchLabel,
   reconciledLabel,
   requestFailure,
+  rowFigures,
+  rowMatchLabel,
   suspenseConfirmation,
   transferDirection,
 } from "./reconciliation-view";
@@ -66,9 +69,9 @@ describe("the header shows the server's figures", () => {
     );
   });
 
-  test("a zero reads ₱0.00 and a negative keeps its sign", () => {
+  test("a zero reads ₱0.00 and a negative reads in parentheses", () => {
     const figures = headerFigures(detail({ difference: 0, statement_balance: -150_000 }));
-    assert.equal(figures[0].value, "-₱1,500.00");
+    assert.equal(figures[0].value, "(₱1,500.00)");
     assert.equal(figures[2].value, "₱0.00");
   });
 
@@ -138,6 +141,32 @@ describe("rows read in words", () => {
     assert.equal(candidateDateText({ ...books, date: "2026-09-28", outside_period: true }), "Outstanding from Sep 28, 2026");
     assert.equal(candidateDateText({ ...books, date: "2026-10-05" }), "Oct 5, 2026");
   });
+
+  test("an outstanding entry whose reversal pair nets to zero says so (netted)", () => {
+    const books = { ...base, match: "unmatched" as const, source: "ledger" as const, statement_line_id: null };
+    const netted = { ...books, date: "2026-09-28", outside_period: true, netted: true };
+    assert.equal(ledgerLineText(netted), "Outstanding, nets to zero");
+    assert.equal(candidateDateText(netted), "Outstanding from Sep 28, 2026, nets to zero");
+    assert.equal(ledgerLineText({ ...netted, netted: false }), "Outstanding from Sep 28, 2026");
+  });
+
+  test("a row's status reads the server's netted flag, not its match alone", () => {
+    const books = { ...base, match: "unmatched" as const, source: "ledger" as const, statement_line_id: null };
+    assert.equal(rowMatchLabel({ ...books, outside_period: true, netted: true }), "Outstanding, nets to zero");
+    assert.equal(rowMatchLabel({ ...books, outside_period: true, netted: false }), "Unmatched");
+    assert.equal(rowMatchLabel(books), "Unmatched");
+    assert.equal(rowMatchLabel(base), "Matched");
+    assert.equal(rowMatchLabel({ ...base, match: "possible" }), "Possible match");
+  });
+
+  test("a picker row names what it is: the entry's own description, or the statement line it is suggested for", () => {
+    const books = { ...base, match: "unmatched" as const, source: "ledger" as const, statement_line_id: null };
+    assert.equal(candidateTitle({ ...books, description: "Deposit of collections" }), "Deposit of collections");
+    assert.equal(
+      candidateTitle({ ...base, match: "possible", description: "DEP 0412" }),
+      `Suggested for the statement line "DEP 0412"`,
+    );
+  });
 });
 
 describe("after an action", () => {
@@ -206,6 +235,18 @@ describe("outstanding items and manual-match refusals", () => {
         { canViewAll: true },
       ),
       { reload: true, message: notLive },
+    );
+  });
+
+  test("a match refused for its amount or side shows the server's words in place, without a reload", () => {
+    const differs =
+      "This statement line is ₱88.00 out; the entry is ₱2,000.00 in. Only an entry for the same amount, in the same direction, can be matched to it.";
+    assert.deepEqual(
+      matchFailure(
+        httpError(422, { message: "The given data was invalid.", errors: { matches: [differs] } }),
+        { canViewAll: true },
+      ),
+      { reload: false, message: differs },
     );
   });
 
@@ -353,6 +394,38 @@ describe("a paired statement line's date and amount", () => {
     assert.equal(pairedFiguresCaption(paired), "Books entry JE-000002");
     assert.equal(pairedFiguresCaption({ ...paired, match: "possible" }), "Books entry JE-000002");
     assert.equal(pairedFiguresCaption({ ...paired, journal_no: null }), "Books entry");
+  });
+
+  test("show the statement line's own date and amount, with the books entry's figures labelled under them", () => {
+    assert.deepEqual(rowFigures({ ...paired, statement_date: "2026-08-28", statement_amount: 8_800 }), {
+      date: "Aug 28, 2026",
+      amount: "₱88.00",
+      dateNote: "Books entry JE-000002: Aug 30, 2026",
+      amountNote: "Books entry JE-000002: ₱2,000.00",
+    });
+  });
+
+  test("fall back to the books entry's figures, labelled, from an API that sends no statement figures", () => {
+    assert.deepEqual(rowFigures(paired), {
+      date: "Aug 30, 2026",
+      amount: "₱2,000.00",
+      dateNote: "Books entry JE-000002",
+      amountNote: "Books entry JE-000002",
+    });
+    assert.deepEqual(rowFigures({ ...paired, statement_date: null, statement_amount: null }), rowFigures(paired));
+  });
+
+  test("read money out in parentheses, on both the statement and the books figures", () => {
+    const out = { ...paired, amount: -200_000, statement_date: "2026-08-28", statement_amount: -8_800 };
+    const figures = rowFigures(out);
+    assert.equal(figures.amount, "(₱88.00)");
+    assert.equal(figures.amountNote, "Books entry JE-000002: (₱2,000.00)");
+    assert.equal(rowFigures({ ...out, source: "ledger", statement_line_id: null }).amount, "(₱2,000.00)");
+  });
+
+  test("on a row with one side only, are its own, with no note", () => {
+    const own = { ...paired, source: "statement" as const, match: "unmatched" as const, journal_id: null, journal_line_id: null };
+    assert.deepEqual(rowFigures(own), { date: "Aug 30, 2026", amount: "₱2,000.00", dateNote: null, amountNote: null });
   });
 
   test("an unpaired statement line's figures are its own, with no label", () => {
