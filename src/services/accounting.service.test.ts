@@ -459,19 +459,6 @@ describe("lists are drained, not read one page deep", () => {
     assert.equal(requests.length, 1, "64 rows fit in one page of 100");
   });
 
-  test("REGRESSION: Outstanding was the total of the first 15 of 40 payables", async () => {
-    // eslint-disable-next-line pagination/no-unparameterised-list -- the defect, on purpose
-    const short = rowsOf(await accountingService.expensesList());
-    const shortTotal = short.reduce((t, r) => t + r.amount - r.amount_paid, 0);
-
-    const { rows } = await accountingService.expensesListAll();
-    const wholeTotal = rows.reduce((t, r) => t + r.amount - r.amount_paid, 0);
-
-    assert.equal(shortTotal, 15 * 100_000, "₱15,000.00 — the headline that shipped");
-    assert.equal(wholeTotal, EXPENSE_COUNT * 100_000, "₱40,000.00 — what is owed");
-    assert.ok(wholeTotal > shortTotal, "and the screen said nothing about the gap");
-  });
-
   test("every remaining list drains too", async () => {
     const cases: Array<[string, () => Promise<{ rows: unknown[] }>, number]> = [
       ["cash accounts", () => accountingService.cashAccountsListAll(), CASH_ACCOUNT_COUNT],

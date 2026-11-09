@@ -39,6 +39,9 @@ export type NormalBalance = "debit" | "credit";
 /** Where the money physically sits. Drives the Cash & Bank screen. */
 export type CashAccountKind = "cash" | "bank" | "gcash" | "maya" | "wallet";
 
+/** The cash flow statement section an account's movements land in. */
+export type AccountCashFlowCategory = "operating" | "investing" | "financing" | "cash";
+
 export interface Account {
   id: number;
   /** "1010". Sorts lexically into statement order by construction. */
@@ -59,6 +62,8 @@ export interface Account {
   is_active: boolean;
   /** Set when the account is one of the money accounts in Cash & Bank. */
   cash_kind?: CashAccountKind | null;
+  /** Set by the server from the type and cash kind unless someone chose it. */
+  cash_flow_category?: AccountCashFlowCategory | null;
   description?: string | null;
   /**
    * Whether any posted journal line references this account. The UI uses it to
