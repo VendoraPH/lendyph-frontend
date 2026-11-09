@@ -18,7 +18,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   amountInputValue,
+  principalMoved,
   principalRangeError,
+  remarksRequired,
+  REMARKS_SAVED_HINT,
   remarksRefusal,
   restructureEditFields,
   scbRuleError,
@@ -72,6 +75,24 @@ test("a restructure edit sends its build-up, ₱0.00 included, and remarks only 
   assert.deepEqual(restructureEditFields({ principal: 18000, storedPrincipal: 19666.67, scb: 0, remarks: "  " }), {
     scb_amount: 0,
   });
+});
+
+test("remarks are required only while the principal differs from the stored one", () => {
+  const message = "Remarks are required when the restructured principal is less than the outstanding balance.";
+  assert.equal(principalMoved(18000, 19666.67), true);
+  assert.equal(principalMoved(19666.67, 19666.67), false);
+  assert.equal(principalMoved(19666.67, null), true);
+  assert.equal(remarksRequired(message, 18000, 19666.67), true);
+  // Back to the stored principal: the server keeps its stored remarks, so none are asked for.
+  assert.equal(remarksRequired(message, 19666.67, 19666.67), false);
+  assert.equal(remarksRequired(null, 18000, 19666.67), false);
+});
+
+test("the Remarks field says they are saved only with a changed principal", () => {
+  assert.equal(REMARKS_SAVED_HINT, "Saved only when the principal changes; otherwise the restructure keeps its remarks.");
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
+  assert.ok(page.includes("{REMARKS_SAVED_HINT}"));
+  assert.ok(page.includes("remarksRequired(remarksRequiredMessage, principal, storedPrincipal)"));
 });
 
 test("the server's 422 on remarks is read so the form can ask for them", () => {

@@ -142,7 +142,9 @@ import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
   principalRangeError,
+  REMARKS_SAVED_HINT,
   remarksRefusal,
+  remarksRequired,
   restructureEditFields,
   scbRuleError,
 } from "./_lib/restructure-edit";
@@ -514,6 +516,9 @@ function NewLoanApplicationInner() {
   const isRestructureEdit = isEditMode && existingLoan?.is_restructure === true;
   const storedPrincipal =
     isRestructureEdit && existingLoan?.principal_amount != null ? Number(existingLoan.principal_amount) : null;
+  // Asked for by the server, and only while the principal differs from the
+  // stored one (the server keeps the stored remarks otherwise).
+  const remarksNeeded = remarksRequired(remarksRequiredMessage, principal, storedPrincipal);
 
   // Validation messages
   const principalError = useMemo(() => {
@@ -745,7 +750,7 @@ function NewLoanApplicationInner() {
     if (scbError) missing.push("Share Capital Build-Up");
     if (processingFeePercentError) missing.push("Processing fee");
     if (serviceFeePercentError) missing.push("Service fee");
-    if (isRestructureEdit && remarksRequiredMessage !== null && !restructureRemarks.trim()) missing.push("Remarks");
+    if (isRestructureEdit && remarksNeeded && !restructureRemarks.trim()) missing.push("Remarks");
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
@@ -880,8 +885,8 @@ function NewLoanApplicationInner() {
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
       // The server asks for a restructure's remarks: the field turns required.
-      const remarksNeeded = remarksRefusal(err);
-      if (remarksNeeded !== null) setRemarksRequiredMessage(remarksNeeded);
+      const remarksAsked = remarksRefusal(err);
+      if (remarksAsked !== null) setRemarksRequiredMessage(remarksAsked);
       toast.error(
         formatProductRangeMessage(
           getErrorMessage(
@@ -1324,7 +1329,7 @@ function NewLoanApplicationInner() {
             <div className="mt-4 space-y-1.5">
               <Label htmlFor="restructure-remarks">
                 Remarks{" "}
-                {remarksRequiredMessage !== null ? (
+                {remarksNeeded ? (
                   <span className="text-destructive">*</span>
                 ) : (
                   <span className="text-muted-foreground font-normal">(needed when the principal is below the outstanding balance)</span>
@@ -1336,12 +1341,15 @@ function NewLoanApplicationInner() {
                 onChange={(e) => setRestructureRemarks(e.target.value)}
                 maxLength={1000}
                 rows={2}
-                required={remarksRequiredMessage !== null}
-                aria-invalid={remarksRequiredMessage !== null && !restructureRemarks.trim()}
-                aria-describedby={remarksRequiredMessage !== null ? "restructure-remarks-hint" : undefined}
+                required={remarksNeeded}
+                aria-invalid={remarksNeeded && !restructureRemarks.trim()}
+                aria-describedby={remarksNeeded ? "restructure-remarks-saved restructure-remarks-hint" : "restructure-remarks-saved"}
                 placeholder="Why the restructured principal is below the outstanding balance"
               />
-              {remarksRequiredMessage !== null && (
+              <p id="restructure-remarks-saved" className="text-xs text-muted-foreground">
+                {REMARKS_SAVED_HINT}
+              </p>
+              {remarksNeeded && (
                 <p id="restructure-remarks-hint" className="text-xs text-destructive">
                   {remarksRequiredMessage}
                 </p>

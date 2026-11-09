@@ -14,6 +14,7 @@ type Figure = string | number | null | undefined;
 
 const known = (value: Figure): string | number | null => (value === undefined ? null : value);
 
+
 export function proceedsFigures(
   isRestructure: boolean,
   figures: {
@@ -24,13 +25,13 @@ export function proceedsFigures(
   },
 ): ProceedsFigure[] {
   if (!isRestructure) return [{ label: "Net Proceeds", amount: known(figures.netProceeds) }];
+  const collected = known(figures.restructure?.collected_now ?? figures.totalDeductions);
+  // A restructure pays nothing out, by its posting rule (A1); the release
+  // preview's own `paid_out` is shown when it was sent. Until the server has
+  // answered, both read as dashes.
+  const paidOut = known(figures.restructure?.paid_out) ?? (collected === null ? null : 0);
   return [
-    {
-      label: "Collected from the member",
-      amount: known(figures.restructure?.collected_now ?? figures.totalDeductions),
-    },
-    // A restructure pays nothing out, by its posting rule (A1); the release
-    // preview's own `paid_out` is shown when it was sent.
-    { label: "Paid out", amount: known(figures.restructure?.paid_out ?? 0) },
+    { label: "Collected from the member", amount: collected },
+    { label: "Paid out", amount: paidOut },
   ];
 }

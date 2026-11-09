@@ -22,6 +22,23 @@ function centavos(amount: number): number {
   return Math.round(amount * 100);
 }
 
+/** The principal differs from the stored one (or there is none stored): the server reads remarks only then. */
+export function principalMoved(principal: number, storedPrincipal: number | null): boolean {
+  return storedPrincipal === null || centavos(principal) !== centavos(storedPrincipal);
+}
+
+/**
+ * Remarks are required once the server has asked for them, and only while
+ * the principal still differs from the stored one: back at the stored
+ * principal, the server keeps the restructure's stored remarks.
+ */
+export function remarksRequired(serverMessage: string | null, principal: number, storedPrincipal: number | null): boolean {
+  return serverMessage !== null && principalMoved(principal, storedPrincipal);
+}
+
+/** Said beside the Remarks field: when they are saved. */
+export const REMARKS_SAVED_HINT = "Saved only when the principal changes; otherwise the restructure keeps its remarks.";
+
 type PrincipalRange = Pick<LoanProduct, "min_amount" | "max_amount">;
 
 /**
@@ -75,9 +92,8 @@ export function restructureEditFields(input: {
   scb: number;
   remarks: string;
 }): { scb_amount: number; remarks?: string } {
-  const moved = input.storedPrincipal === null || centavos(input.principal) !== centavos(input.storedPrincipal);
   const remarks = input.remarks.trim();
-  return moved && remarks !== "" ? { scb_amount: input.scb, remarks } : { scb_amount: input.scb };
+  return principalMoved(input.principal, input.storedPrincipal) && remarks !== "" ? { scb_amount: input.scb, remarks } : { scb_amount: input.scb };
 }
 
 /** The server's 422 message on `remarks`, so the form can ask for them; null for any other answer. */

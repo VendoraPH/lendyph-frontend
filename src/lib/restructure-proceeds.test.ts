@@ -53,6 +53,17 @@ test("a figure the server didn't send is null, never worked out", () => {
   ]);
 });
 
+test("preview not loaded: both dashes, never a ₱0.00 before the server answers", () => {
+  assert.deepEqual(proceedsFigures(true, { totalDeductions: null, netProceeds: null }), [
+    { label: "Collected from the member", amount: null },
+    { label: "Paid out", amount: null },
+  ]);
+  assert.deepEqual(proceedsFigures(true, { totalDeductions: undefined, netProceeds: undefined, restructure: null }), [
+    { label: "Collected from the member", amount: null },
+    { label: "Paid out", amount: null },
+  ]);
+});
+
 test("the loan page's card and the loan form both use it", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
   const form = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
