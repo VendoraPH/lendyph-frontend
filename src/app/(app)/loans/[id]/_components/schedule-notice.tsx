@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertCircle, Inbox, RefreshCw, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { restructureSuccessor } from "@/lib/loan-restructure";
 import type { Loan } from "@/types/loan";
+import { restructureWriteOffFigures, writeOffFigureText } from "../_lib/restructure-write-off";
 
 /** Where the schedule request stands. Rows only ever come from `loaded`. */
 export type ScheduleLoad = "loading" | "failed" | "loaded";
@@ -51,7 +52,6 @@ function Notice({
 
 function RestructuredNotice({ loan }: { loan: Loan }) {
   const successor = restructureSuccessor(loan.restructured_into);
-  const writeOff = loan.write_off_amount ?? 0;
   return (
     <Notice
       icon={<Shuffle className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />}
@@ -84,17 +84,18 @@ function RestructuredNotice({ loan }: { loan: Loan }) {
         ) : (
           "a new loan"
         )}
-        {writeOff > 0 && (
-          <>
-            , less{" "}
-            <span className="font-medium text-foreground tabular-nums">
-              {formatCurrencyExact(writeOff)}
-            </span>{" "}
-            written off
-          </>
-        )}
         .
       </p>
+      {/* Two different figures, each labelled: what was forgiven on approval,
+          and the principal the books wrote off. A dash when not sent. */}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-muted-foreground">
+        {restructureWriteOffFigures(loan).map((f) => (
+          <Fragment key={f.label}>
+            <dt>{f.label}</dt>
+            <dd className="font-medium text-foreground tabular-nums">{writeOffFigureText(f.amount)}</dd>
+          </Fragment>
+        ))}
+      </dl>
       {!successor && (
         <p className="text-muted-foreground">
           That loan could not be found on this loan&apos;s record, so it cannot
@@ -177,14 +178,12 @@ export function RestructuredBalanceFigures({ loan }: { loan: Loan }) {
           {formatCurrencyExact(loan.restructured_balance)}
         </p>
       </div>
-      {loan.write_off_amount != null && (
-        <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Written Off</p>
-          <p className="text-base font-bold tabular-nums">
-            {formatCurrencyExact(loan.write_off_amount)}
-          </p>
+      {restructureWriteOffFigures(loan).map((f) => (
+        <div key={f.label}>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{f.label}</p>
+          <p className="text-base font-bold tabular-nums">{writeOffFigureText(f.amount)}</p>
         </div>
-      )}
+      ))}
     </div>
   );
 }

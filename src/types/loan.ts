@@ -303,6 +303,8 @@ export interface RestructureSourceLoan extends RestructureLinkedLoan {
 
 /** One entry of `Loan.restructured_into`. */
 export interface RestructuredIntoLoan extends RestructureLinkedLoan {
+  /** Principal written off in the books when this restructure released; null before it was recorded. */
+  restructure_written_off_principal?: number | null;
   start_date: string | null;
 }
 
@@ -439,8 +441,18 @@ export interface Loan {
   restructured_at?: string | null;
   /** What was still owed on this loan when the restructure closed it. */
   restructured_balance?: number | null;
-  /** The part of `restructured_balance` the new loan did not take on. */
+  /**
+   * On a closed (restructured) loan: the forgiveness approved, the part of the
+   * approved balance the new loan did not take on. Not what the books wrote
+   * off; that is the new loan's `restructure_written_off_principal`.
+   */
   write_off_amount?: number | null;
+  /**
+   * On a restructure released since Phase 2: the old loan's unpaid principal
+   * it did not carry, written off in the books. Null on other loans and on
+   * restructures released before it was recorded.
+   */
+  restructure_written_off_principal?: number | null;
   /** The loan this one was restructured out of. Only `GET /loans/{id}` loads it. */
   source_loan?: RestructureSourceLoan | null;
   /**
