@@ -6,7 +6,7 @@
 import { formatCentavos } from "@/lib/accounting/money";
 import { signedCentavos } from "../../_lib/signed-money";
 import { getErrorMessage, getFieldErrors, httpStatusOf } from "@/lib/api-error";
-import { formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import type {
   AccountingBranchRef,
   AccountingPeriod,
@@ -31,21 +31,6 @@ export const YEAR_CLOSE_FORBIDDEN =
 const NO_BRANCH = "Journals with no branch";
 
 const FOUR_DIGIT_YEAR = /^\d{4}$/;
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 /**
  * ₱ with two decimals, a loss in parentheses; ₱0.00 for a zero, and "—" only
@@ -74,13 +59,6 @@ export function netResult(net: number | null | undefined): NetResult {
 
 function branchName(branch: AccountingBranchRef | null): string {
   return branch?.name ?? NO_BRANCH;
-}
-
-/** "2026-12-31" as "31 December 2026", read from the string so no timezone can move it. */
-function longDate(iso: string): string {
-  const [year, month, day] = iso.split("-");
-  const name = MONTHS[Number(month) - 1];
-  return name ? `${Number(day)} ${name} ${year}` : iso;
 }
 
 // ── Preview ──
@@ -138,7 +116,7 @@ export function previewView(preview: YearClosePreview): PreviewView {
   const account = preview.net_surplus_account;
   return {
     year: preview.year,
-    asOf: longDate(preview.as_of),
+    asOf: formatDate(preview.as_of),
     movesTo: `Moves to ${account.code} ${account.name}`,
     branches: preview.branches.map(branchView),
     totalIncome: centavosOrDash(preview.total_income),
@@ -153,7 +131,7 @@ export function previewView(preview: YearClosePreview): PreviewView {
 
 export function closeConfirmText(preview: YearClosePreview): string {
   const account = preview.net_surplus_account;
-  return `This posts a closing entry for each branch dated ${longDate(preview.as_of)}, moving the year's income and expenses to ${account.code} ${account.name}, then closes every month of ${preview.year}. Reopen only to correct the year.`;
+  return `This posts a closing entry for each branch dated ${formatDate(preview.as_of)}, moving the year's income and expenses to ${account.code} ${account.name}, then closes every month of ${preview.year}. Reopen only to correct the year.`;
 }
 
 /** Why a close was refused, in the server's words: each blocking reason on `year` (422), or its message (409). */

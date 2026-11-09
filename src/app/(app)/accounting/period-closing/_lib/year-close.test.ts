@@ -161,7 +161,7 @@ test("the preview shows each branch's income and expense lines and the server's 
 test("the preview names the account the result moves to, its date and the months it will close", () => {
   const view = previewView(preview());
   assert.equal(view.movesTo, "Moves to 3080 Undivided Net Surplus");
-  assert.equal(view.asOf, "31 December 2026");
+  assert.equal(view.asOf, "Dec 31, 2026");
   assert.deepEqual(view.monthsToClose, ["November 2026", "December 2026"]);
   assert.equal(view.canClose, true);
 });
@@ -184,7 +184,7 @@ test("Close follows can_close only: no reasons with can_close false still can't 
 test("the confirm names the year, the date and the account", () => {
   assert.equal(
     closeConfirmText(preview()),
-    "This posts a closing entry for each branch dated 31 December 2026, moving the year's income and expenses to 3080 Undivided Net Surplus, then closes every month of 2026. Reopen only to correct the year.",
+    "This posts a closing entry for each branch dated Dec 31, 2026, moving the year's income and expenses to 3080 Undivided Net Surplus, then closes every month of 2026. Reopen only to correct the year.",
   );
 });
 
