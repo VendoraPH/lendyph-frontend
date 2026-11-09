@@ -50,6 +50,11 @@ export function journalStatusCounts(stats: Record<JournalStatus, number> | undef
   return `${drafts}, ${stats.posted} posted, ${stats.reversed} reversed`;
 }
 
+/** The journal entry's own page. */
+export function journalHref(id: number): string {
+  return `/accounting/journals/${id}`;
+}
+
 /** The entry's number, or "Draft #9" for a draft, which is numbered on posting. */
 export function journalTitle(entry: Pick<JournalEntry, "id" | "journal_no">): string {
   return entry.journal_no || `Draft #${entry.id}`;
