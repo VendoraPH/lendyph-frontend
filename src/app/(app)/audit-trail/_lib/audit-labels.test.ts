@@ -305,3 +305,22 @@ test("the same field on another record keeps its plain words", () => {
   assert.equal(auditFieldLabel("max_scb", { type: "Loan" }), "max scb");
   assert.equal(auditFieldLabel("term"), "term");
 });
+
+// The audited reminders models (backend #232; filed under the `reminders`
+// module by AuditLogModules). Member preferences read "Member", never
+// "Borrower".
+test("reminder audit targets read in plain words", () => {
+  assert.equal(auditTargetType("ReminderSetting"), "Reminder settings");
+  assert.equal(auditTargetType("ReminderBranchSetting"), "Branch reminder settings");
+  assert.equal(auditTargetType("ReminderRule"), "Reminder rule");
+  assert.equal(auditTargetType("ReminderTemplate"), "Reminder template");
+  assert.equal(auditTargetType("ReminderPause"), "Reminder pause");
+  assert.equal(auditTargetType("BorrowerNotificationPreference"), "Member reminder preferences");
+});
+
+test("reminder rows read under the Reminders module", () => {
+  assert.equal(
+    auditModuleLabel(log({ module: "reminders" as AuditLog["module"], target: { id: 1, type: "ReminderRule", label: "Due today" } })),
+    "Reminders",
+  );
+});

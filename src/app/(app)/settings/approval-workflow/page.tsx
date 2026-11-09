@@ -30,6 +30,7 @@ import {
 } from "@/services";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
+import { stepRoleOptions } from "./_lib/step-role-options";
 import {
   Workflow,
   Plus,
@@ -83,6 +84,13 @@ const KIND_META: Record<
   // loan page already labels its button "Confirm & Forward".
 };
 
+// Passed to the Step Kind <Select items>, so the trigger reads "Approve", not
+// the stored "approve".
+const KIND_ITEMS = (Object.keys(KIND_META) as ChainStepKind[]).map((k) => ({
+  value: k,
+  label: KIND_META[k].label,
+}));
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -125,7 +133,9 @@ function StepFormDialog({
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
   const [status, setStatus] = useState<string>("");
-  const activeRoles = roles.filter((r) => r.is_active !== false);
+  // Active roles, plus the step's own role when it has since been
+  // deactivated, so the trigger reads "Name (inactive)", never the key.
+  const roleOptions = stepRoleOptions(roles, role);
 
   if (useDialogOpening(open, step)) {
     setName(step?.name ?? "");
@@ -183,7 +193,7 @@ function StepFormDialog({
               Required Role <span className="text-destructive">*</span>
             </Label>
             <Select
-              items={activeRoles.map((r) => ({ value: r.name, label: roleDisplayName(r) }))}
+              items={roleOptions}
               value={role || null}
               onValueChange={(v) => setRole(v ?? "")}
             >
@@ -191,9 +201,9 @@ function StepFormDialog({
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {activeRoles.map((r) => (
-                  <SelectItem key={r.id} value={r.name}>
-                    {roleDisplayName(r)}
+                {roleOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -207,6 +217,7 @@ function StepFormDialog({
               Step Kind <span className="text-destructive">*</span>
             </Label>
             <Select
+              items={KIND_ITEMS}
               value={kind}
               onValueChange={(v) => setKind(v as ChainStepKind)}
             >

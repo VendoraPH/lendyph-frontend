@@ -87,6 +87,8 @@ export const API_ENDPOINTS = {
     DELETE: (id: number) => `/loans/${id}`,
     RELEASE: (id: number) => `/loans/${id}/release`,
     RELEASE_PREVIEW: (id: number) => `/loans/${id}/release-preview`,
+    /** An approved, unreleased restructure back into review (`loans:release`). */
+    SEND_BACK_APPROVED: (id: number) => `/loans/${id}/send-back-approved`,
     DEDUCTIONS_PREVIEW: (id: number) => `/loans/${id}/deductions-preview`,
     SUBMIT: (id: number) => `/loans/${id}/submit`,
     VOID: (id: number) => `/loans/${id}/void`,

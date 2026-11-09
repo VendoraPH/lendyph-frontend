@@ -9,8 +9,6 @@ import type { Action, Module } from "@/types";
  * role, not just the one tick.
  *
  * - `collections` is retired and no longer used in the system.
- * - `reminders` is UI-only: its routes and permissions are not on the backend
- *   yet, so the matrix must not offer them.
  * - `loan_adjustments` is named in the type so pages can check it; the matrix
  *   has never offered it, and a role keeps whatever it holds on save.
  *
@@ -20,8 +18,11 @@ import type { Action, Module } from "@/types";
  * endpoints are built. An API that predates that refuses a save naming one
  * with a 422; the roles page then names the permission (`role-save-error.ts`).
  * Contract: `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
+ *
+ * `reminders` is offered too (Phase 2): the backend seeds
+ * `reminders:view|send|pause|settings` for admin and super_admin.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "reminders">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
@@ -65,6 +66,10 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // `settings` (not `configure`) mirrors `accounting:settings`; `override` is
   // the human decision verb, an action on the borrower profile, not a page.
   credit_scoring: ["view", "override", "settings"],
+  // `send` is one manual reminder to a member, `pause` stops reminders
+  // (all, one member or one loan), `settings` covers rules, templates and the
+  // provider set-up.
+  reminders: ["view", "send", "pause", "settings"],
 };
 
 /**

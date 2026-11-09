@@ -19,7 +19,7 @@ export type WorkflowLoan = Pick<Loan, "status" | "created_at"> &
     >
   > & { submitted_at?: string | null };
 
-export type WorkflowEventKey = "created" | "submitted" | "approved" | "rejected" | "released";
+export type WorkflowEventKey = "created" | "submitted" | "approved" | "rejected" | "released" | "sent_back";
 
 export interface WorkflowEvent {
   key: WorkflowEventKey;
@@ -81,6 +81,11 @@ export function workflowEvents(loan: WorkflowLoan): WorkflowEvent[] {
     });
   }
 
-  const time = (event: WorkflowEvent) => new Date(event.date ?? loan.created_at).getTime();
-  return events.sort((a, b) => time(a) - time(b));
+  return sortWorkflowEvents(events, loan.created_at);
+}
+
+/** Oldest first; an event with no date sorts as if it happened at creation. Ties keep their order. */
+export function sortWorkflowEvents(events: WorkflowEvent[], createdAt: string): WorkflowEvent[] {
+  const time = (event: WorkflowEvent) => new Date(event.date ?? createdAt).getTime();
+  return [...events].sort((a, b) => time(a) - time(b));
 }
