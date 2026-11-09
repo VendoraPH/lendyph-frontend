@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatDate } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { contactValueLabel, pauseReasonSuffix } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
   BorrowerNotificationPreferences,
@@ -29,12 +30,26 @@ const LANGUAGES = [
   { value: "ceb", label: "Cebuano" },
 ];
 
-function ContactLine({ label, value, verified }: { label: string; value: string | null; verified: boolean }) {
+/**
+ * Without `borrowers:view` the server leaves contacts out and both verified
+ * flags false, so an empty value reads "Hidden", never "None on file".
+ */
+function ContactLine({
+  label,
+  value,
+  verified,
+  canSeeContacts,
+}: {
+  label: string;
+  value: string | null;
+  verified: boolean;
+  canSeeContacts: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="flex items-center gap-1.5">
-        {value ?? <span className="text-muted-foreground">None on file</span>}
+        {value ?? <span className="text-muted-foreground">{contactValueLabel(value, canSeeContacts)}</span>}
         {value &&
           (verified ? (
             <CheckCircle2 className="h-3.5 w-3.5 text-green-600" aria-label="Verified" />
@@ -57,6 +72,7 @@ function PreferencesBody({
 }) {
   const { can } = usePermission();
   const canEdit = can("borrowers:update");
+  const canSeeContacts = can("borrowers:view");
   const [saving, setSaving] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -98,8 +114,8 @@ function PreferencesBody({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <ContactLine label="Mobile" value={data.mobile_number} verified={data.mobile_verified} />
-        <ContactLine label="Email" value={data.email} verified={data.email_verified} />
+        <ContactLine label="Mobile" value={data.mobile_number} verified={data.mobile_verified} canSeeContacts={canSeeContacts} />
+        <ContactLine label="Email" value={data.email} verified={data.email_verified} canSeeContacts={canSeeContacts} />
         {data.invalid_contact_reason && (
           <p className="flex items-center gap-1.5 text-xs text-destructive">
             <TriangleAlert className="h-3.5 w-3.5" /> {data.invalid_contact_reason}
@@ -150,7 +166,8 @@ function PreferencesBody({
       {data.pause ? (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
           <p>
-            Reminders paused by {data.pause.paused_by_name} on {formatDate(data.pause.paused_at)} — {data.pause.reason}
+            Reminders paused by {data.pause.paused_by_name} on {formatDate(data.pause.paused_at)}
+            {pauseReasonSuffix(data.pause)}
           </p>
           <PermissionButton permission="reminders:pause" size="sm" variant="outline" onClick={resume} disabled={resuming}>
             <PlayCircle className="mr-1 h-3.5 w-3.5" /> {resuming ? "Resuming…" : "Resume"}
@@ -198,9 +215,12 @@ function NotificationPreferencesContent({ borrowerId }: { borrowerId: number }) 
   );
 }
 
-/** Renders nothing — and requests nothing — without `reminders:view`. */
+/**
+ * Renders nothing — and requests nothing — without `reminders:view` and
+ * `borrowers:view` (the preferences GET answers 403 without the latter).
+ */
 export function NotificationPreferencesCard({ borrowerId }: { borrowerId: number }) {
   const { can } = usePermission();
-  if (!can("reminders:view")) return null;
+  if (!can("reminders:view") || !can("borrowers:view")) return null;
   return <NotificationPreferencesContent borrowerId={borrowerId} />;
 }

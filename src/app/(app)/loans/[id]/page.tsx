@@ -32,6 +32,16 @@ import {
 import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
 import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import { chainEvents, revisionRoundView, withChainEvents } from "./_lib/approval-rounds";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
+import {
+  SEND_BACK_REASON_MAX,
+  canSendBackApproved,
+  sendBackApprovedPayload,
+  sendBackFailureAction,
+  sendBackReasonError,
+} from "./_lib/send-back-approved";
+import type { LoanApprovalRound, LoanApprovalStep as ChainStep } from "@/types/loan-approval";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -215,6 +225,7 @@ import {
   Zap,
   RefreshCw,
   Info,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
@@ -556,15 +567,26 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   approved: <UserCheck className="h-4 w-4 text-blue-600" />,
   rejected: <Ban className="h-4 w-4 text-red-600" />,
   released: <Unlock className="h-4 w-4 text-cyan-600" />,
+  sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
 };
 
-function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events = workflowEvents(loan);
+function WorkflowHistory({
+  loan,
+  rounds,
+  steps,
+}: {
+  loan: Loan;
+  rounds: LoanApprovalRound[];
+  steps: ChainStep[];
+}) {
+  // The loan's own milestones, with every round's sign-offs, send-back and
+  // re-submission from the chain (the loan keeps only its latest approval).
+  const events = withChainEvents(workflowEvents(loan), chainEvents(rounds, steps), loan.created_at);
 
   return (
     <div className="space-y-4">
-      {events.map((event) => (
-        <div key={event.key} className="flex items-start gap-3">
+      {events.map((event, i) => (
+        <div key={`${event.key}-${i}`} className="flex items-start gap-3">
           <div className="mt-0.5">{WORKFLOW_ICONS[event.key]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{event.label}</p>
@@ -1014,6 +1036,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
+  // "Send back for approval" on an approved restructure: its reason, cleared
+  // each time the dialog opens.
+  const [sendBackApprovedOpen, setSendBackApprovedOpen] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState("");
+  const [sendBackApprovedLoading, setSendBackApprovedLoading] = useState(false);
+  if (useDialogOpening(sendBackApprovedOpen, loanId)) setSendBackReason("");
   // How the proceeds are paid out, and its reference. Every opening starts at
   // Cash with no reference, so a later release can't go out under an old one.
   const [releaseMethod, setReleaseMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
@@ -1493,6 +1521,37 @@ function LoanDetail({ loanId }: { loanId: number }) {
     } else {
       notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
     }
+  };
+
+  const sendBackReasonProblem = sendBackReasonError(sendBackReason);
+
+  // An approved, unreleased restructure back into review, offered only on the
+  // server's `can_send_back_approved`. The loan and its chain are read again
+  // after, since the server reopened the chain.
+  const handleSendBackApproved = async () => {
+    if (sendBackReasonProblem !== null || sendBackApprovedLoading) return;
+    setSendBackApprovedLoading(true);
+    try {
+      await loanService.sendBackApproved(loan.id, sendBackApprovedPayload(sendBackReason));
+    } catch (err) {
+      notifyError(err, "We couldn't send this restructure back for approval. Please try again.");
+      if (sendBackFailureAction(err) === "reload") {
+        // The loan moved on meanwhile (released, voided, already sent back):
+        // show where it now stands.
+        setSendBackApprovedOpen(false);
+        reloadLoan();
+        void refreshApproval();
+      }
+      setSendBackApprovedLoading(false);
+      return;
+    }
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setSendBackApprovedLoading(false);
+    setSendBackApprovedOpen(false);
+    toast.success("Restructure sent back for approval");
+    void refreshApproval();
+    if (reloaded) setLoan(reloaded);
+    else notifyWarning("The page couldn't refresh", "Reload to see the loan back in approval.");
   };
 
   // ── Multi-step approval handlers ──
@@ -2199,6 +2258,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
+            {canSendBackApproved(loan) && (
+              <Button
+                variant="outline"
+                onClick={() => setSendBackApprovedOpen(true)}
+                className="w-full sm:w-auto"
+              >
+                <Undo2 className="mr-2 h-4 w-4" />
+                Send back for approval
+              </Button>
+            )}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanTotalOutstanding ?? 0) > 0 && (
@@ -2463,43 +2532,48 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Previous Revisions
                 </p>
-                {approvalRounds.map((round) => (
-                  <div
-                    key={round.round}
-                    className="rounded-lg border border-dashed bg-muted/30 p-3"
-                  >
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                        Round {round.round}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Sent back by {round.sent_back_by} ·{" "}
-                        {formatDateTime(round.sent_back_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
-                      &ldquo;{round.sent_back_remarks}&rdquo;
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {round.steps
-                        .filter((s) => s.status === "approved" || s.status === "sent_back")
-                        .map((s) => (
+                {approvalRounds.map((round) => {
+                  // Any step kind can close a round, a release step included
+                  // (an approved restructure sent back before release).
+                  const view = revisionRoundView(round);
+                  return (
+                    <div
+                      key={round.round}
+                      className="rounded-lg border border-dashed bg-muted/30 p-3"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          Round {round.round}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {view.heading} ·{" "}
+                          {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
+                        </span>
+                      </div>
+                      {view.remarks !== null && (
+                        <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                          &ldquo;{view.remarks}&rdquo;
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {view.badges.map((badge) => (
                           <Badge
-                            key={s.index}
+                            key={badge.key}
                             variant="outline"
                             className={cn(
                               "text-[10px] h-4 px-1.5",
-                              s.status === "approved"
+                              badge.outcome === "approved"
                                 ? "bg-green-500/10 text-green-700 border-green-500/30"
                                 : "bg-red-500/10 text-red-700 border-red-500/30"
                             )}
                           >
-                            {s.status === "approved" ? "✓" : "✗"} {s.name}
+                            {badge.text}
                           </Badge>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {/* Current step action panel — matches the original screenshot
@@ -2960,23 +3034,36 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs text-muted-foreground">Contract Total</p>
                 <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                <p className="text-sm font-semibold">
-                  {cardPreview
-                    ? cardPreview.status === "loaded"
-                      ? formatCurrencyExact(cardPreview.preview.net_proceeds)
-                      : "—"
-                    : loan.net_proceeds != null
-                      ? formatCurrency(loan.net_proceeds)
-                      : "N/A"}
-                </p>
-                {cardEstimated && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Estimated until release
-                  </p>
-                )}
-              </div>
+              {/* A restructure pays nothing out: what is collected from the
+                  member and Paid out, in place of Net Proceeds. Each figure
+                  is the server's (the preview before release, the loan's
+                  own after), a dash when it sent none. */}
+              {proceedsFigures(!!loan.is_restructure, {
+                totalDeductions: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.total_deductions
+                    : null
+                  : loan.total_deductions,
+                netProceeds: cardPreview
+                  ? cardPreview.status === "loaded"
+                    ? cardPreview.preview.net_proceeds
+                    : null
+                  : loan.net_proceeds,
+                restructure:
+                  cardSource === "release-preview" && releasePreview.status === "loaded"
+                    ? releasePreview.preview.restructure
+                    : null,
+              }).map((figure) => (
+                <div key={figure.label}>
+                  <p className="text-xs text-muted-foreground">{figure.label}</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
+                  {cardEstimated && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Estimated until release
+                    </p>
+                  )}
+                </div>
+              ))}
               {/* Insurance premium left unpaid at release: part of the
                   server's Total Payable, collected before anything else. */}
               {insuranceOwed !== null && (
@@ -3234,7 +3321,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </CardHeader>
             <CollapsibleContent>
               <CardContent>
-                <WorkflowHistory loan={loan} />
+                <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -3401,52 +3488,57 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
                   );
 
+                // A restructured loan with rows left (paid ones) still shows
+                // the two write-off figures above them.
                 const scheduleTable = scheduleNotice ?? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
-                            <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
-                            <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                  <div className="space-y-3">
+                    <RestructuredBalanceFigures loan={loan} />
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12 text-center">#</TableHead>
+                            <TableHead>Due Date</TableHead>
+                            <TableHead className="text-right">Principal Due</TableHead>
+                            <TableHead className="text-right">Interest</TableHead>
+                            {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                            <TableHead className="text-right">Total Payment</TableHead>
+                            <TableHead className="text-right">Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {storedSchedule.map((row) => (
+                            <TableRow key={row.period}>
+                              <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
+                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                              <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                              {hasScb && (
+                                <TableCell className="text-right text-brand-orange">
+                                  {currencyOrDash(row.shareCapitalBuildUp)}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
                             {hasScb && (
-                              <TableCell className="text-right text-brand-orange">
-                                {currencyOrDash(row.shareCapitalBuildUp)}
+                              <TableCell className="text-right font-semibold text-brand-orange">
+                                {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                               </TableCell>
                             )}
-                            <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                            <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
+                            <TableCell />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
-                          {hasScb && (
-                            <TableCell className="text-right font-semibold text-brand-orange">
-                              {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
+                        </TableFooter>
+                      </Table>
+                    </div>
                   </div>
                 );
 
@@ -3764,6 +3856,63 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setSoaOpen(false)}>
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send an approved restructure back for approval */}
+      <Dialog
+        open={sendBackApprovedOpen}
+        onOpenChange={(open) => {
+          if (!sendBackApprovedLoading) setSendBackApprovedOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send back for approval</DialogTitle>
+            <DialogDescription>
+              This restructure goes back to its approval chain and must be submitted and approved
+              again before release. Its figures are taken again then.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-back-approved-reason">
+              Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="send-back-approved-reason"
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              maxLength={SEND_BACK_REASON_MAX}
+              rows={3}
+              required
+              disabled={sendBackApprovedLoading}
+              aria-describedby="send-back-approved-hint"
+              placeholder="e.g. the source loan was paid down after approval"
+            />
+            <p id="send-back-approved-hint" className="text-xs text-muted-foreground">
+              {sendBackReasonProblem ?? `${sendBackReason.trim().length} of ${SEND_BACK_REASON_MAX} characters`}
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setSendBackApprovedOpen(false)}
+              disabled={sendBackApprovedLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendBackApproved}
+              disabled={sendBackApprovedLoading || sendBackReasonProblem !== null}
+            >
+              {sendBackApprovedLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Undo2 className="mr-2 h-4 w-4" />
+              )}
+              {sendBackApprovedLoading ? "Sending back..." : "Send back for approval"}
             </Button>
           </div>
         </DialogContent>

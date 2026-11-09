@@ -15,7 +15,14 @@ export type NotificationType =
   | "loan_past_due"
   | "extension_applied"
   | "restructure_applied"
-  | "adjustment_pending";
+  | "adjustment_pending"
+  // Reminders (backend #232), about a member's reminders; never sent to the
+  // member. A reminder showed the member's contact is bad; a loan reached the
+  // long-past-due rule and needs the officer's follow up; a reminder could not
+  // go out after every attempt.
+  | "reminder_contact_invalid"
+  | "reminder_follow_up"
+  | "reminder_failed";
 
 /**
  * One row of `GET /notifications`, the signed-in user's own notifications.

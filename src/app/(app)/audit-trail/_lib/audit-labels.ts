@@ -60,10 +60,24 @@ export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): stri
 }
 
 /**
+ * Target kinds whose class name doesn't read as what it holds: the audited
+ * reminders models (backend #232, module `reminders`).
+ */
+const TARGET_TYPE_LABELS: Record<string, string> = {
+  ReminderSetting: "Reminder settings",
+  ReminderBranchSetting: "Branch reminder settings",
+  ReminderRule: "Reminder rule",
+  ReminderTemplate: "Reminder template",
+  ReminderPause: "Reminder pause",
+  BorrowerNotificationPreference: "Member reminder preferences",
+};
+
+/**
  * The target's kind in words. The server sends the class name ("CoMaker",
  * "LoanApprovalStep"), and a member's class is `Borrower`.
  */
 export function auditTargetType(type: string): string {
+  if (Object.hasOwn(TARGET_TYPE_LABELS, type)) return TARGET_TYPE_LABELS[type];
   return type
     .replace(/^Borrower/, "Member")
     .replace(/CoMaker/g, "Co-maker")

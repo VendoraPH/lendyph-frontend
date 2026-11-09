@@ -6,13 +6,15 @@
  * the auto-credit run send `method` and `reference_number` exactly as built;
  * an auto-credit run with nothing picked sends an empty body, so the server
  * takes its default (Bank); and the release preview's `restructure` block
- * reaches the dialog untouched.
+ * reaches the dialog untouched; and "Send back for approval" PATCHes the
+ * reason and hands back the reloaded loan, or the server's refusal.
  * WHAT IT DOES NOT PROVE: the server's rules or journals (backend tests).
  */
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 
 interface Seen {
   method: string;
@@ -152,4 +154,26 @@ test("an auto-credit run with nothing picked lets the server take Bank", async (
   routes["POST /auto-credit/process"] = [200, { data: { processed_count: 0, total_amount: 0, processed_at: "2026-11-09T01:00:00Z" } }];
   await shareCapitalService.autoCreditProcess();
   assert.deepEqual(seen[0].body, {});
+});
+
+test("send back for approval: PATCH with the reason, answering the reloaded loan", async () => {
+  routes["PATCH /loans/7/send-back-approved"] = [
+    200,
+    { message: "Restructure sent back for approval.", data: { id: 7, status: "for_review", can_send_back_approved: false } },
+  ];
+  const loan = await loanService.sendBackApproved(7, { reason: "Source paid down after approval" });
+  assert.deepEqual(seen, [
+    { method: "PATCH", path: "/loans/7/send-back-approved", body: { reason: "Source paid down after approval" } },
+  ]);
+  assert.equal(loan.status, "for_review");
+});
+
+test("send back for approval: a refusal reaches the caller in the server's words", async () => {
+  const message = "This restructure has already been released, so it can't be sent back for approval.";
+  routes["PATCH /loans/7/send-back-approved"] = [422, { message, errors: { status: [message] } }];
+  await assert.rejects(loanService.sendBackApproved(7, { reason: "x" }), (err: unknown) => {
+    assert.equal(httpStatusOf(err), 422);
+    assert.equal(getErrorMessage(err, "fallback"), message);
+    return true;
+  });
 });
